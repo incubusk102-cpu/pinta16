@@ -1,0 +1,90 @@
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ShoppingCart, Eye } from "lucide-react";
+import { useCart } from "@/contexts/CartContext";
+
+interface ArtworkCardProps {
+  image: string;
+  mockup?: string;
+  title: string;
+  medium: string;
+  year: string;
+  price: number;
+  description: string;
+  index: number;
+  onClick: () => void;
+}
+
+const ArtworkCard = ({ image, mockup, title, medium, year, price, description, index, onClick }: ArtworkCardProps) => {
+  const { addToCart } = useCart();
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    addToCart({ id: `art-${index}`, image, title, medium, year, price });
+  };
+
+  const displayImage = isHovered && mockup ? mockup : image;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6, delay: index * 0.1 }}
+      className="break-inside-avoid group cursor-pointer"
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="relative overflow-hidden gallery-frame hover-lift">
+        <AnimatePresence mode="wait">
+          <motion.img
+            key={displayImage}
+            src={displayImage}
+            alt={title}
+            initial={{ opacity: 0, scale: 1.05 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.4 }}
+            className="w-full object-cover"
+            loading="lazy"
+          />
+        </AnimatePresence>
+
+        {/* Mockup badge on hover */}
+        <AnimatePresence>
+          {isHovered && mockup && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-sm"
+            >
+              <Eye className="w-3 h-3 text-white/80" />
+              <span className="font-body text-[9px] tracking-[0.2em] uppercase text-white/80">Room Preview</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
+          <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60 mb-1">{medium} · {year}</p>
+          <h3 className="font-display text-lg text-white mb-1">{title}</h3>
+          <p className="font-body text-xs text-white/70 mb-3 line-clamp-2">{description}</p>
+          <div className="flex items-center justify-between">
+            <span className="font-body text-sm text-white font-semibold">₱{price.toLocaleString()}</span>
+            <button
+              onClick={handleAddToCart}
+              className="p-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors rounded-sm"
+            >
+              <ShoppingCart className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+export default ArtworkCard;
