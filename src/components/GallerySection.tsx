@@ -1,47 +1,3 @@
-import painting9 from "@/assets/p17.jpg";
-import mockup9 from "@/assets/p17.jpg";
-
-<<<<<<< HEAD:pintaterra01-main/src/components/GallerySection.tsx
-import painting10 from "@/assets/p15.jpg";
-import mockup10 from "@/assets/p15.jpg";
-
-import painting11 from "@/assets/p13.jpg";
-import mockup11 from "@/assets/p13.jpg";
-
-import painting12 from "@/assets/p18.jpg";
-import mockup12 from "@/assets/p18.jpg";
-
-import painting13 from "@/assets/p19.jpg";
-import mockup13 from "@/assets/p19.jpg";
-
-import painting14 from "@/assets/p20.jpg";
-import mockup14 from "@/assets/p20.jpg";
-
-import painting15 from "@/assets/p21.jpg";
-import mockup15 from "@/assets/p21.jpg";
-
-import painting16 from "@/assets/p22.jpg";
-import mockup16 from "@/assets/p22.jpg";
-
-import painting17 from "@/assets/p23.jpg";
-import mockup17 from "@/assets/p23.jpg";
-
-import painting18 from "@/assets/p24.jpg";
-import mockup18 from "@/assets/p24.jpg";
-
-import painting19 from "@/assets/p25.jpg";
-import mockup19 from "@/assets/p25.jpg";
-
-import painting20 from "@/assets/p26.jpg";
-import mockup20 from "@/assets/p26.jpg";
-
-import painting21 from "@/assets/p27.jpg";
-import mockup21 from "@/assets/p27.jpg";
-
-import painting22 from "@/assets/p28.jpg";
-import mockup22 from "@/assets/p28.jpg";
-=======
-
 import painting1 from "@/assets/p1.jpg";
 import painting2 from "@/assets/p2.jpg";
 import painting3 from "@/assets/p3.jpg";
@@ -62,7 +18,6 @@ import painting17 from "@/assets/p17.jpg";
 import painting18 from "@/assets/p18.jpg";
 import painting19 from "@/assets/p19.jpg";
 import painting20 from "@/assets/p20.jpg";
-
 
 import mockup1 from "@/assets/p1.jpg";
 import mockup2 from "@/assets/p2.jpg";
@@ -87,7 +42,6 @@ import mockup20 from "@/assets/p20.jpg";
 
 
 
->>>>>>> 8f8df25a (fix: move project to root):src/components/GallerySection.tsx
 
 const defaultArtworks = [
   {
