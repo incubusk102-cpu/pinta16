@@ -224,24 +224,6 @@ const defaultArtworks = [
     price: 3899,
     description: "A bold abstract composition of swirling color waves frames a serene female profile — spiraling forms in yellow, green, red, and blue radiate outward in a vivid celebration of inner strength and vitality.",
   },
-  {
-    image: painting21,
-    mockup: mockup21,
-    title: "Fiesta Trio",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3799,
-    description: "A vibrant cubist celebration of Filipino fiesta culture — three figures in patchwork festival attire dance and strum guitar against a bold blue backdrop, flanked by stylized tropical flowers.",
-  },
-  {
-    image: painting22,
-    mockup: mockup22,
-    title: "Bloom in Red Vase",
-    medium: "Acrylic on Canvas",
-    year: "2022",
-    price: 3599,
-    description: "An exuberant mixed bouquet of wildflowers — blue, red, pink, yellow, and orange — bursts from a bold crimson bowl against a clean white ground, painted with loose, impressionistic strokes full of joyful energy.",
-  },
 ];
 
 const GallerySection = () => {
