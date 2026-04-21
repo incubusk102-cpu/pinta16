@@ -1,59 +1,44 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import ArtworkCard from "./ArtworkCard";
-import Lightbox from "./Lightbox";
-import { useProducts } from "@/contexts/ProductContext";
+import painting9 from "@/assets/p17.jpg";
+import mockup9 from "@/assets/p17.jpg";
 
-import painting1 from "@/assets/p1.jpg";
-import painting2 from "@/assets/p4.jpg";
-import painting3 from "@/assets/p5.jpg";
-import painting4 from "@/assets/p7.jpg";
-import painting5 from "@/assets/p9.jpg";
-import painting6 from "@/assets/p11.jpg";
-import painting7 from "@/assets/p13.jpg";
-import painting8 from "@/assets/p16.jpg";
+import painting10 from "@/assets/p15.jpg";
+import mockup10 from "@/assets/p15.jpg";
 
-import mockup1 from "@/assets/p2.jpg";
-import mockup2 from "@/assets/p3.jpg";
-import mockup3 from "@/assets/p6.jpg";
-import mockup4 from "@/assets/p8.jpg";
-import mockup5 from "@/assets/p10.jpg";
-import mockup6 from "@/assets/p12.jpg";
-import mockup7 from "@/assets/p14.jpg";
-import mockup8 from "@/assets/p15.jpg";
+import painting11 from "@/assets/p13.jpg";
+import mockup11 from "@/assets/p13.jpg";
 
-import painting9 from "@/assets/p17.png";
-import mockup9 from "@/assets/p17-mockup.jpg";
-import painting10 from "@/assets/p15-bamboo.png";
-import mockup10 from "@/assets/p15-bamboo-mockup.jpg";
-import painting11 from "@/assets/p13-autumn.png";
-import mockup11 from "@/assets/p13-autumn-mockup.jpg";
+import painting12 from "@/assets/p18.jpg";
+import mockup12 from "@/assets/p18.jpg";
 
-import painting12 from "@/assets/p18-tulips.png";
-import mockup12 from "@/assets/p18-tulips-mockup.jpg";
-import painting13 from "@/assets/p19-yarn.png";
-import mockup13 from "@/assets/p19-yarn-mockup.jpg";
-import painting14 from "@/assets/p20-peacock.png";
-import mockup14 from "@/assets/p20-peacock-mockup.jpg";
-import painting15 from "@/assets/p21-butterflies.png";
-import mockup15 from "@/assets/p21-butterflies-mockup.jpg";
+import painting13 from "@/assets/p19.jpg";
+import mockup13 from "@/assets/p19.jpg";
 
-import painting16 from "@/assets/p22-tulips-colorful.png";
-import mockup16 from "@/assets/p22-tulips-colorful-mockup.png";
-import painting17 from "@/assets/p23-mayon-harvest.png";
-import mockup17 from "@/assets/p23-mayon-harvest-mockup.png";
-import painting18 from "@/assets/p24-riverside-sepia.png";
-import mockup18 from "@/assets/p24-riverside-sepia-mockup.jpg";
+import painting14 from "@/assets/p20.jpg";
+import mockup14 from "@/assets/p20.jpg";
 
-import painting19 from "@/assets/p25-coastal-village.png";
-import mockup19 from "@/assets/p25-coastal-village-mockup.png";
-import painting20 from "@/assets/p26-abstract-figure.png";
-import mockup20 from "@/assets/p26-abstract-figure-mockup.png";
-import painting21 from "@/assets/p27-musicians.png";
-import mockup21 from "@/assets/p27-musicians-mockup.png";
+import painting15 from "@/assets/p21.jpg";
+import mockup15 from "@/assets/p21.jpg";
 
-import painting22 from "@/assets/p28-floral-bouquet.png";
-import mockup22 from "@/assets/p28-floral-bouquet-mockup.png";
+import painting16 from "@/assets/p22.jpg";
+import mockup16 from "@/assets/p22.jpg";
+
+import painting17 from "@/assets/p23.jpg";
+import mockup17 from "@/assets/p23.jpg";
+
+import painting18 from "@/assets/p24.jpg";
+import mockup18 from "@/assets/p24.jpg";
+
+import painting19 from "@/assets/p25.jpg";
+import mockup19 from "@/assets/p25.jpg";
+
+import painting20 from "@/assets/p26.jpg";
+import mockup20 from "@/assets/p26.jpg";
+
+import painting21 from "@/assets/p27.jpg";
+import mockup21 from "@/assets/p27.jpg";
+
+import painting22 from "@/assets/p28.jpg";
+import mockup22 from "@/assets/p28.jpg";
 
 const defaultArtworks = [
   {
