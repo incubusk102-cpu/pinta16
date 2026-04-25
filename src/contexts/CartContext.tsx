@@ -250,14 +250,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "place", order }),
-    }).catch((err) => {
-      console.error("Order sync failed:", err);
-      import("sonner").then(({ toast }) =>
-        toast.warning(
-          "Order saved locally but could not sync to server. It will appear in your tracking once connectivity is restored.",
-        ),
-      );
-    });
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      })
+      .catch((err) => {
+        console.error("Order sync failed:", err);
+        import("sonner").then(({ toast }) =>
+          toast.warning(
+            "Order saved locally but could not sync to server. It will appear in your tracking once connectivity is restored.",
+          ),
+        );
+      });
     return order;
   };
 
