@@ -343,8 +343,7 @@ export const handler = async (event) => {
           // client total = subtotal - clientDiscount + shipping; if we strip
           // the discount, add back what we subtracted.
           total:
-            (Number(order.total) || 0) +
-            (clientDiscount - validatedDiscount),
+            (Number(order.total) || 0) + (clientDiscount - validatedDiscount),
           estimatedCreationDays: String(
             order.estimatedCreationDays || "",
           ).slice(0, 100),
