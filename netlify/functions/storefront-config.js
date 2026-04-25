@@ -117,6 +117,10 @@ const publicView = (config) => ({
   freeShipping: config.freeShipping,
   promoCodes: config.promoCodes
     .filter((p) => p.enabled)
+    .filter((p) => p.usageLimit === null || p.usageCount < p.usageLimit)
+    .filter(
+      (p) => !p.expiresAt || new Date(p.expiresAt).getTime() >= Date.now(),
+    )
     .map((p) => ({
       code: p.code,
       type: p.type,
