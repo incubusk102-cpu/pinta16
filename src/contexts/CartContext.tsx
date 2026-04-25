@@ -250,7 +250,26 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "place", order }),
-    }).catch(() => {});
+    })
+      .then((res) => res.json())
+      .then((data: { order?: CompletedOrder }) => {
+        if (data.order?.id && data.order.id !== order.id) {
+          const serverOrder = { ...order, id: data.order.id };
+          setLastOrder(serverOrder);
+          setOrders((prev) =>
+            prev.map((o) => (o.id === order.id ? serverOrder : o)),
+          );
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              ORDERS_STORAGE_KEY,
+              JSON.stringify(
+                orders.map((o) => (o.id === order.id ? serverOrder : o)),
+              ),
+            );
+          }
+        }
+      })
+      .catch(() => {});
     return order;
   };
 
