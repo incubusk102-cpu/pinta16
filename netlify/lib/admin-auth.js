@@ -97,19 +97,19 @@ export const verifyTokenWithSecret = (token, secret) => {
 };
 
 export const ensureSessionSecret = async (store) => {
-  let secret = await store.get(SECRET_KEY, {
-    type: "text",
-    consistency: "strong",
-  });
-  if (!secret) {
-    secret = crypto.randomBytes(48).toString("hex");
-    await store.set(SECRET_KEY, secret);
+  const existing = await store.get(SECRET_KEY, { type: "text" });
+  if (existing) return existing;
+  const candidate = crypto.randomBytes(48).toString("hex");
+  try {
+    await store.set(SECRET_KEY, candidate, { onlyIfNew: true });
+  } catch {
+    /* another invocation won the race; fall through to re-read */
   }
-  return secret;
+  return (await store.get(SECRET_KEY, { type: "text" })) || candidate;
 };
 
 export const readCredentials = async (store) =>
-  await store.get(CREDENTIALS_KEY, { type: "json", consistency: "strong" });
+  await store.get(CREDENTIALS_KEY, { type: "json" });
 
 export const writeCredentials = async (store, credentials) =>
   await store.setJSON(CREDENTIALS_KEY, credentials);
