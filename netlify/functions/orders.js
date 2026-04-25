@@ -44,7 +44,8 @@ export const handler = async (event) => {
         const orders = await readOrders(store);
         const order = orders.find((o) => o.id === params.id);
         if (!order) return json(404, { error: "Order not found" });
-        return json(200, { order });
+        const { orderInfo: _pii, ...publicOrder } = order;
+        return json(200, { order: publicOrder });
       }
 
       if (!(await isAuthenticated(event))) {
@@ -64,7 +65,12 @@ export const handler = async (event) => {
           return json(400, { error: "Invalid order" });
         }
         const serverId = `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`;
-        const safeOrder = { ...order, id: serverId };
+        const safeOrder = {
+          ...order,
+          id: serverId,
+          status: "confirmed",
+          createdAt: new Date().toISOString(),
+        };
         const orders = await readOrders(store);
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
