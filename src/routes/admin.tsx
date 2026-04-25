@@ -1,10 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   useProducts,
   getDiscountPercent,
+  getProductImages,
+  buildImageFields,
+  PRODUCT_MAX_IMAGES,
   type Product,
+  type ProductImage,
 } from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +23,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
+import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import {
@@ -79,15 +84,6 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   users: "Users",
   settings: "Settings",
 };
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -371,10 +367,7 @@ function NavLink({
 
 function ProductsSection() {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const mockupInputRef = useRef<HTMLInputElement>(null);
-  const [image, setImage] = useState<string>("");
-  const [mockup, setMockup] = useState<string>("");
+  const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -386,27 +379,8 @@ function ProductsSection() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
 
-  const readImage = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setter: (value: string) => void,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/"))
-      return toast.error("Please select an image file");
-    if (file.size > 5 * 1024 * 1024)
-      return toast.error("Image must be under 5MB");
-
-    try {
-      setter(await fileToDataUrl(file));
-    } catch {
-      toast.error("Could not read image");
-    }
-  };
-
   const reset = () => {
-    setImage("");
-    setMockup("");
+    setImages([]);
     setTitle("");
     setMedium("Acrylic on Canvas");
     setYear(String(new Date().getFullYear()));
@@ -414,8 +388,6 @@ function ProductsSection() {
     setSalePrice("");
     setDiscountPercent("");
     setDescription("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    if (mockupInputRef.current) mockupInputRef.current.value = "";
   };
 
   const handlePriceChange = (value: string) => {
@@ -451,7 +423,8 @@ function ProductsSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!image) return toast.error("Please upload a painting image");
+    if (images.length === 0)
+      return toast.error("Please upload at least one painting image");
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
@@ -464,8 +437,7 @@ function ProductsSection() {
 
     try {
       await addProduct({
-        image,
-        mockup: mockup || undefined,
+        ...buildImageFields(images),
         title: title.trim(),
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
@@ -509,62 +481,13 @@ function ProductsSection() {
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="image" className="mb-2 block">
-                Painting image
-              </Label>
-              <label className="flex flex-col items-center justify-center w-full aspect-[4/3] border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/60 transition-colors overflow-hidden bg-background/40">
-                {image ? (
-                  <img
-                    src={image}
-                    alt="preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-6">
-                    <Upload className="w-7 h-7 mx-auto mb-2" />
-                    <p className="text-sm">Click to upload (max 5MB)</p>
-                  </div>
-                )}
-                <input
-                  id="image"
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => void readImage(e, setImage)}
-                />
-              </label>
-            </div>
-
-            <div>
-              <Label htmlFor="mockup" className="mb-2 block">
-                Room mockup{" "}
+              <Label className="mb-2 block">
+                Photos{" "}
                 <span className="text-muted-foreground font-normal">
-                  (optional, shown on hover)
+                  (up to {PRODUCT_MAX_IMAGES})
                 </span>
               </Label>
-              <label className="flex flex-col items-center justify-center w-full aspect-[4/3] border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/60 transition-colors overflow-hidden bg-background/40">
-                {mockup ? (
-                  <img
-                    src={mockup}
-                    alt="mockup preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-6">
-                    <Upload className="w-7 h-7 mx-auto mb-2" />
-                    <p className="text-sm">Upload a room preview</p>
-                  </div>
-                )}
-                <input
-                  id="mockup"
-                  ref={mockupInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => void readImage(e, setMockup)}
-                />
-              </label>
+              <ProductImageGallery images={images} onChange={setImages} />
             </div>
 
             <div>
@@ -688,17 +611,43 @@ function ProductsSection() {
             <ul className="space-y-3">
               {products.map((product) => {
                 const isDeleting = deletingId === product.id;
+                const photos = getProductImages(product);
+                const main = photos[0];
+                const extras = photos.slice(1);
 
                 return (
                   <li
                     key={product.id}
                     className="flex gap-4 bg-card/40 border border-border/50 rounded-lg p-3"
                   >
-                    <img
-                      src={product.image}
-                      alt={product.title}
-                      className="w-24 h-24 object-cover rounded-md flex-shrink-0"
-                    />
+                    <div className="flex-shrink-0 space-y-1.5">
+                      {main && (
+                        <div className="relative">
+                          <img
+                            src={main.url}
+                            alt={product.title}
+                            className="w-24 h-24 object-cover rounded-md"
+                          />
+                          {photos.length > 1 && (
+                            <span className="absolute bottom-1 right-1 px-1.5 py-0.5 text-[10px] font-medium bg-background/90 backdrop-blur rounded">
+                              {photos.length} photos
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {extras.length > 0 && (
+                        <div className="flex gap-1">
+                          {extras.slice(0, 4).map((img, i) => (
+                            <img
+                              key={i}
+                              src={img.url}
+                              alt={`${product.title} photo ${i + 2}`}
+                              className="w-[22px] h-[22px] object-cover rounded-sm border border-border/40"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium truncate">{product.title}</h3>
                       <p className="text-xs text-muted-foreground">

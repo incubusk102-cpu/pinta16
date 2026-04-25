@@ -9,6 +9,14 @@ import {
 } from "react";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 
+export interface ProductImage {
+  url: string;
+  fileName?: string;
+  bytes?: number;
+}
+
+export const PRODUCT_MAX_IMAGES = 5;
+
 export interface Product {
   id: string;
   image: string;
@@ -20,7 +28,70 @@ export interface Product {
   salePrice?: number;
   description: string;
   createdAt: string;
+  images?: ProductImage[];
+  imageFileName?: string;
+  imageBytes?: number;
+  mockupFileName?: string;
+  mockupBytes?: number;
 }
+
+export const getProductImages = (
+  p: Pick<
+    Product,
+    | "image"
+    | "mockup"
+    | "images"
+    | "imageFileName"
+    | "imageBytes"
+    | "mockupFileName"
+    | "mockupBytes"
+  >,
+): ProductImage[] => {
+  if (p.images && p.images.length > 0) {
+    return p.images.slice(0, PRODUCT_MAX_IMAGES);
+  }
+  const arr: ProductImage[] = [];
+  if (p.image) {
+    arr.push({
+      url: p.image,
+      fileName: p.imageFileName,
+      bytes: p.imageBytes,
+    });
+  }
+  if (p.mockup) {
+    arr.push({
+      url: p.mockup,
+      fileName: p.mockupFileName,
+      bytes: p.mockupBytes,
+    });
+  }
+  return arr;
+};
+
+export const buildImageFields = (
+  images: ProductImage[],
+): Pick<
+  Product,
+  | "image"
+  | "mockup"
+  | "imageFileName"
+  | "imageBytes"
+  | "mockupFileName"
+  | "mockupBytes"
+  | "images"
+> => {
+  const trimmed = images.slice(0, PRODUCT_MAX_IMAGES);
+  const [first, second] = trimmed;
+  return {
+    image: first?.url ?? "",
+    mockup: second?.url || undefined,
+    imageFileName: first?.fileName,
+    imageBytes: first?.bytes,
+    mockupFileName: second?.fileName,
+    mockupBytes: second?.bytes,
+    images: trimmed,
+  };
+};
 
 export const getEffectivePrice = (product: {
   price: number;
