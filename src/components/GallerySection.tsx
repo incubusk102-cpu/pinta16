@@ -179,12 +179,19 @@ const defaultArtworks = [
   },
 ];
 
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 const GallerySection = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("featured");
   const { products } = useProducts();
 
   const allArtworks: {
+    id: string;
     image: string;
     mockup?: string;
     title: string;
@@ -193,9 +200,11 @@ const GallerySection = () => {
     price: number;
     salePrice?: number;
     description: string;
-    id?: string;
   }[] = [
-    ...defaultArtworks,
+    ...defaultArtworks.map((art) => ({
+      ...art,
+      id: `default-${slugify(art.title)}`,
+    })),
     ...products.map((product) => ({
       image: product.image,
       mockup: product.mockup || product.image,
@@ -205,7 +214,7 @@ const GallerySection = () => {
       price: product.price,
       salePrice: product.salePrice,
       description: product.description,
-      id: product.id,
+      id: `product-${product.id}`,
     })),
   ];
 
@@ -286,7 +295,7 @@ const GallerySection = () => {
       <div className="columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8">
         {sortedArtworks.map((art, index) => (
           <ArtworkCard
-            key={art.id ?? `${art.title}-${index}`}
+            key={art.id}
             {...art}
             index={index}
             onClick={() => setLightboxIndex(index)}

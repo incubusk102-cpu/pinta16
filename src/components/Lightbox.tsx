@@ -9,6 +9,7 @@ import {
 
 interface LightboxProps {
   artworks: {
+    id: string;
     image: string;
     mockup?: string;
     title: string;
@@ -185,7 +186,7 @@ const Lightbox = ({
               <button
                 onClick={() =>
                   addToCart({
-                    id: `art-${currentIndex}`,
+                    id: art.id,
                     image: art.image,
                     title: art.title,
                     medium: art.medium,
