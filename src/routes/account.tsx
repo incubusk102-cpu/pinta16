@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -26,9 +26,10 @@ const formatDate = (iso?: string) => {
 function AccountPage() {
   const { user, token, logout } = useUserAuth();
   const navigate = useNavigate();
+  const loggingOutRef = useRef(false);
 
   useEffect(() => {
-    if (!token) {
+    if (!token && !loggingOutRef.current) {
       void navigate({ to: "/login" });
     }
   }, [token, navigate]);
@@ -36,6 +37,7 @@ function AccountPage() {
   if (!user || !token) return null;
 
   const handleLogout = () => {
+    loggingOutRef.current = true;
     logout();
     toast.success("Signed out");
     void navigate({ to: "/" });
