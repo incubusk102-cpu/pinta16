@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
+import { UsersSection } from "@/components/admin/UsersSection";
 import {
   ArrowLeft,
   Activity,
@@ -28,6 +29,7 @@ import {
   Settings,
   Trash2,
   Upload,
+  Users,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -44,11 +46,12 @@ export const Route = createFileRoute("/admin")({
   }),
 });
 
-type AdminSection = "products" | "visitors" | "settings";
+type AdminSection = "products" | "visitors" | "users" | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
   products: "Products",
   visitors: "Visitors",
+  users: "Users",
   settings: "Settings",
 };
 
@@ -252,6 +255,13 @@ function AdminDashboard() {
               hint="Live + 24h chart"
             />
             <NavLink
+              icon={<Users className="w-4 h-4" />}
+              label="Users"
+              active={section === "users"}
+              onClick={() => navigate("users")}
+              hint="Sign-ups + 30-day cleanup"
+            />
+            <NavLink
               icon={<Settings className="w-4 h-4" />}
               label="Settings"
               active={section === "settings"}
@@ -273,6 +283,7 @@ function AdminDashboard() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {section === "products" && <ProductsSection />}
         {section === "visitors" && <VisitorsSection />}
+        {section === "users" && <UsersSection />}
         {section === "settings" && <SettingsSection />}
       </main>
     </div>
