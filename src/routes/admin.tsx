@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   useProducts,
@@ -28,6 +28,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  Package,
   Pencil,
   Plus,
   Settings,
@@ -35,6 +36,8 @@ import {
   Upload,
   Users,
 } from "lucide-react";
+import { ORDER_STEPS, type CompletedOrder } from "@/contexts/CartContext";
+import { getAdminToken } from "@/contexts/AdminAuthContext";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -50,10 +53,11 @@ export const Route = createFileRoute("/admin")({
   }),
 });
 
-type AdminSection = "products" | "visitors" | "users" | "settings";
+type AdminSection = "products" | "orders" | "visitors" | "users" | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
   products: "Products",
+  orders: "Orders",
   visitors: "Visitors",
   users: "Users",
   settings: "Settings",
@@ -252,6 +256,13 @@ function AdminDashboard() {
               hint={`${products.length} uploaded`}
             />
             <NavLink
+              icon={<Package className="w-4 h-4" />}
+              label="Orders"
+              active={section === "orders"}
+              onClick={() => navigate("orders")}
+              hint="Track & update"
+            />
+            <NavLink
               icon={<Activity className="w-4 h-4" />}
               label="Visitors"
               active={section === "visitors"}
@@ -286,6 +297,7 @@ function AdminDashboard() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {section === "products" && <ProductsSection />}
+        {section === "orders" && <OrdersSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "settings" && <SettingsSection />}
@@ -722,6 +734,164 @@ function ProductsSection() {
         onSave={updateProduct}
       />
     </>
+  );
+}
+
+function OrdersSection() {
+  const [orders, setOrders] = useState<CompletedOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const fetchOrders = async () => {
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setOrders(data.orders || []);
+    } catch {
+      toast.error("Could not load orders");
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchOrders();
+  }, []);
+
+  const handleStatusUpdate = async (
+    orderId: string,
+    status: CompletedOrder["status"],
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "update-status", orderId, status }),
+      });
+      if (!res.ok) throw new Error();
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
+      );
+      toast.success("Status updated");
+    } catch {
+      toast.error("Could not update status");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-PH", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  if (loadingOrders) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Package className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">No orders yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-xl">Orders ({orders.length})</h2>
+        <Button variant="ghost" size="sm" onClick={() => void fetchOrders()}>
+          Refresh
+        </Button>
+      </div>
+
+      {orders.map((order) => {
+        const currentStepIdx = ORDER_STEPS.findIndex(
+          (s) => s.key === order.status,
+        );
+        return (
+          <div
+            key={order.id}
+            className="border border-border/40 rounded-lg p-5 space-y-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-body text-sm font-semibold">{order.id}</p>
+                <p className="font-body text-xs text-muted-foreground">
+                  {formatDate(order.createdAt)} · {order.orderInfo.fullName} ·{" "}
+                  {order.orderInfo.email}
+                </p>
+              </div>
+              <p className="font-body text-sm font-semibold">
+                ₱{order.total.toLocaleString()}
+              </p>
+            </div>
+
+            {/* Items */}
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {order.items.map((item) => (
+                <p key={item.id}>
+                  {item.title} × {item.quantity} — ₱
+                  {(item.price * item.quantity).toLocaleString()}
+                </p>
+              ))}
+            </div>
+
+            {/* Delivery info */}
+            <p className="text-xs text-muted-foreground">
+              Ship to: {order.orderInfo.address}, {order.orderInfo.city} ·
+              Phone: {order.orderInfo.phone}
+            </p>
+
+            {/* Journey Map */}
+            <div className="flex items-center gap-1">
+              {ORDER_STEPS.map((step, idx) => {
+                const done = idx <= currentStepIdx;
+                const isActive = idx === currentStepIdx;
+                return (
+                  <button
+                    key={step.key}
+                    disabled={updatingId === order.id}
+                    onClick={() => handleStatusUpdate(order.id, step.key)}
+                    className={`flex-1 py-2 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
+                      done
+                        ? isActive
+                          ? "bg-foreground text-background"
+                          : "bg-foreground/20 text-foreground"
+                        : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                    } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                    title={step.description}
+                  >
+                    {step.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
