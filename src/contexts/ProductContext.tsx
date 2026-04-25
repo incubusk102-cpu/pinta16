@@ -124,18 +124,25 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProduct = useCallback(
     async (id: string, updates: Partial<Product>) => {
-      const existing = products.find((product) => product.id === id);
-      if (!existing) return;
+      let nextProduct: Product | null = null;
 
-      const nextProduct = {
-        ...existing,
-        ...updates,
-        id: existing.id,
-        createdAt: existing.createdAt,
-      };
-      setAndPersistProducts((previous) =>
-        previous.map((product) => (product.id === id ? nextProduct : product)),
-      );
+      setAndPersistProducts((previous) => {
+        const existing = previous.find((product) => product.id === id);
+        if (!existing) return previous;
+
+        nextProduct = {
+          ...existing,
+          ...updates,
+          id: existing.id,
+          createdAt: existing.createdAt,
+        };
+
+        return previous.map((product) =>
+          product.id === id ? (nextProduct as Product) : product,
+        );
+      });
+
+      if (!nextProduct) return;
 
       try {
         const response = await fetch(PRODUCTS_API, {
@@ -151,7 +158,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         // Browser storage remains as the local fallback.
       }
     },
-    [products, setAndPersistProducts],
+    [setAndPersistProducts],
   );
 
   const deleteProduct = useCallback(
