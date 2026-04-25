@@ -152,6 +152,14 @@ export const findUserById = (users, id) => {
   return null;
 };
 
+const escapeHtml = (input) =>
+  String(input ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 export const sendInactiveDeletionEmail = async (user) => {
   const apiKey = process.env.RESEND_API_KEY || "";
   const from = process.env.RESEND_FROM || "Pintaterra <onboarding@resend.dev>";
@@ -160,13 +168,16 @@ export const sendInactiveDeletionEmail = async (user) => {
     return { skipped: true, reason: "no-api-key" };
   }
   const subject = "Your Pintaterra account was removed for inactivity";
+  const safeName = escapeHtml(user.name || "there");
+  const safeEmail = escapeHtml(user.email || "");
+  const safeSignup = `${escapeHtml(siteUrl)}/signup`;
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:auto;padding:24px;color:#222">
-      <h2 style="margin:0 0 16px">Hi ${user.name || "there"},</h2>
-      <p>Your Pintaterra account (<strong>${user.email}</strong>) was removed
+      <h2 style="margin:0 0 16px">Hi ${safeName},</h2>
+      <p>Your Pintaterra account (<strong>${safeEmail}</strong>) was removed
       because it has been inactive for ${INACTIVE_DAYS} days.</p>
       <p>If this was a mistake, you're welcome to sign up again any time at
-      <a href="${siteUrl}/signup">${siteUrl}/signup</a>.</p>
+      <a href="${safeSignup}">${safeSignup}</a>.</p>
       <p style="margin-top:24px;color:#666;font-size:12px">— Pintaterra</p>
     </div>
   `.trim();

@@ -120,11 +120,15 @@ export const handler = async (event) => {
     }
 
     if (event.httpMethod === "POST" && action === "heartbeat") {
-      const user = await getCurrentUser(event, store);
+      const token = extractToken(event);
+      if (!token) return json(401, { error: "Not authenticated" });
+      const secret = await ensureSessionSecret(store);
+      const payload = verifyTokenWithSecret(token, secret);
+      if (!payload?.sub) return json(401, { error: "Not authenticated" });
+      const users = await readUsers(store);
+      const user = findUserById(users, payload.sub);
       if (!user) return json(401, { error: "Not authenticated" });
       user.lastSeenAt = new Date().toISOString();
-      const users = await readUsers(store);
-      users[user.email] = user;
       await writeUsers(store, users);
       return json(200, { ok: true });
     }
