@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
+import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 
 function NotFoundComponent() {
   return (
@@ -33,6 +34,7 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  useVisitorHeartbeat();
   return (
     <AdminAuthProvider>
       <ProductProvider>

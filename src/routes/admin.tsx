@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { useProducts } from "@/contexts/ProductContext";
+import { useProducts, type Product } from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,11 +9,23 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { EditProductDialog } from "@/components/admin/EditProductDialog";
+import { VisitorsSection } from "@/components/admin/VisitorsSection";
+import {
   ArrowLeft,
+  Activity,
   KeyRound,
   Loader2,
   LogOut,
+  Menu,
+  Pencil,
   Plus,
+  Settings,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -31,6 +43,14 @@ export const Route = createFileRoute("/admin")({
     ],
   }),
 });
+
+type AdminSection = "products" | "visitors" | "settings";
+
+const SECTION_LABELS: Record<AdminSection, string> = {
+  products: "Products",
+  visitors: "Visitors",
+  settings: "Settings",
+};
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -168,8 +188,135 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
 }
 
 function AdminDashboard() {
-  const { products, addProduct, deleteProduct } = useProducts();
-  const { logout, changePassword } = useAdminAuth();
+  const { logout } = useAdminAuth();
+  const { products } = useProducts();
+  const [section, setSection] = useState<AdminSection>("products");
+  const [navOpen, setNavOpen] = useState(false);
+
+  const navigate = (next: AdminSection) => {
+    setSection(next);
+    setNavOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Toaster richColors position="top-right" />
+      <header className="border-b border-border/50 bg-card/30 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+          <h1 className="font-display text-lg sm:text-xl flex-1 truncate">
+            Admin · {SECTION_LABELS[section]}
+          </h1>
+          {section === "products" && (
+            <span className="hidden sm:inline text-xs text-muted-foreground">
+              {products.length} uploaded
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="text-xs"
+          >
+            <LogOut className="w-3 h-3 mr-1" />
+            <span className="hidden sm:inline">Sign out</span>
+          </Button>
+        </div>
+      </header>
+
+      <Sheet open={navOpen} onOpenChange={setNavOpen}>
+        <SheetContent side="left" className="w-72">
+          <SheetHeader>
+            <SheetTitle className="font-display">Admin · Pintaterra</SheetTitle>
+          </SheetHeader>
+          <nav className="mt-6 flex flex-col gap-1">
+            <NavLink
+              icon={<Upload className="w-4 h-4" />}
+              label="Products"
+              active={section === "products"}
+              onClick={() => navigate("products")}
+              hint={`${products.length} uploaded`}
+            />
+            <NavLink
+              icon={<Activity className="w-4 h-4" />}
+              label="Visitors"
+              active={section === "visitors"}
+              onClick={() => navigate("visitors")}
+              hint="Live + 24h chart"
+            />
+            <NavLink
+              icon={<Settings className="w-4 h-4" />}
+              label="Settings"
+              active={section === "settings"}
+              onClick={() => navigate("settings")}
+              hint="Change password"
+            />
+          </nav>
+          <div className="mt-8 pt-6 border-t border-border/60 text-xs text-muted-foreground space-y-2">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 hover:text-foreground"
+            >
+              <ArrowLeft className="w-3 h-3" /> Back to public site
+            </Link>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        {section === "products" && <ProductsSection />}
+        {section === "visitors" && <VisitorsSection />}
+        {section === "settings" && <SettingsSection />}
+      </main>
+    </div>
+  );
+}
+
+function NavLink({
+  icon,
+  label,
+  active,
+  onClick,
+  hint,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  hint?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+        active
+          ? "bg-primary/10 text-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-card/60"
+      }`}
+    >
+      <span
+        className={`flex-shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
+      >
+        {icon}
+      </span>
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      {hint && (
+        <span className="text-[10px] text-muted-foreground">{hint}</span>
+      )}
+    </button>
+  );
+}
+
+function ProductsSection() {
+  const { products, addProduct, updateProduct, deleteProduct } = useProducts();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mockupInputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<string>("");
@@ -181,11 +328,7 @@ function AdminDashboard() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
+  const [editTarget, setEditTarget] = useState<Product | null>(null);
 
   const readImage = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -262,67 +405,9 @@ function AdminDashboard() {
     }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (changingPassword) return;
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      return toast.error(
-        `New password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-      );
-    }
-    if (newPassword !== confirmNewPassword) {
-      return toast.error("New passwords do not match");
-    }
-
-    setChangingPassword(true);
-    try {
-      await changePassword(currentPassword, newPassword);
-      toast.success("Password updated");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not change password",
-      );
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <header className="border-b border-border/50 bg-card/30 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" /> Back to site
-            </Link>
-            <span className="text-border">|</span>
-            <h1 className="font-display text-xl">Admin · Products</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              {products.length} uploaded
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={logout}
-              className="text-xs"
-            >
-              <LogOut className="w-3 h-3 mr-1" />
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-6 py-10 grid lg:grid-cols-[1fr_1.2fr] gap-10">
+    <>
+      <div className="grid lg:grid-cols-[1fr_1.2fr] gap-8">
         <section className="bg-card/40 border border-border/60 rounded-xl p-6 h-fit lg:sticky lg:top-24">
           <div className="flex items-center gap-2 mb-6">
             <Plus className="w-5 h-5 text-primary" />
@@ -352,7 +437,7 @@ function AdminDashboard() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => readImage(e, setImage)}
+                  onChange={(e) => void readImage(e, setImage)}
                 />
               </label>
             </div>
@@ -383,7 +468,7 @@ function AdminDashboard() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => readImage(e, setMockup)}
+                  onChange={(e) => void readImage(e, setMockup)}
                 />
               </label>
             </div>
@@ -459,53 +544,6 @@ function AdminDashboard() {
               </Button>
             </div>
           </form>
-
-          <div className="mt-8 pt-6 border-t border-border/60">
-            <div className="flex items-center gap-2 mb-4">
-              <KeyRound className="w-4 h-4 text-primary" />
-              <h3 className="font-display text-base">Change password</h3>
-            </div>
-            <form onSubmit={handleChangePassword} className="space-y-3">
-              <div>
-                <Label htmlFor="currentPassword">Current password</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="newPassword">New password</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="confirmNewPassword">Confirm new password</Label>
-                <Input
-                  id="confirmNewPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                />
-              </div>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={changingPassword}
-                className="w-full"
-              >
-                {changingPassword ? "Updating..." : "Update password"}
-              </Button>
-            </form>
-          </div>
         </section>
 
         <section>
@@ -543,24 +581,144 @@ function AdminDashboard() {
                         </p>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      disabled={isDeleting}
-                      onClick={() =>
-                        void handleDelete(product.id, product.title)
-                      }
-                      aria-label={`Delete ${product.title}`}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEditTarget(product)}
+                        aria-label={`Edit ${product.title}`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={isDeleting}
+                        onClick={() =>
+                          void handleDelete(product.id, product.title)
+                        }
+                        aria-label={`Delete ${product.title}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
                   </li>
                 );
               })}
             </ul>
           )}
         </section>
-      </main>
+      </div>
+
+      <EditProductDialog
+        product={editTarget}
+        open={Boolean(editTarget)}
+        onClose={() => setEditTarget(null)}
+        onSave={updateProduct}
+      />
+    </>
+  );
+}
+
+function SettingsSection() {
+  const { changePassword, logout } = useAdminAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (changingPassword) return;
+    if (!currentPassword) {
+      return toast.error("Enter your current password");
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return toast.error(
+        `New password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      );
+    }
+    if (newPassword === currentPassword) {
+      return toast.error("New password must be different");
+    }
+    if (newPassword !== confirmNewPassword) {
+      return toast.error("New passwords do not match");
+    }
+
+    setChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      toast.success("Password updated");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not change password",
+      );
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  return (
+    <div className="max-w-md space-y-6">
+      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <h2 className="font-display text-lg">Change password</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Pick any new password (8+ characters). After saving, your existing
+          session stays signed in but every other device gets logged out.
+        </p>
+        <form onSubmit={handleChangePassword} className="space-y-3">
+          <div>
+            <Label htmlFor="currentPassword">Current password</Label>
+            <Input
+              id="currentPassword"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="newPassword">New password</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="confirmNewPassword">Confirm new password</Label>
+            <Input
+              id="confirmNewPassword"
+              type="password"
+              autoComplete="new-password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+            />
+          </div>
+          <Button type="submit" disabled={changingPassword} className="w-full">
+            {changingPassword ? "Updating..." : "Update password"}
+          </Button>
+        </form>
+      </section>
+
+      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+        <h2 className="font-display text-lg mb-2">Sign out</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          End your admin session on this device. You can sign back in any time
+          from this URL.
+        </p>
+        <Button variant="outline" onClick={logout} className="w-full">
+          <LogOut className="w-4 h-4 mr-2" /> Sign out
+        </Button>
+      </section>
     </div>
   );
 }
