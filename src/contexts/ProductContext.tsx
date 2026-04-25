@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { getAdminToken } from "@/contexts/AdminAuthContext";
 
 export interface Product {
   id: string;
@@ -109,18 +110,26 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
       setAndPersistProducts((previous) => [nextProduct, ...previous]);
 
-      try {
-        const response = await fetch(PRODUCTS_API, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(nextProduct),
-        });
+      const token = getAdminToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
 
-        if (!response.ok) {
-          throw new Error("Could not save product");
-        }
-      } catch {
-        // Browser storage remains as the local fallback.
+      const response = await fetch(PRODUCTS_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(nextProduct),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not save product",
+        );
       }
     },
     [setAndPersistProducts],
@@ -142,18 +151,26 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         previous.map((product) => (product.id === id ? nextProduct : product)),
       );
 
-      try {
-        const response = await fetch(PRODUCTS_API, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(nextProduct),
-        });
+      const token = getAdminToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
 
-        if (!response.ok) {
-          throw new Error("Could not update product");
-        }
-      } catch {
-        // Browser storage remains as the local fallback.
+      const response = await fetch(PRODUCTS_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(nextProduct),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not update product",
+        );
       }
     },
     [setAndPersistProducts],
@@ -165,18 +182,26 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         previous.filter((product) => product.id !== id),
       );
 
-      try {
-        const response = await fetch(PRODUCTS_API, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        });
+      const token = getAdminToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
 
-        if (!response.ok) {
-          throw new Error("Could not delete product");
-        }
-      } catch {
-        // Browser storage remains as the local fallback.
+      const response = await fetch(PRODUCTS_API, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not delete product",
+        );
       }
     },
     [setAndPersistProducts],

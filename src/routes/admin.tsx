@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { Trash2, Upload, ArrowLeft, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -32,8 +41,135 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+
 function AdminPage() {
+  const { token, initialized, loading } = useAdminAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Toaster richColors position="top-right" />
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!token) {
+    return <AdminAuthGate initialized={initialized} />;
+  }
+
+  return <AdminDashboard />;
+}
+
+function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
+  const { initPassword, login } = useAdminAuth();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const isInitMode = initialized === false;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+
+    if (isInitMode) {
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        return toast.error(
+          `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        );
+      }
+      if (password !== confirmPassword) {
+        return toast.error("Passwords do not match");
+      }
+    }
+
+    setSubmitting(true);
+    try {
+      if (isInitMode) {
+        await initPassword(password);
+        toast.success("Admin password set");
+      } else {
+        await login(password);
+        toast.success("Welcome back");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Authentication failed",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+      <Toaster richColors position="top-right" />
+      <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-8 space-y-6">
+        <div className="space-y-2 text-center">
+          <h1 className="font-display text-2xl">Admin · Pintaterra</h1>
+          <p className="text-sm text-muted-foreground">
+            {isInitMode
+              ? "First time setup — choose a password to protect this admin."
+              : initialized === null
+                ? "Could not reach the auth service. Check your connection."
+                : "Enter the admin password to manage your collection."}
+          </p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete={isInitMode ? "new-password" : "current-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              disabled={initialized === null}
+            />
+          </div>
+          {isInitMode && (
+            <div>
+              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          )}
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={submitting || initialized === null}
+          >
+            {submitting
+              ? "Working..."
+              : isInitMode
+                ? "Set password"
+                : "Sign in"}
+          </Button>
+        </form>
+        <div className="text-center">
+          <Link
+            to="/"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+          >
+            <ArrowLeft className="w-3 h-3" /> Back to site
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard() {
   const { products, addProduct, deleteProduct } = useProducts();
+  const { logout, changePassword } = useAdminAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mockupInputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<string>("");
@@ -45,6 +181,11 @@ function AdminPage() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const readImage = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -97,8 +238,10 @@ function AdminPage() {
       });
       toast.success(`"${title.trim()}" added to the collection`);
       reset();
-    } catch {
-      toast.error("Could not save product");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not save product",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -110,10 +253,40 @@ function AdminPage() {
     try {
       await deleteProduct(productId);
       toast.success(`Removed "${productTitle}"`);
-    } catch {
-      toast.error("Could not remove product");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not remove product",
+      );
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (changingPassword) return;
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return toast.error(
+        `New password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      );
+    }
+    if (newPassword !== confirmNewPassword) {
+      return toast.error("New passwords do not match");
+    }
+
+    setChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      toast.success("Password updated");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not change password",
+      );
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -132,9 +305,20 @@ function AdminPage() {
             <span className="text-border">|</span>
             <h1 className="font-display text-xl">Admin · Products</h1>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {products.length} uploaded
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {products.length} uploaded
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="text-xs"
+            >
+              <LogOut className="w-3 h-3 mr-1" />
+              Sign out
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -275,6 +459,53 @@ function AdminPage() {
               </Button>
             </div>
           </form>
+
+          <div className="mt-8 pt-6 border-t border-border/60">
+            <div className="flex items-center gap-2 mb-4">
+              <KeyRound className="w-4 h-4 text-primary" />
+              <h3 className="font-display text-base">Change password</h3>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <Label htmlFor="currentPassword">Current password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="newPassword">New password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirmNewPassword">Confirm new password</Label>
+                <Input
+                  id="confirmNewPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={changingPassword}
+                className="w-full"
+              >
+                {changingPassword ? "Updating..." : "Update password"}
+              </Button>
+            </form>
+          </div>
         </section>
 
         <section>

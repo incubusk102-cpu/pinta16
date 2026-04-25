@@ -1,4 +1,5 @@
 import { connectLambda, getStore } from "@netlify/blobs";
+import { isAuthenticated } from "../lib/admin-auth.js";
 
 const STORE_NAME = "products";
 const PRODUCTS_KEY = "all-products";
@@ -48,6 +49,14 @@ export const handler = async (event) => {
     }
 
     if (method === "POST") {
+      if (!(await isAuthenticated(event))) {
+        return {
+          statusCode: 401,
+          headers: jsonHeaders,
+          body: JSON.stringify({ error: "Not authenticated" }),
+        };
+      }
+
       const product = parseBody(event.body);
       if (!product?.id || !product?.image || !product?.title) {
         return {
@@ -73,6 +82,14 @@ export const handler = async (event) => {
     }
 
     if (method === "DELETE") {
+      if (!(await isAuthenticated(event))) {
+        return {
+          statusCode: 401,
+          headers: jsonHeaders,
+          body: JSON.stringify({ error: "Not authenticated" }),
+        };
+      }
+
       const { id } = parseBody(event.body);
       if (!id) {
         return {

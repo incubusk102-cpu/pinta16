@@ -1,4 +1,5 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
+import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 
@@ -33,10 +34,12 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <ProductProvider>
-      <CartProvider>
-        <Outlet />
-      </CartProvider>
-    </ProductProvider>
+    <AdminAuthProvider>
+      <ProductProvider>
+        <CartProvider>
+          <Outlet />
+        </CartProvider>
+      </ProductProvider>
+    </AdminAuthProvider>
   );
 }
