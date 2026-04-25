@@ -19,6 +19,20 @@ export interface OrderInfo {
   notes: string;
 }
 
+export interface OrderNotification {
+  type: "shipped" | "received" | "in_progress" | "confirmed";
+  message: string;
+  recipient: string;
+  sentAt: string;
+}
+
+export interface OrderReview {
+  rating: number;
+  text: string;
+  images: string[];
+  submittedAt: string;
+}
+
 export interface CompletedOrder {
   id: string;
   items: CartItem[];
@@ -30,7 +44,14 @@ export interface CompletedOrder {
   estimatedCreationDays: string;
   createdAt: string;
   status: "confirmed" | "in_progress" | "out_for_delivery" | "received";
+  paymentIntentId?: string;
+  qrCodeImageUrl?: string;
+  notifications?: OrderNotification[];
+  review?: OrderReview;
 }
+
+export const REVIEW_MIN_CHARS = 500;
+export const REVIEW_MAX_IMAGES = 5;
 
 export const ORDER_STEPS: {
   key: CompletedOrder["status"];
@@ -89,11 +110,15 @@ interface CartContextType {
   amountToFreeShipping: number;
   estimatedCreationDays: string;
   orders: CompletedOrder[];
-  placeOrder: (orderInfo: OrderInfo) => CompletedOrder;
+  placeOrder: (
+    orderInfo: OrderInfo,
+    payment?: { paymentIntentId?: string; qrCodeImageUrl?: string | null },
+  ) => CompletedOrder;
   updateOrderStatus: (
     orderId: string,
     status: CompletedOrder["status"],
   ) => void;
+  submitOrderReview: (orderId: string, review: OrderReview) => void;
   showCheckout: boolean;
   setShowCheckout: (show: boolean) => void;
   lastOrder: CompletedOrder | null;
@@ -226,7 +251,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const total = subtotal - discount + shippingFee;
   const estimatedCreationDays = getEstimatedCreationDays(itemCount);
 
-  const placeOrder = (orderInfo: OrderInfo): CompletedOrder => {
+  const placeOrder = (
+    orderInfo: OrderInfo,
+    payment?: { paymentIntentId?: string; qrCodeImageUrl?: string | null },
+  ): CompletedOrder => {
     const order: CompletedOrder = {
       id: `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`,
       items: [...items],
@@ -238,6 +266,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       estimatedCreationDays,
       createdAt: new Date().toISOString(),
       status: "confirmed",
+      paymentIntentId: payment?.paymentIntentId,
+      qrCodeImageUrl: payment?.qrCodeImageUrl ?? undefined,
+      notifications: [],
     };
     const newOrders = [order, ...orders];
     saveOrders(newOrders);
@@ -275,6 +306,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     saveOrders(newOrders);
   };
 
+  const submitOrderReview = (orderId: string, review: OrderReview) => {
+    const newOrders = orders.map((o) =>
+      o.id === orderId ? { ...o, review } : o,
+    );
+    saveOrders(newOrders);
+    if (lastOrder?.id === orderId) {
+      setLastOrder({ ...lastOrder, review });
+    }
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -302,6 +343,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         orders,
         placeOrder,
         updateOrderStatus,
+        submitOrderReview,
         showCheckout,
         setShowCheckout,
         lastOrder,

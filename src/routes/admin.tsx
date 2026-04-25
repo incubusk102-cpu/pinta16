@@ -24,6 +24,7 @@ import { UsersSection } from "@/components/admin/UsersSection";
 import {
   ArrowLeft,
   Activity,
+  Bell,
   KeyRound,
   Loader2,
   LogOut,
@@ -31,7 +32,9 @@ import {
   Package,
   Pencil,
   Plus,
+  QrCode,
   Settings,
+  Star,
   Trash2,
   Upload,
   Users,
@@ -860,11 +863,130 @@ function OrdersSection() {
             </div>
 
             {/* Delivery info */}
-            <p className="text-xs text-muted-foreground">
-              Ship to: {order.orderInfo?.address ?? "—"},{" "}
-              {order.orderInfo?.city ?? "—"} · Phone:{" "}
-              {order.orderInfo?.phone ?? "—"}
-            </p>
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <p>
+                Ship to: {order.orderInfo?.address ?? "—"},{" "}
+                {order.orderInfo?.city ?? "—"} · Phone:{" "}
+                {order.orderInfo?.phone ?? "—"}
+              </p>
+              {order.orderInfo?.notes && (
+                <p>
+                  <span className="text-foreground/70">Customer notes:</span>{" "}
+                  {order.orderInfo.notes}
+                </p>
+              )}
+            </div>
+
+            {/* Payment QR */}
+            {(order.paymentIntentId || order.qrCodeImageUrl) && (
+              <div className="flex items-start gap-3 p-3 bg-muted/30 border border-border/40 rounded-md">
+                {order.qrCodeImageUrl ? (
+                  <a
+                    href={order.qrCodeImageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0"
+                  >
+                    <img
+                      src={order.qrCodeImageUrl}
+                      alt="Payment QR"
+                      className="w-20 h-20 object-contain bg-white p-1 rounded-sm border border-border/30"
+                    />
+                  </a>
+                ) : (
+                  <QrCode className="w-5 h-5 text-muted-foreground mt-0.5" />
+                )}
+                <div className="min-w-0 flex-1 text-xs space-y-0.5">
+                  <p className="text-foreground font-medium">QR Ph payment</p>
+                  {order.paymentIntentId && (
+                    <p className="text-muted-foreground break-all">
+                      Intent: {order.paymentIntentId}
+                    </p>
+                  )}
+                  {order.qrCodeImageUrl && (
+                    <a
+                      href={order.qrCodeImageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-foreground underline"
+                    >
+                      Open QR image
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Notifications log */}
+            {order.notifications && order.notifications.length > 0 && (
+              <div className="text-xs space-y-1.5">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Bell className="w-3.5 h-3.5" />
+                  <span className="text-[10px] uppercase tracking-wider">
+                    Notifications sent
+                  </span>
+                </div>
+                <ul className="space-y-1 pl-5 list-disc text-muted-foreground">
+                  {order.notifications.map((n, idx) => (
+                    <li key={`${n.sentAt}-${idx}`}>
+                      <span className="text-foreground">{n.message}</span> — to{" "}
+                      {n.recipient} on {new Date(n.sentAt).toLocaleString()}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Review */}
+            {order.review && (
+              <div className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                  <span className="text-[10px] uppercase tracking-wider">
+                    Customer review
+                  </span>
+                  <span className="ml-auto text-[10px]">
+                    {new Date(order.review.submittedAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star
+                      key={n}
+                      className={`w-3.5 h-3.5 ${
+                        n <= order.review!.rating
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-muted-foreground"
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-1 text-muted-foreground">
+                    {order.review.rating}/5
+                  </span>
+                </div>
+                <p className="text-foreground whitespace-pre-wrap">
+                  {order.review.text}
+                </p>
+                {order.review.images.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {order.review.images.map((src, i) => (
+                      <a
+                        key={i}
+                        href={src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <img
+                          src={src}
+                          alt={`Review image ${i + 1}`}
+                          className="aspect-square w-full object-cover rounded-sm border border-border/20"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Journey Map */}
             <div className="flex items-center gap-1">

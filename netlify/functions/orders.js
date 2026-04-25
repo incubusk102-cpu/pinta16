@@ -44,8 +44,17 @@ export const handler = async (event) => {
         const orders = await readOrders(store);
         const order = orders.find((o) => o.id === params.id);
         if (!order) return json(404, { error: "Order not found" });
-        const { orderInfo: _pii, ...publicOrder } = order;
-        return json(200, { order: publicOrder });
+        const { orderInfo, ...rest } = order;
+        const publicOrderInfo = orderInfo
+          ? {
+              fullName: orderInfo.fullName,
+              city: orderInfo.city,
+              email: orderInfo.email,
+            }
+          : undefined;
+        return json(200, {
+          order: { ...rest, orderInfo: publicOrderInfo },
+        });
       }
 
       if (!(await isAuthenticated(event))) {
@@ -119,6 +128,16 @@ export const handler = async (event) => {
           ).slice(0, 100),
           status: "confirmed",
           createdAt: new Date().toISOString(),
+          paymentIntentId:
+            typeof order.paymentIntentId === "string"
+              ? order.paymentIntentId.slice(0, 200)
+              : "",
+          qrCodeImageUrl:
+            typeof order.qrCodeImageUrl === "string"
+              ? order.qrCodeImageUrl.slice(0, 4000)
+              : "",
+          notifications: [],
+          review: null,
         };
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
@@ -142,9 +161,88 @@ export const handler = async (event) => {
         const orders = await readOrders(store);
         const idx = orders.findIndex((o) => o.id === orderId);
         if (idx === -1) return json(404, { error: "Order not found" });
-        orders[idx] = { ...orders[idx], status };
+        const existing = orders[idx];
+        const notifications = Array.isArray(existing.notifications)
+          ? [...existing.notifications]
+          : [];
+        const recipient = existing.orderInfo?.email || "";
+        const statusChanged = existing.status !== status;
+        const NOTIFICATION_MESSAGES = {
+          confirmed: "Your order has been confirmed.",
+          in_progress: "The artist has started working on your painting.",
+          out_for_delivery: "Your order has shipped and is out for delivery!",
+          received: "Your order is marked as received. We'd love your review!",
+        };
+        if (statusChanged) {
+          notifications.push({
+            type: status,
+            message: NOTIFICATION_MESSAGES[status],
+            recipient,
+            sentAt: new Date().toISOString(),
+          });
+        }
+        orders[idx] = { ...existing, status, notifications };
         await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: orders[idx] });
+      }
+
+      if (action === "submit-review") {
+        const { orderId, review } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        if (!review || typeof review !== "object") {
+          return json(400, { error: "Invalid review" });
+        }
+        const rating = Math.floor(Number(review.rating));
+        if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+          return json(400, { error: "Rating must be between 1 and 5" });
+        }
+        const text = typeof review.text === "string" ? review.text : "";
+        if (text.trim().length < 500) {
+          return json(400, {
+            error: "Review text must be at least 500 characters",
+          });
+        }
+        if (text.length > 5000) {
+          return json(400, { error: "Review text too long" });
+        }
+        const rawImages = Array.isArray(review.images) ? review.images : [];
+        if (rawImages.length > 5) {
+          return json(400, { error: "Maximum 5 images allowed" });
+        }
+        const images = [];
+        for (const img of rawImages) {
+          if (typeof img !== "string") continue;
+          if (img.length > 800_000) {
+            return json(400, { error: "Image too large (max ~600KB each)" });
+          }
+          if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(img)) {
+            return json(400, { error: "Invalid image format" });
+          }
+          images.push(img);
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        if (orders[idx].status !== "received") {
+          return json(400, {
+            error: "Reviews can only be submitted after the order is received",
+          });
+        }
+        if (orders[idx].review) {
+          return json(409, { error: "Review already submitted" });
+        }
+        const safeReview = {
+          rating,
+          text: text.slice(0, 5000),
+          images,
+          submittedAt: new Date().toISOString(),
+        };
+        orders[idx] = { ...orders[idx], review: safeReview };
+        await store.setJSON(ORDERS_KEY, orders);
+        const { orderInfo: _pii, ...publicOrder } = orders[idx];
+        return json(200, { order: publicOrder });
       }
 
       return json(400, { error: "Unknown action" });
