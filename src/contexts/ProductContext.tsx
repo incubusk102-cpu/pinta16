@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -50,6 +51,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
   const [products, setProducts] = useState<Product[]>(() =>
     sortProducts(readStoredProducts()),
   );
+  const productsRef = useRef<Product[]>(products);
 
   const persistProducts = useCallback((nextProducts: Product[]) => {
     if (typeof window === "undefined") return;
@@ -60,6 +62,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     (updater: (previous: Product[]) => Product[]) => {
       setProducts((previous) => {
         const next = sortProducts(updater(previous));
+        productsRef.current = next;
         persistProducts(next);
         return next;
       });
@@ -82,6 +85,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
         const next = sortProducts(data.products);
         setProducts(next);
+        productsRef.current = next;
         persistProducts(next);
       } catch {
         // Local development falls back to browser storage.
@@ -124,25 +128,19 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProduct = useCallback(
     async (id: string, updates: Partial<Product>) => {
-      let nextProduct: Product | null = null;
+      const existing = productsRef.current.find((product) => product.id === id);
+      if (!existing) return;
 
-      setAndPersistProducts((previous) => {
-        const existing = previous.find((product) => product.id === id);
-        if (!existing) return previous;
+      const nextProduct: Product = {
+        ...existing,
+        ...updates,
+        id: existing.id,
+        createdAt: existing.createdAt,
+      };
 
-        nextProduct = {
-          ...existing,
-          ...updates,
-          id: existing.id,
-          createdAt: existing.createdAt,
-        };
-
-        return previous.map((product) =>
-          product.id === id ? (nextProduct as Product) : product,
-        );
-      });
-
-      if (!nextProduct) return;
+      setAndPersistProducts((previous) =>
+        previous.map((product) => (product.id === id ? nextProduct : product)),
+      );
 
       try {
         const response = await fetch(PRODUCTS_API, {
