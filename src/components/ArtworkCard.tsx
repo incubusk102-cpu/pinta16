@@ -8,6 +8,7 @@ import {
 } from "@/contexts/ProductContext";
 
 interface ArtworkCardProps {
+  id: string;
   image: string;
   mockup?: string;
   title: string;
@@ -21,6 +22,7 @@ interface ArtworkCardProps {
 }
 
 const ArtworkCard = ({
+  id,
   image,
   mockup,
   title,
@@ -40,7 +42,7 @@ const ArtworkCard = ({
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     addToCart({
-      id: `art-${index}`,
+      id,
       image,
       title,
       medium,

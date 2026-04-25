@@ -38,7 +38,7 @@ function LoginPage() {
       try {
         await googleLogin(response.credential);
         toast.success("Welcome to Pintaterra");
-        void navigate({ to: "/account" });
+        void navigate({ to: "/", hash: "gallery" });
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Could not sign in",
@@ -50,7 +50,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (token) {
-      void navigate({ to: "/account" });
+      void navigate({ to: "/", hash: "gallery" });
       return;
     }
 

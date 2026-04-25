@@ -1,8 +1,30 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
-import { useProducts } from "@/contexts/ProductContext";
+import { getEffectivePrice, useProducts } from "@/contexts/ProductContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type SortOption =
+  | "featured"
+  | "name-asc"
+  | "name-desc"
+  | "price-asc"
+  | "price-desc";
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "featured", label: "Featured" },
+  { value: "name-asc", label: "Name: A → Z" },
+  { value: "name-desc", label: "Name: Z → A" },
+  { value: "price-asc", label: "Price: Low to High" },
+  { value: "price-desc", label: "Price: High to Low" },
+];
 
 const defaultArtworks = [
   {
@@ -157,11 +179,19 @@ const defaultArtworks = [
   },
 ];
 
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 const GallerySection = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("featured");
   const { products } = useProducts();
 
   const allArtworks: {
+    id: string;
     image: string;
     mockup?: string;
     title: string;
@@ -170,9 +200,11 @@ const GallerySection = () => {
     price: number;
     salePrice?: number;
     description: string;
-    id?: string;
   }[] = [
-    ...defaultArtworks,
+    ...defaultArtworks.map((art) => ({
+      ...art,
+      id: `default-${slugify(art.title)}`,
+    })),
     ...products.map((product) => ({
       image: product.image,
       mockup: product.mockup || product.image,
@@ -182,9 +214,32 @@ const GallerySection = () => {
       price: product.price,
       salePrice: product.salePrice,
       description: product.description,
-      id: product.id,
+      id: `product-${product.id}`,
     })),
   ];
+
+  const sortedArtworks = useMemo(() => {
+    const copy = [...allArtworks];
+    switch (sortBy) {
+      case "name-asc":
+        return copy.sort((a, b) =>
+          a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+        );
+      case "name-desc":
+        return copy.sort((a, b) =>
+          b.title.localeCompare(a.title, undefined, { sensitivity: "base" }),
+        );
+      case "price-asc":
+        return copy.sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
+      case "price-desc":
+        return copy.sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
+      default:
+        return copy;
+    }
+    // allArtworks is intentionally omitted: defaultArtworks is a module-level
+    // constant and the mapped products array only changes when `products` does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, sortBy]);
 
   return (
     <section
@@ -205,10 +260,42 @@ const GallerySection = () => {
           Our Paintings
         </h2>
       </motion.div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
+        <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground">
+          {sortedArtworks.length}{" "}
+          {sortedArtworks.length === 1 ? "piece" : "pieces"}
+        </p>
+        <div className="flex items-center gap-3">
+          <label
+            htmlFor="gallery-sort"
+            className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground"
+          >
+            Sort by
+          </label>
+          <Select
+            value={sortBy}
+            onValueChange={(value) => setSortBy(value as SortOption)}
+          >
+            <SelectTrigger
+              id="gallery-sort"
+              className="w-[200px] font-body text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       <div className="columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8">
-        {allArtworks.map((art, index) => (
+        {sortedArtworks.map((art, index) => (
           <ArtworkCard
-            key={art.id ?? `${art.title}-${index}`}
+            key={art.id}
             {...art}
             index={index}
             onClick={() => setLightboxIndex(index)}
@@ -216,7 +303,7 @@ const GallerySection = () => {
         ))}
       </div>
       <Lightbox
-        artworks={allArtworks}
+        artworks={sortedArtworks}
         currentIndex={lightboxIndex ?? 0}
         isOpen={lightboxIndex !== null}
         onClose={() => setLightboxIndex(null)}
