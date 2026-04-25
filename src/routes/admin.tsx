@@ -839,12 +839,13 @@ function OrdersSection() {
               <div>
                 <p className="font-body text-sm font-semibold">{order.id}</p>
                 <p className="font-body text-xs text-muted-foreground">
-                  {formatDate(order.createdAt)} · {order.orderInfo.fullName} ·{" "}
-                  {order.orderInfo.email}
+                  {formatDate(order.createdAt)} ·{" "}
+                  {order.orderInfo?.fullName ?? "—"} ·{" "}
+                  {order.orderInfo?.email ?? "—"}
                 </p>
               </div>
               <p className="font-body text-sm font-semibold">
-                ₱{order.total.toLocaleString()}
+                ₱{(order.total ?? 0).toLocaleString()}
               </p>
             </div>
 
@@ -860,8 +861,9 @@ function OrdersSection() {
 
             {/* Delivery info */}
             <p className="text-xs text-muted-foreground">
-              Ship to: {order.orderInfo.address}, {order.orderInfo.city} ·
-              Phone: {order.orderInfo.phone}
+              Ship to: {order.orderInfo?.address ?? "—"},{" "}
+              {order.orderInfo?.city ?? "—"} · Phone:{" "}
+              {order.orderInfo?.phone ?? "—"}
             </p>
 
             {/* Journey Map */}
