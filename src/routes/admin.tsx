@@ -1,7 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { useProducts, type Product } from "@/contexts/ProductContext";
+import {
+  useProducts,
+  getDiscountPercent,
+  type Product,
+} from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +28,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  Package,
   Pencil,
   Plus,
   Settings,
@@ -31,6 +36,8 @@ import {
   Upload,
   Users,
 } from "lucide-react";
+import { ORDER_STEPS, type CompletedOrder } from "@/contexts/CartContext";
+import { getAdminToken } from "@/contexts/AdminAuthContext";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -46,10 +53,11 @@ export const Route = createFileRoute("/admin")({
   }),
 });
 
-type AdminSection = "products" | "visitors" | "users" | "settings";
+type AdminSection = "products" | "orders" | "visitors" | "users" | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
   products: "Products",
+  orders: "Orders",
   visitors: "Visitors",
   users: "Users",
   settings: "Settings",
@@ -248,6 +256,13 @@ function AdminDashboard() {
               hint={`${products.length} uploaded`}
             />
             <NavLink
+              icon={<Package className="w-4 h-4" />}
+              label="Orders"
+              active={section === "orders"}
+              onClick={() => navigate("orders")}
+              hint="Track & update"
+            />
+            <NavLink
               icon={<Activity className="w-4 h-4" />}
               label="Visitors"
               active={section === "visitors"}
@@ -282,6 +297,7 @@ function AdminDashboard() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {section === "products" && <ProductsSection />}
+        {section === "orders" && <OrdersSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "settings" && <SettingsSection />}
@@ -336,6 +352,8 @@ function ProductsSection() {
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [price, setPrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -366,9 +384,42 @@ function ProductsSection() {
     setMedium("Acrylic on Canvas");
     setYear(String(new Date().getFullYear()));
     setPrice("");
+    setSalePrice("");
+    setDiscountPercent("");
     setDescription("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (mockupInputRef.current) mockupInputRef.current.value = "";
+  };
+
+  const handlePriceChange = (value: string) => {
+    setPrice(value);
+    const p = Number(value);
+    const d = Number(discountPercent);
+    if (p > 0 && d > 0 && d < 100) {
+      setSalePrice(String(Math.round(p * (1 - d / 100))));
+    }
+  };
+
+  const handleSalePriceChange = (value: string) => {
+    setSalePrice(value);
+    const p = Number(price);
+    const s = Number(value);
+    if (p > 0 && s > 0 && s < p) {
+      setDiscountPercent(String(Math.round(((p - s) / p) * 100)));
+    } else {
+      setDiscountPercent("");
+    }
+  };
+
+  const handleDiscountPercentChange = (value: string) => {
+    setDiscountPercent(value);
+    const p = Number(price);
+    const d = Number(value);
+    if (p > 0 && d > 0 && d < 100) {
+      setSalePrice(String(Math.round(p * (1 - d / 100))));
+    } else {
+      setSalePrice("");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -380,6 +431,10 @@ function ProductsSection() {
 
     setSubmitting(true);
 
+    const salePriceNum = Number(salePrice);
+    const effectiveSalePrice =
+      salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
+
     try {
       await addProduct({
         image,
@@ -388,6 +443,7 @@ function ProductsSection() {
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
         price: priceNum,
+        salePrice: effectiveSalePrice,
         description: description.trim(),
       });
       toast.success(`"${title.trim()}" added to the collection`);
@@ -524,9 +580,47 @@ function ProductsSection() {
                 min="0"
                 step="1"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => handlePriceChange(e.target.value)}
                 placeholder="3499"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="salePrice">
+                  Sale price (₱){" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="salePrice"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={salePrice}
+                  onChange={(e) => handleSalePriceChange(e.target.value)}
+                  placeholder="2799"
+                />
+              </div>
+              <div>
+                <Label htmlFor="discountPercent">
+                  Discount %{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="discountPercent"
+                  type="number"
+                  min="0"
+                  max="99"
+                  step="1"
+                  value={discountPercent}
+                  onChange={(e) => handleDiscountPercentChange(e.target.value)}
+                  placeholder="20"
+                />
+              </div>
             </div>
 
             <div>
@@ -584,7 +678,19 @@ function ProductsSection() {
                         {product.medium} · {product.year}
                       </p>
                       <p className="text-sm font-semibold mt-1">
-                        ₱{product.price.toLocaleString()}
+                        {getDiscountPercent(product) > 0 ? (
+                          <>
+                            <span className="line-through text-muted-foreground font-normal mr-1">
+                              ₱{product.price.toLocaleString()}
+                            </span>
+                            <span>₱{product.salePrice!.toLocaleString()}</span>
+                            <span className="ml-1 text-xs text-red-500 font-semibold">
+                              {getDiscountPercent(product)}% OFF
+                            </span>
+                          </>
+                        ) : (
+                          <>₱{product.price.toLocaleString()}</>
+                        )}
                       </p>
                       {product.description && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
@@ -628,6 +734,166 @@ function ProductsSection() {
         onSave={updateProduct}
       />
     </>
+  );
+}
+
+function OrdersSection() {
+  const [orders, setOrders] = useState<CompletedOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const fetchOrders = async () => {
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setOrders(data.orders || []);
+    } catch {
+      toast.error("Could not load orders");
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchOrders();
+  }, []);
+
+  const handleStatusUpdate = async (
+    orderId: string,
+    status: CompletedOrder["status"],
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "update-status", orderId, status }),
+      });
+      if (!res.ok) throw new Error();
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
+      );
+      toast.success("Status updated");
+    } catch {
+      toast.error("Could not update status");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-PH", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  if (loadingOrders) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Package className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">No orders yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-xl">Orders ({orders.length})</h2>
+        <Button variant="ghost" size="sm" onClick={() => void fetchOrders()}>
+          Refresh
+        </Button>
+      </div>
+
+      {orders.map((order) => {
+        const currentStepIdx = ORDER_STEPS.findIndex(
+          (s) => s.key === order.status,
+        );
+        return (
+          <div
+            key={order.id}
+            className="border border-border/40 rounded-lg p-5 space-y-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-body text-sm font-semibold">{order.id}</p>
+                <p className="font-body text-xs text-muted-foreground">
+                  {formatDate(order.createdAt)} ·{" "}
+                  {order.orderInfo?.fullName ?? "—"} ·{" "}
+                  {order.orderInfo?.email ?? "—"}
+                </p>
+              </div>
+              <p className="font-body text-sm font-semibold">
+                ₱{(order.total ?? 0).toLocaleString()}
+              </p>
+            </div>
+
+            {/* Items */}
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {order.items.map((item) => (
+                <p key={item.id}>
+                  {item.title} × {item.quantity} — ₱
+                  {(item.price * item.quantity).toLocaleString()}
+                </p>
+              ))}
+            </div>
+
+            {/* Delivery info */}
+            <p className="text-xs text-muted-foreground">
+              Ship to: {order.orderInfo?.address ?? "—"},{" "}
+              {order.orderInfo?.city ?? "—"} · Phone:{" "}
+              {order.orderInfo?.phone ?? "—"}
+            </p>
+
+            {/* Journey Map */}
+            <div className="flex items-center gap-1">
+              {ORDER_STEPS.map((step, idx) => {
+                const done = idx <= currentStepIdx;
+                const isActive = idx === currentStepIdx;
+                return (
+                  <button
+                    key={step.key}
+                    disabled={updatingId === order.id}
+                    onClick={() => handleStatusUpdate(order.id, step.key)}
+                    className={`flex-1 py-2 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
+                      done
+                        ? isActive
+                          ? "bg-foreground text-background"
+                          : "bg-foreground/20 text-foreground"
+                        : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                    } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                    title={step.description}
+                  >
+                    {step.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

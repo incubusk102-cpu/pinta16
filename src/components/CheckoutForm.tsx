@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -12,7 +12,6 @@ import {
   LogIn,
   UserPlus,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { useCart, type OrderInfo } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import {
@@ -39,29 +38,19 @@ const CheckoutForm = () => {
     shippingFeeOriginal,
     voucher,
   } = useCart();
-  const { user } = useUserAuth();
-  const navigate = useNavigate();
-  const [step, setStep] = useState<"choose" | "form">(user ? "form" : "choose");
+  const { user, token } = useUserAuth();
+  const isSignedIn = Boolean(token && user);
+  const [checkoutMode, setCheckoutMode] = useState<
+    "choose" | "guest" | "signed_in"
+  >("choose");
   const [form, setForm] = useState<OrderInfo>({
-    fullName: user?.name ?? "",
-    email: user?.email ?? "",
+    fullName: "",
+    email: "",
     phone: "",
     address: "",
     city: "",
     notes: "",
   });
-
-  useEffect(() => {
-    if (!showCheckout) return;
-    setStep(user ? "form" : "choose");
-    if (user) {
-      setForm((prev) => ({
-        ...prev,
-        fullName: prev.fullName || user.name || "",
-        email: prev.email || user.email || "",
-      }));
-    }
-  }, [showCheckout, user]);
   const [errors, setErrors] = useState<
     Partial<Record<keyof OrderInfo, string>>
   >({});
@@ -69,6 +58,21 @@ const CheckoutForm = () => {
   const [isCreatingPayment, setIsCreatingPayment] = useState(false);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (showCheckout) {
+      if (isSignedIn) {
+        setCheckoutMode("signed_in");
+        setForm((prev) => ({
+          ...prev,
+          fullName: prev.fullName || user?.name || "",
+          email: prev.email || user?.email || "",
+        }));
+      } else {
+        setCheckoutMode("choose");
+      }
+    }
+  }, [showCheckout, isSignedIn, user?.name, user?.email]);
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof OrderInfo, string>> = {};
@@ -213,11 +217,7 @@ const CheckoutForm = () => {
               <div className="p-6 border-b border-border/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() =>
-                      step === "form" && !user
-                        ? setStep("choose")
-                        : setShowCheckout(false)
-                    }
+                    onClick={() => setShowCheckout(false)}
                     className="p-2 hover:bg-accent rounded-sm transition-colors"
                   >
                     <ArrowLeft className="w-5 h-5 text-foreground" />
@@ -234,187 +234,187 @@ const CheckoutForm = () => {
                 </button>
               </div>
 
-              {step === "choose" && !user ? (
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col justify-center">
-                  <div className="space-y-2 text-center mb-8">
-                    <h3 className="font-display text-xl text-foreground">
-                      How would you like to continue?
-                    </h3>
-                    <p className="font-body text-xs text-muted-foreground">
-                      Sign in to track your orders, or check out as a guest.
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => {
-                        setShowCheckout(false);
-                        void navigate({ to: "/login" });
-                      }}
-                      className="w-full py-4 bg-foreground text-background font-body text-xs tracking-[0.3em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm flex items-center justify-center gap-2"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      Sign in
-                    </button>
-                    <button
-                      onClick={() => setStep("form")}
-                      className="w-full py-4 bg-background border border-border/40 text-foreground font-body text-xs tracking-[0.3em] uppercase hover:bg-accent transition-all duration-300 rounded-sm flex items-center justify-center gap-2"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      Continue as guest
-                    </button>
-                  </div>
-                  <p className="font-body text-[10px] text-center text-muted-foreground/60 mt-6">
-                    New here?{" "}
-                    <button
-                      onClick={() => {
-                        setShowCheckout(false);
-                        void navigate({ to: "/signup" });
-                      }}
-                      className="underline hover:text-foreground"
-                    >
-                      Create an account
-                    </button>
-                  </p>
-                </div>
-              ) : (
-                <div className="flex-1 overflow-y-auto p-6">
-                  {/* Order Summary */}
-                  <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
-                    <p className="font-body text-xs tracking-wider uppercase text-muted-foreground mb-3">
-                      Order Summary
-                    </p>
-                    {items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex justify-between font-body text-xs text-foreground mb-1"
-                      >
-                        <span>
-                          {item.title} × {item.quantity}
-                        </span>
-                        <span>
-                          ₱{(item.price * item.quantity).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
-                      <div className="flex justify-between font-body text-xs text-muted-foreground">
-                        <span>Subtotal</span>
-                        <span>₱{subtotal.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between font-body text-xs text-muted-foreground">
-                        <span>Shipping</span>
-                        {isFreeShipping ? (
-                          <span>
-                            <span className="line-through mr-1">
-                              ₱{shippingFeeOriginal.toLocaleString()}
-                            </span>
-                            <span className="text-foreground">FREE</span>
-                          </span>
-                        ) : (
-                          <span>₱{shippingFee.toLocaleString()}</span>
-                        )}
-                      </div>
-                      {discount > 0 && (
-                        <div className="flex justify-between font-body text-xs text-foreground">
-                          <span>Discount ({voucher.discountPercent}%)</span>
-                          <span>-₱{discount.toLocaleString()}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
-                        <span>Total</span>
-                        <span className="font-semibold">
-                          ₱{total.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                    {estimatedCreationDays && (
-                      <p className="font-body text-[10px] text-muted-foreground mt-2">
-                        Est. creation: {estimatedCreationDays}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Form */}
-                  <div className="space-y-4">
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Guest vs Sign-in choice */}
+                {checkoutMode === "choose" && (
+                  <div className="mb-6 space-y-3">
                     <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
-                      Your Information
+                      How would you like to checkout?
                     </p>
-                    {fields.map(
-                      ({
-                        key,
-                        label,
-                        icon: Icon,
-                        type,
-                        placeholder,
-                        required,
-                      }) => (
-                        <div key={String(key)}>
-                          <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
-                            <Icon className="w-3.5 h-3.5" />
-                            {label}{" "}
-                            {required && (
-                              <span className="text-destructive">*</span>
-                            )}
-                          </label>
-                          {key === "notes" ? (
-                            <textarea
-                              value={form[key]}
-                              onChange={(e) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  [key]: e.target.value,
-                                }))
-                              }
-                              placeholder={placeholder}
-                              rows={3}
-                              className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none"
-                            />
+                    <button
+                      onClick={() => setCheckoutMode("guest")}
+                      className="w-full flex items-center gap-3 p-4 border border-border/30 rounded-sm hover:bg-accent/50 transition-colors text-left"
+                    >
+                      <UserPlus className="w-5 h-5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="font-body text-sm font-medium text-foreground">
+                          Continue as Guest
+                        </p>
+                        <p className="font-body text-xs text-muted-foreground">
+                          No account needed
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCheckout(false);
+                        window.location.href = "/login";
+                      }}
+                      className="w-full flex items-center gap-3 p-4 border border-border/30 rounded-sm hover:bg-accent/50 transition-colors text-left"
+                    >
+                      <LogIn className="w-5 h-5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="font-body text-sm font-medium text-foreground">
+                          Sign in with Google
+                        </p>
+                        <p className="font-body text-xs text-muted-foreground">
+                          Track your order &amp; save your info
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                {/* Order Summary + Form (hidden during choose mode) */}
+                {checkoutMode !== "choose" && (
+                  <>
+                    <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
+                      <p className="font-body text-xs tracking-wider uppercase text-muted-foreground mb-3">
+                        Order Summary
+                      </p>
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex justify-between font-body text-xs text-foreground mb-1"
+                        >
+                          <span>
+                            {item.title} × {item.quantity}
+                          </span>
+                          <span>
+                            ₱{(item.price * item.quantity).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
+                        <div className="flex justify-between font-body text-xs text-muted-foreground">
+                          <span>Subtotal</span>
+                          <span>₱{subtotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between font-body text-xs text-muted-foreground">
+                          <span>Shipping</span>
+                          {isFreeShipping ? (
+                            <span>
+                              <span className="line-through mr-1">
+                                ₱{shippingFeeOriginal.toLocaleString()}
+                              </span>
+                              <span className="text-foreground">FREE</span>
+                            </span>
                           ) : (
-                            <input
-                              type={type || "text"}
-                              value={form[key]}
-                              onChange={(e) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  [key]: e.target.value,
-                                }))
-                              }
-                              placeholder={placeholder}
-                              className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm"
-                            />
-                          )}
-                          {errors[key] && (
-                            <p className="font-body text-[10px] text-destructive mt-1">
-                              {errors[key]}
-                            </p>
+                            <span>₱{shippingFee.toLocaleString()}</span>
                           )}
                         </div>
-                      ),
-                    )}
-
-                    {/* Pay with QR Ph Button */}
-                    <button
-                      onClick={handlePayWithQR}
-                      disabled={isCreatingPayment}
-                      className="w-full py-4 bg-[#0066FF] text-[#FFFFFF] font-body text-xs tracking-[0.3em] uppercase hover:bg-[#0052CC] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 rounded-sm flex items-center justify-center gap-3"
-                    >
-                      {isCreatingPayment ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Generating QR Code...
-                        </>
-                      ) : (
-                        "Pay with QR Ph"
+                        {discount > 0 && (
+                          <div className="flex justify-between font-body text-xs text-foreground">
+                            <span>Discount ({voucher.discountPercent}%)</span>
+                            <span>-₱{discount.toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
+                          <span>Total</span>
+                          <span className="font-semibold">
+                            ₱{total.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      {estimatedCreationDays && (
+                        <p className="font-body text-[10px] text-muted-foreground mt-2">
+                          Est. creation: {estimatedCreationDays}
+                        </p>
                       )}
-                    </button>
+                    </div>
 
-                    <p className="font-body text-[10px] text-center text-muted-foreground/50">
-                      Secure payment via PayMongo. Scan with GCash, Maya, or any
-                      QR Ph app.
-                    </p>
-                  </div>
-                </div>
-              )}
+                    {/* Form */}
+                    <div className="space-y-4">
+                      <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                        Your Information
+                      </p>
+                      {fields.map(
+                        ({
+                          key,
+                          label,
+                          icon: Icon,
+                          type,
+                          placeholder,
+                          required,
+                        }) => (
+                          <div key={String(key)}>
+                            <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                              <Icon className="w-3.5 h-3.5" />
+                              {label}{" "}
+                              {required && (
+                                <span className="text-destructive">*</span>
+                              )}
+                            </label>
+                            {key === "notes" ? (
+                              <textarea
+                                value={form[key]}
+                                onChange={(e) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    [key]: e.target.value,
+                                  }))
+                                }
+                                placeholder={placeholder}
+                                rows={3}
+                                className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none"
+                              />
+                            ) : (
+                              <input
+                                type={type || "text"}
+                                value={form[key]}
+                                onChange={(e) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    [key]: e.target.value,
+                                  }))
+                                }
+                                placeholder={placeholder}
+                                className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm"
+                              />
+                            )}
+                            {errors[key] && (
+                              <p className="font-body text-[10px] text-destructive mt-1">
+                                {errors[key]}
+                              </p>
+                            )}
+                          </div>
+                        ),
+                      )}
+
+                      {/* Pay with QR Ph Button */}
+                      <button
+                        onClick={handlePayWithQR}
+                        disabled={isCreatingPayment}
+                        className="w-full py-4 bg-[#0066FF] text-[#FFFFFF] font-body text-xs tracking-[0.3em] uppercase hover:bg-[#0052CC] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 rounded-sm flex items-center justify-center gap-3"
+                      >
+                        {isCreatingPayment ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Generating QR Code...
+                          </>
+                        ) : (
+                          "Pay with QR Ph"
+                        )}
+                      </button>
+
+                      <p className="font-body text-[10px] text-center text-muted-foreground/50">
+                        Secure payment via PayMongo. Scan with GCash, Maya, or
+                        any QR Ph app.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
             </motion.div>
           </>
         )}

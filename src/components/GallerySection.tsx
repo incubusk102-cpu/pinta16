@@ -161,7 +161,17 @@ const GallerySection = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { products } = useProducts();
 
-  const allArtworks = [
+  const allArtworks: {
+    image: string;
+    mockup?: string;
+    title: string;
+    medium: string;
+    year: string;
+    price: number;
+    salePrice?: number;
+    description: string;
+    id?: string;
+  }[] = [
     ...defaultArtworks,
     ...products.map((product) => ({
       image: product.image,
@@ -170,6 +180,7 @@ const GallerySection = () => {
       medium: product.medium,
       year: product.year,
       price: product.price,
+      salePrice: product.salePrice,
       description: product.description,
       id: product.id,
     })),

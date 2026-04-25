@@ -1,11 +1,30 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle, X, Package, Clock } from "lucide-react";
-import { useCart } from "@/contexts/CartContext";
+import {
+  CheckCircle,
+  X,
+  Package,
+  Clock,
+  Truck,
+  Info,
+  Copy,
+} from "lucide-react";
+import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
+import { toast } from "sonner";
 
 const OrderConfirmation = () => {
   const { showConfirmation, setShowConfirmation, lastOrder } = useCart();
 
   if (!lastOrder) return null;
+
+  const currentStepIdx = ORDER_STEPS.findIndex(
+    (s) => s.key === lastOrder.status,
+  );
+
+  const copyOrderId = () => {
+    navigator.clipboard.writeText(lastOrder.id).then(() => {
+      toast.success("Order ID copied");
+    });
+  };
 
   return (
     <AnimatePresence>
@@ -48,12 +67,61 @@ const OrderConfirmation = () => {
               <p className="font-body text-sm text-muted-foreground">
                 Thank you for your purchase
               </p>
-              <p className="font-body text-xs text-muted-foreground mt-1">
+              <button
+                onClick={copyOrderId}
+                className="inline-flex items-center gap-1.5 mt-1 font-body text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
                 Order ID: {lastOrder.id}
-              </p>
+                <Copy className="w-3 h-3" />
+              </button>
             </div>
 
             <div className="space-y-4">
+              {/* Order Journey Map */}
+              <div className="p-4 bg-muted/30 border border-border/10 rounded-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <Truck className="w-4 h-4 text-muted-foreground" />
+                  <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                    Order Status
+                  </p>
+                </div>
+                <div className="space-y-0">
+                  {ORDER_STEPS.map((step, idx) => {
+                    const done = idx <= currentStepIdx;
+                    const active = idx === currentStepIdx;
+                    return (
+                      <div key={step.key} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`w-3 h-3 rounded-full border-2 shrink-0 ${
+                              done
+                                ? "bg-foreground border-foreground"
+                                : "border-border bg-transparent"
+                            } ${active ? "ring-2 ring-foreground/20" : ""}`}
+                          />
+                          {idx < ORDER_STEPS.length - 1 && (
+                            <div
+                              className={`w-0.5 h-6 ${done ? "bg-foreground" : "bg-border"}`}
+                            />
+                          )}
+                        </div>
+                        <div className="-mt-0.5 pb-4">
+                          <p
+                            className={`font-body text-xs font-medium ${done ? "text-foreground" : "text-muted-foreground"}`}
+                          >
+                            {step.label}
+                          </p>
+                          <p className="font-body text-[10px] text-muted-foreground">
+                            {step.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Items */}
               <div className="p-4 bg-muted/30 border border-border/10 rounded-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <Package className="w-4 h-4 text-muted-foreground" />
@@ -91,9 +159,37 @@ const OrderConfirmation = () => {
                 </div>
               )}
 
-              <p className="font-body text-xs text-center text-muted-foreground">
-                A confirmation email has been sent to{" "}
-                {lastOrder.orderInfo.email}
+              {/* Instructions */}
+              <div className="p-4 bg-muted/20 border border-border/10 rounded-sm space-y-2">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                  <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                    What happens next
+                  </p>
+                </div>
+                <ol className="font-body text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                  <li>
+                    You will receive a confirmation email at{" "}
+                    <span className="text-foreground">
+                      {lastOrder.orderInfo.email}
+                    </span>
+                  </li>
+                  <li>
+                    The artist will begin working on your painting — you can
+                    track the status using your Order ID
+                  </li>
+                  <li>
+                    Once completed, your painting will be carefully packed and
+                    shipped to your address
+                  </li>
+                  <li>
+                    You will be notified when the order is out for delivery
+                  </li>
+                </ol>
+              </div>
+
+              <p className="font-body text-[10px] text-center text-muted-foreground">
+                Save your Order ID to check the status anytime
               </p>
             </div>
           </motion.div>

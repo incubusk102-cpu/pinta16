@@ -2,6 +2,10 @@ import { useEffect, useCallback, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
+import {
+  getEffectivePrice,
+  getDiscountPercent,
+} from "@/contexts/ProductContext";
 
 interface LightboxProps {
   artworks: {
@@ -11,6 +15,7 @@ interface LightboxProps {
     medium: string;
     year: string;
     price: number;
+    salePrice?: number;
     description: string;
   }[];
   currentIndex: number;
@@ -162,9 +167,21 @@ const Lightbox = ({
               <p className="font-body text-sm text-muted-foreground mb-4 leading-relaxed">
                 {art.description}
               </p>
-              <p className="font-body text-xl text-foreground font-semibold mb-4">
-                ₱{art.price.toLocaleString()}
-              </p>
+              <div className="font-body text-xl text-foreground font-semibold mb-4">
+                {getDiscountPercent(art) > 0 ? (
+                  <>
+                    <span className="line-through text-muted-foreground text-base mr-2">
+                      ₱{art.price.toLocaleString()}
+                    </span>
+                    <span>₱{getEffectivePrice(art).toLocaleString()}</span>
+                    <span className="ml-2 text-sm text-red-500 font-semibold">
+                      {getDiscountPercent(art)}% OFF
+                    </span>
+                  </>
+                ) : (
+                  <>₱{art.price.toLocaleString()}</>
+                )}
+              </div>
               <button
                 onClick={() =>
                   addToCart({
@@ -173,7 +190,7 @@ const Lightbox = ({
                     title: art.title,
                     medium: art.medium,
                     year: art.year,
-                    price: art.price,
+                    price: getEffectivePrice(art),
                   })
                 }
                 className="inline-flex items-center gap-2 px-8 py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm"
