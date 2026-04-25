@@ -35,10 +35,9 @@ export const verifyPassword = (password, salt, expectedHash) => {
 };
 
 export const constantTimeEquals = (a, b) => {
-  const aBuf = Buffer.from(String(a));
-  const bBuf = Buffer.from(String(b));
-  if (aBuf.length !== bBuf.length) return false;
-  return crypto.timingSafeEqual(aBuf, bBuf);
+  const hash = (v) =>
+    crypto.createHmac("sha256", "constant-time-cmp").update(String(v)).digest();
+  return crypto.timingSafeEqual(hash(a), hash(b));
 };
 
 const base64UrlEncode = (input) =>

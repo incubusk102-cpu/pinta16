@@ -256,17 +256,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         if (data.order?.id && data.order.id !== order.id) {
           const serverOrder = { ...order, id: data.order.id };
           setLastOrder(serverOrder);
-          setOrders((prev) =>
-            prev.map((o) => (o.id === order.id ? serverOrder : o)),
-          );
-          if (typeof window !== "undefined") {
-            localStorage.setItem(
-              ORDERS_STORAGE_KEY,
-              JSON.stringify(
-                orders.map((o) => (o.id === order.id ? serverOrder : o)),
-              ),
+          setOrders((prev) => {
+            const updated = prev.map((o) =>
+              o.id === order.id ? serverOrder : o,
             );
-          }
+            if (typeof window !== "undefined") {
+              localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(updated));
+            }
+            return updated;
+          });
         }
       })
       .catch(() => {});
