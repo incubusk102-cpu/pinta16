@@ -45,6 +45,84 @@ const getPaymongoSecret = () => {
 
 const STORE_NAME = "orders";
 const ORDERS_KEY = "all-orders";
+const CONFIG_STORE_NAME = "storefront-config";
+const CONFIG_KEY = "config";
+
+const findEligiblePromo = (config, code) => {
+  if (!config || !Array.isArray(config.promoCodes)) return null;
+  const upper = String(code || "")
+    .trim()
+    .toUpperCase();
+  if (!upper) return null;
+  const promo = config.promoCodes.find((p) => p.code === upper);
+  if (!promo) return null;
+  if (promo.enabled === false) return null;
+  if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
+    return null;
+  }
+  if (
+    promo.usageLimit !== null &&
+    promo.usageLimit !== undefined &&
+    (promo.usageCount || 0) >= promo.usageLimit
+  ) {
+    return null;
+  }
+  return promo;
+};
+
+const computeExpectedDiscount = (promo, subtotal) => {
+  if (!promo) return 0;
+  if (subtotal < (promo.minSpend || 0)) return 0;
+  if (promo.type === "percent") {
+    return Math.round((subtotal * promo.value) / 100);
+  }
+  return Math.min(promo.value, subtotal);
+};
+
+// Compare-and-swap increment of usageCount. Validates the promo is still
+// eligible (enabled, not expired, under limit) on every attempt so a malicious
+// client can't deplete a usage cap by replaying the place action.
+const incrementPromoUsage = async (event, code) => {
+  if (!code || typeof code !== "string") return;
+  try {
+    connectLambda(event);
+    const configStore = getStore(CONFIG_STORE_NAME);
+    const upper = code.trim().toUpperCase();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = await configStore.getWithMetadata(CONFIG_KEY, {
+        type: "json",
+      });
+      if (!result) return;
+      const config = result.data;
+      if (!config || !Array.isArray(config.promoCodes)) return;
+      const promo = findEligiblePromo(config, upper);
+      if (!promo) return; // no longer eligible — silently skip
+      const idx = config.promoCodes.findIndex((p) => p.code === upper);
+      const next = { ...config };
+      next.promoCodes = config.promoCodes.map((p, i) =>
+        i === idx ? { ...p, usageCount: (p.usageCount || 0) + 1 } : p,
+      );
+      const writeOpts = result.etag ? { onlyIfMatch: result.etag } : {};
+      const write = await configStore.setJSON(CONFIG_KEY, next, writeOpts);
+      if (write.modified) return;
+      // CAS conflict — retry with a fresh read.
+    }
+    console.warn("incrementPromoUsage: gave up after 5 CAS attempts", code);
+  } catch (err) {
+    console.error("incrementPromoUsage failed:", err);
+  }
+};
+
+const readStorefrontConfigDirect = async (event) => {
+  try {
+    connectLambda(event);
+    const configStore = getStore(CONFIG_STORE_NAME);
+    return await configStore.get(CONFIG_KEY, { type: "json" });
+  } catch (err) {
+    console.error("readStorefrontConfigDirect failed:", err);
+    return null;
+  }
+};
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -224,6 +302,30 @@ export const handler = async (event) => {
           image:
             typeof item.image === "string" ? item.image.slice(0, 2000) : "",
         }));
+        // Server-side promo validation: only honor a voucher if it's still
+        // eligible AND the client-supplied discount matches what the code
+        // would actually grant. Otherwise drop the code so a malicious client
+        // can't use a known code to drain usage caps with bogus discounts.
+        let validatedVoucherCode = "";
+        let validatedDiscount = 0;
+        const clientVoucher =
+          typeof order.voucherCode === "string"
+            ? order.voucherCode.trim().toUpperCase().slice(0, 30)
+            : "";
+        const clientSubtotal = Number(order.subtotal) || 0;
+        const clientDiscount = Number(order.discount) || 0;
+        if (clientVoucher) {
+          const config = await readStorefrontConfigDirect(event);
+          const promo = findEligiblePromo(config, clientVoucher);
+          if (promo) {
+            const expected = computeExpectedDiscount(promo, clientSubtotal);
+            if (expected > 0 && Math.abs(expected - clientDiscount) <= 1) {
+              validatedVoucherCode = clientVoucher;
+              validatedDiscount = expected;
+            }
+          }
+        }
+
         const safeOrder = {
           id: orderId,
           items: safeItems,
@@ -235,10 +337,14 @@ export const handler = async (event) => {
             city: String(info.city).slice(0, 200),
             notes: String(info.notes || "").slice(0, 1000),
           },
-          subtotal: Number(order.subtotal) || 0,
+          subtotal: clientSubtotal,
           shippingFee: Number(order.shippingFee) || 0,
-          discount: Number(order.discount) || 0,
-          total: Number(order.total),
+          discount: validatedDiscount,
+          // client total = subtotal - clientDiscount + shipping; if we strip
+          // the discount, add back what we subtracted.
+          total:
+            (Number(order.total) || 0) +
+            (clientDiscount - validatedDiscount),
           estimatedCreationDays: String(
             order.estimatedCreationDays || "",
           ).slice(0, 100),
@@ -252,11 +358,15 @@ export const handler = async (event) => {
             typeof order.qrCodeImageUrl === "string"
               ? order.qrCodeImageUrl.slice(0, 4000)
               : "",
+          voucherCode: validatedVoucherCode,
           notifications: [],
           review: null,
         };
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
+        if (safeOrder.voucherCode && safeOrder.discount > 0) {
+          await incrementPromoUsage(event, safeOrder.voucherCode);
+        }
         return json(200, { order: safeOrder });
       }
 

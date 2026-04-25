@@ -2,6 +2,8 @@ import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
+import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
+import AnnouncementBar from "@/components/AnnouncementBar";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
@@ -45,12 +47,15 @@ function RootComponent() {
   return (
     <AdminAuthProvider>
       <UserAuthProvider>
-        <ProductProvider>
-          <CartProvider>
-            <HeartbeatBridge />
-            <Outlet />
-          </CartProvider>
-        </ProductProvider>
+        <StorefrontConfigProvider>
+          <ProductProvider>
+            <CartProvider>
+              <HeartbeatBridge />
+              <AnnouncementBar />
+              <Outlet />
+            </CartProvider>
+          </ProductProvider>
+        </StorefrontConfigProvider>
       </UserAuthProvider>
     </AdminAuthProvider>
   );
