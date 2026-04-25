@@ -5,9 +5,9 @@ import {
   runInactiveUserCleanup,
 } from "../lib/user-auth.js";
 
-const handler = schedule("@daily", async () => {
+const handler = schedule("@daily", async (event) => {
   try {
-    const store = getUsersStore(null);
+    const store = getUsersStore(event);
     const result = await runInactiveUserCleanup(store);
     console.log(
       `[cleanup] cutoff=${INACTIVE_DAYS}d removed=${result.removed.length} remaining=${result.remaining}`,
