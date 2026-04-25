@@ -11,10 +11,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   buildImageFields,
   getProductImages,
+  PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
   type Product,
   type ProductImage,
@@ -33,6 +41,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("");
   const [year, setYear] = useState("");
+  const [category, setCategory] = useState<string>(PRODUCT_CATEGORIES[0]);
+  const [dimensions, setDimensions] = useState("");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -45,6 +55,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     setTitle(product.title);
     setMedium(product.medium);
     setYear(product.year);
+    setCategory(product.category || PRODUCT_CATEGORIES[0]);
+    setDimensions(product.dimensions || "");
     setPrice(String(product.price));
     setSalePrice(product.salePrice ? String(product.salePrice) : "");
     setDiscountPercent(
@@ -84,6 +96,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         price: priceNum,
         salePrice: effectiveSalePrice,
         description: description.trim(),
+        category: category.trim() || undefined,
+        dimensions: dimensions.trim() || undefined,
       });
       toast.success("Product updated");
       onClose();
@@ -140,6 +154,38 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
                 maxLength={10}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="edit-category">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger id="edit-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRODUCT_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="edit-dimensions">
+                Dimensions{" "}
+                <span className="text-muted-foreground font-normal">
+                  (e.g. 24 × 30 in)
+                </span>
+              </Label>
+              <Input
+                id="edit-dimensions"
+                value={dimensions}
+                onChange={(e) => setDimensions(e.target.value)}
+                maxLength={60}
               />
             </div>
           </div>

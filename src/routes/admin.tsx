@@ -6,6 +6,7 @@ import {
   getDiscountPercent,
   getProductImages,
   buildImageFields,
+  PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
   type Product,
   type ProductImage,
@@ -14,6 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -384,6 +392,10 @@ function ProductsSection() {
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [category, setCategory] = useState<string>(PRODUCT_CATEGORIES[0]);
+  const [dimensions, setDimensions] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -397,6 +409,8 @@ function ProductsSection() {
     setTitle("");
     setMedium("Acrylic on Canvas");
     setYear(String(new Date().getFullYear()));
+    setCategory(PRODUCT_CATEGORIES[0]);
+    setDimensions("");
     setPrice("");
     setSalePrice("");
     setDiscountPercent("");
@@ -457,6 +471,8 @@ function ProductsSection() {
         price: priceNum,
         salePrice: effectiveSalePrice,
         description: description.trim(),
+        category: category.trim() || undefined,
+        dimensions: dimensions.trim() || undefined,
       });
       toast.success(`"${title.trim()}" added to the collection`);
       reset();
@@ -468,6 +484,31 @@ function ProductsSection() {
       setSubmitting(false);
     }
   };
+
+  const filteredProducts = products.filter((p) => {
+    if (filterCategory === "__uncategorized__") {
+      if (p.category && p.category.trim()) return false;
+    } else if (filterCategory !== "all") {
+      if ((p.category || "") !== filterCategory) return false;
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const haystack = [
+      p.title,
+      p.medium,
+      p.year,
+      p.category,
+      p.dimensions,
+      p.description,
+      p.imageFileName,
+      p.mockupFileName,
+      p.id,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(q);
+  });
 
   const handleDelete = async (productId: string, productTitle: string) => {
     setDeletingId(productId);
@@ -531,6 +572,39 @@ function ProductsSection() {
                   value={year}
                   onChange={(e) => setYear(e.target.value)}
                   maxLength={10}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger id="category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="dimensions">
+                  Dimensions{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="dimensions"
+                  value={dimensions}
+                  onChange={(e) => setDimensions(e.target.value)}
+                  maxLength={60}
+                  placeholder="24 × 30 in"
                 />
               </div>
             </div>
@@ -615,14 +689,46 @@ function ProductsSection() {
         </section>
 
         <section>
-          <h2 className="font-display text-lg mb-4">Your uploads</h2>
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <h2 className="font-display text-lg">
+              Your uploads ({filteredProducts.length})
+            </h2>
+            <div className="flex gap-2 flex-wrap">
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search title, category, dimensions…"
+                className="h-9 w-56"
+              />
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="h-9 w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  <SelectItem value="__uncategorized__">
+                    Uncategorized
+                  </SelectItem>
+                  {PRODUCT_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {products.length === 0 ? (
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
               No uploaded products yet. Add your first painting on the left.
             </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
+              No products match your search.
+            </div>
           ) : (
             <ul className="space-y-3">
-              {products.map((product) => {
+              {filteredProducts.map((product) => {
                 const isDeleting = deletingId === product.id;
                 const photos = getProductImages(product);
                 const main = photos[0];
@@ -646,6 +752,11 @@ function ProductsSection() {
                               {photos.length} photos
                             </span>
                           )}
+                          {product.category && (
+                            <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-medium bg-primary/90 text-primary-foreground rounded">
+                              {product.category}
+                            </span>
+                          )}
                         </div>
                       )}
                       {extras.length > 0 && (
@@ -665,6 +776,7 @@ function ProductsSection() {
                       <h3 className="font-medium truncate">{product.title}</h3>
                       <p className="text-xs text-muted-foreground">
                         {product.medium} · {product.year}
+                        {product.dimensions ? ` · ${product.dimensions}` : ""}
                       </p>
                       <p className="text-sm font-semibold mt-1">
                         {getDiscountPercent(product) > 0 ? (
