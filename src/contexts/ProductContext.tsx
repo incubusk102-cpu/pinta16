@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export interface Product {
   id: string;
@@ -14,43 +21,166 @@ export interface Product {
 
 interface ProductContextType {
   products: Product[];
-  addProduct: (product: Omit<Product, "id" | "createdAt">) => void;
-  updateProduct: (id: string, product: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 const STORAGE_KEY = "pintaterra_products";
+const PRODUCTS_API = "/api/products";
+
+const readStoredProducts = (): Product[] => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const sortProducts = (products: Product[]) =>
+  [...products].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 
 export const ProductProvider = ({ children }: { children: ReactNode }) => {
-  const [products, setProducts] = useState<Product[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [products, setProducts] = useState<Product[]>(() =>
+    sortProducts(readStoredProducts()),
+  );
+
+  const persistProducts = useCallback((nextProducts: Product[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextProducts));
+  }, []);
+
+  const setAndPersistProducts = useCallback(
+    (updater: (previous: Product[]) => Product[]) => {
+      setProducts((previous) => {
+        const next = sortProducts(updater(previous));
+        persistProducts(next);
+        return next;
+      });
+    },
+    [persistProducts],
+  );
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-  }, [products]);
+    if (typeof window === "undefined") return;
 
-  const addProduct = (product: Omit<Product, "id" | "createdAt">) => {
-    setProducts((prev) => [{ ...product, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...prev]);
-  };
+    let isCancelled = false;
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-  };
+    const loadProducts = async () => {
+      try {
+        const response = await fetch(PRODUCTS_API);
+        if (!response.ok) throw new Error("Failed to load products");
 
-  const deleteProduct = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-  };
+        const data = await response.json();
+        if (!Array.isArray(data.products) || isCancelled) return;
+
+        const next = sortProducts(data.products);
+        setProducts(next);
+        persistProducts(next);
+      } catch {
+        // Local development falls back to browser storage.
+      }
+    };
+
+    void loadProducts();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [persistProducts]);
+
+  const addProduct = useCallback(
+    async (product: Omit<Product, "id" | "createdAt">) => {
+      const nextProduct: Product = {
+        ...product,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
+
+      setAndPersistProducts((previous) => [nextProduct, ...previous]);
+
+      try {
+        const response = await fetch(PRODUCTS_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(nextProduct),
+        });
+
+        if (!response.ok) {
+          throw new Error("Could not save product");
+        }
+      } catch {
+        // Browser storage remains as the local fallback.
+      }
+    },
+    [setAndPersistProducts],
+  );
+
+  const updateProduct = useCallback(
+    async (id: string, updates: Partial<Product>) => {
+      const existing = products.find((product) => product.id === id);
+      if (!existing) return;
+
+      const nextProduct = {
+        ...existing,
+        ...updates,
+        id: existing.id,
+        createdAt: existing.createdAt,
+      };
+      setAndPersistProducts((previous) =>
+        previous.map((product) => (product.id === id ? nextProduct : product)),
+      );
+
+      try {
+        const response = await fetch(PRODUCTS_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(nextProduct),
+        });
+
+        if (!response.ok) {
+          throw new Error("Could not update product");
+        }
+      } catch {
+        // Browser storage remains as the local fallback.
+      }
+    },
+    [products, setAndPersistProducts],
+  );
+
+  const deleteProduct = useCallback(
+    async (id: string) => {
+      setAndPersistProducts((previous) =>
+        previous.filter((product) => product.id !== id),
+      );
+
+      try {
+        const response = await fetch(PRODUCTS_API, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Could not delete product");
+        }
+      } catch {
+        // Browser storage remains as the local fallback.
+      }
+    },
+    [setAndPersistProducts],
+  );
 
   return (
-    <ProductContext.Provider value={{ products, addProduct, updateProduct, deleteProduct }}>
+    <ProductContext.Provider
+      value={{ products, addProduct, updateProduct, deleteProduct }}
+    >
       {children}
     </ProductContext.Provider>
   );
@@ -58,6 +188,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
 export const useProducts = () => {
   const context = useContext(ProductContext);
-  if (!context) throw new Error("useProducts must be used within ProductProvider");
+  if (!context)
+    throw new Error("useProducts must be used within ProductProvider");
   return context;
 };

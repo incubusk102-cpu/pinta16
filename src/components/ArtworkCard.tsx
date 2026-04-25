@@ -15,7 +15,17 @@ interface ArtworkCardProps {
   onClick: () => void;
 }
 
-const ArtworkCard = ({ image, mockup, title, medium, year, price, description, index, onClick }: ArtworkCardProps) => {
+const ArtworkCard = ({
+  image,
+  mockup,
+  title,
+  medium,
+  year,
+  price,
+  description,
+  index,
+  onClick,
+}: ArtworkCardProps) => {
   const { addToCart } = useCart();
   const [isHovered, setIsHovered] = useState(false);
 
@@ -62,18 +72,26 @@ const ArtworkCard = ({ image, mockup, title, medium, year, price, description, i
               className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-sm"
             >
               <Eye className="w-3 h-3 text-white/80" />
-              <span className="font-body text-[9px] tracking-[0.2em] uppercase text-white/80">Room Preview</span>
+              <span className="font-body text-[9px] tracking-[0.2em] uppercase text-white/80">
+                Room Preview
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
-          <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60 mb-1">{medium} · {year}</p>
+          <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60 mb-1">
+            {medium} · {year}
+          </p>
           <h3 className="font-display text-lg text-white mb-1">{title}</h3>
-          <p className="font-body text-xs text-white/70 mb-3 line-clamp-2">{description}</p>
+          <p className="font-body text-xs text-white/70 mb-3 line-clamp-2">
+            {description}
+          </p>
           <div className="flex items-center justify-between">
-            <span className="font-body text-sm text-white font-semibold">₱{price.toLocaleString()}</span>
+            <span className="font-body text-sm text-white font-semibold">
+              ₱{price.toLocaleString()}
+            </span>
             <button
               onClick={handleAddToCart}
               className="p-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors rounded-sm"
