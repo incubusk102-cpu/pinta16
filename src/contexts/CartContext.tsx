@@ -29,8 +29,35 @@ export interface CompletedOrder {
   total: number;
   estimatedCreationDays: string;
   createdAt: string;
-  status: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled";
+  status: "confirmed" | "in_progress" | "out_for_delivery" | "received";
 }
+
+export const ORDER_STEPS: {
+  key: CompletedOrder["status"];
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: "confirmed",
+    label: "Order Confirmed",
+    description: "Payment received, order is being processed",
+  },
+  {
+    key: "in_progress",
+    label: "Painting In Progress",
+    description: "The artist is working on your painting",
+  },
+  {
+    key: "out_for_delivery",
+    label: "Out for Delivery",
+    description: "Your order is on its way",
+  },
+  {
+    key: "received",
+    label: "Order Received",
+    description: "Delivered successfully",
+  },
+];
 
 interface VoucherState {
   code: string;
@@ -201,7 +228,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const placeOrder = (orderInfo: OrderInfo): CompletedOrder => {
     const order: CompletedOrder = {
-      id: `ORD-${Date.now().toString(36).toUpperCase()}`,
+      id: `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`,
       items: [...items],
       orderInfo,
       subtotal,
@@ -210,7 +237,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       total,
       estimatedCreationDays,
       createdAt: new Date().toISOString(),
-      status: "pending",
+      status: "confirmed",
     };
     const newOrders = [order, ...orders];
     saveOrders(newOrders);
@@ -219,6 +246,22 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setIsOpen(false);
     setShowCheckout(false);
     setShowConfirmation(true);
+    fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "place", order }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      })
+      .catch((err) => {
+        console.error("Order sync failed:", err);
+        import("sonner").then(({ toast }) =>
+          toast.warning(
+            "Order saved locally but could not sync to server. It will appear in your tracking once connectivity is restored.",
+          ),
+        );
+      });
     return order;
   };
 
