@@ -63,7 +63,10 @@ interface CartContextType {
   estimatedCreationDays: string;
   orders: CompletedOrder[];
   placeOrder: (orderInfo: OrderInfo) => CompletedOrder;
-  updateOrderStatus: (orderId: string, status: CompletedOrder["status"]) => void;
+  updateOrderStatus: (
+    orderId: string,
+    status: CompletedOrder["status"],
+  ) => void;
   showCheckout: boolean;
   setShowCheckout: (show: boolean) => void;
   lastOrder: CompletedOrder | null;
@@ -71,12 +74,13 @@ interface CartContextType {
   setShowConfirmation: (show: boolean) => void;
 }
 
-const VOUCHERS: Record<string, { discountPercent: number; minSpend: number }> = {
-  PINTATERRA10: { discountPercent: 10, minSpend: 7100 },
-  PINTATERRA15: { discountPercent: 15, minSpend: 7100 },
-  ARTLOVER20: { discountPercent: 20, minSpend: 7100 },
-  GETNEW28: { discountPercent: 28, minSpend: 7100 },
-};
+const VOUCHERS: Record<string, { discountPercent: number; minSpend: number }> =
+  {
+    PINTATERRA10: { discountPercent: 10, minSpend: 7100 },
+    PINTATERRA15: { discountPercent: 15, minSpend: 7100 },
+    ARTLOVER20: { discountPercent: 20, minSpend: 7100 },
+    GETNEW28: { discountPercent: 28, minSpend: 7100 },
+  };
 
 const MIN_SPEND = 7100;
 const FREE_SHIPPING_THRESHOLD = 8000;
@@ -125,21 +129,30 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.id === item.id);
       if (existing) {
-        return prev.map((i) => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map((i) =>
+          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i,
+        );
       }
       return [...prev, { ...item, quantity: 1 }];
     });
     setIsOpen(true);
   };
 
-  const removeFromCart = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const removeFromCart = (id: string) =>
+    setItems((prev) => prev.filter((i) => i.id !== id));
 
   const updateQuantity = (id: string, quantity: number) => {
-    if (quantity <= 0) { removeFromCart(id); return; }
+    if (quantity <= 0) {
+      removeFromCart(id);
+      return;
+    }
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity } : i)));
   };
 
-  const clearCart = () => { setItems([]); removeVoucher(); };
+  const clearCart = () => {
+    setItems([]);
+    removeVoucher();
+  };
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -149,19 +162,40 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const applyVoucher = (code: string) => {
     const upper = code.toUpperCase().trim();
     const v = VOUCHERS[upper];
-    if (!v) { setVoucher({ code: upper, discountPercent: 0, applied: false, error: "Invalid voucher code" }); return; }
-    if (subtotal < MIN_SPEND) {
-      setVoucher({ code: upper, discountPercent: 0, applied: false, error: `Minimum spend of ₱${MIN_SPEND.toLocaleString()} required.` });
+    if (!v) {
+      setVoucher({
+        code: upper,
+        discountPercent: 0,
+        applied: false,
+        error: "Invalid voucher code",
+      });
       return;
     }
-    setVoucher({ code: upper, discountPercent: v.discountPercent, applied: true, error: "" });
+    if (subtotal < MIN_SPEND) {
+      setVoucher({
+        code: upper,
+        discountPercent: 0,
+        applied: false,
+        error: `Minimum spend of ₱${MIN_SPEND.toLocaleString()} required.`,
+      });
+      return;
+    }
+    setVoucher({
+      code: upper,
+      discountPercent: v.discountPercent,
+      applied: true,
+      error: "",
+    });
   };
 
-  const removeVoucher = () => setVoucher({ code: "", discountPercent: 0, applied: false, error: "" });
+  const removeVoucher = () =>
+    setVoucher({ code: "", discountPercent: 0, applied: false, error: "" });
 
   const shippingFeeOriginal = SHIPPING_FEE;
   const shippingFee = isFreeShipping ? 0 : SHIPPING_FEE;
-  const discount = voucher.applied ? subtotal * (voucher.discountPercent / 100) : 0;
+  const discount = voucher.applied
+    ? subtotal * (voucher.discountPercent / 100)
+    : 0;
   const total = subtotal - discount + shippingFee;
   const estimatedCreationDays = getEstimatedCreationDays(itemCount);
 
@@ -170,7 +204,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       id: `ORD-${Date.now().toString(36).toUpperCase()}`,
       items: [...items],
       orderInfo,
-      subtotal, shippingFee, discount, total, estimatedCreationDays,
+      subtotal,
+      shippingFee,
+      discount,
+      total,
+      estimatedCreationDays,
       createdAt: new Date().toISOString(),
       status: "pending",
     };
@@ -184,24 +222,50 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     return order;
   };
 
-  const updateOrderStatus = (orderId: string, status: CompletedOrder["status"]) => {
-    const newOrders = orders.map((o) => o.id === orderId ? { ...o, status } : o);
+  const updateOrderStatus = (
+    orderId: string,
+    status: CompletedOrder["status"],
+  ) => {
+    const newOrders = orders.map((o) =>
+      o.id === orderId ? { ...o, status } : o,
+    );
     saveOrders(newOrders);
   };
 
   return (
-    <CartContext.Provider value={{
-      items, isOpen, voucher,
-      addToCart, removeFromCart, updateQuantity, clearCart,
-      openCart: () => setIsOpen(true), closeCart: () => setIsOpen(false),
-      applyVoucher, removeVoucher,
-      shippingFee, shippingFeeOriginal, subtotal, discount, total, itemCount,
-      freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
-      isFreeShipping, amountToFreeShipping, estimatedCreationDays,
-      orders, placeOrder, updateOrderStatus,
-      showCheckout, setShowCheckout,
-      lastOrder, showConfirmation, setShowConfirmation,
-    }}>
+    <CartContext.Provider
+      value={{
+        items,
+        isOpen,
+        voucher,
+        addToCart,
+        removeFromCart,
+        updateQuantity,
+        clearCart,
+        openCart: () => setIsOpen(true),
+        closeCart: () => setIsOpen(false),
+        applyVoucher,
+        removeVoucher,
+        shippingFee,
+        shippingFeeOriginal,
+        subtotal,
+        discount,
+        total,
+        itemCount,
+        freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+        isFreeShipping,
+        amountToFreeShipping,
+        estimatedCreationDays,
+        orders,
+        placeOrder,
+        updateOrderStatus,
+        showCheckout,
+        setShowCheckout,
+        lastOrder,
+        showConfirmation,
+        setShowConfirmation,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );

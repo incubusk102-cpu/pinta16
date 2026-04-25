@@ -4,14 +4,28 @@ import { X, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 
 interface LightboxProps {
-  artworks: { image: string; mockup?: string; title: string; medium: string; year: string; price: number; description: string }[];
+  artworks: {
+    image: string;
+    mockup?: string;
+    title: string;
+    medium: string;
+    year: string;
+    price: number;
+    description: string;
+  }[];
   currentIndex: number;
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (index: number) => void;
 }
 
-const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: LightboxProps) => {
+const Lightbox = ({
+  artworks,
+  currentIndex,
+  isOpen,
+  onClose,
+  onNavigate,
+}: LightboxProps) => {
   const { addToCart } = useCart();
   const [zoomed, setZoomed] = useState(false);
   const [showMockup, setShowMockup] = useState(false);
@@ -40,7 +54,10 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { if (zoomed) setZoomed(false); else onClose(); }
+      if (e.key === "Escape") {
+        if (zoomed) setZoomed(false);
+        else onClose();
+      }
       if (e.key === "ArrowLeft" && !zoomed) handlePrev();
       if (e.key === "ArrowRight" && !zoomed) handleNext();
     };
@@ -73,22 +90,52 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
             className="max-w-[95vw] max-h-[95vh] object-contain select-none"
             draggable={false}
           />
-          <button onClick={(e) => { e.stopPropagation(); setZoomed(false); }} className="absolute top-6 right-6 p-3 text-white/80 hover:text-white transition-colors z-10">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomed(false);
+            }}
+            className="absolute top-6 right-6 p-3 text-white/80 hover:text-white transition-colors z-10"
+          >
             <X className="w-6 h-6" />
           </button>
         </motion.div>
       ) : (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex items-center justify-center" onClick={onClose}>
-          <button onClick={onClose} className="absolute top-6 right-6 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex items-center justify-center"
+          onClick={onClose}
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-6 right-6 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+          >
             <X className="w-6 h-6" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); handlePrev(); }} className="absolute left-4 md:left-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrev();
+            }}
+            className="absolute left-4 md:left-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+          >
             <ChevronLeft className="w-6 h-6" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); handleNext(); }} className="absolute right-4 md:right-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
+            className="absolute right-4 md:right-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+          >
             <ChevronRight className="w-6 h-6" />
           </button>
-          <div className="max-w-5xl w-full px-16 flex flex-col md:flex-row items-center gap-8" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="max-w-5xl w-full px-16 flex flex-col md:flex-row items-center gap-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="relative">
               <AnimatePresence mode="wait">
                 <motion.img
@@ -106,12 +153,29 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
               </AnimatePresence>
             </div>
             <div className="text-center md:text-left max-w-sm">
-              <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">{art.medium} · {art.year}</p>
-              <h3 className="font-display text-2xl md:text-3xl text-foreground mb-3">{art.title}</h3>
-              <p className="font-body text-sm text-muted-foreground mb-4 leading-relaxed">{art.description}</p>
-              <p className="font-body text-xl text-foreground font-semibold mb-4">₱{art.price.toLocaleString()}</p>
+              <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
+                {art.medium} · {art.year}
+              </p>
+              <h3 className="font-display text-2xl md:text-3xl text-foreground mb-3">
+                {art.title}
+              </h3>
+              <p className="font-body text-sm text-muted-foreground mb-4 leading-relaxed">
+                {art.description}
+              </p>
+              <p className="font-body text-xl text-foreground font-semibold mb-4">
+                ₱{art.price.toLocaleString()}
+              </p>
               <button
-                onClick={() => addToCart({ id: `art-${currentIndex}`, image: art.image, title: art.title, medium: art.medium, year: art.year, price: art.price })}
+                onClick={() =>
+                  addToCart({
+                    id: `art-${currentIndex}`,
+                    image: art.image,
+                    title: art.title,
+                    medium: art.medium,
+                    year: art.year,
+                    price: art.price,
+                  })
+                }
                 className="inline-flex items-center gap-2 px-8 py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm"
               >
                 <ShoppingCart className="w-4 h-4" />

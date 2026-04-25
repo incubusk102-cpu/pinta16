@@ -13,9 +13,17 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Pintaterra — Affordable Art, Authentic Stories" },
-      { name: "description", content: "Discover hand-crafted paintings that transform spaces. Each piece tells a story, crafted with passion and precision." },
+      {
+        name: "description",
+        content:
+          "Discover hand-crafted paintings that transform spaces. Each piece tells a story, crafted with passion and precision.",
+      },
       { property: "og:title", content: "Pintaterra — Affordable Art Gallery" },
-      { property: "og:description", content: "Original paintings, hand-crafted upon order. Browse our collection of affordable art." },
+      {
+        property: "og:description",
+        content:
+          "Original paintings, hand-crafted upon order. Browse our collection of affordable art.",
+      },
     ],
   }),
 });
