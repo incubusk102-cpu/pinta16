@@ -91,9 +91,17 @@ export const handler = async (event) => {
         if (orders.some((o) => o.id === orderId)) {
           return json(409, { error: "Order already exists" });
         }
+        const safeItems = order.items.slice(0, 50).map((item) => ({
+          id: String(item.id || "").slice(0, 100),
+          title: String(item.title || "").slice(0, 300),
+          price: Number(item.price) || 0,
+          quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+          image:
+            typeof item.image === "string" ? item.image.slice(0, 2000) : "",
+        }));
         const safeOrder = {
           id: orderId,
-          items: order.items,
+          items: safeItems,
           orderInfo: {
             fullName: String(info.fullName).slice(0, 200),
             email: String(info.email).slice(0, 200),

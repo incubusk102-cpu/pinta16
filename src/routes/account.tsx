@@ -47,24 +47,26 @@ function OrderTracker() {
     if (!id) return;
     setSearching(true);
 
+    try {
+      const res = await fetch(`/api/orders?id=${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrder(data.order);
+        setSearching(false);
+        return;
+      }
+    } catch {
+      /* server unreachable — fall through to local */
+    }
+
     const local = localOrders.find((o) => o.id === id);
     if (local) {
       setOrder(local);
-      setSearching(false);
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/orders?id=${encodeURIComponent(id)}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setOrder(data.order);
-    } catch {
+    } else {
       toast.error("Order not found");
       setOrder(null);
-    } finally {
-      setSearching(false);
     }
+    setSearching(false);
   };
 
   const currentStepIdx = order
