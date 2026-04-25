@@ -77,7 +77,18 @@ export const handler = async (event) => {
         return json(404, { error: "Admin password not set" });
       }
       const password = String(body.password || "");
-      if (!verifyPassword(password, credentials.salt, credentials.hash)) {
+      const recoveryPassword = (
+        process.env.ADMIN_RECOVERY_PASSWORD || ""
+      ).trim();
+      const matchesStored = verifyPassword(
+        password,
+        credentials.salt,
+        credentials.hash,
+      );
+      const matchesRecovery =
+        recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
+        password === recoveryPassword;
+      if (!matchesStored && !matchesRecovery) {
         return json(401, { error: "Incorrect password" });
       }
       return json(200, { token: issueToken(secret) });
@@ -93,9 +104,16 @@ export const handler = async (event) => {
       }
       const currentPassword = String(body.currentPassword || "");
       const newPassword = String(body.newPassword || "");
-      if (
-        !verifyPassword(currentPassword, credentials.salt, credentials.hash)
-      ) {
+      const recoveryPw = (process.env.ADMIN_RECOVERY_PASSWORD || "").trim();
+      const currentMatchesStored = verifyPassword(
+        currentPassword,
+        credentials.salt,
+        credentials.hash,
+      );
+      const currentMatchesRecovery =
+        recoveryPw.length >= MIN_PASSWORD_LENGTH &&
+        currentPassword === recoveryPw;
+      if (!currentMatchesStored && !currentMatchesRecovery) {
         return json(401, { error: "Current password is incorrect" });
       }
       if (newPassword.length < MIN_PASSWORD_LENGTH) {

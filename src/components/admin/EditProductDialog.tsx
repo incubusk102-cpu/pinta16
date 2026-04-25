@@ -36,6 +36,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [medium, setMedium] = useState("");
   const [year, setYear] = useState("");
   const [price, setPrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -49,6 +51,18 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     setMedium(product.medium);
     setYear(product.year);
     setPrice(String(product.price));
+    setSalePrice(product.salePrice ? String(product.salePrice) : "");
+    setDiscountPercent(
+      product.salePrice &&
+        product.salePrice > 0 &&
+        product.salePrice < product.price
+        ? String(
+            Math.round(
+              ((product.price - product.salePrice) / product.price) * 100,
+            ),
+          )
+        : "",
+    );
     setDescription(product.description ?? "");
   }, [product]);
 
@@ -79,6 +93,10 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
 
     setSaving(true);
     try {
+      const salePriceNum = Number(salePrice);
+      const effectiveSalePrice =
+        salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
+
       await onSave(product.id, {
         image,
         mockup: mockup || undefined,
@@ -86,6 +104,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
         price: priceNum,
+        salePrice: effectiveSalePrice,
         description: description.trim(),
       });
       toast.success("Product updated");
@@ -212,8 +231,69 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
               min="0"
               step="1"
               value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              onChange={(e) => {
+                setPrice(e.target.value);
+                const p = Number(e.target.value);
+                const d = Number(discountPercent);
+                if (p > 0 && d > 0 && d < 100) {
+                  setSalePrice(String(Math.round(p * (1 - d / 100))));
+                }
+              }}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="edit-salePrice">
+                Sale price (₱){" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="edit-salePrice"
+                type="number"
+                min="0"
+                step="1"
+                value={salePrice}
+                onChange={(e) => {
+                  setSalePrice(e.target.value);
+                  const p = Number(price);
+                  const s = Number(e.target.value);
+                  if (p > 0 && s > 0 && s < p) {
+                    setDiscountPercent(String(Math.round(((p - s) / p) * 100)));
+                  } else {
+                    setDiscountPercent("");
+                  }
+                }}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-discountPercent">
+                Discount %{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="edit-discountPercent"
+                type="number"
+                min="0"
+                max="99"
+                step="1"
+                value={discountPercent}
+                onChange={(e) => {
+                  setDiscountPercent(e.target.value);
+                  const p = Number(price);
+                  const d = Number(e.target.value);
+                  if (p > 0 && d > 0 && d < 100) {
+                    setSalePrice(String(Math.round(p * (1 - d / 100))));
+                  } else {
+                    setSalePrice("");
+                  }
+                }}
+              />
+            </div>
           </div>
 
           <div>

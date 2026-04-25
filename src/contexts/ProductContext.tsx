@@ -17,9 +17,40 @@ export interface Product {
   medium: string;
   year: string;
   price: number;
+  salePrice?: number;
   description: string;
   createdAt: string;
 }
+
+export const getEffectivePrice = (product: {
+  price: number;
+  salePrice?: number;
+}): number => {
+  if (
+    product.salePrice != null &&
+    product.salePrice > 0 &&
+    product.salePrice < product.price
+  ) {
+    return product.salePrice;
+  }
+  return product.price;
+};
+
+export const getDiscountPercent = (product: {
+  price: number;
+  salePrice?: number;
+}): number => {
+  if (
+    product.salePrice != null &&
+    product.salePrice > 0 &&
+    product.salePrice < product.price
+  ) {
+    return Math.round(
+      ((product.price - product.salePrice) / product.price) * 100,
+    );
+  }
+  return 0;
+};
 
 interface ProductContextType {
   products: Product[];

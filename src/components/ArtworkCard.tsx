@@ -2,6 +2,10 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingCart, Eye } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
+import {
+  getEffectivePrice,
+  getDiscountPercent,
+} from "@/contexts/ProductContext";
 
 interface ArtworkCardProps {
   image: string;
@@ -10,6 +14,7 @@ interface ArtworkCardProps {
   medium: string;
   year: string;
   price: number;
+  salePrice?: number;
   description: string;
   index: number;
   onClick: () => void;
@@ -22,16 +27,26 @@ const ArtworkCard = ({
   medium,
   year,
   price,
+  salePrice,
   description,
   index,
   onClick,
 }: ArtworkCardProps) => {
   const { addToCart } = useCart();
   const [isHovered, setIsHovered] = useState(false);
+  const effectivePrice = getEffectivePrice({ price, salePrice });
+  const discount = getDiscountPercent({ price, salePrice });
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    addToCart({ id: `art-${index}`, image, title, medium, year, price });
+    addToCart({
+      id: `art-${index}`,
+      image,
+      title,
+      medium,
+      year,
+      price: effectivePrice,
+    });
   };
 
   const displayImage = isHovered && mockup ? mockup : image;
@@ -79,6 +94,13 @@ const ArtworkCard = ({
           )}
         </AnimatePresence>
 
+        {/* Discount badge */}
+        {discount > 0 && (
+          <div className="absolute top-3 left-3 z-[1] px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
+            {discount}% OFF
+          </div>
+        )}
+
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
           <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60 mb-1">
@@ -90,7 +112,16 @@ const ArtworkCard = ({
           </p>
           <div className="flex items-center justify-between">
             <span className="font-body text-sm text-white font-semibold">
-              ₱{price.toLocaleString()}
+              {discount > 0 ? (
+                <>
+                  <span className="line-through text-white/50 mr-1">
+                    ₱{price.toLocaleString()}
+                  </span>
+                  ₱{effectivePrice.toLocaleString()}
+                </>
+              ) : (
+                <>₱{price.toLocaleString()}</>
+              )}
             </span>
             <button
               onClick={handleAddToCart}

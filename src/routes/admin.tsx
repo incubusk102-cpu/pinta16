@@ -1,7 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { useProducts, type Product } from "@/contexts/ProductContext";
+import {
+  useProducts,
+  getDiscountPercent,
+  type Product,
+} from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -336,6 +340,8 @@ function ProductsSection() {
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [price, setPrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -366,9 +372,42 @@ function ProductsSection() {
     setMedium("Acrylic on Canvas");
     setYear(String(new Date().getFullYear()));
     setPrice("");
+    setSalePrice("");
+    setDiscountPercent("");
     setDescription("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (mockupInputRef.current) mockupInputRef.current.value = "";
+  };
+
+  const handlePriceChange = (value: string) => {
+    setPrice(value);
+    const p = Number(value);
+    const d = Number(discountPercent);
+    if (p > 0 && d > 0 && d < 100) {
+      setSalePrice(String(Math.round(p * (1 - d / 100))));
+    }
+  };
+
+  const handleSalePriceChange = (value: string) => {
+    setSalePrice(value);
+    const p = Number(price);
+    const s = Number(value);
+    if (p > 0 && s > 0 && s < p) {
+      setDiscountPercent(String(Math.round(((p - s) / p) * 100)));
+    } else {
+      setDiscountPercent("");
+    }
+  };
+
+  const handleDiscountPercentChange = (value: string) => {
+    setDiscountPercent(value);
+    const p = Number(price);
+    const d = Number(value);
+    if (p > 0 && d > 0 && d < 100) {
+      setSalePrice(String(Math.round(p * (1 - d / 100))));
+    } else {
+      setSalePrice("");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -380,6 +419,10 @@ function ProductsSection() {
 
     setSubmitting(true);
 
+    const salePriceNum = Number(salePrice);
+    const effectiveSalePrice =
+      salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
+
     try {
       await addProduct({
         image,
@@ -388,6 +431,7 @@ function ProductsSection() {
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
         price: priceNum,
+        salePrice: effectiveSalePrice,
         description: description.trim(),
       });
       toast.success(`"${title.trim()}" added to the collection`);
@@ -524,9 +568,47 @@ function ProductsSection() {
                 min="0"
                 step="1"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => handlePriceChange(e.target.value)}
                 placeholder="3499"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="salePrice">
+                  Sale price (₱){" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="salePrice"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={salePrice}
+                  onChange={(e) => handleSalePriceChange(e.target.value)}
+                  placeholder="2799"
+                />
+              </div>
+              <div>
+                <Label htmlFor="discountPercent">
+                  Discount %{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="discountPercent"
+                  type="number"
+                  min="0"
+                  max="99"
+                  step="1"
+                  value={discountPercent}
+                  onChange={(e) => handleDiscountPercentChange(e.target.value)}
+                  placeholder="20"
+                />
+              </div>
             </div>
 
             <div>
@@ -584,7 +666,19 @@ function ProductsSection() {
                         {product.medium} · {product.year}
                       </p>
                       <p className="text-sm font-semibold mt-1">
-                        ₱{product.price.toLocaleString()}
+                        {getDiscountPercent(product) > 0 ? (
+                          <>
+                            <span className="line-through text-muted-foreground font-normal mr-1">
+                              ₱{product.price.toLocaleString()}
+                            </span>
+                            <span>₱{product.salePrice!.toLocaleString()}</span>
+                            <span className="ml-1 text-xs text-red-500 font-semibold">
+                              {getDiscountPercent(product)}% OFF
+                            </span>
+                          </>
+                        ) : (
+                          <>₱{product.price.toLocaleString()}</>
+                        )}
                       </p>
                       {product.description && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
