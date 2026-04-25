@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 export interface CartItem {
   id: string;
@@ -127,6 +128,7 @@ interface CartContextType {
   total: number;
   itemCount: number;
   freeShippingThreshold: number;
+  freeShippingEnabled: boolean;
   isFreeShipping: boolean;
   amountToFreeShipping: number;
   estimatedCreationDays: string;
@@ -148,17 +150,8 @@ interface CartContextType {
   setShowConfirmation: (show: boolean) => void;
 }
 
-const VOUCHERS: Record<string, { discountPercent: number; minSpend: number }> =
-  {
-    PINTATERRA10: { discountPercent: 10, minSpend: 7100 },
-    PINTATERRA15: { discountPercent: 15, minSpend: 7100 },
-    ARTLOVER20: { discountPercent: 20, minSpend: 7100 },
-    GETNEW28: { discountPercent: 28, minSpend: 7100 },
-  };
-
-const MIN_SPEND = 7100;
-const FREE_SHIPPING_THRESHOLD = 8000;
-const SHIPPING_FEE = 500;
+const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
+const DEFAULT_SHIPPING_FEE = 500;
 
 const ORDERS_STORAGE_KEY = "pintaterra_orders";
 
@@ -171,6 +164,11 @@ const getEstimatedCreationDays = (itemCount: number): string => {
 };
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
+  const { config } = useStorefrontConfig();
+  const FREE_SHIPPING_THRESHOLD = config.freeShipping.enabled
+    ? config.freeShipping.threshold || DEFAULT_FREE_SHIPPING_THRESHOLD
+    : Number.POSITIVE_INFINITY;
+  const SHIPPING_FEE = config.freeShipping.shippingFee || DEFAULT_SHIPPING_FEE;
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -235,8 +233,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const applyVoucher = (code: string) => {
     const upper = code.toUpperCase().trim();
-    const v = VOUCHERS[upper];
-    if (!v) {
+    const promo = config.promoCodes.find((p) => p.code === upper);
+    if (!promo) {
       setVoucher({
         code: upper,
         discountPercent: 0,
@@ -245,18 +243,33 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       });
       return;
     }
-    if (subtotal < MIN_SPEND) {
+    if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
       setVoucher({
         code: upper,
         discountPercent: 0,
         applied: false,
-        error: `Minimum spend of ₱${MIN_SPEND.toLocaleString()} required.`,
+        error: "This code has expired",
       });
       return;
     }
+    if (subtotal < promo.minSpend) {
+      setVoucher({
+        code: upper,
+        discountPercent: 0,
+        applied: false,
+        error: `Minimum spend of \u20b1${promo.minSpend.toLocaleString()} required.`,
+      });
+      return;
+    }
+    const discountPercent =
+      promo.type === "percent"
+        ? promo.value
+        : subtotal > 0
+          ? Math.min(100, (promo.value / subtotal) * 100)
+          : 0;
     setVoucher({
       code: upper,
-      discountPercent: v.discountPercent,
+      discountPercent,
       applied: true,
       error: "",
     });
@@ -368,7 +381,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         discount,
         total,
         itemCount,
-        freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+        freeShippingThreshold: Number.isFinite(FREE_SHIPPING_THRESHOLD)
+          ? FREE_SHIPPING_THRESHOLD
+          : 0,
+        freeShippingEnabled: config.freeShipping.enabled,
         isFreeShipping,
         amountToFreeShipping,
         estimatedCreationDays,

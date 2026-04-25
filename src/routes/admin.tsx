@@ -26,6 +26,7 @@ import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
+import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import {
   ArrowLeft,
   Activity,
@@ -76,6 +77,7 @@ type AdminSection =
   | "orders"
   | "visitors"
   | "users"
+  | "storefront"
   | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
@@ -84,6 +86,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   orders: "Orders",
   visitors: "Visitors",
   users: "Users",
+  storefront: "Storefront",
   settings: "Settings",
 };
 
@@ -299,6 +302,13 @@ function AdminDashboard() {
               hint="Sign-ups + 30-day cleanup"
             />
             <NavLink
+              icon={<Activity className="w-4 h-4" />}
+              label="Storefront"
+              active={section === "storefront"}
+              onClick={() => navigate("storefront")}
+              hint="Announcement, shipping, promo codes"
+            />
+            <NavLink
               icon={<Settings className="w-4 h-4" />}
               label="Settings"
               active={section === "settings"}
@@ -325,6 +335,7 @@ function AdminDashboard() {
         {section === "orders" && <OrdersSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
+        {section === "storefront" && <StorefrontSection />}
         {section === "settings" && <SettingsSection />}
       </main>
     </div>

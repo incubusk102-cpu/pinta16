@@ -18,6 +18,7 @@ const CartDrawer = () => {
     shippingFeeOriginal,
     amountToFreeShipping,
     freeShippingThreshold,
+    freeShippingEnabled,
     voucher,
     applyVoucher,
     removeVoucher,
@@ -65,7 +66,7 @@ const CartDrawer = () => {
               <>
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                   {/* Free shipping progress */}
-                  {!isFreeShipping && (
+                  {!isFreeShipping && freeShippingEnabled && (
                     <div className="p-3 bg-muted/30 border border-border/10 rounded-sm mb-4">
                       <div className="flex items-center gap-2 mb-1">
                         <Truck className="w-3.5 h-3.5 text-muted-foreground" />
