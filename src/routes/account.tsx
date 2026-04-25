@@ -29,7 +29,13 @@ function AccountPage() {
   const loggingOutRef = useRef(false);
 
   useEffect(() => {
-    if (!token && !loggingOutRef.current) {
+    if (loggingOutRef.current) return;
+    if (token) return;
+    const storedToken =
+      typeof window !== "undefined"
+        ? localStorage.getItem("pintaterra_user_token")
+        : null;
+    if (!storedToken) {
       void navigate({ to: "/login" });
     }
   }, [token, navigate]);
