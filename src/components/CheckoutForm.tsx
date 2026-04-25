@@ -131,7 +131,10 @@ const CheckoutForm = () => {
       city: sanitizeText(enforceMaxLength(form.city, 100)),
       notes: sanitizeText(enforceMaxLength(form.notes, 500)),
     };
-    placeOrder(sanitizedForm);
+    placeOrder(sanitizedForm, {
+      paymentIntentId: paymentIntentId ?? undefined,
+      qrCodeImageUrl: qrCodeUrl,
+    });
     setForm({
       fullName: "",
       email: "",

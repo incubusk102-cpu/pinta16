@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle,
@@ -7,12 +8,34 @@ import {
   Truck,
   Info,
   Copy,
+  Bell,
+  Star,
 } from "lucide-react";
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
 import { toast } from "sonner";
+import OrderReviewForm from "./OrderReviewForm";
+
+const formatNotificationDate = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+};
 
 const OrderConfirmation = () => {
   const { showConfirmation, setShowConfirmation, lastOrder } = useCart();
+  const seenNotificationsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!lastOrder?.notifications?.length) return;
+    for (const n of lastOrder.notifications) {
+      const key = `${lastOrder.id}:${n.sentAt}`;
+      if (seenNotificationsRef.current.has(key)) continue;
+      seenNotificationsRef.current.add(key);
+      toast.message(n.message, {
+        description: `Notification sent to ${n.recipient}`,
+      });
+    }
+  }, [lastOrder]);
 
   if (!lastOrder) return null;
 
@@ -156,6 +179,78 @@ const OrderConfirmation = () => {
                   <p className="font-body text-xs text-muted-foreground">
                     Estimated creation: {lastOrder.estimatedCreationDays}
                   </p>
+                </div>
+              )}
+
+              {/* Notifications log */}
+              {lastOrder.notifications &&
+                lastOrder.notifications.length > 0 && (
+                  <div className="p-4 bg-muted/30 border border-border/10 rounded-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bell className="w-4 h-4 text-muted-foreground" />
+                      <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                        Notifications
+                      </p>
+                    </div>
+                    <ul className="space-y-2">
+                      {lastOrder.notifications.map((n, idx) => (
+                        <li
+                          key={`${n.sentAt}-${idx}`}
+                          className="font-body text-xs text-foreground"
+                        >
+                          <p>{n.message}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Sent to {n.recipient} ·{" "}
+                            {formatNotificationDate(n.sentAt)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              {/* Review form / submitted review */}
+              {lastOrder.status === "received" && !lastOrder.review && (
+                <OrderReviewForm
+                  orderId={lastOrder.id}
+                  customerEmail={lastOrder.orderInfo.email}
+                />
+              )}
+              {lastOrder.review && (
+                <div className="p-4 bg-muted/30 border border-border/10 rounded-sm space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                    <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                      Your Review
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        className={`w-4 h-4 ${
+                          n <= lastOrder.review!.rating
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-muted-foreground"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="font-body text-xs text-foreground whitespace-pre-wrap">
+                    {lastOrder.review.text}
+                  </p>
+                  {lastOrder.review.images.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {lastOrder.review.images.map((src, i) => (
+                        <img
+                          key={i}
+                          src={src}
+                          alt={`Review image ${i + 1}`}
+                          className="aspect-square w-full object-cover rounded-sm border border-border/10"
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

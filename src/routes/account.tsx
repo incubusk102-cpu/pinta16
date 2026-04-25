@@ -12,12 +12,15 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
   ArrowLeft,
+  Bell,
   LogOut,
   Mail,
   Package,
   Search,
+  Star,
   UserCircle,
 } from "lucide-react";
+import OrderReviewForm from "@/components/OrderReviewForm";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -142,6 +145,74 @@ function OrderTracker() {
               );
             })}
           </div>
+
+          {/* Notifications log */}
+          {order.notifications && order.notifications.length > 0 && (
+            <div className="pt-2 border-t border-border/10">
+              <div className="flex items-center gap-2 mb-2">
+                <Bell className="w-3.5 h-3.5 text-muted-foreground" />
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Notifications
+                </p>
+              </div>
+              <ul className="space-y-1.5">
+                {order.notifications.map((n, idx) => (
+                  <li key={`${n.sentAt}-${idx}`} className="text-xs">
+                    <p className="text-foreground">{n.message}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(n.sentAt).toLocaleString()} · to {n.recipient}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Review form / submitted review */}
+          {order.status === "received" && !order.review && (
+            <OrderReviewForm
+              orderId={order.id}
+              customerEmail={order.orderInfo?.email}
+              onSubmitted={(review) => setOrder({ ...order, review })}
+            />
+          )}
+          {order.review && (
+            <div className="pt-2 border-t border-border/10 space-y-2">
+              <div className="flex items-center gap-2">
+                <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Your Review
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Star
+                    key={n}
+                    className={`w-3.5 h-3.5 ${
+                      n <= order.review!.rating
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "text-muted-foreground"
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-foreground whitespace-pre-wrap">
+                {order.review.text}
+              </p>
+              {order.review.images.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {order.review.images.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt={`Review image ${i + 1}`}
+                      className="aspect-square w-full object-cover rounded-sm border border-border/10"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
