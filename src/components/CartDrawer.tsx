@@ -145,7 +145,11 @@ const CartDrawer = () => {
                         <div className="flex items-center gap-2">
                           <Tag className="w-3.5 h-3.5 text-success" />
                           <span className="font-body text-xs text-success">
-                            {voucher.code} ({voucher.discountPercent}% off)
+                            {voucher.code} (
+                            {voucher.type === "percent"
+                              ? `${voucher.value}% off`
+                              : `\u20b1${voucher.value.toLocaleString()} off`}
+                            )
                           </span>
                         </div>
                         <button

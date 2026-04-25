@@ -104,7 +104,8 @@ export const ORDER_STEPS: {
 
 interface VoucherState {
   code: string;
-  discountPercent: number;
+  type: "percent" | "fixed";
+  value: number;
   applied: boolean;
   error: string;
 }
@@ -176,7 +177,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [lastOrder, setLastOrder] = useState<CompletedOrder | null>(null);
   const [voucher, setVoucher] = useState<VoucherState>({
     code: "",
-    discountPercent: 0,
+    type: "percent",
+    value: 0,
     applied: false,
     error: "",
   });
@@ -234,55 +236,48 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const applyVoucher = (code: string) => {
     const upper = code.toUpperCase().trim();
     const promo = config.promoCodes.find((p) => p.code === upper);
-    if (!promo) {
+    const fail = (error: string) =>
       setVoucher({
         code: upper,
-        discountPercent: 0,
+        type: "percent",
+        value: 0,
         applied: false,
-        error: "Invalid voucher code",
+        error,
       });
-      return;
-    }
+    if (!promo) return fail("Invalid voucher code");
     if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
-      setVoucher({
-        code: upper,
-        discountPercent: 0,
-        applied: false,
-        error: "This code has expired",
-      });
-      return;
+      return fail("This code has expired");
     }
     if (subtotal < promo.minSpend) {
-      setVoucher({
-        code: upper,
-        discountPercent: 0,
-        applied: false,
-        error: `Minimum spend of \u20b1${promo.minSpend.toLocaleString()} required.`,
-      });
-      return;
+      return fail(
+        `Minimum spend of \u20b1${promo.minSpend.toLocaleString()} required.`,
+      );
     }
-    const discountPercent =
-      promo.type === "percent"
-        ? promo.value
-        : subtotal > 0
-          ? Math.min(100, (promo.value / subtotal) * 100)
-          : 0;
     setVoucher({
       code: upper,
-      discountPercent,
+      type: promo.type,
+      value: promo.value,
       applied: true,
       error: "",
     });
   };
 
   const removeVoucher = () =>
-    setVoucher({ code: "", discountPercent: 0, applied: false, error: "" });
+    setVoucher({
+      code: "",
+      type: "percent",
+      value: 0,
+      applied: false,
+      error: "",
+    });
 
   const shippingFeeOriginal = SHIPPING_FEE;
   const shippingFee = isFreeShipping ? 0 : SHIPPING_FEE;
-  const discount = voucher.applied
-    ? subtotal * (voucher.discountPercent / 100)
-    : 0;
+  const discount = !voucher.applied
+    ? 0
+    : voucher.type === "percent"
+      ? subtotal * (voucher.value / 100)
+      : Math.min(voucher.value, subtotal);
   const total = subtotal - discount + shippingFee;
   const estimatedCreationDays = getEstimatedCreationDays(itemCount);
 
