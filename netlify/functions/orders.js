@@ -1,4 +1,5 @@
 import { connectLambda, getStore } from "@netlify/blobs";
+import crypto from "node:crypto";
 import { isAuthenticated } from "../lib/admin-auth.js";
 
 const STORE_NAME = "orders";
@@ -59,13 +60,15 @@ export const handler = async (event) => {
 
       if (action === "place") {
         const order = body.order;
-        if (!order?.id || !order?.items?.length) {
+        if (!order?.items?.length) {
           return json(400, { error: "Invalid order" });
         }
+        const serverId = `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`;
+        const safeOrder = { ...order, id: serverId };
         const orders = await readOrders(store);
-        const next = [order, ...orders.filter((o) => o.id !== order.id)];
+        const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
-        return json(200, { order });
+        return json(200, { order: safeOrder });
       }
 
       if (action === "update-status") {

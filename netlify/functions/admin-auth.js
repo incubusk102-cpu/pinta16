@@ -1,4 +1,5 @@
 import {
+  constantTimeEquals,
   ensureSessionSecret,
   extractToken,
   getAuthStore,
@@ -87,7 +88,7 @@ export const handler = async (event) => {
       );
       const matchesRecovery =
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
-        password === recoveryPassword;
+        constantTimeEquals(password, recoveryPassword);
       if (!matchesStored && !matchesRecovery) {
         return json(401, { error: "Incorrect password" });
       }
@@ -112,7 +113,7 @@ export const handler = async (event) => {
       );
       const currentMatchesRecovery =
         recoveryPw.length >= MIN_PASSWORD_LENGTH &&
-        currentPassword === recoveryPw;
+        constantTimeEquals(currentPassword, recoveryPw);
       if (!currentMatchesStored && !currentMatchesRecovery) {
         return json(401, { error: "Current password is incorrect" });
       }

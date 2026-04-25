@@ -34,6 +34,13 @@ export const verifyPassword = (password, salt, expectedHash) => {
   return crypto.timingSafeEqual(expected, actual);
 };
 
+export const constantTimeEquals = (a, b) => {
+  const aBuf = Buffer.from(String(a));
+  const bBuf = Buffer.from(String(b));
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+};
+
 const base64UrlEncode = (input) =>
   Buffer.from(input)
     .toString("base64")
