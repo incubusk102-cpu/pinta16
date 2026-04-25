@@ -122,11 +122,13 @@ function LoginPage() {
           </p>
         </div>
 
-        <div className="flex justify-center">
-          {loading ? (
+        <div className="flex flex-col items-center gap-2">
+          <div
+            ref={btnRef}
+            className={loading ? "opacity-50 pointer-events-none" : ""}
+          />
+          {loading && (
             <p className="text-sm text-muted-foreground">Signing in…</p>
-          ) : (
-            <div ref={btnRef} />
           )}
         </div>
 
