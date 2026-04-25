@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, Menu, X } from "lucide-react";
+import { ShoppingCart, Menu, X, UserCircle, LogIn } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
+import { useUserAuth } from "@/contexts/UserAuthContext";
 
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { itemCount, openCart } = useCart();
+  const { user } = useUserAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -50,6 +53,23 @@ const GalleryNav = () => {
               {item.label}
             </button>
           ))}
+          {user ? (
+            <Link
+              to="/account"
+              className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors duration-500 inline-flex items-center gap-2"
+            >
+              <UserCircle className="w-4 h-4" />
+              {user.name?.split(" ")[0] || "Account"}
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors duration-500 inline-flex items-center gap-2"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign in
+            </Link>
+          )}
           <button onClick={openCart} className="relative p-2">
             <ShoppingCart className="w-5 h-5 text-foreground" />
             {itemCount > 0 && (
@@ -101,6 +121,25 @@ const GalleryNav = () => {
                 {item.label}
               </button>
             ))}
+            {user ? (
+              <Link
+                to="/account"
+                onClick={() => setMenuOpen(false)}
+                className="font-body text-sm tracking-[0.3em] uppercase text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+              >
+                <UserCircle className="w-4 h-4" />
+                Account
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                onClick={() => setMenuOpen(false)}
+                className="font-body text-sm tracking-[0.3em] uppercase text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign in
+              </Link>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

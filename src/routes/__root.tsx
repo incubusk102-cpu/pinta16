@@ -2,6 +2,9 @@ import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
+import { UserAuthProvider } from "@/contexts/UserAuthContext";
+import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
+import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
 
 function NotFoundComponent() {
   return (
@@ -32,14 +35,23 @@ export const Route = createRootRoute({
   notFoundComponent: NotFoundComponent,
 });
 
+function HeartbeatBridge() {
+  useVisitorHeartbeat();
+  useUserHeartbeat();
+  return null;
+}
+
 function RootComponent() {
   return (
     <AdminAuthProvider>
-      <ProductProvider>
-        <CartProvider>
-          <Outlet />
-        </CartProvider>
-      </ProductProvider>
+      <UserAuthProvider>
+        <ProductProvider>
+          <CartProvider>
+            <HeartbeatBridge />
+            <Outlet />
+          </CartProvider>
+        </ProductProvider>
+      </UserAuthProvider>
     </AdminAuthProvider>
   );
 }
