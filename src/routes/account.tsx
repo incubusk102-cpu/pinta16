@@ -21,6 +21,7 @@ import {
   UserCircle,
 } from "lucide-react";
 import OrderReviewForm from "@/components/OrderReviewForm";
+import RefundBanner from "@/components/RefundBanner";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -168,8 +169,21 @@ function OrderTracker() {
             </div>
           )}
 
+          {/* Refund banner */}
+          {order.refund && (
+            <RefundBanner
+              orderId={order.id}
+              status={order.refund.status}
+              amount={order.refund.amount}
+              requestedAt={order.refund.requestedAt}
+              completedAt={order.refund.completedAt}
+              failureMessage={order.refund.failureMessage}
+              onRefreshed={(updated) => setOrder(updated)}
+            />
+          )}
+
           {/* Review form / submitted review */}
-          {order.status === "received" && !order.review && (
+          {order.status === "received" && !order.review && !order.refund && (
             <OrderReviewForm
               orderId={order.id}
               customerEmail={order.orderInfo?.email}

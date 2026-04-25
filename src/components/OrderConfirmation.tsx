@@ -14,6 +14,7 @@ import {
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
 import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
+import RefundBanner from "./RefundBanner";
 
 const formatNotificationDate = (iso: string) => {
   const d = new Date(iso);
@@ -209,13 +210,27 @@ const OrderConfirmation = () => {
                   </div>
                 )}
 
-              {/* Review form / submitted review */}
-              {lastOrder.status === "received" && !lastOrder.review && (
-                <OrderReviewForm
+              {/* Refund banner */}
+              {lastOrder.refund && (
+                <RefundBanner
                   orderId={lastOrder.id}
-                  customerEmail={lastOrder.orderInfo.email}
+                  status={lastOrder.refund.status}
+                  amount={lastOrder.refund.amount}
+                  requestedAt={lastOrder.refund.requestedAt}
+                  completedAt={lastOrder.refund.completedAt}
+                  failureMessage={lastOrder.refund.failureMessage}
                 />
               )}
+
+              {/* Review form / submitted review */}
+              {lastOrder.status === "received" &&
+                !lastOrder.review &&
+                !lastOrder.refund && (
+                  <OrderReviewForm
+                    orderId={lastOrder.id}
+                    customerEmail={lastOrder.orderInfo.email}
+                  />
+                )}
               {lastOrder.review && (
                 <div className="p-4 bg-muted/30 border border-border/10 rounded-sm space-y-2">
                   <div className="flex items-center gap-2">

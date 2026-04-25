@@ -20,10 +20,29 @@ export interface OrderInfo {
 }
 
 export interface OrderNotification {
-  type: "shipped" | "received" | "in_progress" | "confirmed";
+  type:
+    | "shipped"
+    | "received"
+    | "in_progress"
+    | "confirmed"
+    | "out_for_delivery"
+    | "refund_requested"
+    | "refund_succeeded"
+    | "refund_failed";
   message: string;
   recipient: string;
   sentAt: string;
+}
+
+export interface OrderRefund {
+  id: string;
+  paymentId: string;
+  amount: number;
+  status: "pending" | "succeeded" | "failed";
+  reason: string;
+  requestedAt: string;
+  completedAt?: string;
+  failureMessage?: string;
 }
 
 export interface OrderReview {
@@ -48,6 +67,7 @@ export interface CompletedOrder {
   qrCodeImageUrl?: string;
   notifications?: OrderNotification[];
   review?: OrderReview;
+  refund?: OrderRefund;
 }
 
 export const REVIEW_MIN_CHARS = 500;
@@ -119,6 +139,7 @@ interface CartContextType {
     status: CompletedOrder["status"],
   ) => void;
   submitOrderReview: (orderId: string, review: OrderReview) => void;
+  applyOrderUpdate: (order: CompletedOrder) => void;
   showCheckout: boolean;
   setShowCheckout: (show: boolean) => void;
   lastOrder: CompletedOrder | null;
@@ -316,6 +337,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const applyOrderUpdate = (updated: CompletedOrder) => {
+    const newOrders = orders.map((o) =>
+      o.id === updated.id ? { ...o, ...updated } : o,
+    );
+    saveOrders(newOrders);
+    if (lastOrder?.id === updated.id) {
+      setLastOrder({ ...lastOrder, ...updated });
+    }
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -344,6 +375,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         placeOrder,
         updateOrderStatus,
         submitOrderReview,
+        applyOrderUpdate,
         showCheckout,
         setShowCheckout,
         lastOrder,
