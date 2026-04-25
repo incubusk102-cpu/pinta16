@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,27 +19,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { PRODUCT_CATEGORIES, type Product } from "@/contexts/ProductContext";
-
-interface ImageMeta {
-  fileName: string;
-  bytes: number;
-}
-
-const formatBytes = (bytes: number): string => {
-  if (!bytes || bytes < 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-};
-
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+import {
+  buildImageFields,
+  getProductImages,
+  PRODUCT_CATEGORIES,
+  PRODUCT_MAX_IMAGES,
+  type Product,
+  type ProductImage,
+} from "@/contexts/ProductContext";
+import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 
 interface Props {
   product: Product | null;
@@ -49,47 +37,25 @@ interface Props {
 }
 
 export function EditProductDialog({ product, open, onClose, onSave }: Props) {
-  const [image, setImage] = useState("");
-  const [imageMeta, setImageMeta] = useState<ImageMeta | null>(null);
-  const [mockup, setMockup] = useState("");
-  const [mockupMeta, setMockupMeta] = useState<ImageMeta | null>(null);
+  const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("");
   const [year, setYear] = useState("");
-  const [category, setCategory] = useState("Abstract");
+  const [category, setCategory] = useState<string>(PRODUCT_CATEGORIES[0]);
   const [dimensions, setDimensions] = useState("");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
-  const imageRef = useRef<HTMLInputElement>(null);
-  const mockupRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!product) return;
-    setImage(product.image);
-    setImageMeta(
-      product.imageFileName
-        ? {
-            fileName: product.imageFileName,
-            bytes: product.imageBytes ?? 0,
-          }
-        : null,
-    );
-    setMockup(product.mockup ?? "");
-    setMockupMeta(
-      product.mockupFileName
-        ? {
-            fileName: product.mockupFileName,
-            bytes: product.mockupBytes ?? 0,
-          }
-        : null,
-    );
+    setImages(getProductImages(product));
     setTitle(product.title);
     setMedium(product.medium);
     setYear(product.year);
-    setCategory(product.category || "Abstract");
+    setCategory(product.category || PRODUCT_CATEGORIES[0]);
     setDimensions(product.dimensions || "");
     setPrice(String(product.price));
     setSalePrice(product.salePrice ? String(product.salePrice) : "");
@@ -107,29 +73,11 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     setDescription(product.description ?? "");
   }, [product]);
 
-  const handleImage = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setter: (v: string) => void,
-    metaSetter: (meta: ImageMeta | null) => void,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/"))
-      return toast.error("Please select an image file");
-    if (file.size > 5 * 1024 * 1024)
-      return toast.error("Image must be under 5MB");
-    try {
-      setter(await fileToDataUrl(file));
-      metaSetter({ fileName: file.name, bytes: file.size });
-    } catch {
-      toast.error("Could not read image");
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product || saving) return;
-    if (!image) return toast.error("Please attach a painting image");
+    if (images.length === 0)
+      return toast.error("Please keep at least one painting photo");
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
@@ -141,8 +89,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
 
       await onSave(product.id, {
-        image,
-        mockup: mockup || undefined,
+        ...buildImageFields(images),
         title: title.trim(),
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
@@ -151,10 +98,6 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
-        imageFileName: imageMeta?.fileName,
-        imageBytes: imageMeta?.bytes,
-        mockupFileName: mockup ? mockupMeta?.fileName : undefined,
-        mockupBytes: mockup ? mockupMeta?.bytes : undefined,
       });
       toast.success("Product updated");
       onClose();
@@ -174,96 +117,14 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
           <DialogTitle>Edit product</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-2 block">Painting image</Label>
-              <label className="flex flex-col items-center justify-center w-full aspect-[4/3] border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/60 transition-colors overflow-hidden bg-background/40">
-                {image ? (
-                  <img
-                    src={image}
-                    alt="preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-6">
-                    <Upload className="w-7 h-7 mx-auto mb-2" />
-                    <p className="text-sm">Replace image</p>
-                  </div>
-                )}
-                <input
-                  ref={imageRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => void handleImage(e, setImage, setImageMeta)}
-                />
-              </label>
-              {imageMeta && (
-                <p
-                  className="text-[11px] text-muted-foreground mt-1 truncate"
-                  title={imageMeta.fileName}
-                >
-                  {imageMeta.fileName}
-                  {imageMeta.bytes ? ` · ${formatBytes(imageMeta.bytes)}` : ""}
-                </p>
-              )}
-            </div>
-            <div>
-              <Label className="mb-2 block">
-                Room mockup{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
-              </Label>
-              <label className="flex flex-col items-center justify-center w-full aspect-[4/3] border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/60 transition-colors overflow-hidden bg-background/40">
-                {mockup ? (
-                  <img
-                    src={mockup}
-                    alt="mockup preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-6">
-                    <Upload className="w-7 h-7 mx-auto mb-2" />
-                    <p className="text-sm">Add a room preview</p>
-                  </div>
-                )}
-                <input
-                  ref={mockupRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) =>
-                    void handleImage(e, setMockup, setMockupMeta)
-                  }
-                />
-              </label>
-              {mockup && mockupMeta && (
-                <p
-                  className="text-[11px] text-muted-foreground mt-1 truncate"
-                  title={mockupMeta.fileName}
-                >
-                  {mockupMeta.fileName}
-                  {mockupMeta.bytes
-                    ? ` · ${formatBytes(mockupMeta.bytes)}`
-                    : ""}
-                </p>
-              )}
-              {mockup && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setMockup("");
-                    setMockupMeta(null);
-                  }}
-                  className="mt-2 text-xs"
-                >
-                  Remove mockup
-                </Button>
-              )}
-            </div>
+          <div>
+            <Label className="mb-2 block">
+              Photos{" "}
+              <span className="text-muted-foreground font-normal">
+                (up to {PRODUCT_MAX_IMAGES})
+              </span>
+            </Label>
+            <ProductImageGallery images={images} onChange={setImages} />
           </div>
 
           <div>
@@ -302,7 +163,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
               <Label htmlFor="edit-category">Category</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger id="edit-category">
-                  <SelectValue placeholder="Choose a category" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PRODUCT_CATEGORIES.map((c) => (
@@ -317,15 +178,14 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
               <Label htmlFor="edit-dimensions">
                 Dimensions{" "}
                 <span className="text-muted-foreground font-normal">
-                  (optional)
+                  (e.g. 24 × 30 in)
                 </span>
               </Label>
               <Input
                 id="edit-dimensions"
                 value={dimensions}
                 onChange={(e) => setDimensions(e.target.value)}
-                maxLength={40}
-                placeholder="e.g. 24 × 30 in"
+                maxLength={60}
               />
             </div>
           </div>

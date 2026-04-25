@@ -318,7 +318,13 @@ const CheckoutForm = () => {
                         </div>
                         {discount > 0 && (
                           <div className="flex justify-between font-body text-xs text-foreground">
-                            <span>Discount ({voucher.discountPercent}%)</span>
+                            <span>
+                              Discount (
+                              {voucher.type === "percent"
+                                ? `${voucher.value}%`
+                                : `\u20b1${voucher.value.toLocaleString()} off`}
+                              )
+                            </span>
                             <span>-₱{discount.toLocaleString()}</span>
                           </div>
                         )}

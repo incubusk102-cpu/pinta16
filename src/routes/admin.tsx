@@ -1,11 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   useProducts,
   getDiscountPercent,
+  getProductImages,
+  buildImageFields,
   PRODUCT_CATEGORIES,
+  PRODUCT_MAX_IMAGES,
   type Product,
+  type ProductImage,
 } from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,13 +31,17 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
+import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
+import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import {
   ArrowLeft,
   Activity,
   Bell,
+  CheckCircle2,
   KeyRound,
+  LayoutDashboard,
   Loader2,
   LogOut,
   Menu,
@@ -41,11 +49,18 @@ import {
   Pencil,
   Plus,
   QrCode,
+  RefreshCw,
   Settings,
+  Eye,
+  EyeOff,
   Star,
   Trash2,
+  TrendingUp,
+  Truck,
+  Undo2,
   Upload,
   Users,
+  Wallet,
 } from "lucide-react";
 import { ORDER_STEPS, type CompletedOrder } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
@@ -64,24 +79,24 @@ export const Route = createFileRoute("/admin")({
   }),
 });
 
-type AdminSection = "products" | "orders" | "visitors" | "users" | "settings";
+type AdminSection =
+  | "dashboard"
+  | "products"
+  | "orders"
+  | "visitors"
+  | "users"
+  | "storefront"
+  | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
+  dashboard: "Dashboard",
   products: "Products",
   orders: "Orders",
   visitors: "Visitors",
   users: "Users",
+  storefront: "Storefront",
   settings: "Settings",
 };
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -260,6 +275,13 @@ function AdminDashboard() {
           </SheetHeader>
           <nav className="mt-6 flex flex-col gap-1">
             <NavLink
+              icon={<LayoutDashboard className="w-4 h-4" />}
+              label="Dashboard"
+              active={section === "dashboard"}
+              onClick={() => navigate("dashboard")}
+              hint="Revenue, ship-out, complete"
+            />
+            <NavLink
               icon={<Upload className="w-4 h-4" />}
               label="Products"
               active={section === "products"}
@@ -288,6 +310,13 @@ function AdminDashboard() {
               hint="Sign-ups + 30-day cleanup"
             />
             <NavLink
+              icon={<Activity className="w-4 h-4" />}
+              label="Storefront"
+              active={section === "storefront"}
+              onClick={() => navigate("storefront")}
+              hint="Announcement, shipping, promo codes"
+            />
+            <NavLink
               icon={<Settings className="w-4 h-4" />}
               label="Settings"
               active={section === "settings"}
@@ -307,10 +336,14 @@ function AdminDashboard() {
       </Sheet>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        {section === "dashboard" && (
+          <DashboardSection onOpenOrders={() => navigate("orders")} />
+        )}
         {section === "products" && <ProductsSection />}
         {section === "orders" && <OrdersSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
+        {section === "storefront" && <StorefrontSection />}
         {section === "settings" && <SettingsSection />}
       </main>
     </div>
@@ -353,37 +386,16 @@ function NavLink({
   );
 }
 
-interface ImageMeta {
-  fileName: string;
-  bytes: number;
-}
-
-const formatBytes = (bytes: number): string => {
-  if (!bytes || bytes < 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-};
-
-const formatDate = (iso: string): string => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString();
-};
-
 function ProductsSection() {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const mockupInputRef = useRef<HTMLInputElement>(null);
-  const [image, setImage] = useState<string>("");
-  const [imageMeta, setImageMeta] = useState<ImageMeta | null>(null);
-  const [mockup, setMockup] = useState<string>("");
-  const [mockupMeta, setMockupMeta] = useState<ImageMeta | null>(null);
+  const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
-  const [category, setCategory] = useState<string>("Abstract");
+  const [category, setCategory] = useState<string>(PRODUCT_CATEGORIES[0]);
   const [dimensions, setDimensions] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -391,45 +403,18 @@ function ProductsSection() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-
-  const readImage = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setter: (value: string) => void,
-    metaSetter: (meta: ImageMeta | null) => void,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/"))
-      return toast.error("Please select an image file");
-    if (file.size > 5 * 1024 * 1024)
-      return toast.error("Image must be under 5MB");
-
-    try {
-      setter(await fileToDataUrl(file));
-      metaSetter({ fileName: file.name, bytes: file.size });
-    } catch {
-      toast.error("Could not read image");
-    }
-  };
 
   const reset = () => {
-    setImage("");
-    setImageMeta(null);
-    setMockup("");
-    setMockupMeta(null);
+    setImages([]);
     setTitle("");
     setMedium("Acrylic on Canvas");
     setYear(String(new Date().getFullYear()));
-    setCategory("Abstract");
+    setCategory(PRODUCT_CATEGORIES[0]);
     setDimensions("");
     setPrice("");
     setSalePrice("");
     setDiscountPercent("");
     setDescription("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    if (mockupInputRef.current) mockupInputRef.current.value = "";
   };
 
   const handlePriceChange = (value: string) => {
@@ -465,7 +450,8 @@ function ProductsSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!image) return toast.error("Please upload a painting image");
+    if (images.length === 0)
+      return toast.error("Please upload at least one painting image");
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
@@ -478,8 +464,7 @@ function ProductsSection() {
 
     try {
       await addProduct({
-        image,
-        mockup: mockup || undefined,
+        ...buildImageFields(images),
         title: title.trim(),
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
@@ -488,10 +473,6 @@ function ProductsSection() {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
-        imageFileName: imageMeta?.fileName,
-        imageBytes: imageMeta?.bytes,
-        mockupFileName: mockupMeta?.fileName,
-        mockupBytes: mockupMeta?.bytes,
       });
       toast.success(`"${title.trim()}" added to the collection`);
       reset();
@@ -503,6 +484,31 @@ function ProductsSection() {
       setSubmitting(false);
     }
   };
+
+  const filteredProducts = products.filter((p) => {
+    if (filterCategory === "__uncategorized__") {
+      if (p.category && p.category.trim()) return false;
+    } else if (filterCategory !== "all") {
+      if ((p.category || "") !== filterCategory) return false;
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const haystack = [
+      p.title,
+      p.medium,
+      p.year,
+      p.category,
+      p.dimensions,
+      p.description,
+      p.imageFileName,
+      p.mockupFileName,
+      p.id,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(q);
+  });
 
   const handleDelete = async (productId: string, productTitle: string) => {
     setDeletingId(productId);
@@ -529,72 +535,13 @@ function ProductsSection() {
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="image" className="mb-2 block">
-                Painting image
-              </Label>
-              <label className="flex flex-col items-center justify-center w-full aspect-[4/3] border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/60 transition-colors overflow-hidden bg-background/40">
-                {image ? (
-                  <img
-                    src={image}
-                    alt="preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-6">
-                    <Upload className="w-7 h-7 mx-auto mb-2" />
-                    <p className="text-sm">Click to upload (max 5MB)</p>
-                  </div>
-                )}
-                <input
-                  id="image"
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => void readImage(e, setImage, setImageMeta)}
-                />
-              </label>
-              {imageMeta && (
-                <p className="text-[11px] text-muted-foreground mt-1 truncate">
-                  {imageMeta.fileName} · {formatBytes(imageMeta.bytes)}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="mockup" className="mb-2 block">
-                Room mockup{" "}
+              <Label className="mb-2 block">
+                Photos{" "}
                 <span className="text-muted-foreground font-normal">
-                  (optional, shown on hover)
+                  (up to {PRODUCT_MAX_IMAGES})
                 </span>
               </Label>
-              <label className="flex flex-col items-center justify-center w-full aspect-[4/3] border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/60 transition-colors overflow-hidden bg-background/40">
-                {mockup ? (
-                  <img
-                    src={mockup}
-                    alt="mockup preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-6">
-                    <Upload className="w-7 h-7 mx-auto mb-2" />
-                    <p className="text-sm">Upload a room preview</p>
-                  </div>
-                )}
-                <input
-                  id="mockup"
-                  ref={mockupInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => void readImage(e, setMockup, setMockupMeta)}
-                />
-              </label>
-              {mockupMeta && (
-                <p className="text-[11px] text-muted-foreground mt-1 truncate">
-                  {mockupMeta.fileName} · {formatBytes(mockupMeta.bytes)}
-                </p>
-              )}
+              <ProductImageGallery images={images} onChange={setImages} />
             </div>
 
             <div>
@@ -634,7 +581,7 @@ function ProductsSection() {
                 <Label htmlFor="category">Category</Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger id="category">
-                    <SelectValue placeholder="Choose a category" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {PRODUCT_CATEGORIES.map((c) => (
@@ -656,8 +603,8 @@ function ProductsSection() {
                   id="dimensions"
                   value={dimensions}
                   onChange={(e) => setDimensions(e.target.value)}
-                  maxLength={40}
-                  placeholder="e.g. 24 × 30 in"
+                  maxLength={60}
+                  placeholder="24 × 30 in"
                 />
               </div>
             </div>
@@ -742,32 +689,31 @@ function ProductsSection() {
         </section>
 
         <section>
-          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <h2 className="font-display text-lg">
-              Your uploads{" "}
-              <span className="text-muted-foreground font-normal text-sm">
-                ({products.length})
-              </span>
+              Your uploads ({filteredProducts.length})
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search title, medium, description…"
-                className="h-9 text-sm w-56"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search title, category, dimensions…"
+                className="h-9 w-56"
               />
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-9 w-36 text-sm">
-                  <SelectValue placeholder="All categories" />
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="h-9 w-44">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All categories</SelectItem>
+                  <SelectItem value="__uncategorized__">
+                    Uncategorized
+                  </SelectItem>
                   {PRODUCT_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
                   ))}
-                  <SelectItem value="__uncategorized">Uncategorized</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -776,15 +722,108 @@ function ProductsSection() {
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
               No uploaded products yet. Add your first painting on the left.
             </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
+              No products match your search.
+            </div>
           ) : (
-            <ProductsList
-              products={products}
-              search={search}
-              categoryFilter={categoryFilter}
-              deletingId={deletingId}
-              onEdit={(p) => setEditTarget(p)}
-              onDelete={(id, title) => void handleDelete(id, title)}
-            />
+            <ul className="space-y-3">
+              {filteredProducts.map((product) => {
+                const isDeleting = deletingId === product.id;
+                const photos = getProductImages(product);
+                const main = photos[0];
+                const extras = photos.slice(1);
+
+                return (
+                  <li
+                    key={product.id}
+                    className="flex gap-4 bg-card/40 border border-border/50 rounded-lg p-3"
+                  >
+                    <div className="flex-shrink-0 space-y-1.5">
+                      {main && (
+                        <div className="relative">
+                          <img
+                            src={main.url}
+                            alt={product.title}
+                            className="w-24 h-24 object-cover rounded-md"
+                          />
+                          {photos.length > 1 && (
+                            <span className="absolute bottom-1 right-1 px-1.5 py-0.5 text-[10px] font-medium bg-background/90 backdrop-blur rounded">
+                              {photos.length} photos
+                            </span>
+                          )}
+                          {product.category && (
+                            <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-medium bg-primary/90 text-primary-foreground rounded">
+                              {product.category}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {extras.length > 0 && (
+                        <div className="flex gap-1">
+                          {extras.slice(0, 4).map((img, i) => (
+                            <img
+                              key={i}
+                              src={img.url}
+                              alt={`${product.title} photo ${i + 2}`}
+                              className="w-[22px] h-[22px] object-cover rounded-sm border border-border/40"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium truncate">{product.title}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {product.medium} · {product.year}
+                        {product.dimensions ? ` · ${product.dimensions}` : ""}
+                      </p>
+                      <p className="text-sm font-semibold mt-1">
+                        {getDiscountPercent(product) > 0 ? (
+                          <>
+                            <span className="line-through text-muted-foreground font-normal mr-1">
+                              ₱{product.price.toLocaleString()}
+                            </span>
+                            <span>₱{product.salePrice!.toLocaleString()}</span>
+                            <span className="ml-1 text-xs text-red-500 font-semibold">
+                              {getDiscountPercent(product)}% OFF
+                            </span>
+                          </>
+                        ) : (
+                          <>₱{product.price.toLocaleString()}</>
+                        )}
+                      </p>
+                      {product.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                          {product.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEditTarget(product)}
+                        aria-label={`Edit ${product.title}`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={isDeleting}
+                        onClick={() =>
+                          void handleDelete(product.id, product.title)
+                        }
+                        aria-label={`Delete ${product.title}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
       </div>
@@ -799,171 +838,153 @@ function ProductsSection() {
   );
 }
 
-interface ProductsListProps {
-  products: Product[];
-  search: string;
-  categoryFilter: string;
-  deletingId: string | null;
-  onEdit: (product: Product) => void;
-  onDelete: (id: string, title: string) => void;
+interface OrdersSummary {
+  totalOrders: number;
+  grossRevenue: number;
+  refundedAmount: number;
+  netRevenue: number;
+  confirmedCount: number;
+  inProgressCount: number;
+  outForDeliveryCount: number;
+  completedCount: number;
+  pendingShipOutCount: number;
+  refundPendingCount: number;
+  refundSucceededCount: number;
+  refundFailedCount: number;
 }
 
-function ProductsList({
-  products,
-  search,
-  categoryFilter,
-  deletingId,
-  onEdit,
-  onDelete,
-}: ProductsListProps) {
-  const filtered = products.filter((p) => {
-    if (categoryFilter === "__uncategorized") {
-      if (p.category && p.category.trim()) return false;
-    } else if (categoryFilter !== "all") {
-      if ((p.category || "").trim() !== categoryFilter) return false;
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      const haystack = [
-        p.title,
-        p.medium,
-        p.year,
-        p.category,
-        p.dimensions,
-        p.description,
-        p.imageFileName,
-        p.mockupFileName,
-        p.id,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
+const formatPHP = (n: number) =>
+  `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
 
-  if (filtered.length === 0) {
-    return (
-      <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground text-sm">
-        No products match your filter.
-      </div>
-    );
-  }
+function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
+  const [summary, setSummary] = useState<OrdersSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders?metrics=summary", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSummary(data.summary as OrdersSummary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load metrics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
 
   return (
-    <ul className="space-y-3">
-      {filtered.map((product) => {
-        const isDeleting = deletingId === product.id;
-        const discount = getDiscountPercent(product);
-        return (
-          <li
-            key={product.id}
-            className="flex flex-col sm:flex-row gap-4 bg-card/40 border border-border/50 rounded-lg p-3"
-          >
-            <div className="flex gap-2 flex-shrink-0">
-              <div className="relative">
-                <img
-                  src={product.image}
-                  alt={product.title}
-                  className="w-28 h-28 object-cover rounded-md"
-                />
-                {product.category && (
-                  <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-medium bg-background/90 backdrop-blur rounded">
-                    {product.category}
-                  </span>
-                )}
-              </div>
-              {product.mockup && (
-                <img
-                  src={product.mockup}
-                  alt={`${product.title} mockup`}
-                  title="Room mockup"
-                  className="w-28 h-28 object-cover rounded-md border border-border/40"
-                />
-              )}
-            </div>
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="font-medium truncate">{product.title}</h3>
-                <p className="text-sm font-semibold whitespace-nowrap">
-                  {discount > 0 ? (
-                    <>
-                      <span className="line-through text-muted-foreground font-normal mr-1">
-                        ₱{product.price.toLocaleString()}
-                      </span>
-                      <span>₱{product.salePrice!.toLocaleString()}</span>
-                      <span className="ml-1 text-xs text-red-500 font-semibold">
-                        {discount}% OFF
-                      </span>
-                    </>
-                  ) : (
-                    <>₱{product.price.toLocaleString()}</>
-                  )}
-                </p>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {[product.medium, product.year, product.dimensions]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              {product.description && (
-                <p className="text-xs text-muted-foreground line-clamp-2">
-                  {product.description}
-                </p>
-              )}
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground pt-1">
-                {product.imageFileName && (
-                  <>
-                    <dt className="opacity-70">Image file</dt>
-                    <dd className="truncate" title={product.imageFileName}>
-                      {product.imageFileName}
-                      {product.imageBytes
-                        ? ` · ${formatBytes(product.imageBytes)}`
-                        : ""}
-                    </dd>
-                  </>
-                )}
-                {product.mockupFileName && (
-                  <>
-                    <dt className="opacity-70">Mockup file</dt>
-                    <dd className="truncate" title={product.mockupFileName}>
-                      {product.mockupFileName}
-                      {product.mockupBytes
-                        ? ` · ${formatBytes(product.mockupBytes)}`
-                        : ""}
-                    </dd>
-                  </>
-                )}
-                <dt className="opacity-70">Listing ID</dt>
-                <dd className="truncate font-mono">{product.id}</dd>
-                <dt className="opacity-70">Uploaded</dt>
-                <dd>{formatDate(product.createdAt)}</dd>
-              </dl>
-            </div>
-            <div className="flex sm:flex-col gap-1 self-start">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onEdit(product)}
-                aria-label={`Edit ${product.title}`}
-              >
-                <Pencil className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={isDeleting}
-                onClick={() => onDelete(product.id, product.title)}
-                aria-label={`Delete ${product.title}`}
-              >
-                <Trash2 className="w-4 h-4 text-destructive" />
-              </Button>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-display text-xl">Dashboard</h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 mr-1 ${loading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
+
+      {error && (
+        <div className="text-sm text-destructive border border-destructive/30 bg-destructive/10 rounded-md p-3">
+          {error}
+        </div>
+      )}
+
+      {loading && !summary && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {summary && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <DashCard
+              icon={<TrendingUp className="w-4 h-4" />}
+              label="Order purchase total"
+              value={formatPHP(summary.grossRevenue)}
+              hint={`${summary.totalOrders} order${summary.totalOrders === 1 ? "" : "s"} · net ${formatPHP(summary.netRevenue)} after refunds`}
+            />
+            <DashCard
+              icon={<Truck className="w-4 h-4" />}
+              label="Pending ship-out"
+              value={String(summary.pendingShipOutCount)}
+              hint={`${summary.confirmedCount} confirmed · ${summary.inProgressCount} in progress · ${summary.outForDeliveryCount} out for delivery`}
+              onClick={onOpenOrders}
+            />
+            <DashCard
+              icon={<CheckCircle2 className="w-4 h-4" />}
+              label="Order complete"
+              value={String(summary.completedCount)}
+              hint="Marked received by admin"
+              onClick={onOpenOrders}
+            />
+            <DashCard
+              icon={<Wallet className="w-4 h-4" />}
+              label="Refunds in progress"
+              value={String(summary.refundPendingCount)}
+              hint={`${summary.refundSucceededCount} completed · ${summary.refundFailedCount} failed`}
+              onClick={onOpenOrders}
+            />
+            <DashCard
+              icon={<Undo2 className="w-4 h-4" />}
+              label="Total refunded"
+              value={formatPHP(summary.refundedAmount)}
+              hint="Successfully credited back to customers"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DashCard({
+  icon,
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  const interactive = !!onClick;
+  return (
+    <button
+      type="button"
+      disabled={!interactive}
+      onClick={onClick}
+      className={`text-left border border-border/40 rounded-lg p-4 bg-card/40 transition-colors ${
+        interactive ? "hover:bg-card/70 cursor-pointer" : "cursor-default"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-muted-foreground text-[11px] uppercase tracking-wider">
+        {icon}
+        {label}
+      </div>
+      <p className="font-display text-2xl mt-2">{value}</p>
+      {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+    </button>
   );
 }
 
@@ -971,6 +992,9 @@ function OrdersSection() {
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [confirmRefundFor, setConfirmRefundFor] =
+    useState<CompletedOrder | null>(null);
 
   const fetchOrders = async () => {
     try {
@@ -1007,17 +1031,165 @@ function OrdersSection() {
         },
         body: JSON.stringify({ action: "update-status", orderId, status }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
+        prev.map((o) => (o.id === orderId ? (updated ?? { ...o, status }) : o)),
       );
       toast.success("Status updated");
-    } catch {
-      toast.error("Could not update status");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update status",
+      );
     } finally {
       setUpdatingId(null);
     }
   };
+
+  const handleSetReviewPublished = async (
+    orderId: string,
+    publishedToHomepage: boolean,
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "set-review-published",
+          orderId,
+          publishedToHomepage,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? (updated ??
+              (o.review
+                ? { ...o, review: { ...o.review, publishedToHomepage } }
+                : o))
+            : o,
+        ),
+      );
+      toast.success(
+        publishedToHomepage
+          ? "Review published to homepage"
+          : "Review unpublished from homepage",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update review",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleRefund = async (order: CompletedOrder) => {
+    setRefundingId(order.id);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "request-refund",
+          orderId: order.id,
+          reason: "requested_by_customer",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
+      toast.success(
+        `Refund initiated. Status: ${updated.refund?.status ?? "pending"}`,
+      );
+      setConfirmRefundFor(null);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not initiate refund",
+      );
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
+  const handleCheckRefund = async (orderId: string) => {
+    setRefundingId(orderId);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check-refund", orderId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      const status = updated.refund?.status;
+      if (status === "succeeded") toast.success("Refund completed");
+      else if (status === "failed") toast.error("Refund failed");
+      else toast.info("Refund still pending");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not check refund",
+      );
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
+  // Auto-poll pending refunds every 30s while the section is visible
+  useEffect(() => {
+    const pendingIds = orders
+      .filter((o) => o.refund?.status === "pending")
+      .map((o) => o.id);
+    if (pendingIds.length === 0) return;
+    const id = setInterval(() => {
+      pendingIds.forEach((orderId) => {
+        void (async () => {
+          try {
+            const res = await fetch("/api/orders", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "check-refund", orderId }),
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const updated = data.order as CompletedOrder;
+            setOrders((prev) =>
+              prev.map((o) => (o.id === orderId ? updated : o)),
+            );
+          } catch {
+            // ignore polling errors
+          }
+        })();
+      });
+    }, 30000);
+    return () => clearInterval(id);
+  }, [orders]);
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -1167,11 +1339,16 @@ function OrdersSection() {
             {/* Review */}
             {order.review && (
               <div className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md">
-                <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
                   <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                   <span className="text-[10px] uppercase tracking-wider">
                     Customer review
                   </span>
+                  {order.review.publishedToHomepage && (
+                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded">
+                      On homepage
+                    </span>
+                  )}
                   <span className="ml-auto text-[10px]">
                     {new Date(order.review.submittedAt).toLocaleString()}
                   </span>
@@ -1212,6 +1389,35 @@ function OrdersSection() {
                     ))}
                   </div>
                 )}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    type="button"
+                    variant={
+                      order.review.publishedToHomepage ? "outline" : "default"
+                    }
+                    size="sm"
+                    disabled={updatingId === order.id}
+                    onClick={() =>
+                      void handleSetReviewPublished(
+                        order.id,
+                        !order.review!.publishedToHomepage,
+                      )
+                    }
+                    className="text-xs h-7"
+                  >
+                    {order.review.publishedToHomepage ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 mr-1" />
+                        Unpublish from homepage
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5 mr-1" />
+                        Publish to homepage
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -1239,9 +1445,125 @@ function OrdersSection() {
                 );
               })}
             </div>
+
+            {/* Refund block */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
+              {order.refund ? (
+                <div className="flex flex-wrap items-center gap-2 w-full">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] uppercase tracking-wider ${
+                      order.refund.status === "succeeded"
+                        ? "bg-emerald-500/15 text-emerald-600"
+                        : order.refund.status === "failed"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-amber-500/15 text-amber-600"
+                    }`}
+                  >
+                    <Wallet className="w-3 h-3" />
+                    Refund {order.refund.status}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ₱{order.refund.amount.toLocaleString()} · requested{" "}
+                    {new Date(order.refund.requestedAt).toLocaleString()}
+                  </span>
+                  {order.refund.id && (
+                    <span className="text-[10px] text-muted-foreground break-all">
+                      Ref: {order.refund.id}
+                    </span>
+                  )}
+                  {order.refund.status === "pending" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() => void handleCheckRefund(order.id)}
+                      className="ml-auto"
+                    >
+                      <RefreshCw
+                        className={`w-3 h-3 mr-1 ${refundingId === order.id ? "animate-spin" : ""}`}
+                      />
+                      Check QR Ph status
+                    </Button>
+                  )}
+                  {order.refund.status === "failed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() => setConfirmRefundFor(order)}
+                      className="ml-auto"
+                    >
+                      <Undo2 className="w-3 h-3 mr-1" /> Retry refund
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!order.paymentIntentId || refundingId === order.id}
+                  onClick={() => setConfirmRefundFor(order)}
+                  title={
+                    order.paymentIntentId
+                      ? "Manually refund this order via PayMongo back to the customer's QR Ph wallet"
+                      : "No PayMongo payment recorded — cannot auto-refund"
+                  }
+                >
+                  <Undo2 className="w-3 h-3 mr-1" /> Manual refund
+                </Button>
+              )}
+            </div>
           </div>
         );
       })}
+
+      {/* Confirm refund dialog */}
+      {confirmRefundFor && (
+        <div className="fixed inset-0 z-[200] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border/40 rounded-lg p-6 max-w-md w-full space-y-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-amber-500" />
+              <h3 className="font-display text-lg">Confirm refund</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Refund ₱{(confirmRefundFor.total ?? 0).toLocaleString()} for order{" "}
+              <span className="text-foreground font-medium">
+                {confirmRefundFor.id}
+              </span>{" "}
+              back to {confirmRefundFor.orderInfo?.email}'s QR Ph wallet via
+              PayMongo? The customer will receive a refund-in-progress
+              notification immediately and a confirmation once PayMongo
+              completes the transfer (typically minutes to a few banking days).
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={refundingId === confirmRefundFor.id}
+                onClick={() => setConfirmRefundFor(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={refundingId === confirmRefundFor.id}
+                onClick={() => void handleRefund(confirmRefundFor)}
+              >
+                {refundingId === confirmRefundFor.id ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />{" "}
+                    Initiating...
+                  </>
+                ) : (
+                  <>
+                    <Undo2 className="w-3 h-3 mr-1" /> Issue refund
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

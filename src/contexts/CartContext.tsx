@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 export interface CartItem {
   id: string;
@@ -20,10 +21,29 @@ export interface OrderInfo {
 }
 
 export interface OrderNotification {
-  type: "shipped" | "received" | "in_progress" | "confirmed";
+  type:
+    | "shipped"
+    | "received"
+    | "in_progress"
+    | "confirmed"
+    | "out_for_delivery"
+    | "refund_requested"
+    | "refund_succeeded"
+    | "refund_failed";
   message: string;
   recipient: string;
   sentAt: string;
+}
+
+export interface OrderRefund {
+  id: string;
+  paymentId: string;
+  amount: number;
+  status: "pending" | "succeeded" | "failed";
+  reason: string;
+  requestedAt: string;
+  completedAt?: string;
+  failureMessage?: string;
 }
 
 export interface OrderReview {
@@ -31,6 +51,7 @@ export interface OrderReview {
   text: string;
   images: string[];
   submittedAt: string;
+  publishedToHomepage?: boolean;
 }
 
 export interface CompletedOrder {
@@ -46,8 +67,10 @@ export interface CompletedOrder {
   status: "confirmed" | "in_progress" | "out_for_delivery" | "received";
   paymentIntentId?: string;
   qrCodeImageUrl?: string;
+  voucherCode?: string;
   notifications?: OrderNotification[];
   review?: OrderReview;
+  refund?: OrderRefund;
 }
 
 export const REVIEW_MIN_CHARS = 500;
@@ -82,7 +105,8 @@ export const ORDER_STEPS: {
 
 interface VoucherState {
   code: string;
-  discountPercent: number;
+  type: "percent" | "fixed";
+  value: number;
   applied: boolean;
   error: string;
 }
@@ -106,6 +130,7 @@ interface CartContextType {
   total: number;
   itemCount: number;
   freeShippingThreshold: number;
+  freeShippingEnabled: boolean;
   isFreeShipping: boolean;
   amountToFreeShipping: number;
   estimatedCreationDays: string;
@@ -119,6 +144,7 @@ interface CartContextType {
     status: CompletedOrder["status"],
   ) => void;
   submitOrderReview: (orderId: string, review: OrderReview) => void;
+  applyOrderUpdate: (order: CompletedOrder) => void;
   showCheckout: boolean;
   setShowCheckout: (show: boolean) => void;
   lastOrder: CompletedOrder | null;
@@ -126,17 +152,8 @@ interface CartContextType {
   setShowConfirmation: (show: boolean) => void;
 }
 
-const VOUCHERS: Record<string, { discountPercent: number; minSpend: number }> =
-  {
-    PINTATERRA10: { discountPercent: 10, minSpend: 7100 },
-    PINTATERRA15: { discountPercent: 15, minSpend: 7100 },
-    ARTLOVER20: { discountPercent: 20, minSpend: 7100 },
-    GETNEW28: { discountPercent: 28, minSpend: 7100 },
-  };
-
-const MIN_SPEND = 7100;
-const FREE_SHIPPING_THRESHOLD = 8000;
-const SHIPPING_FEE = 500;
+const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
+const DEFAULT_SHIPPING_FEE = 500;
 
 const ORDERS_STORAGE_KEY = "pintaterra_orders";
 
@@ -149,6 +166,11 @@ const getEstimatedCreationDays = (itemCount: number): string => {
 };
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
+  const { config } = useStorefrontConfig();
+  const FREE_SHIPPING_THRESHOLD = config.freeShipping.enabled
+    ? (config.freeShipping.threshold ?? DEFAULT_FREE_SHIPPING_THRESHOLD)
+    : Number.POSITIVE_INFINITY;
+  const SHIPPING_FEE = config.freeShipping.shippingFee ?? DEFAULT_SHIPPING_FEE;
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -156,7 +178,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [lastOrder, setLastOrder] = useState<CompletedOrder | null>(null);
   const [voucher, setVoucher] = useState<VoucherState>({
     code: "",
-    discountPercent: 0,
+    type: "percent",
+    value: 0,
     applied: false,
     error: "",
   });
@@ -213,41 +236,49 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const applyVoucher = (code: string) => {
     const upper = code.toUpperCase().trim();
-    const v = VOUCHERS[upper];
-    if (!v) {
+    const promo = config.promoCodes.find((p) => p.code === upper);
+    const fail = (error: string) =>
       setVoucher({
         code: upper,
-        discountPercent: 0,
+        type: "percent",
+        value: 0,
         applied: false,
-        error: "Invalid voucher code",
+        error,
       });
-      return;
+    if (!promo) return fail("Invalid voucher code");
+    if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
+      return fail("This code has expired");
     }
-    if (subtotal < MIN_SPEND) {
-      setVoucher({
-        code: upper,
-        discountPercent: 0,
-        applied: false,
-        error: `Minimum spend of ₱${MIN_SPEND.toLocaleString()} required.`,
-      });
-      return;
+    if (subtotal < promo.minSpend) {
+      return fail(
+        `Minimum spend of \u20b1${promo.minSpend.toLocaleString()} required.`,
+      );
     }
     setVoucher({
       code: upper,
-      discountPercent: v.discountPercent,
+      type: promo.type,
+      value: promo.value,
       applied: true,
       error: "",
     });
   };
 
   const removeVoucher = () =>
-    setVoucher({ code: "", discountPercent: 0, applied: false, error: "" });
+    setVoucher({
+      code: "",
+      type: "percent",
+      value: 0,
+      applied: false,
+      error: "",
+    });
 
   const shippingFeeOriginal = SHIPPING_FEE;
   const shippingFee = isFreeShipping ? 0 : SHIPPING_FEE;
-  const discount = voucher.applied
-    ? subtotal * (voucher.discountPercent / 100)
-    : 0;
+  const discount = !voucher.applied
+    ? 0
+    : voucher.type === "percent"
+      ? subtotal * (voucher.value / 100)
+      : Math.min(voucher.value, subtotal);
   const total = subtotal - discount + shippingFee;
   const estimatedCreationDays = getEstimatedCreationDays(itemCount);
 
@@ -268,6 +299,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       status: "confirmed",
       paymentIntentId: payment?.paymentIntentId,
       qrCodeImageUrl: payment?.qrCodeImageUrl ?? undefined,
+      voucherCode: voucher.applied ? voucher.code : undefined,
       notifications: [],
     };
     const newOrders = [order, ...orders];
@@ -316,6 +348,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const applyOrderUpdate = (updated: CompletedOrder) => {
+    const newOrders = orders.map((o) =>
+      o.id === updated.id ? { ...o, ...updated } : o,
+    );
+    saveOrders(newOrders);
+    if (lastOrder?.id === updated.id) {
+      setLastOrder({ ...lastOrder, ...updated });
+    }
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -336,7 +378,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         discount,
         total,
         itemCount,
-        freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+        freeShippingThreshold: Number.isFinite(FREE_SHIPPING_THRESHOLD)
+          ? FREE_SHIPPING_THRESHOLD
+          : 0,
+        freeShippingEnabled: config.freeShipping.enabled,
         isFreeShipping,
         amountToFreeShipping,
         estimatedCreationDays,
@@ -344,6 +389,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         placeOrder,
         updateOrderStatus,
         submitOrderReview,
+        applyOrderUpdate,
         showCheckout,
         setShowCheckout,
         lastOrder,
