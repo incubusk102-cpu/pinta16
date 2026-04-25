@@ -50,6 +50,7 @@ export interface OrderReview {
   text: string;
   images: string[];
   submittedAt: string;
+  publishedToHomepage?: boolean;
 }
 
 export interface CompletedOrder {

@@ -3,6 +3,7 @@ import GalleryNav from "@/components/GalleryNav";
 import HeroSection from "@/components/HeroSection";
 import GallerySection from "@/components/GallerySection";
 import AboutSection from "@/components/AboutSection";
+import ReviewsSection from "@/components/ReviewsSection";
 import ContactSection from "@/components/ContactSection";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
@@ -35,6 +36,7 @@ function Index() {
       <HeroSection />
       <GallerySection />
       <AboutSection />
+      <ReviewsSection />
       <ContactSection />
       <CartDrawer />
       <CheckoutForm />

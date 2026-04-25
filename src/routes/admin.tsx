@@ -37,6 +37,8 @@ import {
   QrCode,
   RefreshCw,
   Settings,
+  Eye,
+  EyeOff,
   Star,
   Trash2,
   TrendingUp,
@@ -976,6 +978,55 @@ function OrdersSection() {
     }
   };
 
+  const handleSetReviewPublished = async (
+    orderId: string,
+    publishedToHomepage: boolean,
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "set-review-published",
+          orderId,
+          publishedToHomepage,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? (updated ??
+              (o.review
+                ? { ...o, review: { ...o.review, publishedToHomepage } }
+                : o))
+            : o,
+        ),
+      );
+      toast.success(
+        publishedToHomepage
+          ? "Review published to homepage"
+          : "Review unpublished from homepage",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update review",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleRefund = async (order: CompletedOrder) => {
     setRefundingId(order.id);
     try {
@@ -1216,11 +1267,16 @@ function OrdersSection() {
             {/* Review */}
             {order.review && (
               <div className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md">
-                <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
                   <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                   <span className="text-[10px] uppercase tracking-wider">
                     Customer review
                   </span>
+                  {order.review.publishedToHomepage && (
+                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded">
+                      On homepage
+                    </span>
+                  )}
                   <span className="ml-auto text-[10px]">
                     {new Date(order.review.submittedAt).toLocaleString()}
                   </span>
@@ -1261,6 +1317,35 @@ function OrdersSection() {
                     ))}
                   </div>
                 )}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    type="button"
+                    variant={
+                      order.review.publishedToHomepage ? "outline" : "default"
+                    }
+                    size="sm"
+                    disabled={updatingId === order.id}
+                    onClick={() =>
+                      void handleSetReviewPublished(
+                        order.id,
+                        !order.review!.publishedToHomepage,
+                      )
+                    }
+                    className="text-xs h-7"
+                  >
+                    {order.review.publishedToHomepage ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 mr-1" />
+                        Unpublish from homepage
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5 mr-1" />
+                        Publish to homepage
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
 

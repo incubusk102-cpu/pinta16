@@ -81,6 +81,32 @@ export const handler = async (event) => {
     const store = getOrdersStore(event);
 
     if (method === "GET") {
+      if (params.reviews === "published") {
+        const orders = await readOrders(store);
+        const reviews = [];
+        for (const o of orders) {
+          if (!o.review || !o.review.publishedToHomepage) continue;
+          const firstName = (o.orderInfo?.fullName || "")
+            .trim()
+            .split(/\s+/)[0];
+          reviews.push({
+            orderId: o.id,
+            rating: o.review.rating,
+            text: o.review.text,
+            images: Array.isArray(o.review.images) ? o.review.images : [],
+            submittedAt: o.review.submittedAt,
+            customerName: firstName || "Customer",
+            customerCity: o.orderInfo?.city || "",
+          });
+        }
+        reviews.sort(
+          (a, b) =>
+            new Date(b.submittedAt).getTime() -
+            new Date(a.submittedAt).getTime(),
+        );
+        return json(200, { reviews });
+      }
+
       if (params.id) {
         const orders = await readOrders(store);
         const order = orders.find((o) => o.id === params.id);
@@ -333,6 +359,33 @@ export const handler = async (event) => {
         await store.setJSON(ORDERS_KEY, orders);
         const { orderInfo: _pii, ...publicOrder } = orders[idx];
         return json(200, { order: publicOrder });
+      }
+
+      if (action === "set-review-published") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, publishedToHomepage } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        if (typeof publishedToHomepage !== "boolean") {
+          return json(400, { error: "publishedToHomepage must be a boolean" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        if (!existing.review) {
+          return json(400, { error: "Order has no review" });
+        }
+        const updatedReview = {
+          ...existing.review,
+          publishedToHomepage,
+        };
+        orders[idx] = { ...existing, review: updatedReview };
+        await store.setJSON(ORDERS_KEY, orders);
+        return json(200, { order: orders[idx] });
       }
 
       if (action === "request-refund") {
