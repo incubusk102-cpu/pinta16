@@ -110,21 +110,34 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
       setAndPersistProducts((previous) => [nextProduct, ...previous]);
 
+      const rollback = () =>
+        setAndPersistProducts((previous) =>
+          previous.filter((p) => p.id !== nextProduct.id),
+        );
+
       const token = getAdminToken();
       if (!token) {
+        rollback();
         throw new Error("Not authenticated");
       }
 
-      const response = await fetch(PRODUCTS_API, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(nextProduct),
-      });
+      let response: Response;
+      try {
+        response = await fetch(PRODUCTS_API, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(nextProduct),
+        });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
 
       if (!response.ok) {
+        rollback();
         throw new Error(
           response.status === 401
             ? "Session expired — please log in again"
@@ -151,21 +164,34 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         previous.map((product) => (product.id === id ? nextProduct : product)),
       );
 
+      const rollback = () =>
+        setAndPersistProducts((previous) =>
+          previous.map((product) => (product.id === id ? existing : product)),
+        );
+
       const token = getAdminToken();
       if (!token) {
+        rollback();
         throw new Error("Not authenticated");
       }
 
-      const response = await fetch(PRODUCTS_API, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(nextProduct),
-      });
+      let response: Response;
+      try {
+        response = await fetch(PRODUCTS_API, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(nextProduct),
+        });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
 
       if (!response.ok) {
+        rollback();
         throw new Error(
           response.status === 401
             ? "Session expired — please log in again"
@@ -178,25 +204,43 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteProduct = useCallback(
     async (id: string) => {
+      const removed = productsRef.current.find((product) => product.id === id);
+      if (!removed) return;
+
       setAndPersistProducts((previous) =>
         previous.filter((product) => product.id !== id),
       );
 
+      const rollback = () =>
+        setAndPersistProducts((previous) =>
+          previous.some((product) => product.id === removed.id)
+            ? previous
+            : [removed, ...previous],
+        );
+
       const token = getAdminToken();
       if (!token) {
+        rollback();
         throw new Error("Not authenticated");
       }
 
-      const response = await fetch(PRODUCTS_API, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ id }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(PRODUCTS_API, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ id }),
+        });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
 
       if (!response.ok) {
+        rollback();
         throw new Error(
           response.status === 401
             ? "Session expired — please log in again"
