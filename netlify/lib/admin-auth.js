@@ -73,9 +73,11 @@ export const verifyTokenWithSecret = (token, secret) => {
   if (!encoded || !signature) return false;
 
   const expected = sign(encoded, secret);
+  const expectedBuf = Buffer.from(expected);
+  const signatureBuf = Buffer.from(signature);
   if (
-    expected.length !== signature.length ||
-    !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+    expectedBuf.length !== signatureBuf.length ||
+    !crypto.timingSafeEqual(expectedBuf, signatureBuf)
   ) {
     return false;
   }
@@ -95,7 +97,10 @@ export const verifyTokenWithSecret = (token, secret) => {
 };
 
 export const ensureSessionSecret = async (store) => {
-  let secret = await store.get(SECRET_KEY, { type: "text" });
+  let secret = await store.get(SECRET_KEY, {
+    type: "text",
+    consistency: "strong",
+  });
   if (!secret) {
     secret = crypto.randomBytes(48).toString("hex");
     await store.set(SECRET_KEY, secret);
