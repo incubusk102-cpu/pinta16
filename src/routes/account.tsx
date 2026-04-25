@@ -207,6 +207,14 @@ function AccountPage() {
               <UserCircle className="w-4 h-4" /> Profile
             </div>
             <div className="mt-3 space-y-1 text-sm">
+              {user.picture && (
+                <img
+                  src={user.picture}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-full mb-2"
+                />
+              )}
               <p>
                 <span className="text-muted-foreground">Name:</span>{" "}
                 {user.name || "—"}
@@ -215,6 +223,11 @@ function AccountPage() {
                 <span className="text-muted-foreground">Email:</span>{" "}
                 {user.email}
               </p>
+              {user.provider === "google" && (
+                <p className="text-xs text-muted-foreground">
+                  Signed in with Google
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mt-3">
                 Joined {formatDate(user.createdAt)}
               </p>
@@ -230,7 +243,8 @@ function AccountPage() {
             <p className="mt-3 text-sm text-muted-foreground">
               Pintaterra removes accounts that have been inactive for{" "}
               <strong className="text-foreground">30 days</strong> and emails
-              you when this happens. Just sign in any time to keep yours active.
+              you when this happens. Just visit your account any time to keep it
+              active.
             </p>
           </div>
         </div>

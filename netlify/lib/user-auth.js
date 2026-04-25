@@ -136,13 +136,16 @@ export const extractToken = (event) => {
 
 export const publicUser = (user) => {
   if (!user) return null;
-  return {
+  const out = {
     id: user.id,
     email: user.email,
     name: user.name || "",
     createdAt: user.createdAt,
     lastSeenAt: user.lastSeenAt,
   };
+  if (user.picture) out.picture = user.picture;
+  if (user.provider) out.provider = user.provider;
+  return out;
 };
 
 export const findUserById = (users, id) => {

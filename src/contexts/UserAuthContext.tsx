@@ -16,6 +16,8 @@ export interface PublicUser {
   id: string;
   email: string;
   name?: string;
+  picture?: string;
+  provider?: string;
   createdAt?: string;
   lastSeenAt?: string;
 }
@@ -24,12 +26,7 @@ interface UserAuthContextValue {
   token: string | null;
   user: PublicUser | null;
   loading: boolean;
-  signup: (input: {
-    email: string;
-    password: string;
-    name?: string;
-  }) => Promise<void>;
-  login: (input: { email: string; password: string }) => Promise<void>;
+  googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -119,38 +116,19 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     void refresh();
   }, [refresh]);
 
-  const signup = useCallback(
-    async (input: { email: string; password: string; name?: string }) => {
+  const googleLogin = useCallback(
+    async (credential: string) => {
       setLoading(true);
       try {
-        const response = await fetch(`${API}?action=signup`, {
+        const response = await fetch(`${API}?action=google-login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...input, action: "signup" }),
+          body: JSON.stringify({ action: "google-login", credential }),
         });
         if (!response.ok) {
-          throw new Error(await parseError(response, "Could not sign up"));
-        }
-        const data = await response.json();
-        apply(data.token, data.user as PublicUser);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [apply],
-  );
-
-  const login = useCallback(
-    async (input: { email: string; password: string }) => {
-      setLoading(true);
-      try {
-        const response = await fetch(`${API}?action=login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...input, action: "login" }),
-        });
-        if (!response.ok) {
-          throw new Error(await parseError(response, "Could not log in"));
+          throw new Error(
+            await parseError(response, "Could not sign in with Google"),
+          );
         }
         const data = await response.json();
         apply(data.token, data.user as PublicUser);
@@ -166,8 +144,8 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
   }, [apply]);
 
   const value = useMemo<UserAuthContextValue>(
-    () => ({ token, user, loading, signup, login, logout, refresh }),
-    [token, user, loading, signup, login, logout, refresh],
+    () => ({ token, user, loading, googleLogin, logout, refresh }),
+    [token, user, loading, googleLogin, logout, refresh],
   );
 
   return (

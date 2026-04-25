@@ -265,7 +265,7 @@ const CheckoutForm = () => {
                       <LogIn className="w-5 h-5 text-muted-foreground shrink-0" />
                       <div>
                         <p className="font-body text-sm font-medium text-foreground">
-                          Sign in
+                          Sign in with Google
                         </p>
                         <p className="font-body text-xs text-muted-foreground">
                           Track your order &amp; save your info

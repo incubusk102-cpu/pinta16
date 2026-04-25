@@ -54,6 +54,74 @@ export const handler = async (event) => {
       parseBody(event.body).action ||
       "";
 
+    if (event.httpMethod === "POST" && action === "google-login") {
+      const body = parseBody(event.body);
+      const credential = String(body.credential || "");
+      if (!credential) {
+        return json(400, { error: "Missing Google credential" });
+      }
+
+      const clientId = process.env.GOOGLE_CLIENT_ID || "";
+      if (!clientId) {
+        return json(500, { error: "Google login not configured" });
+      }
+
+      // Verify the Google ID token
+      let tokenRes;
+      try {
+        tokenRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
+        );
+      } catch {
+        return json(502, { error: "Could not verify Google token" });
+      }
+      if (!tokenRes.ok) {
+        return json(401, { error: "Invalid Google credential" });
+      }
+      const googlePayload = await tokenRes.json();
+
+      if (googlePayload.aud !== clientId) {
+        return json(401, { error: "Token audience mismatch" });
+      }
+
+      const email = normalizeEmail(googlePayload.email);
+      if (!email || !isValidEmail(email)) {
+        return json(400, { error: "Could not read email from Google account" });
+      }
+
+      const now = new Date().toISOString();
+      const users = await readUsers(store);
+      let user = users[email];
+
+      if (user) {
+        user.lastSeenAt = now;
+        if (googlePayload.name && !user.name) {
+          user.name = String(googlePayload.name).slice(0, 80);
+        }
+        if (googlePayload.picture) {
+          user.picture = String(googlePayload.picture).slice(0, 2000);
+        }
+      } else {
+        user = {
+          id: crypto.randomUUID(),
+          email,
+          name: String(googlePayload.name || "").slice(0, 80),
+          picture: String(googlePayload.picture || "").slice(0, 2000),
+          provider: "google",
+          createdAt: now,
+          lastSeenAt: now,
+        };
+      }
+      users[email] = user;
+      await writeUsers(store, users);
+
+      const secret = await ensureSessionSecret(store);
+      return json(200, {
+        token: issueToken(user.id, secret),
+        user: publicUser(user),
+      });
+    }
+
     if (event.httpMethod === "POST" && action === "signup") {
       const body = parseBody(event.body);
       const email = normalizeEmail(body.email);
