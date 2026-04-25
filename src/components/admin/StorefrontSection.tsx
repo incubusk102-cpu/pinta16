@@ -20,6 +20,25 @@ interface AdminPromo {
   description: string;
 }
 
+const sizeClassMap: Record<string, string> = {
+  compact: "text-xs sm:text-sm py-1.5",
+  normal: "text-sm sm:text-base py-2",
+  large: "text-base sm:text-lg py-3",
+};
+
+const formatPromoLine = (template: string, p: AdminPromo): string => {
+  const discount =
+    p.type === "percent" ? `${p.value}%` : `₱${p.value.toLocaleString()}`;
+  const minSpend =
+    p.minSpend > 0 ? ` orders ₱${p.minSpend.toLocaleString()}+` : "";
+  return template
+    .replace(/\{code\}/g, p.code)
+    .replace(/\{discount\}/g, discount)
+    .replace(/\{minSpend\}/g, minSpend)
+    .replace(/\{description\}/g, p.description || "")
+    .trim();
+};
+
 interface AdminConfig {
   announcement: {
     enabled: boolean;
@@ -27,6 +46,12 @@ interface AdminConfig {
     link: string;
     backgroundColor: string;
     textColor: string;
+    showFreeShipping: boolean;
+    showPromoCodes: boolean;
+    promoTemplate: string;
+    rotateSeconds: number;
+    size: "compact" | "normal" | "large";
+    bold: boolean;
   };
   freeShipping: {
     enabled: boolean;
@@ -43,6 +68,12 @@ const DEFAULTS: AdminConfig = {
     link: "",
     backgroundColor: "#1f2937",
     textColor: "#ffffff",
+    showFreeShipping: true,
+    showPromoCodes: true,
+    promoTemplate: "Use code {code} for {discount} off{minSpend}",
+    rotateSeconds: 5,
+    size: "normal",
+    bold: true,
   },
   freeShipping: {
     enabled: true,
@@ -330,18 +361,136 @@ export function StorefrontSection() {
               />
             </div>
           </div>
-          <div
-            className="text-center px-4 py-2 rounded-md text-xs sm:text-sm font-medium"
-            style={{
-              backgroundColor: cfg.announcement.backgroundColor,
-              color: cfg.announcement.textColor,
-            }}
-          >
-            {cfg.announcement.message || "Live preview — write a message above"}
-            {cfg.freeShipping.enabled &&
-              cfg.freeShipping.threshold > 0 &&
-              ` · Free shipping on orders ₱${cfg.freeShipping.threshold.toLocaleString()}+`}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="ann-size">Size</Label>
+              <select
+                id="ann-size"
+                value={cfg.announcement.size}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: {
+                      ...c.announcement,
+                      size: e.target.value as "compact" | "normal" | "large",
+                    },
+                  }))
+                }
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="compact">Compact</option>
+                <option value="normal">Normal</option>
+                <option value="large">Large (most readable)</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="ann-rotate">
+                Rotate every (seconds){" "}
+                <span className="text-muted-foreground font-normal">
+                  (0 = no rotation)
+                </span>
+              </Label>
+              <Input
+                id="ann-rotate"
+                type="number"
+                min={0}
+                max={60}
+                value={cfg.announcement.rotateSeconds}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: {
+                      ...c.announcement,
+                      rotateSeconds: Math.min(
+                        60,
+                        Math.max(0, Number(e.target.value) || 0),
+                      ),
+                    },
+                  }))
+                }
+              />
+            </div>
           </div>
+          <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+            <div>
+              <p className="text-sm font-medium">Bold text</p>
+              <p className="text-xs text-muted-foreground">
+                Easier to read on a busy background.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.announcement.bold}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({
+                  ...c,
+                  announcement: { ...c.announcement, bold: v },
+                }))
+              }
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+            <div>
+              <p className="text-sm font-medium">Auto-include free shipping</p>
+              <p className="text-xs text-muted-foreground">
+                Automatically appends "Free shipping on orders ₱X+" using the
+                threshold below.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.announcement.showFreeShipping}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({
+                  ...c,
+                  announcement: { ...c.announcement, showFreeShipping: v },
+                }))
+              }
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+            <div>
+              <p className="text-sm font-medium">Auto-include promo codes</p>
+              <p className="text-xs text-muted-foreground">
+                Adds every active, non-expired promo to the bar so customers can
+                read the code.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.announcement.showPromoCodes}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({
+                  ...c,
+                  announcement: { ...c.announcement, showPromoCodes: v },
+                }))
+              }
+            />
+          </label>
+          {cfg.announcement.showPromoCodes && (
+            <div>
+              <Label htmlFor="ann-promo-template">
+                Promo template{" "}
+                <span className="text-muted-foreground font-normal">
+                  ({"{code}"}, {"{discount}"}, {"{minSpend}"}, {"{description}"}
+                  )
+                </span>
+              </Label>
+              <Input
+                id="ann-promo-template"
+                maxLength={200}
+                value={cfg.announcement.promoTemplate}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: {
+                      ...c.announcement,
+                      promoTemplate: e.target.value,
+                    },
+                  }))
+                }
+                placeholder="Use code {code} for {discount} off{minSpend}"
+              />
+            </div>
+          )}
+          <AnnouncementPreview cfg={cfg} />
           <div className="flex justify-end">
             <Button
               onClick={() => void handleSaveAnnouncement()}
@@ -659,6 +808,80 @@ export function StorefrontSection() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
+  const messages: string[] = [];
+  const main = cfg.announcement.message.trim();
+  if (main) messages.push(main);
+  if (
+    cfg.announcement.showFreeShipping &&
+    cfg.freeShipping.enabled &&
+    cfg.freeShipping.threshold > 0
+  ) {
+    messages.push(
+      `Free shipping on orders ₱${cfg.freeShipping.threshold.toLocaleString()}+`,
+    );
+  }
+  if (cfg.announcement.showPromoCodes) {
+    const tpl =
+      cfg.announcement.promoTemplate ||
+      "Use code {code} for {discount} off{minSpend}";
+    cfg.promoCodes
+      .filter((p) => p.enabled)
+      .filter((p) => p.usageLimit === null || p.usageCount < p.usageLimit)
+      .filter(
+        (p) => !p.expiresAt || new Date(p.expiresAt).getTime() >= Date.now(),
+      )
+      .forEach((p) => {
+        const line = formatPromoLine(tpl, p);
+        if (line) messages.push(line);
+      });
+  }
+
+  const [previewIdx, setPreviewIdx] = useState(0);
+  useEffect(() => {
+    setPreviewIdx(0);
+  }, [messages.length]);
+  useEffect(() => {
+    if (cfg.announcement.rotateSeconds <= 0) return;
+    if (messages.length <= 1) return;
+    const id = window.setInterval(() => {
+      setPreviewIdx((i) => (i + 1) % messages.length);
+    }, cfg.announcement.rotateSeconds * 1000);
+    return () => window.clearInterval(id);
+  }, [cfg.announcement.rotateSeconds, messages.length]);
+
+  const rotate = cfg.announcement.rotateSeconds > 0 && messages.length > 1;
+  const text =
+    messages.length === 0
+      ? "Live preview — write a message above"
+      : rotate
+        ? messages[previewIdx]
+        : messages.join(" · ");
+  const sizeCls = sizeClassMap[cfg.announcement.size] || sizeClassMap.normal;
+  const weightCls = cfg.announcement.bold ? "font-semibold" : "font-medium";
+
+  return (
+    <div className="space-y-2">
+      <div
+        className={`text-center px-4 rounded-md tracking-wide ${sizeCls} ${weightCls}`}
+        style={{
+          backgroundColor: cfg.announcement.backgroundColor,
+          color: cfg.announcement.textColor,
+        }}
+      >
+        {text}
+      </div>
+      {messages.length > 1 && (
+        <p className="text-xs text-muted-foreground">
+          {rotate
+            ? `Rotating ${messages.length} messages every ${cfg.announcement.rotateSeconds}s.`
+            : `Showing ${messages.length} messages joined together. Set rotate seconds > 0 to cycle them.`}
+        </p>
+      )}
     </div>
   );
 }

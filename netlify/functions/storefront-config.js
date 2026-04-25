@@ -33,6 +33,12 @@ const DEFAULT_CONFIG = {
     link: "",
     backgroundColor: "#1f2937",
     textColor: "#ffffff",
+    showFreeShipping: true,
+    showPromoCodes: true,
+    promoTemplate: "Use code {code} for {discount} off{minSpend}",
+    rotateSeconds: 5,
+    size: "normal",
+    bold: true,
   },
   freeShipping: {
     enabled: true,
@@ -66,6 +72,19 @@ const sanitizeConfig = (raw) => {
       textColor: String(
         announcement.textColor ?? DEFAULT_CONFIG.announcement.textColor,
       ).slice(0, 30),
+      showFreeShipping: announcement.showFreeShipping !== false,
+      showPromoCodes: announcement.showPromoCodes !== false,
+      promoTemplate: String(
+        announcement.promoTemplate ?? DEFAULT_CONFIG.announcement.promoTemplate,
+      ).slice(0, 200),
+      rotateSeconds: Math.min(
+        60,
+        Math.max(0, Math.floor(Number(announcement.rotateSeconds) || 0)),
+      ),
+      size: ["compact", "normal", "large"].includes(announcement.size)
+        ? announcement.size
+        : "normal",
+      bold: announcement.bold !== false,
     },
     freeShipping: {
       enabled: freeShipping.enabled !== false,

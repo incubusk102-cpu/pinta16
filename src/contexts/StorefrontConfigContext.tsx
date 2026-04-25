@@ -7,12 +7,20 @@ import {
   type ReactNode,
 } from "react";
 
+export type AnnouncementSize = "compact" | "normal" | "large";
+
 export interface AnnouncementConfig {
   enabled: boolean;
   message: string;
   link: string;
   backgroundColor: string;
   textColor: string;
+  showFreeShipping: boolean;
+  showPromoCodes: boolean;
+  promoTemplate: string;
+  rotateSeconds: number;
+  size: AnnouncementSize;
+  bold: boolean;
 }
 
 export interface FreeShippingConfig {
@@ -43,6 +51,12 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     link: "",
     backgroundColor: "#1f2937",
     textColor: "#ffffff",
+    showFreeShipping: true,
+    showPromoCodes: true,
+    promoTemplate: "Use code {code} for {discount} off{minSpend}",
+    rotateSeconds: 5,
+    size: "normal",
+    bold: true,
   },
   freeShipping: {
     enabled: true,
