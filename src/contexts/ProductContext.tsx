@@ -3,9 +3,11 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { getAdminToken } from "@/contexts/AdminAuthContext";
 
 export interface Product {
   id: string;
@@ -50,6 +52,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
   const [products, setProducts] = useState<Product[]>(() =>
     sortProducts(readStoredProducts()),
   );
+  const productsRef = useRef<Product[]>(products);
 
   const persistProducts = useCallback((nextProducts: Product[]) => {
     if (typeof window === "undefined") return;
@@ -60,6 +63,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     (updater: (previous: Product[]) => Product[]) => {
       setProducts((previous) => {
         const next = sortProducts(updater(previous));
+        productsRef.current = next;
         persistProducts(next);
         return next;
       });
@@ -82,6 +86,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
         const next = sortProducts(data.products);
         setProducts(next);
+        productsRef.current = next;
         persistProducts(next);
       } catch {
         // Local development falls back to browser storage.
@@ -105,18 +110,39 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
       setAndPersistProducts((previous) => [nextProduct, ...previous]);
 
+      const rollback = () =>
+        setAndPersistProducts((previous) =>
+          previous.filter((p) => p.id !== nextProduct.id),
+        );
+
+      const token = getAdminToken();
+      if (!token) {
+        rollback();
+        throw new Error("Not authenticated");
+      }
+
+      let response: Response;
       try {
-        const response = await fetch(PRODUCTS_API, {
+        response = await fetch(PRODUCTS_API, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(nextProduct),
         });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
 
-        if (!response.ok) {
-          throw new Error("Could not save product");
-        }
-      } catch {
-        // Browser storage remains as the local fallback.
+      if (!response.ok) {
+        rollback();
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not save product",
+        );
       }
     },
     [setAndPersistProducts],
@@ -124,54 +150,102 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProduct = useCallback(
     async (id: string, updates: Partial<Product>) => {
-      const existing = products.find((product) => product.id === id);
+      const existing = productsRef.current.find((product) => product.id === id);
       if (!existing) return;
 
-      const nextProduct = {
+      const nextProduct: Product = {
         ...existing,
         ...updates,
         id: existing.id,
         createdAt: existing.createdAt,
       };
+
       setAndPersistProducts((previous) =>
         previous.map((product) => (product.id === id ? nextProduct : product)),
       );
 
+      const rollback = () =>
+        setAndPersistProducts((previous) =>
+          previous.map((product) => (product.id === id ? existing : product)),
+        );
+
+      const token = getAdminToken();
+      if (!token) {
+        rollback();
+        throw new Error("Not authenticated");
+      }
+
+      let response: Response;
       try {
-        const response = await fetch(PRODUCTS_API, {
+        response = await fetch(PRODUCTS_API, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(nextProduct),
         });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
 
-        if (!response.ok) {
-          throw new Error("Could not update product");
-        }
-      } catch {
-        // Browser storage remains as the local fallback.
+      if (!response.ok) {
+        rollback();
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not update product",
+        );
       }
     },
-    [products, setAndPersistProducts],
+    [setAndPersistProducts],
   );
 
   const deleteProduct = useCallback(
     async (id: string) => {
+      const removed = productsRef.current.find((product) => product.id === id);
+      if (!removed) return;
+
       setAndPersistProducts((previous) =>
         previous.filter((product) => product.id !== id),
       );
 
+      const rollback = () =>
+        setAndPersistProducts((previous) =>
+          previous.some((product) => product.id === removed.id)
+            ? previous
+            : [removed, ...previous],
+        );
+
+      const token = getAdminToken();
+      if (!token) {
+        rollback();
+        throw new Error("Not authenticated");
+      }
+
+      let response: Response;
       try {
-        const response = await fetch(PRODUCTS_API, {
+        response = await fetch(PRODUCTS_API, {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({ id }),
         });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
 
-        if (!response.ok) {
-          throw new Error("Could not delete product");
-        }
-      } catch {
-        // Browser storage remains as the local fallback.
+      if (!response.ok) {
+        rollback();
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not delete product",
+        );
       }
     },
     [setAndPersistProducts],

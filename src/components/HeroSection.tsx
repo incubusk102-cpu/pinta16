@@ -26,7 +26,6 @@ const HeroSection = () => {
           <img src={img} alt="" className="w-full h-full object-cover" />
         </motion.div>
       ))}
-      /
       <div className="absolute inset-0 bg-background/70" />
       <motion.div
         className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6"
