@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
-import { useProducts } from "@/contexts/ProductContext";
+import { getEffectivePrice, useProducts } from "@/contexts/ProductContext";
 import {
   Select,
   SelectContent,
@@ -25,11 +25,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "price-asc", label: "Price: Low to High" },
   { value: "price-desc", label: "Price: High to Low" },
 ];
-
-const getEffectivePrice = (art: { price: number; salePrice?: number }) =>
-  typeof art.salePrice === "number" && art.salePrice > 0
-    ? art.salePrice
-    : art.price;
 
 const defaultArtworks = [
   {
@@ -232,7 +227,10 @@ const GallerySection = () => {
       default:
         return copy;
     }
-  }, [allArtworks, sortBy]);
+    // allArtworks is intentionally omitted: defaultArtworks is a module-level
+    // constant and the mapped products array only changes when `products` does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, sortBy]);
 
   return (
     <section
