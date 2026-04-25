@@ -1,29 +1,49 @@
-export async function createPayment({ data }: { data: { amount: number; description?: string } }) {
+interface CreatePaymentData {
+  amount: number;
+  description?: string;
+  customer: {
+    fullName: string;
+    email: string;
+    phone: string;
+    address: string;
+    city: string;
+  };
+}
+
+export async function createPayment({ data }: { data: CreatePaymentData }) {
   const res = await fetch("/api/create-payment", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
+  const payload = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Payment creation failed");
+    throw new Error(
+      payload.detail || payload.error || "Payment creation failed",
+    );
   }
 
-  return res.json();
+  return payload;
 }
 
-export async function checkPaymentStatus({ data }: { data: { paymentIntentId: string } }) {
+export async function checkPaymentStatus({
+  data,
+}: {
+  data: { paymentIntentId: string };
+}) {
   const res = await fetch("/api/check-payment", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
+  const payload = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Status check failed");
+    throw new Error(payload.detail || payload.error || "Status check failed");
   }
 
-  return res.json();
+  return payload;
 }

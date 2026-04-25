@@ -1,80 +1,171 @@
+const jsonHeaders = {
+  "Content-Type": "application/json",
+};
+
+const parseBody = (body) => {
+  if (!body) return {};
+
+  try {
+    return JSON.parse(body);
+  } catch {
+    return {};
+  }
+};
+
+const buildAuthHeader = (secretKey) =>
+  `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
+
+const readPayMongoError = async (response) => {
+  const text = await response.text();
+
+  try {
+    const payload = JSON.parse(text);
+    const message = payload?.errors
+      ?.map((error) => error?.detail || error?.code)
+      .filter(Boolean)
+      .join("; ");
+    return message || text;
+  } catch {
+    return text;
+  }
+};
+
+const payMongoRequest = async (path, secretKey, body, method = "POST") => {
+  const response = await fetch(`https://api.paymongo.com${path}`, {
+    method,
+    headers: {
+      Authorization: buildAuthHeader(secretKey),
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error(await readPayMongoError(response));
+  }
+
+  return response.json();
+};
+
 export const handler = async (event) => {
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method not allowed" };
+    return {
+      statusCode: 405,
+      headers: jsonHeaders,
+      body: JSON.stringify({ error: "Method not allowed" }),
+    };
   }
 
   try {
-    const { amount, description } = JSON.parse(event.body || "{}");
+    const { amount, description, customer } = parseBody(event.body);
 
     if (!amount || typeof amount !== "number" || amount <= 0) {
       return {
         statusCode: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: jsonHeaders,
         body: JSON.stringify({ error: "Invalid amount" }),
       };
     }
 
-    const secretKey = process.env.PAYMONGO_SECRET_KEY;
+    const amountInCentavos = Math.round(amount * 100);
+    if (amountInCentavos < 2000) {
+      return {
+        statusCode: 400,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: "Minimum amount is ₱20" }),
+      };
+    }
+
+    const secretKey = process.env.PAYMONGO_SECRET_KEY?.trim();
     if (!secretKey) {
       return {
         statusCode: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: jsonHeaders,
         body: JSON.stringify({ error: "Payment not configured" }),
       };
     }
 
-    const authHeader = `Basic ${Buffer.from(secretKey + ":").toString("base64")}`;
-    const amountInCentavos = Math.round(amount * 100);
-
-    const siteUrl =
-      process.env.URL ||
-      process.env.DEPLOY_URL ||
-      "https://pintaterra.netlify.app";
-
-    const sourceRes = await fetch("https://api.paymongo.com/v1/sources", {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        data: {
-          attributes: {
-            amount: amountInCentavos,
-            redirect: {
-              success: `${siteUrl}?payment=success`,
-              failed: `${siteUrl}?payment=failed`,
-            },
-            type: "qrph",
-            currency: "PHP",
-            description: description || "Pintaterra Art Purchase",
-          },
-        },
-      }),
-    });
-
-    if (!sourceRes.ok) {
-      const errorData = await sourceRes.text();
-      console.error("PayMongo Source error:", errorData);
+    if (!secretKey.startsWith("sk_")) {
       return {
         statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Payment creation failed", detail: errorData }),
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          error: "PAYMONGO_SECRET_KEY must be a secret key starting with sk_",
+        }),
       };
     }
 
-    const sourceResult = await sourceRes.json();
+    const paymentIntent = await payMongoRequest(
+      "/v1/payment_intents",
+      secretKey,
+      {
+        data: {
+          attributes: {
+            amount: amountInCentavos,
+            currency: "PHP",
+            capture_type: "automatic",
+            payment_method_allowed: ["qrph"],
+            description: description || "Pintaterra Art Purchase",
+          },
+        },
+      },
+    );
+
+    const paymentMethod = await payMongoRequest(
+      "/v1/payment_methods",
+      secretKey,
+      {
+        data: {
+          attributes: {
+            type: "qrph",
+            billing: {
+              name: customer?.fullName || "Pintaterra Customer",
+              email: customer?.email || "support@pintaterra.local",
+              phone: customer?.phone || undefined,
+              address: {
+                line1: customer?.address || undefined,
+                city: customer?.city || undefined,
+                country: "PH",
+              },
+            },
+          },
+        },
+      },
+    );
+
+    const attachedIntent = await payMongoRequest(
+      `/v1/payment_intents/${paymentIntent.data.id}/attach`,
+      secretKey,
+      {
+        data: {
+          attributes: {
+            payment_method: paymentMethod.data.id,
+          },
+        },
+      },
+    );
+
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sourceResult.data),
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        id: attachedIntent.data.id,
+        attributes: attachedIntent.data.attributes,
+        qrCodeImageUrl:
+          attachedIntent.data.attributes?.next_action?.code?.image_url || null,
+        paymentMethodId: paymentMethod.data.id,
+      }),
     };
-  } catch (err) {
-    console.error("create-payment error:", err);
+  } catch (error) {
+    console.error("create-payment error:", error);
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Internal server error" }),
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        error: "Payment creation failed",
+        detail:
+          error instanceof Error ? error.message : "Internal server error",
+      }),
     };
   }
 };
