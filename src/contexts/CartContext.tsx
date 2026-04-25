@@ -67,6 +67,7 @@ export interface CompletedOrder {
   status: "confirmed" | "in_progress" | "out_for_delivery" | "received";
   paymentIntentId?: string;
   qrCodeImageUrl?: string;
+  voucherCode?: string;
   notifications?: OrderNotification[];
   review?: OrderReview;
   refund?: OrderRefund;
@@ -298,6 +299,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       status: "confirmed",
       paymentIntentId: payment?.paymentIntentId,
       qrCodeImageUrl: payment?.qrCodeImageUrl ?? undefined,
+      voucherCode: voucher.applied ? voucher.code : undefined,
       notifications: [],
     };
     const newOrders = [order, ...orders];

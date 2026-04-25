@@ -45,6 +45,28 @@ const getPaymongoSecret = () => {
 
 const STORE_NAME = "orders";
 const ORDERS_KEY = "all-orders";
+const CONFIG_STORE_NAME = "storefront-config";
+const CONFIG_KEY = "config";
+
+const incrementPromoUsage = async (event, code) => {
+  if (!code || typeof code !== "string") return;
+  try {
+    connectLambda(event);
+    const configStore = getStore(CONFIG_STORE_NAME);
+    const config = await configStore.get(CONFIG_KEY, { type: "json" });
+    if (!config || !Array.isArray(config.promoCodes)) return;
+    const upper = code.trim().toUpperCase();
+    const idx = config.promoCodes.findIndex((p) => p.code === upper);
+    if (idx === -1) return;
+    config.promoCodes[idx] = {
+      ...config.promoCodes[idx],
+      usageCount: (config.promoCodes[idx].usageCount || 0) + 1,
+    };
+    await configStore.setJSON(CONFIG_KEY, config);
+  } catch (err) {
+    console.error("incrementPromoUsage failed:", err);
+  }
+};
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -252,11 +274,18 @@ export const handler = async (event) => {
             typeof order.qrCodeImageUrl === "string"
               ? order.qrCodeImageUrl.slice(0, 4000)
               : "",
+          voucherCode:
+            typeof order.voucherCode === "string"
+              ? order.voucherCode.trim().toUpperCase().slice(0, 30)
+              : "",
           notifications: [],
           review: null,
         };
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
+        if (safeOrder.voucherCode && safeOrder.discount > 0) {
+          await incrementPromoUsage(event, safeOrder.voucherCode);
+        }
         return json(200, { order: safeOrder });
       }
 
