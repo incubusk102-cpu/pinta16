@@ -6,9 +6,11 @@ import {
   issueToken,
   MIN_PASSWORD_LENGTH,
   readCredentials,
+  rotateSessionSecret,
   verifyPassword,
   verifyTokenWithSecret,
   writeCredentials,
+  writeCredentialsIfNew,
 } from "../lib/admin-auth.js";
 
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -58,11 +60,14 @@ export const handler = async (event) => {
       }
 
       const { salt, hash } = hashPassword(password);
-      await writeCredentials(store, {
+      const written = await writeCredentialsIfNew(store, {
         salt,
         hash,
         updatedAt: new Date().toISOString(),
       });
+      if (!written) {
+        return json(409, { error: "Admin password already set" });
+      }
 
       return json(200, { token: issueToken(secret) });
     }
@@ -105,8 +110,9 @@ export const handler = async (event) => {
         hash,
         updatedAt: new Date().toISOString(),
       });
+      const newSecret = await rotateSessionSecret(store);
 
-      return json(200, { token: issueToken(secret) });
+      return json(200, { token: issueToken(newSecret) });
     }
 
     return json(400, { error: "Unknown action" });

@@ -114,6 +114,19 @@ export const readCredentials = async (store) =>
 export const writeCredentials = async (store, credentials) =>
   await store.setJSON(CREDENTIALS_KEY, credentials);
 
+export const writeCredentialsIfNew = async (store, credentials) => {
+  const result = await store.setJSON(CREDENTIALS_KEY, credentials, {
+    onlyIfNew: true,
+  });
+  return result?.modified !== false;
+};
+
+export const rotateSessionSecret = async (store) => {
+  const secret = crypto.randomBytes(48).toString("hex");
+  await store.set(SECRET_KEY, secret);
+  return secret;
+};
+
 export const extractToken = (event) => {
   const auth =
     event.headers?.authorization || event.headers?.Authorization || "";
