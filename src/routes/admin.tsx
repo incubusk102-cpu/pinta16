@@ -4,12 +4,20 @@ import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   useProducts,
   getDiscountPercent,
+  PRODUCT_CATEGORIES,
   type Product,
 } from "@/contexts/ProductContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -345,15 +353,37 @@ function NavLink({
   );
 }
 
+interface ImageMeta {
+  fileName: string;
+  bytes: number;
+}
+
+const formatBytes = (bytes: number): string => {
+  if (!bytes || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+const formatDate = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+};
+
 function ProductsSection() {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mockupInputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<string>("");
+  const [imageMeta, setImageMeta] = useState<ImageMeta | null>(null);
   const [mockup, setMockup] = useState<string>("");
+  const [mockupMeta, setMockupMeta] = useState<ImageMeta | null>(null);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [category, setCategory] = useState<string>("Abstract");
+  const [dimensions, setDimensions] = useState("");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -361,10 +391,13 @@ function ProductsSection() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const readImage = async (
     e: React.ChangeEvent<HTMLInputElement>,
     setter: (value: string) => void,
+    metaSetter: (meta: ImageMeta | null) => void,
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -375,6 +408,7 @@ function ProductsSection() {
 
     try {
       setter(await fileToDataUrl(file));
+      metaSetter({ fileName: file.name, bytes: file.size });
     } catch {
       toast.error("Could not read image");
     }
@@ -382,10 +416,14 @@ function ProductsSection() {
 
   const reset = () => {
     setImage("");
+    setImageMeta(null);
     setMockup("");
+    setMockupMeta(null);
     setTitle("");
     setMedium("Acrylic on Canvas");
     setYear(String(new Date().getFullYear()));
+    setCategory("Abstract");
+    setDimensions("");
     setPrice("");
     setSalePrice("");
     setDiscountPercent("");
@@ -448,6 +486,12 @@ function ProductsSection() {
         price: priceNum,
         salePrice: effectiveSalePrice,
         description: description.trim(),
+        category: category.trim() || undefined,
+        dimensions: dimensions.trim() || undefined,
+        imageFileName: imageMeta?.fileName,
+        imageBytes: imageMeta?.bytes,
+        mockupFileName: mockupMeta?.fileName,
+        mockupBytes: mockupMeta?.bytes,
       });
       toast.success(`"${title.trim()}" added to the collection`);
       reset();
@@ -507,9 +551,14 @@ function ProductsSection() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => void readImage(e, setImage)}
+                  onChange={(e) => void readImage(e, setImage, setImageMeta)}
                 />
               </label>
+              {imageMeta && (
+                <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                  {imageMeta.fileName} · {formatBytes(imageMeta.bytes)}
+                </p>
+              )}
             </div>
 
             <div>
@@ -538,9 +587,14 @@ function ProductsSection() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => void readImage(e, setMockup)}
+                  onChange={(e) => void readImage(e, setMockup, setMockupMeta)}
                 />
               </label>
+              {mockupMeta && (
+                <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                  {mockupMeta.fileName} · {formatBytes(mockupMeta.bytes)}
+                </p>
+              )}
             </div>
 
             <div>
@@ -571,6 +625,39 @@ function ProductsSection() {
                   value={year}
                   onChange={(e) => setYear(e.target.value)}
                   maxLength={10}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger id="category">
+                    <SelectValue placeholder="Choose a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="dimensions">
+                  Dimensions{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="dimensions"
+                  value={dimensions}
+                  onChange={(e) => setDimensions(e.target.value)}
+                  maxLength={40}
+                  placeholder="e.g. 24 × 30 in"
                 />
               </div>
             </div>
@@ -655,77 +742,49 @@ function ProductsSection() {
         </section>
 
         <section>
-          <h2 className="font-display text-lg mb-4">Your uploads</h2>
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <h2 className="font-display text-lg">
+              Your uploads{" "}
+              <span className="text-muted-foreground font-normal text-sm">
+                ({products.length})
+              </span>
+            </h2>
+            <div className="flex gap-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search title, medium, description…"
+                className="h-9 text-sm w-56"
+              />
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-9 w-36 text-sm">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {PRODUCT_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__uncategorized">Uncategorized</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {products.length === 0 ? (
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
               No uploaded products yet. Add your first painting on the left.
             </div>
           ) : (
-            <ul className="space-y-3">
-              {products.map((product) => {
-                const isDeleting = deletingId === product.id;
-
-                return (
-                  <li
-                    key={product.id}
-                    className="flex gap-4 bg-card/40 border border-border/50 rounded-lg p-3"
-                  >
-                    <img
-                      src={product.image}
-                      alt={product.title}
-                      className="w-24 h-24 object-cover rounded-md flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate">{product.title}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {product.medium} · {product.year}
-                      </p>
-                      <p className="text-sm font-semibold mt-1">
-                        {getDiscountPercent(product) > 0 ? (
-                          <>
-                            <span className="line-through text-muted-foreground font-normal mr-1">
-                              ₱{product.price.toLocaleString()}
-                            </span>
-                            <span>₱{product.salePrice!.toLocaleString()}</span>
-                            <span className="ml-1 text-xs text-red-500 font-semibold">
-                              {getDiscountPercent(product)}% OFF
-                            </span>
-                          </>
-                        ) : (
-                          <>₱{product.price.toLocaleString()}</>
-                        )}
-                      </p>
-                      {product.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                          {product.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEditTarget(product)}
-                        aria-label={`Edit ${product.title}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={isDeleting}
-                        onClick={() =>
-                          void handleDelete(product.id, product.title)
-                        }
-                        aria-label={`Delete ${product.title}`}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <ProductsList
+              products={products}
+              search={search}
+              categoryFilter={categoryFilter}
+              deletingId={deletingId}
+              onEdit={(p) => setEditTarget(p)}
+              onDelete={(id, title) => void handleDelete(id, title)}
+            />
           )}
         </section>
       </div>
@@ -737,6 +796,174 @@ function ProductsSection() {
         onSave={updateProduct}
       />
     </>
+  );
+}
+
+interface ProductsListProps {
+  products: Product[];
+  search: string;
+  categoryFilter: string;
+  deletingId: string | null;
+  onEdit: (product: Product) => void;
+  onDelete: (id: string, title: string) => void;
+}
+
+function ProductsList({
+  products,
+  search,
+  categoryFilter,
+  deletingId,
+  onEdit,
+  onDelete,
+}: ProductsListProps) {
+  const filtered = products.filter((p) => {
+    if (categoryFilter === "__uncategorized") {
+      if (p.category && p.category.trim()) return false;
+    } else if (categoryFilter !== "all") {
+      if ((p.category || "").trim() !== categoryFilter) return false;
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const haystack = [
+        p.title,
+        p.medium,
+        p.year,
+        p.category,
+        p.dimensions,
+        p.description,
+        p.imageFileName,
+        p.mockupFileName,
+        p.id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    return (
+      <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground text-sm">
+        No products match your filter.
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-3">
+      {filtered.map((product) => {
+        const isDeleting = deletingId === product.id;
+        const discount = getDiscountPercent(product);
+        return (
+          <li
+            key={product.id}
+            className="flex flex-col sm:flex-row gap-4 bg-card/40 border border-border/50 rounded-lg p-3"
+          >
+            <div className="flex gap-2 flex-shrink-0">
+              <div className="relative">
+                <img
+                  src={product.image}
+                  alt={product.title}
+                  className="w-28 h-28 object-cover rounded-md"
+                />
+                {product.category && (
+                  <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-medium bg-background/90 backdrop-blur rounded">
+                    {product.category}
+                  </span>
+                )}
+              </div>
+              {product.mockup && (
+                <img
+                  src={product.mockup}
+                  alt={`${product.title} mockup`}
+                  title="Room mockup"
+                  className="w-28 h-28 object-cover rounded-md border border-border/40"
+                />
+              )}
+            </div>
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="font-medium truncate">{product.title}</h3>
+                <p className="text-sm font-semibold whitespace-nowrap">
+                  {discount > 0 ? (
+                    <>
+                      <span className="line-through text-muted-foreground font-normal mr-1">
+                        ₱{product.price.toLocaleString()}
+                      </span>
+                      <span>₱{product.salePrice!.toLocaleString()}</span>
+                      <span className="ml-1 text-xs text-red-500 font-semibold">
+                        {discount}% OFF
+                      </span>
+                    </>
+                  ) : (
+                    <>₱{product.price.toLocaleString()}</>
+                  )}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {[product.medium, product.year, product.dimensions]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              {product.description && (
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {product.description}
+                </p>
+              )}
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground pt-1">
+                {product.imageFileName && (
+                  <>
+                    <dt className="opacity-70">Image file</dt>
+                    <dd className="truncate" title={product.imageFileName}>
+                      {product.imageFileName}
+                      {product.imageBytes
+                        ? ` · ${formatBytes(product.imageBytes)}`
+                        : ""}
+                    </dd>
+                  </>
+                )}
+                {product.mockupFileName && (
+                  <>
+                    <dt className="opacity-70">Mockup file</dt>
+                    <dd className="truncate" title={product.mockupFileName}>
+                      {product.mockupFileName}
+                      {product.mockupBytes
+                        ? ` · ${formatBytes(product.mockupBytes)}`
+                        : ""}
+                    </dd>
+                  </>
+                )}
+                <dt className="opacity-70">Listing ID</dt>
+                <dd className="truncate font-mono">{product.id}</dd>
+                <dt className="opacity-70">Uploaded</dt>
+                <dd>{formatDate(product.createdAt)}</dd>
+              </dl>
+            </div>
+            <div className="flex sm:flex-col gap-1 self-start">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onEdit(product)}
+                aria-label={`Edit ${product.title}`}
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={isDeleting}
+                onClick={() => onDelete(product.id, product.title)}
+                aria-label={`Delete ${product.title}`}
+              >
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </Button>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

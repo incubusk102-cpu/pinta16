@@ -20,7 +20,26 @@ export interface Product {
   salePrice?: number;
   description: string;
   createdAt: string;
+  category?: string;
+  dimensions?: string;
+  imageFileName?: string;
+  imageBytes?: number;
+  mockupFileName?: string;
+  mockupBytes?: number;
 }
+
+export const PRODUCT_CATEGORIES = [
+  "Abstract",
+  "Landscape",
+  "Portrait",
+  "Still Life",
+  "Modern",
+  "Surrealism",
+  "Impressionism",
+  "Other",
+] as const;
+
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 
 export const getEffectivePrice = (product: {
   price: number;
