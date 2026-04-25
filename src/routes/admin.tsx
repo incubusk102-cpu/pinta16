@@ -25,7 +25,9 @@ import {
   ArrowLeft,
   Activity,
   Bell,
+  CheckCircle2,
   KeyRound,
+  LayoutDashboard,
   Loader2,
   LogOut,
   Menu,
@@ -33,11 +35,16 @@ import {
   Pencil,
   Plus,
   QrCode,
+  RefreshCw,
   Settings,
   Star,
   Trash2,
+  TrendingUp,
+  Truck,
+  Undo2,
   Upload,
   Users,
+  Wallet,
 } from "lucide-react";
 import { ORDER_STEPS, type CompletedOrder } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
@@ -56,9 +63,16 @@ export const Route = createFileRoute("/admin")({
   }),
 });
 
-type AdminSection = "products" | "orders" | "visitors" | "users" | "settings";
+type AdminSection =
+  | "dashboard"
+  | "products"
+  | "orders"
+  | "visitors"
+  | "users"
+  | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
+  dashboard: "Dashboard",
   products: "Products",
   orders: "Orders",
   visitors: "Visitors",
@@ -252,6 +266,13 @@ function AdminDashboard() {
           </SheetHeader>
           <nav className="mt-6 flex flex-col gap-1">
             <NavLink
+              icon={<LayoutDashboard className="w-4 h-4" />}
+              label="Dashboard"
+              active={section === "dashboard"}
+              onClick={() => navigate("dashboard")}
+              hint="Revenue, ship-out, complete"
+            />
+            <NavLink
               icon={<Upload className="w-4 h-4" />}
               label="Products"
               active={section === "products"}
@@ -299,6 +320,9 @@ function AdminDashboard() {
       </Sheet>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        {section === "dashboard" && (
+          <DashboardSection onOpenOrders={() => navigate("orders")} />
+        )}
         {section === "products" && <ProductsSection />}
         {section === "orders" && <OrdersSection />}
         {section === "visitors" && <VisitorsSection />}
@@ -740,10 +764,163 @@ function ProductsSection() {
   );
 }
 
+interface OrdersSummary {
+  totalOrders: number;
+  grossRevenue: number;
+  refundedAmount: number;
+  netRevenue: number;
+  confirmedCount: number;
+  inProgressCount: number;
+  outForDeliveryCount: number;
+  completedCount: number;
+  pendingShipOutCount: number;
+  refundPendingCount: number;
+  refundSucceededCount: number;
+  refundFailedCount: number;
+}
+
+const formatPHP = (n: number) =>
+  `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
+
+function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
+  const [summary, setSummary] = useState<OrdersSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders?metrics=summary", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSummary(data.summary as OrdersSummary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load metrics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-display text-xl">Dashboard</h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 mr-1 ${loading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
+
+      {error && (
+        <div className="text-sm text-destructive border border-destructive/30 bg-destructive/10 rounded-md p-3">
+          {error}
+        </div>
+      )}
+
+      {loading && !summary && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {summary && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <DashCard
+              icon={<TrendingUp className="w-4 h-4" />}
+              label="Order purchase total"
+              value={formatPHP(summary.grossRevenue)}
+              hint={`${summary.totalOrders} order${summary.totalOrders === 1 ? "" : "s"} · net ${formatPHP(summary.netRevenue)} after refunds`}
+            />
+            <DashCard
+              icon={<Truck className="w-4 h-4" />}
+              label="Pending ship-out"
+              value={String(summary.pendingShipOutCount)}
+              hint={`${summary.confirmedCount} confirmed · ${summary.inProgressCount} in progress · ${summary.outForDeliveryCount} out for delivery`}
+              onClick={onOpenOrders}
+            />
+            <DashCard
+              icon={<CheckCircle2 className="w-4 h-4" />}
+              label="Order complete"
+              value={String(summary.completedCount)}
+              hint="Marked received by admin"
+              onClick={onOpenOrders}
+            />
+            <DashCard
+              icon={<Wallet className="w-4 h-4" />}
+              label="Refunds in progress"
+              value={String(summary.refundPendingCount)}
+              hint={`${summary.refundSucceededCount} completed · ${summary.refundFailedCount} failed`}
+              onClick={onOpenOrders}
+            />
+            <DashCard
+              icon={<Undo2 className="w-4 h-4" />}
+              label="Total refunded"
+              value={formatPHP(summary.refundedAmount)}
+              hint="Successfully credited back to customers"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DashCard({
+  icon,
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  const interactive = !!onClick;
+  return (
+    <button
+      type="button"
+      disabled={!interactive}
+      onClick={onClick}
+      className={`text-left border border-border/40 rounded-lg p-4 bg-card/40 transition-colors ${
+        interactive ? "hover:bg-card/70 cursor-pointer" : "cursor-default"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-muted-foreground text-[11px] uppercase tracking-wider">
+        {icon}
+        {label}
+      </div>
+      <p className="font-display text-2xl mt-2">{value}</p>
+      {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+    </button>
+  );
+}
+
 function OrdersSection() {
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [confirmRefundFor, setConfirmRefundFor] =
+    useState<CompletedOrder | null>(null);
 
   const fetchOrders = async () => {
     try {
@@ -780,17 +957,116 @@ function OrdersSection() {
         },
         body: JSON.stringify({ action: "update-status", orderId, status }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
+        prev.map((o) => (o.id === orderId ? (updated ?? { ...o, status }) : o)),
       );
       toast.success("Status updated");
-    } catch {
-      toast.error("Could not update status");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update status",
+      );
     } finally {
       setUpdatingId(null);
     }
   };
+
+  const handleRefund = async (order: CompletedOrder) => {
+    setRefundingId(order.id);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "request-refund",
+          orderId: order.id,
+          reason: "requested_by_customer",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
+      toast.success(
+        `Refund initiated. Status: ${updated.refund?.status ?? "pending"}`,
+      );
+      setConfirmRefundFor(null);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not initiate refund",
+      );
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
+  const handleCheckRefund = async (orderId: string) => {
+    setRefundingId(orderId);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check-refund", orderId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      const status = updated.refund?.status;
+      if (status === "succeeded") toast.success("Refund completed");
+      else if (status === "failed") toast.error("Refund failed");
+      else toast.info("Refund still pending");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not check refund",
+      );
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
+  // Auto-poll pending refunds every 30s while the section is visible
+  useEffect(() => {
+    const pendingIds = orders
+      .filter((o) => o.refund?.status === "pending")
+      .map((o) => o.id);
+    if (pendingIds.length === 0) return;
+    const id = setInterval(() => {
+      pendingIds.forEach((orderId) => {
+        void (async () => {
+          try {
+            const res = await fetch("/api/orders", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "check-refund", orderId }),
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const updated = data.order as CompletedOrder;
+            setOrders((prev) =>
+              prev.map((o) => (o.id === orderId ? updated : o)),
+            );
+          } catch {
+            // ignore polling errors
+          }
+        })();
+      });
+    }, 30000);
+    return () => clearInterval(id);
+  }, [orders]);
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -1012,9 +1288,125 @@ function OrdersSection() {
                 );
               })}
             </div>
+
+            {/* Refund block */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
+              {order.refund ? (
+                <div className="flex flex-wrap items-center gap-2 w-full">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] uppercase tracking-wider ${
+                      order.refund.status === "succeeded"
+                        ? "bg-emerald-500/15 text-emerald-600"
+                        : order.refund.status === "failed"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-amber-500/15 text-amber-600"
+                    }`}
+                  >
+                    <Wallet className="w-3 h-3" />
+                    Refund {order.refund.status}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ₱{order.refund.amount.toLocaleString()} · requested{" "}
+                    {new Date(order.refund.requestedAt).toLocaleString()}
+                  </span>
+                  {order.refund.id && (
+                    <span className="text-[10px] text-muted-foreground break-all">
+                      Ref: {order.refund.id}
+                    </span>
+                  )}
+                  {order.refund.status === "pending" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() => void handleCheckRefund(order.id)}
+                      className="ml-auto"
+                    >
+                      <RefreshCw
+                        className={`w-3 h-3 mr-1 ${refundingId === order.id ? "animate-spin" : ""}`}
+                      />
+                      Check QR Ph status
+                    </Button>
+                  )}
+                  {order.refund.status === "failed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() => setConfirmRefundFor(order)}
+                      className="ml-auto"
+                    >
+                      <Undo2 className="w-3 h-3 mr-1" /> Retry refund
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!order.paymentIntentId || refundingId === order.id}
+                  onClick={() => setConfirmRefundFor(order)}
+                  title={
+                    order.paymentIntentId
+                      ? "Manually refund this order via PayMongo back to the customer's QR Ph wallet"
+                      : "No PayMongo payment recorded — cannot auto-refund"
+                  }
+                >
+                  <Undo2 className="w-3 h-3 mr-1" /> Manual refund
+                </Button>
+              )}
+            </div>
           </div>
         );
       })}
+
+      {/* Confirm refund dialog */}
+      {confirmRefundFor && (
+        <div className="fixed inset-0 z-[200] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border/40 rounded-lg p-6 max-w-md w-full space-y-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-amber-500" />
+              <h3 className="font-display text-lg">Confirm refund</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Refund ₱{(confirmRefundFor.total ?? 0).toLocaleString()} for order{" "}
+              <span className="text-foreground font-medium">
+                {confirmRefundFor.id}
+              </span>{" "}
+              back to {confirmRefundFor.orderInfo?.email}'s QR Ph wallet via
+              PayMongo? The customer will receive a refund-in-progress
+              notification immediately and a confirmation once PayMongo
+              completes the transfer (typically minutes to a few banking days).
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={refundingId === confirmRefundFor.id}
+                onClick={() => setConfirmRefundFor(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={refundingId === confirmRefundFor.id}
+                onClick={() => void handleRefund(confirmRefundFor)}
+              >
+                {refundingId === confirmRefundFor.id ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />{" "}
+                    Initiating...
+                  </>
+                ) : (
+                  <>
+                    <Undo2 className="w-3 h-3 mr-1" /> Issue refund
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
