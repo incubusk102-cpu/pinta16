@@ -167,9 +167,9 @@ const getEstimatedCreationDays = (itemCount: number): string => {
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { config } = useStorefrontConfig();
   const FREE_SHIPPING_THRESHOLD = config.freeShipping.enabled
-    ? config.freeShipping.threshold || DEFAULT_FREE_SHIPPING_THRESHOLD
+    ? (config.freeShipping.threshold ?? DEFAULT_FREE_SHIPPING_THRESHOLD)
     : Number.POSITIVE_INFINITY;
-  const SHIPPING_FEE = config.freeShipping.shippingFee || DEFAULT_SHIPPING_FEE;
+  const SHIPPING_FEE = config.freeShipping.shippingFee ?? DEFAULT_SHIPPING_FEE;
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
