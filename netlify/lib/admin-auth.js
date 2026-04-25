@@ -104,7 +104,7 @@ export const ensureSessionSecret = async (store) => {
 };
 
 export const readCredentials = async (store) =>
-  await store.get(CREDENTIALS_KEY, { type: "json" });
+  await store.get(CREDENTIALS_KEY, { type: "json", consistency: "strong" });
 
 export const writeCredentials = async (store, credentials) =>
   await store.setJSON(CREDENTIALS_KEY, credentials);
