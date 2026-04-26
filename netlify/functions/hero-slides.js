@@ -66,11 +66,24 @@ const trimText = (v, max) =>
     .trim()
     .slice(0, max);
 
+// Allow only safe URL shapes for CTA links: same-origin ("/foo"), in-page
+// anchors ("#foo"), http(s)://, mailto:, tel:. Anything else (e.g. javascript:,
+// data:) is silently dropped so a compromised admin token can't ship an XSS
+// payload through the hero CTA.
+const sanitizeHref = (raw) => {
+  const v = trimText(raw, MAX_HREF);
+  if (!v) return "";
+  if (v.startsWith("/") || v.startsWith("#")) return v;
+  if (/^(https?:|mailto:|tel:)/i.test(v)) return v;
+  return "";
+};
+
 const isValidImage = (v) => {
   if (typeof v !== "string") return false;
   if (!v) return true; // empty is allowed (placeholder slide)
   if (v.length > MAX_IMAGE_BYTES) return false;
-  return /^data:image\/(png|jpe?g|webp|gif|avif|svg\+xml);base64,/i.test(v);
+  // Raster only — SVG is dropped to avoid script-in-image XSS via inline use.
+  return /^data:image\/(png|jpe?g|webp|gif|avif);base64,/i.test(v);
 };
 
 const generateSlideId = () => {
@@ -93,7 +106,7 @@ const sanitizeSlide = (raw) => {
     headline: trimText(raw.headline, MAX_TEXT),
     subtext: trimText(raw.subtext, MAX_TEXT),
     ctaLabel: trimText(raw.ctaLabel, MAX_LABEL),
-    ctaHref: trimText(raw.ctaHref, MAX_HREF),
+    ctaHref: sanitizeHref(raw.ctaHref),
     align: ALIGNS.includes(raw.align) ? raw.align : "center",
     enabled: raw.enabled !== false,
     sortOrder: Number.isFinite(Number(raw.sortOrder))

@@ -143,12 +143,26 @@ const HeroSlider = () => {
     [count, index],
   );
 
-  // Autoplay
+  // Clamp index when slides change underneath us (admin add/remove during view).
+  useEffect(() => {
+    if (count > 0 && index >= count) setIndex(0);
+  }, [count, index]);
+
+  // Autoplay. Including `index` in deps re-arms the timer on manual
+  // navigation, so clicking next/prev/dot doesn't fire an immediate auto-advance.
   useEffect(() => {
     if (!settings.autoplay || paused || reduced || count <= 1) return;
-    const id = window.setInterval(next, settings.intervalMs);
-    return () => window.clearInterval(id);
-  }, [settings.autoplay, settings.intervalMs, paused, reduced, count, next]);
+    const id = window.setTimeout(next, settings.intervalMs);
+    return () => window.clearTimeout(id);
+  }, [
+    settings.autoplay,
+    settings.intervalMs,
+    paused,
+    reduced,
+    count,
+    next,
+    index,
+  ]);
 
   // Keyboard nav (when slider is focused)
   useEffect(() => {

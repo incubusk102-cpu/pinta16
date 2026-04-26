@@ -25,7 +25,11 @@ import {
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 
 const MAX_SLIDES = 8;
-const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // 3 MB raw
+// Server caps the base64 data URL at 3.5 MB. Base64 expands raw bytes by ~33 %,
+// so we cap raw uploads at 2.5 MB (~3.3 MB base64) to leave headroom and keep
+// the client + server limits in sync.
+const MAX_IMAGE_RAW_BYTES = 2_500_000;
+const MAX_IMAGE_DATA_URL_BYTES = 3_500_000;
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -150,14 +154,21 @@ export function HeroSlidesSection() {
       toast.error("Use JPG, PNG, WEBP, AVIF, or GIF");
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
+    if (file.size > MAX_IMAGE_RAW_BYTES) {
       toast.error(
-        `${file.name}: ${formatBytes(file.size)} — must be under 3 MB`,
+        `${file.name}: ${formatBytes(file.size)} — must be under 2.5 MB`,
       );
       return;
     }
     try {
       const url = await fileToDataUrl(file);
+      // Defence in depth: data URL must also fit under the server's raw cap.
+      if (url.length > MAX_IMAGE_DATA_URL_BYTES) {
+        toast.error(
+          `${file.name}: encoded size ${formatBytes(url.length)} too large`,
+        );
+        return;
+      }
       updateSlide(id, { image: url });
     } catch {
       toast.error("Could not read image");
@@ -190,6 +201,22 @@ export function HeroSlidesSection() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Save failed (${res.status})`);
+      }
+      const persisted = (await res.json().catch(() => null)) as {
+        slides?: AdminSlide[];
+      } | null;
+      // Sync the editor with whatever the server actually persisted (server
+      // is authoritative on ids / sort order / dropped invalid slides).
+      if (persisted?.slides) {
+        setDraftSlides(
+          persisted.slides.map((s) => ({
+            ...blankSlide(),
+            ...s,
+            enabled: s.enabled !== false,
+          })),
+        );
+      } else {
+        setDraftSlides(slidesWithImage);
       }
       await refresh();
       setSavedAt(new Date().toLocaleTimeString());
