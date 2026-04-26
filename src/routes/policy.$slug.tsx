@@ -170,6 +170,12 @@ const renderMarkdown = (md: string) => {
       listBuf.push(line.slice(2));
       continue;
     }
+    // Indented continuation of the previous bullet (e.g. "  more text").
+    if (listBuf.length && (raw.startsWith("  ") || raw.startsWith("\t"))) {
+      listBuf[listBuf.length - 1] += " " + line.trim();
+      continue;
+    }
+    flushList();
     paraBuf.push(line);
   }
   flushList();

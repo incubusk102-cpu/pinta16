@@ -106,8 +106,7 @@ We collect only what we need to fulfil your order and improve the storefront.
 ## What we collect
 - Account info (name, email) when you create an account or subscribe
 - Order info (shipping address, contact number, items)
-- Payment info is processed by PayMongo — we never see your card or e-wallet
-  credentials
+- Payment info is processed by PayMongo — we never see your card or e-wallet credentials
 - Anonymous browser/device metadata for analytics and abuse detection
 
 ## How we use it
@@ -150,12 +149,17 @@ const trim = (v, max) =>
     .trim()
     .slice(0, max);
 
+// Used when reading from storage: missing/blank fields fall back to defaults so
+// the public site always has *something* to show. Admin writes use
+// `sanitizeIncoming` instead, which validates without filling in defaults.
 const sanitizeOne = (slug, raw) => {
   const fallback = DEFAULT_POLICIES[slug];
   const data = raw && typeof raw === "object" ? raw : {};
+  const title = trim(data.title, MAX_TITLE);
+  const body = trim(data.body, MAX_BODY);
   return {
-    title: trim(data.title || fallback.title, MAX_TITLE),
-    body: trim(data.body || fallback.body, MAX_BODY),
+    title: title || fallback.title,
+    body: body || fallback.body,
     updatedAt:
       typeof data.updatedAt === "string" && data.updatedAt
         ? data.updatedAt
@@ -178,18 +182,47 @@ const sanitizeAll = (raw) => {
   return { policies: out };
 };
 
+const readPoliciesWithMeta = async (store) => {
+  const result = await store.getWithMetadata(KEY, { type: "json" });
+  const raw = result?.data;
+  const sanitized = sanitizeAll(
+    raw && typeof raw === "object" ? raw : { policies: DEFAULT_POLICIES },
+  );
+  return { etag: result?.etag, data: sanitized };
+};
+
 const readPolicies = async (store) => {
   try {
-    const raw = await store.get(KEY, { type: "json" });
-    if (!raw) return sanitizeAll({ policies: DEFAULT_POLICIES });
-    return sanitizeAll(raw);
+    const { data } = await readPoliciesWithMeta(store);
+    return data;
   } catch {
     return sanitizeAll({ policies: DEFAULT_POLICIES });
   }
 };
 
-const writePolicies = async (store, data) => {
-  await store.setJSON(KEY, data);
+// Compare-and-swap upsert; retries up to 4 times on contention.
+const upsertPolicy = async (store, slug, nextEntry) => {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let etag;
+    let current;
+    try {
+      ({ etag, data: current } = await readPoliciesWithMeta(store));
+    } catch {
+      // Read failure: bail rather than overwriting on the next attempt.
+      return null;
+    }
+    const next = {
+      policies: { ...current.policies, [slug]: nextEntry },
+    };
+    try {
+      const wrote = await store.setJSON(KEY, next, { onlyIfMatch: etag });
+      if (wrote && wrote.modified === false) continue;
+      return next;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 };
 
 export const handler = async (event) => {
@@ -206,44 +239,33 @@ export const handler = async (event) => {
         return json(401, { error: "Not authenticated" });
       }
       const body = parseBody(event.body);
+      const slug = String(body.slug || "");
+      if (!POLICY_SLUGS.includes(slug)) {
+        return json(400, { error: "Unknown policy slug" });
+      }
 
       if (body.action === "update") {
-        const slug = String(body.slug || "");
-        if (!POLICY_SLUGS.includes(slug)) {
-          return json(400, { error: "Unknown policy slug" });
-        }
-        const existing = await readPolicies(store);
-        const next = {
-          policies: {
-            ...existing.policies,
-            [slug]: sanitizeOne(slug, {
-              title: body.title,
-              body: body.body,
-              updatedAt: new Date().toISOString(),
-            }),
-          },
-        };
-        await writePolicies(store, next);
+        const title = trim(body.title, MAX_TITLE);
+        const bodyText = trim(body.body, MAX_BODY);
+        if (!title) return json(400, { error: "Title is required" });
+        if (!bodyText) return json(400, { error: "Body is required" });
+        const next = await upsertPolicy(store, slug, {
+          title,
+          body: bodyText,
+          updatedAt: new Date().toISOString(),
+        });
+        if (!next) return json(409, { error: "Save conflicted, please retry" });
         return json(200, next);
       }
 
       if (body.action === "reset") {
-        const slug = String(body.slug || "");
-        if (!POLICY_SLUGS.includes(slug)) {
-          return json(400, { error: "Unknown policy slug" });
-        }
-        const existing = await readPolicies(store);
-        const next = {
-          policies: {
-            ...existing.policies,
-            [slug]: sanitizeOne(slug, {
-              title: DEFAULT_POLICIES[slug].title,
-              body: DEFAULT_POLICIES[slug].body,
-              updatedAt: new Date().toISOString(),
-            }),
-          },
-        };
-        await writePolicies(store, next);
+        const next = await upsertPolicy(store, slug, {
+          title: DEFAULT_POLICIES[slug].title,
+          body: DEFAULT_POLICIES[slug].body,
+          updatedAt: new Date().toISOString(),
+        });
+        if (!next)
+          return json(409, { error: "Reset conflicted, please retry" });
         return json(200, next);
       }
 
