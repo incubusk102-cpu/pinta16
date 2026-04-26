@@ -8,6 +8,7 @@ import {
   Heart,
   ShoppingCart,
   Star,
+  Share2,
   ZoomIn,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +16,10 @@ import GalleryNav from "@/components/GalleryNav";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import OrderConfirmation from "@/components/OrderConfirmation";
+import RelatedProducts from "@/components/RelatedProducts";
+import RecentlyViewed from "@/components/RecentlyViewed";
+import ZoomableImage from "@/components/ZoomableImage";
+import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import {
   getDiscountPercent,
   getEffectivePrice,
@@ -86,6 +91,14 @@ function ProductPage() {
     setActiveImage(0);
     setZoomed(false);
   }, [id]);
+
+  // Track view in localStorage so the "recently viewed" strip can show this
+  // product on the home page and other product pages later.
+  useEffect(() => {
+    if (artwork && artwork.availability !== "draft") {
+      pushRecentlyViewed(artwork.id);
+    }
+  }, [artwork]);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,6 +501,40 @@ function ProductPage() {
                 />
                 {inWishlist ? "Saved" : "Save"}
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url =
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/product/${artwork.id}`
+                      : "";
+                  const data = {
+                    title: `${artwork.title} — Pintaterra`,
+                    text: `Check out "${artwork.title}" on Pintaterra.`,
+                    url,
+                  };
+                  const nav = navigator as Navigator & {
+                    share?: (d: ShareData) => Promise<void>;
+                  };
+                  if (nav.share) {
+                    nav.share(data).catch(() => {
+                      /* user cancelled */
+                    });
+                  } else if (navigator.clipboard) {
+                    navigator.clipboard
+                      .writeText(url)
+                      .then(() => toast.success("Link copied to clipboard"))
+                      .catch(() => toast.error("Could not copy link"));
+                  } else {
+                    toast.message(url);
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
+                aria-label="Share painting"
+              >
+                <Share2 className="w-4 h-4" />
+                Share
+              </button>
               <Link
                 to="/"
                 hash="gallery"
@@ -521,22 +568,33 @@ function ProductPage() {
         </motion.div>
 
         <ProductReviews loading={reviewsLoading} reviews={reviews} />
+
+        <RelatedProducts currentId={artwork.id} />
+        <RecentlyViewed excludeId={artwork.id} />
       </main>
 
       {zoomed && (
         <div
           role="dialog"
           aria-label={`${artwork.title} – zoomed`}
-          className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center cursor-zoom-out p-6"
-          onClick={() => setZoomed(false)}
+          className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 md:p-6"
         >
-          <img
+          <button
+            type="button"
+            onClick={() => setZoomed(false)}
+            className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-full bg-foreground text-background text-[11px] tracking-[0.2em] uppercase hover:opacity-90"
+            aria-label="Close zoomed view"
+          >
+            Close
+          </button>
+          <ZoomableImage
             src={currentImage.url}
             alt={artwork.title}
-            className="max-w-[95vw] max-h-[95vh] object-contain"
-            loading="lazy"
-            decoding="async"
+            className="w-full h-full"
           />
+          <p className="mt-3 text-[10px] tracking-[0.25em] uppercase text-white/60">
+            Pinch · scroll · double-tap to zoom · drag to pan
+          </p>
         </div>
       )}
 
