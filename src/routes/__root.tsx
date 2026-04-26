@@ -9,6 +9,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
+import PwaPrompts from "@/components/PwaPrompts";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
@@ -68,6 +69,7 @@ function RootComponent() {
                 <HeartbeatBridge />
                 <ConditionalAnnouncementBar />
                 <Outlet />
+                <PwaPrompts />
               </CartProvider>
             </ProductProvider>
           </StorefrontConfigProvider>
