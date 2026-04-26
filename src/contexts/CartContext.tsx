@@ -58,6 +58,28 @@ export interface OrderRefund {
   failureMessage?: string;
 }
 
+export type RefundRequestReason =
+  | "damaged"
+  | "wrong_item"
+  | "not_as_described"
+  | "no_longer_wanted"
+  | "other";
+
+export type RefundRequestStatus =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "processed";
+
+export interface OrderRefundRequest {
+  reason: RefundRequestReason;
+  note: string;
+  requestedAt: string;
+  status: RefundRequestStatus;
+  decidedAt?: string;
+  decisionNote?: string;
+}
+
 export interface OrderShipment {
   courier: string;
   trackingNumber: string;
@@ -111,6 +133,7 @@ export interface CompletedOrder {
   review?: OrderReview;
   reviews?: OrderReview[];
   refund?: OrderRefund;
+  refundRequest?: OrderRefundRequest;
   shipment?: OrderShipment;
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];

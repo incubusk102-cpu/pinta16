@@ -27,6 +27,7 @@ import { useWishlist } from "@/contexts/WishlistContext";
 import { buildTrackingUrl } from "@/lib/shipment";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
+import { RefundRequestForm } from "@/components/RefundRequestForm";
 import ProfileEditor from "@/components/account/ProfileEditor";
 import AddressBook from "@/components/account/AddressBook";
 import MyOrders from "@/components/account/MyOrders";
@@ -225,10 +226,29 @@ function OrderTracker() {
             />
           )}
 
+          {/* Customer refund-request status (admin hasn't decided yet, or has) */}
+          {order.refundRequest && (
+            <RefundRequestStatus request={order.refundRequest} />
+          )}
+
+          {/* Customer refund-request form */}
+          {order.status === "received" &&
+            !order.refund &&
+            (!order.refundRequest ||
+              order.refundRequest.status === "denied") && (
+              <RefundRequestForm
+                order={order}
+                onSubmitted={(updated) => setOrder(updated)}
+              />
+            )}
+
           {/* Review form / submitted reviews */}
           {(() => {
             const reviews = getOrderReviews(order);
-            const showForm = order.status === "received" && !order.refund;
+            const showForm =
+              order.status === "received" &&
+              !order.refund &&
+              !order.refundRequest;
             return (
               <>
                 {showForm && (
@@ -302,6 +322,66 @@ function OrderTracker() {
             );
           })()}
         </div>
+      )}
+    </div>
+  );
+}
+
+const REFUND_REASON_LABEL: Record<string, string> = {
+  damaged: "Arrived damaged",
+  wrong_item: "Wrong item received",
+  not_as_described: "Not as described",
+  no_longer_wanted: "No longer wanted",
+  other: "Other",
+};
+
+const REFUND_STATUS_BADGE: Record<string, string> = {
+  pending: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  approved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  denied: "bg-destructive/15 text-destructive",
+  processed: "bg-foreground/10 text-foreground",
+};
+
+function RefundRequestStatus({
+  request,
+}: {
+  request: NonNullable<CompletedOrder["refundRequest"]>;
+}) {
+  const badge =
+    REFUND_STATUS_BADGE[request.status] || "bg-foreground/10 text-foreground";
+  const headline =
+    request.status === "pending"
+      ? "Refund request received"
+      : request.status === "approved"
+        ? "Refund request approved"
+        : request.status === "denied"
+          ? "Refund request denied"
+          : "Refund processed";
+  return (
+    <div className="bg-card/40 border border-border/40 rounded-md p-3 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span
+          className={`px-2 py-0.5 rounded-sm text-[10px] uppercase tracking-wider ${badge}`}
+        >
+          {request.status}
+        </span>
+        <p className="text-xs font-medium">{headline}</p>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Reason: {REFUND_REASON_LABEL[request.reason] || request.reason} ·
+        Submitted {formatDate(request.requestedAt)}
+        {request.decidedAt ? ` · Decided ${formatDate(request.decidedAt)}` : ""}
+      </p>
+      {request.note && (
+        <p className="text-[11px] text-muted-foreground italic">
+          "{request.note}"
+        </p>
+      )}
+      {request.decisionNote && (
+        <p className="text-[11px] text-foreground">
+          <span className="font-medium">Note from us:</span>{" "}
+          {request.decisionNote}
+        </p>
       )}
     </div>
   );

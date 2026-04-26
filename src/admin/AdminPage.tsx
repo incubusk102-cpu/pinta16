@@ -1686,6 +1686,51 @@ function OrdersSection() {
     }
   };
 
+  const handleDecideRefundRequest = async (
+    order: CompletedOrder,
+    decision: "approved" | "denied",
+  ) => {
+    const decisionNote =
+      window.prompt(
+        decision === "approved"
+          ? "Optional note for the customer about the approved refund:"
+          : "Optional note for the customer explaining the denial:",
+        "",
+      ) ?? "";
+    setRefundingId(order.id);
+    try {
+      const adminToken = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+        },
+        body: JSON.stringify({
+          action: "decide-refund-request",
+          orderId: order.id,
+          decision,
+          decisionNote,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
+      toast.success(
+        decision === "approved"
+          ? "Refund request approved. You can now process the refund."
+          : "Refund request denied",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not save decision",
+      );
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
   // Auto-poll pending refunds every 30s while the section is visible
   useEffect(() => {
     const pendingIds = orders
@@ -2327,6 +2372,73 @@ function OrdersSection() {
                 );
               })}
             </div>
+
+            {/* Customer refund request */}
+            {order.refundRequest && (
+              <div
+                className={`flex flex-wrap items-start gap-2 pt-2 border-t border-border/30 ${
+                  order.refundRequest.status === "pending"
+                    ? "bg-amber-500/5 -mx-3 px-3 -mb-1 pb-2 rounded-md"
+                    : ""
+                }`}
+              >
+                <div className="flex-1 min-w-[260px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] uppercase tracking-wider ${
+                        order.refundRequest.status === "pending"
+                          ? "bg-amber-500/15 text-amber-600"
+                          : order.refundRequest.status === "approved"
+                            ? "bg-emerald-500/15 text-emerald-600"
+                            : order.refundRequest.status === "denied"
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-foreground/10 text-foreground"
+                      }`}
+                    >
+                      Customer refund request · {order.refundRequest.status}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {order.refundRequest.reason} ·{" "}
+                      {new Date(
+                        order.refundRequest.requestedAt,
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground italic">
+                    "{order.refundRequest.note}"
+                  </p>
+                  {order.refundRequest.decisionNote && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Decision note: {order.refundRequest.decisionNote}
+                    </p>
+                  )}
+                </div>
+                {order.refundRequest.status === "pending" && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() =>
+                        void handleDecideRefundRequest(order, "denied")
+                      }
+                    >
+                      Deny
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() =>
+                        void handleDecideRefundRequest(order, "approved")
+                      }
+                    >
+                      Approve
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Refund block */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
