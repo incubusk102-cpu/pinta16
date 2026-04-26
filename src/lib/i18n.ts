@@ -47,9 +47,9 @@ const en = {
   "contact.subtitle":
     "Questions about a painting, a custom request, or trade pricing? Send us a note.",
   // Newsletter
-  "newsletter.title": "Stay in the loop",
+  "newsletter.title": "Get updates",
   "newsletter.subtitle":
-    "New paintings, sale drops, and behind-the-easel notes. Roughly once a month, no spam.",
+    "New drops, restocks, and the occasional studio update — straight to your inbox.",
   "newsletter.email": "Email address",
   "newsletter.namePlaceholder": "Your name (optional)",
   "newsletter.submit": "Subscribe",
@@ -84,6 +84,12 @@ const en = {
   "cart.checkout": "Checkout",
   // Footer
   "footer.copyright": "© {year} Pintaterra. All rights reserved.",
+  "footer.policies": "Policies",
+  "footer.terms": "Terms & Conditions",
+  "footer.refund": "Refund & Returns",
+  "footer.shipping": "Shipping",
+  "footer.privacy": "Privacy",
+  "footer.lastUpdated": "Last updated {date}",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -119,9 +125,9 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "contact.heading": "Kontakin kami",
   "contact.subtitle":
     "Mga tanong tungkol sa pinta, custom na request, o trade pricing? Magpadala ng note.",
-  "newsletter.title": "Manatiling updated",
+  "newsletter.title": "Kumuha ng updates",
   "newsletter.subtitle":
-    "Mga bagong pinta, sale drops, at kwento mula sa easel. Mga isang beses bawat buwan, walang spam.",
+    "Mga bagong drop, restock, at paminsan-minsang kwento ng studio — direkta sa inbox mo.",
   "newsletter.email": "Email address",
   "newsletter.namePlaceholder": "Pangalan mo (opsyonal)",
   "newsletter.submit": "Sumali",
@@ -151,6 +157,12 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Mag-checkout",
   "footer.copyright": "© {year} Pintaterra. Lahat ng karapatan ay nakalaan.",
+  "footer.policies": "Mga patakaran",
+  "footer.terms": "Mga Tuntunin at Kondisyon",
+  "footer.refund": "Refund at Returns",
+  "footer.shipping": "Shipping",
+  "footer.privacy": "Privacy",
+  "footer.lastUpdated": "Huling na-update {date}",
 };
 
 export const dictionaries: Record<Locale, Record<TranslationKey, string>> = {

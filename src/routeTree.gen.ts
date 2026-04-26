@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as LoginRouteImport } from "./routes/login";
 import { Route as SignupRouteImport } from "./routes/signup";
 import { Route as ProductIdRouteImport } from "./routes/product.$id";
+import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
 
 const AccountRoute = AccountRouteImport.update({
   id: "/account",
@@ -46,6 +47,11 @@ const ProductIdRoute = ProductIdRouteImport.update({
   path: "/product/$id",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PolicySlugRoute = PolicySlugRouteImport.update({
+  id: "/policy/$slug",
+  path: "/policy/$slug",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   "/admin": typeof AdminRoute;
   "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
+  "/policy/$slug": typeof PolicySlugRoute;
   "/product/$id": typeof ProductIdRoute;
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   "/admin": typeof AdminRoute;
   "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
+  "/policy/$slug": typeof PolicySlugRoute;
   "/product/$id": typeof ProductIdRoute;
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   "/admin": typeof AdminRoute;
   "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
+  "/policy/$slug": typeof PolicySlugRoute;
   "/product/$id": typeof ProductIdRoute;
 }
 export interface FileRouteTypes {
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | "/admin"
     | "/login"
     | "/signup"
+    | "/policy/$slug"
     | "/product/$id";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | "/admin"
     | "/login"
     | "/signup"
+    | "/policy/$slug"
     | "/product/$id";
   id:
     | "__root__"
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | "/admin"
     | "/login"
     | "/signup"
+    | "/policy/$slug"
     | "/product/$id";
   fileRoutesById: FileRoutesById;
 }
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute;
   LoginRoute: typeof LoginRoute;
   SignupRoute: typeof SignupRoute;
+  PolicySlugRoute: typeof PolicySlugRoute;
   ProductIdRoute: typeof ProductIdRoute;
 }
 
@@ -152,6 +165,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ProductIdRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/policy/$slug": {
+      id: "/policy/$slug";
+      path: "/policy/$slug";
+      fullPath: "/policy/$slug";
+      preLoaderRoute: typeof PolicySlugRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  PolicySlugRoute: PolicySlugRoute,
   ProductIdRoute: ProductIdRoute,
 };
 export const routeTree = rootRouteImport
