@@ -23,7 +23,8 @@ const formatNotificationDate = (iso: string) => {
 };
 
 const OrderConfirmation = () => {
-  const { showConfirmation, setShowConfirmation, lastOrder } = useCart();
+  const { showConfirmation, setShowConfirmation, lastOrder, getOrderReviews } =
+    useCart();
   const seenNotificationsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -222,52 +223,72 @@ const OrderConfirmation = () => {
                 />
               )}
 
-              {/* Review form / submitted review */}
-              {lastOrder.status === "received" &&
-                !lastOrder.review &&
-                !lastOrder.refund && (
-                  <OrderReviewForm
-                    orderId={lastOrder.id}
-                    customerEmail={lastOrder.orderInfo.email}
-                  />
-                )}
-              {lastOrder.review && (
-                <div className="p-4 bg-muted/30 border border-border/10 rounded-sm space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
-                      Your Review
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <Star
-                        key={n}
-                        className={`w-4 h-4 ${
-                          n <= lastOrder.review!.rating
-                            ? "fill-yellow-400 text-yellow-400"
-                            : "text-muted-foreground"
-                        }`}
+              {/* Review form / submitted reviews */}
+              {(() => {
+                const reviews = getOrderReviews(lastOrder);
+                const showForm =
+                  lastOrder.status === "received" && !lastOrder.refund;
+                return (
+                  <>
+                    {showForm && (
+                      <OrderReviewForm
+                        orderId={lastOrder.id}
+                        customerEmail={lastOrder.orderInfo.email}
+                        items={lastOrder.items}
+                        existingReviews={reviews}
                       />
+                    )}
+                    {reviews.map((rev, idx) => (
+                      <div
+                        key={`${rev.productId ?? "order"}-${idx}`}
+                        className="p-4 bg-muted/30 border border-border/10 rounded-sm space-y-2"
+                      >
+                        <div className="flex items-center gap-2 justify-between">
+                          <div className="flex items-center gap-2">
+                            <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                            <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                              Your review
+                              {rev.productTitle ? ` · ${rev.productTitle}` : ""}
+                            </p>
+                          </div>
+                          {rev.publishedToHomepage && (
+                            <span className="px-2 py-0.5 bg-foreground/10 text-foreground font-body text-[10px] tracking-[0.2em] uppercase rounded-sm">
+                              Featured
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star
+                              key={n}
+                              className={`w-4 h-4 ${
+                                n <= rev.rating
+                                  ? "fill-yellow-400 text-yellow-400"
+                                  : "text-muted-foreground"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <p className="font-body text-xs text-foreground whitespace-pre-wrap">
+                          {rev.text}
+                        </p>
+                        {rev.images.length > 0 && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {rev.images.map((src, i) => (
+                              <img
+                                key={i}
+                                src={src}
+                                alt={`Review image ${i + 1}`}
+                                className="aspect-square w-full object-cover rounded-sm border border-border/10"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
-                  </div>
-                  <p className="font-body text-xs text-foreground whitespace-pre-wrap">
-                    {lastOrder.review.text}
-                  </p>
-                  {lastOrder.review.images.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {lastOrder.review.images.map((src, i) => (
-                        <img
-                          key={i}
-                          src={src}
-                          alt={`Review image ${i + 1}`}
-                          className="aspect-square w-full object-cover rounded-sm border border-border/10"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                  </>
+                );
+              })()}
 
               {/* Instructions */}
               <div className="p-4 bg-muted/20 border border-border/10 rounded-sm space-y-2">

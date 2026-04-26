@@ -5,9 +5,12 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Heart,
   ShoppingCart,
+  Star,
   ZoomIn,
 } from "lucide-react";
+import { toast } from "sonner";
 import GalleryNav from "@/components/GalleryNav";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
@@ -18,12 +21,25 @@ import {
   useProducts,
 } from "@/contexts/ProductContext";
 import { useCart } from "@/contexts/CartContext";
+import { useWishlist } from "@/contexts/WishlistContext";
 import {
   AVAILABILITY_LABEL,
   findArtworkById,
   isPurchasable,
   type Availability,
 } from "@/lib/artworks";
+
+interface ProductReview {
+  orderId: string;
+  rating: number;
+  text: string;
+  images: string[];
+  submittedAt: string;
+  customerName: string;
+  customerCity?: string;
+  productId?: string;
+  productTitle?: string;
+}
 
 export const Route = createFileRoute("/product/$id")({
   component: ProductPage,
@@ -60,11 +76,43 @@ function ProductPage() {
 
   const [activeImage, setActiveImage] = useState(0);
   const [zoomed, setZoomed] = useState(false);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const { addToCart } = useCart();
+  const wishlist = useWishlist();
+  const inWishlist = wishlist.has(id);
 
   useEffect(() => {
     setActiveImage(0);
     setZoomed(false);
+  }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReviewsLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/orders?reviews=published&productId=${encodeURIComponent(id)}`,
+        );
+        if (!res.ok) {
+          if (!cancelled) setReviews([]);
+          return;
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        setReviews(
+          Array.isArray(data.reviews) ? (data.reviews as ProductReview[]) : [],
+        );
+      } catch {
+        if (!cancelled) setReviews([]);
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
@@ -312,6 +360,34 @@ function ProductPage() {
                   ? "Add to cart"
                   : `${AVAILABILITY_LABEL[artwork.availability]}`}
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!artwork) return;
+                  const added = wishlist.toggle({
+                    id,
+                    title: artwork.title,
+                    image: artwork.image,
+                    price: effectivePrice,
+                  });
+                  toast.success(
+                    added
+                      ? `Saved "${artwork.title}" to your wishlist`
+                      : `Removed "${artwork.title}" from your wishlist`,
+                  );
+                }}
+                aria-pressed={inWishlist}
+                className={`inline-flex items-center gap-2 px-6 py-3 border font-body text-xs tracking-[0.2em] uppercase rounded-sm transition-all ${
+                  inWishlist
+                    ? "border-red-500/40 bg-red-500/10 text-red-500"
+                    : "border-foreground/20 text-foreground hover:bg-accent"
+                }`}
+              >
+                <Heart
+                  className={`w-4 h-4 ${inWishlist ? "fill-red-500" : ""}`}
+                />
+                {inWishlist ? "Saved" : "Save"}
+              </button>
               <Link
                 to="/"
                 hash="gallery"
@@ -343,6 +419,8 @@ function ProductPage() {
             </div>
           </section>
         </motion.div>
+
+        <ProductReviews loading={reviewsLoading} reviews={reviews} />
       </main>
 
       {zoomed && (
@@ -364,5 +442,119 @@ function ProductPage() {
       <CheckoutForm />
       <OrderConfirmation />
     </div>
+  );
+}
+
+function ProductReviews({
+  loading,
+  reviews,
+}: {
+  loading: boolean;
+  reviews: ProductReview[];
+}) {
+  if (loading) {
+    return (
+      <section className="mt-16 border-t border-border/40 pt-10">
+        <p className="font-body text-xs tracking-[0.3em] uppercase text-muted-foreground">
+          Loading reviews…
+        </p>
+      </section>
+    );
+  }
+  if (reviews.length === 0) {
+    return (
+      <section className="mt-16 border-t border-border/40 pt-10">
+        <h2 className="font-display text-2xl text-foreground mb-3">Reviews</h2>
+        <p className="font-body text-sm text-muted-foreground">
+          No reviews yet for this painting. Be the first collector to share your
+          experience after delivery.
+        </p>
+      </section>
+    );
+  }
+  const total = reviews.reduce((s, r) => s + r.rating, 0);
+  const avg = total / reviews.length;
+  return (
+    <section className="mt-16 border-t border-border/40 pt-10">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+        <h2 className="font-display text-2xl text-foreground">
+          Reviews from collectors
+        </h2>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Star
+                key={n}
+                className={`w-4 h-4 ${
+                  n <= Math.round(avg)
+                    ? "fill-yellow-400 text-yellow-400"
+                    : "text-muted-foreground/40"
+                }`}
+              />
+            ))}
+          </div>
+          <span className="font-medium text-foreground">{avg.toFixed(1)}</span>
+          <span>·</span>
+          <span>
+            {reviews.length} review{reviews.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        {reviews.map((r, i) => (
+          <article
+            key={`${r.orderId}-${i}`}
+            className="bg-card/40 border border-border/60 rounded-md p-5 flex flex-col gap-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Star
+                    key={n}
+                    className={`w-4 h-4 ${
+                      n <= r.rating
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "text-muted-foreground/40"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {new Date(r.submittedAt).toLocaleDateString(undefined, {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            </div>
+            <p className="font-body text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+              {r.text}
+            </p>
+            {r.images.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {r.images.slice(0, 3).map((src, j) => (
+                  <a
+                    key={j}
+                    href={src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src={src}
+                      alt={`Review photo ${j + 1}`}
+                      className="aspect-square w-full object-cover rounded-md border border-border/40"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground mt-auto">
+              — {r.customerName}
+              {r.customerCity ? `, ${r.customerCity}` : ""}
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }

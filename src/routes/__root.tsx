@@ -10,6 +10,7 @@ import { ProductProvider } from "@/contexts/ProductContext";
 import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
+import { WishlistProvider } from "@/contexts/WishlistContext";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
 
@@ -60,15 +61,17 @@ function RootComponent() {
   return (
     <AdminAuthProvider>
       <UserAuthProvider>
-        <StorefrontConfigProvider>
-          <ProductProvider>
-            <CartProvider>
-              <HeartbeatBridge />
-              <ConditionalAnnouncementBar />
-              <Outlet />
-            </CartProvider>
-          </ProductProvider>
-        </StorefrontConfigProvider>
+        <WishlistProvider>
+          <StorefrontConfigProvider>
+            <ProductProvider>
+              <CartProvider>
+                <HeartbeatBridge />
+                <ConditionalAnnouncementBar />
+                <Outlet />
+              </CartProvider>
+            </ProductProvider>
+          </StorefrontConfigProvider>
+        </WishlistProvider>
       </UserAuthProvider>
     </AdminAuthProvider>
   );
