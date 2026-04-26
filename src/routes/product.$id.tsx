@@ -213,7 +213,9 @@ function ProductPage() {
         reviewCount: ratingStats.count,
       };
     }
-    return JSON.stringify(data);
+    // Escape "<" so a stray "</script>" inside a string can't break out
+    // of the surrounding <script type="application/ld+json"> block.
+    return JSON.stringify(data).replace(/</g, "\\u003c");
   }, [artwork, ratingStats]);
 
   if (!artwork) {
