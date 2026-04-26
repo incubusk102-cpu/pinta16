@@ -150,6 +150,8 @@ const PaymentModal = ({
                     src={qrCodeUrl}
                     alt="QR Ph code"
                     className="mx-auto w-full max-w-xs rounded-sm border border-border/20 bg-white p-3"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <p className="font-body text-[10px] text-muted-foreground mt-3">
                     Scan this QR code using GCash, Maya, or any QR Ph-enabled
