@@ -55,10 +55,12 @@ const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const external = isExternalHref(href);
   const target = external ? "_blank" : undefined;
   const rel = external ? "noreferrer" : undefined;
-  // Internal "/", external, and "#anchor" all render as plain <a>.
-  // Tanstack typed Link is overkill for hero CTAs and full-page nav is fine.
+  // Defence in depth: the server already blocks protocol-relative URLs
+  // ("//evil.com"), but the client also rejects them in case stored data
+  // predates that fix. Tanstack typed Link is overkill for hero CTAs.
+  const isSafeInternal = href.startsWith("/") && !href.startsWith("//");
   const finalHref =
-    href.startsWith("/") || external ? href : `#${href.replace(/^#/, "")}`;
+    isSafeInternal || external ? href : `#${href.replace(/^#/, "")}`;
   return (
     <a href={finalHref} target={target} rel={rel} className={cls}>
       {label}

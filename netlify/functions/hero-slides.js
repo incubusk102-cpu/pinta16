@@ -68,11 +68,15 @@ const trimText = (v, max) =>
 
 // Allow only safe URL shapes for CTA links: same-origin ("/foo"), in-page
 // anchors ("#foo"), http(s)://, mailto:, tel:. Anything else (e.g. javascript:,
-// data:) is silently dropped so a compromised admin token can't ship an XSS
-// payload through the hero CTA.
+// data:, protocol-relative "//evil.com") is silently dropped so a compromised
+// admin token can't redirect visitors off-site or ship an XSS payload through
+// the hero CTA.
 const sanitizeHref = (raw) => {
   const v = trimText(raw, MAX_HREF);
   if (!v) return "";
+  // Reject protocol-relative URLs ("//evil.com") which browsers resolve to
+  // an external origin even though they start with "/".
+  if (v.startsWith("//")) return "";
   if (v.startsWith("/") || v.startsWith("#")) return v;
   if (/^(https?:|mailto:|tel:)/i.test(v)) return v;
   return "";
