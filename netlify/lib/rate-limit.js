@@ -4,7 +4,8 @@
 // open — we never hard-fail a legitimate user because the limiter blob is down.
 
 import { connectLambda, getStore } from "@netlify/blobs";
-import { getClientIp } from "./request-info.js";
+import { getClientIp, captureRequestMeta } from "./request-info.js";
+import { appendAuditEvent } from "./audit-log.js";
 
 const STORE_NAME = "rate-limits";
 
@@ -60,6 +61,20 @@ export const consumeRateLimit = async (
         1,
         Math.ceil((oldest + windowMs - now) / 1000),
       );
+      // Best-effort audit log entry so admins can spot abusive clients.
+      // Wrapped in try/catch because we never want a logging failure to
+      // change the rate-limit decision.
+      try {
+        await appendAuditEvent(event, {
+          type: "rate_limit.exceeded",
+          outcome: "failure",
+          subject: bucket,
+          detail: `${recent.length}/${max} in ${Math.round(windowMs / 1000)}s · retry in ${retryAfter}s`,
+          ...captureRequestMeta(event),
+        });
+      } catch {
+        // ignore
+      }
       return {
         allowed: false,
         retryAfter,
