@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   useProducts,
