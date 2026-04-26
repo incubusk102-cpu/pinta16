@@ -1,7 +1,10 @@
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin } from "lucide-react";
+import NewsletterForm from "@/components/NewsletterForm";
+import { useLocale } from "@/contexts/LocaleContext";
 
 const ContactSection = () => {
+  const { t } = useLocale();
   return (
     <section
       id="contact"
@@ -15,10 +18,10 @@ const ContactSection = () => {
         className="text-center mb-12"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-          Get in Touch
+          {t("contact.title")}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
-          Contact Us
+          {t("contact.heading")}
         </h2>
       </motion.div>
       <motion.div
@@ -44,6 +47,22 @@ const ContactSection = () => {
             <p className="font-body text-sm text-foreground">{value}</p>
           </div>
         ))}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.6, delay: 0.3 }}
+        className="mt-16 md:mt-24 border-t border-border/30 pt-12 flex flex-col items-center text-center"
+      >
+        <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-3">
+          {t("newsletter.title")}
+        </p>
+        <h3 className="font-display text-2xl md:text-3xl text-foreground mb-4 max-w-md">
+          {t("newsletter.subtitle")}
+        </h3>
+        <NewsletterForm source="footer" />
       </motion.div>
     </section>
   );

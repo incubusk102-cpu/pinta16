@@ -12,6 +12,23 @@ const STORAGE_KEY = "pintaterra_user_token";
 const USER_KEY = "pintaterra_user";
 const API = "/api/users";
 
+export interface SavedAddress {
+  id: string;
+  label: string;
+  fullName: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  country: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type AddressInput = Omit<SavedAddress, "id" | "createdAt" | "updatedAt">;
+
 export interface PublicUser {
   id: string;
   email: string;
@@ -20,6 +37,9 @@ export interface PublicUser {
   provider?: string;
   createdAt?: string;
   lastSeenAt?: string;
+  updatedAt?: string;
+  addresses?: SavedAddress[];
+  defaultAddressId?: string | null;
 }
 
 interface UserAuthContextValue {
@@ -29,6 +49,12 @@ interface UserAuthContextValue {
   googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
+  updateProfile: (patch: { name?: string; picture?: string }) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
+  addAddress: (address: AddressInput) => Promise<void>;
+  updateAddress: (id: string, address: AddressInput) => Promise<void>;
+  removeAddress: (id: string) => Promise<void>;
+  setDefaultAddress: (id: string) => Promise<void>;
 }
 
 const UserAuthContext = createContext<UserAuthContextValue | undefined>(
@@ -143,9 +169,133 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     apply(null, null);
   }, [apply]);
 
+  const callAction = useCallback(
+    async (
+      action: string,
+      payload: Record<string, unknown>,
+      defaultError: string,
+    ): Promise<{ user?: PublicUser } | { ok?: boolean }> => {
+      if (!token) throw new Error("Not signed in");
+      const response = await fetch(`${API}?action=${action}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action, ...payload }),
+      });
+      if (response.status === 401) {
+        apply(null, null);
+        throw new Error("Session expired — please sign in again");
+      }
+      if (!response.ok) {
+        throw new Error(await parseError(response, defaultError));
+      }
+      return response.json();
+    },
+    [token, apply],
+  );
+
+  const updateProfile = useCallback(
+    async (patch: { name?: string; picture?: string }) => {
+      const data = (await callAction(
+        "update-profile",
+        patch,
+        "Could not update profile",
+      )) as { user: PublicUser };
+      if (data?.user) apply(token, data.user);
+    },
+    [callAction, apply, token],
+  );
+
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      await callAction(
+        "change-password",
+        { oldPassword, newPassword },
+        "Could not change password",
+      );
+    },
+    [callAction],
+  );
+
+  const addAddress = useCallback(
+    async (address: AddressInput) => {
+      const data = (await callAction(
+        "addresses-add",
+        { address },
+        "Could not save address",
+      )) as { user: PublicUser };
+      if (data?.user) apply(token, data.user);
+    },
+    [callAction, apply, token],
+  );
+
+  const updateAddress = useCallback(
+    async (id: string, address: AddressInput) => {
+      const data = (await callAction(
+        "addresses-update",
+        { id, address },
+        "Could not update address",
+      )) as { user: PublicUser };
+      if (data?.user) apply(token, data.user);
+    },
+    [callAction, apply, token],
+  );
+
+  const removeAddress = useCallback(
+    async (id: string) => {
+      const data = (await callAction(
+        "addresses-remove",
+        { id },
+        "Could not remove address",
+      )) as { user: PublicUser };
+      if (data?.user) apply(token, data.user);
+    },
+    [callAction, apply, token],
+  );
+
+  const setDefaultAddress = useCallback(
+    async (id: string) => {
+      const data = (await callAction(
+        "addresses-set-default",
+        { id },
+        "Could not set default address",
+      )) as { user: PublicUser };
+      if (data?.user) apply(token, data.user);
+    },
+    [callAction, apply, token],
+  );
+
   const value = useMemo<UserAuthContextValue>(
-    () => ({ token, user, loading, googleLogin, logout, refresh }),
-    [token, user, loading, googleLogin, logout, refresh],
+    () => ({
+      token,
+      user,
+      loading,
+      googleLogin,
+      logout,
+      refresh,
+      updateProfile,
+      changePassword,
+      addAddress,
+      updateAddress,
+      removeAddress,
+      setDefaultAddress,
+    }),
+    [
+      token,
+      user,
+      loading,
+      googleLogin,
+      logout,
+      refresh,
+      updateProfile,
+      changePassword,
+      addAddress,
+      updateAddress,
+      removeAddress,
+      setDefaultAddress,
+    ],
   );
 
   return (

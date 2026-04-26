@@ -84,6 +84,8 @@ export function ProductImageGallery({ images, onChange }: Props) {
               src={img.url}
               alt={img.fileName || `Photo ${idx + 1}`}
               className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
             <div className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-medium bg-background/85 backdrop-blur rounded">
               {idx === 0 ? "Main" : `Photo ${idx + 1}`}

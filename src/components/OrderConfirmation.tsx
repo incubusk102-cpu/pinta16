@@ -316,6 +316,8 @@ const OrderConfirmation = () => {
                                 src={src}
                                 alt={`Review image ${i + 1}`}
                                 className="aspect-square w-full object-cover rounded-sm border border-border/10"
+                                loading="lazy"
+                                decoding="async"
                               />
                             ))}
                           </div>

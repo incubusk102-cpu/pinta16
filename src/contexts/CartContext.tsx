@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 export interface CartItem {
@@ -33,6 +39,12 @@ export interface OrderNotification {
   message: string;
   recipient: string;
   sentAt: string;
+  delivered?: boolean;
+  provider?: "resend" | "brevo" | string;
+  providerId?: string;
+  error?: string;
+  skipped?: boolean;
+  skipReason?: string;
 }
 
 export interface OrderRefund {
@@ -188,6 +200,7 @@ const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
 const DEFAULT_SHIPPING_FEE = 500;
 
 const ORDERS_STORAGE_KEY = "pintaterra_orders";
+const CART_STORAGE_KEY = "pintaterra_cart";
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
@@ -203,7 +216,30 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     ? (config.freeShipping.threshold ?? DEFAULT_FREE_SHIPPING_THRESHOLD)
     : Number.POSITIVE_INFINITY;
   const SHIPPING_FEE = config.freeShipping.shippingFee ?? DEFAULT_SHIPPING_FEE;
-  const [items, setItems] = useState<CartItem[]>([]);
+  const [items, setItems] = useState<CartItem[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Persist cart locally so it survives reloads + offline navigation.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (items.length === 0) {
+        localStorage.removeItem(CART_STORAGE_KEY);
+      } else {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+      }
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [items]);
   const [isOpen, setIsOpen] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);

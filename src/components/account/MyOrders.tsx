@@ -1,0 +1,205 @@
+import { useMemo, useState } from "react";
+import { Filter, Package, Search, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  ORDER_STEPS,
+  useCart,
+  type CompletedOrder,
+} from "@/contexts/CartContext";
+
+type StatusFilter = "all" | CompletedOrder["status"];
+
+const STATUS_LABEL: Record<CompletedOrder["status"], string> = {
+  confirmed: "Confirmed",
+  in_progress: "In progress",
+  out_for_delivery: "Out for delivery",
+  received: "Received",
+};
+
+const isWithin = (iso: string, fromIso?: string, toIso?: string) => {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  if (fromIso) {
+    const f = new Date(fromIso).getTime();
+    if (!Number.isNaN(f) && t < f) return false;
+  }
+  if (toIso) {
+    const e = new Date(toIso).getTime();
+    if (!Number.isNaN(e) && t > e + 24 * 60 * 60 * 1000 - 1) return false;
+  }
+  return true;
+};
+
+export default function MyOrders() {
+  const { orders } = useCart();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      if (status !== "all" && o.status !== status) return false;
+      if (!isWithin(o.createdAt, from || undefined, to || undefined))
+        return false;
+      if (!q) return true;
+      const haystack = [
+        o.id,
+        o.shipment?.trackingNumber || "",
+        o.shipment?.courier || "",
+        ...o.items.map((i) => i.title),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [orders, search, status, from, to]);
+
+  const reset = () => {
+    setSearch("");
+    setStatus("all");
+    setFrom("");
+    setTo("");
+  };
+
+  if (orders.length === 0) {
+    return (
+      <section className="bg-card/40 border border-border/60 rounded-xl p-5">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+          <Package className="w-4 h-4" /> My orders
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          No orders yet.{" "}
+          <Link to="/" className="underline">
+            Browse the gallery
+          </Link>{" "}
+          to start collecting.
+        </p>
+      </section>
+    );
+  }
+
+  const filtersActive =
+    search.trim() !== "" || status !== "all" || from !== "" || to !== "";
+
+  return (
+    <section className="bg-card/40 border border-border/60 rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+          <Package className="w-4 h-4" /> My orders
+          <span className="text-[10px] text-muted-foreground/70">
+            ({filtered.length} of {orders.length})
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowFilters((v) => !v)}
+        >
+          <Filter className="w-3.5 h-3.5 mr-1" />
+          {showFilters ? "Hide filters" : "Filters"}
+        </Button>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Search by order ID, item, or tracking #"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="text-sm pl-8"
+        />
+      </div>
+
+      {showFilters && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Status
+            </span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as StatusFilter)}
+              className="mt-1 w-full bg-background border border-border rounded-md text-sm px-2 py-2"
+            >
+              <option value="all">All</option>
+              {ORDER_STEPS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {STATUS_LABEL[s.key as CompletedOrder["status"]]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              From
+            </span>
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="text-sm mt-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              To
+            </span>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="text-sm mt-1"
+            />
+          </label>
+          {filtersActive && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={reset}
+              className="self-end"
+            >
+              <X className="w-3.5 h-3.5 mr-1" /> Reset
+            </Button>
+          )}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          No orders match your filters.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border/30">
+          {filtered.map((o) => (
+            <li
+              key={o.id}
+              className="py-3 flex items-start justify-between gap-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{o.id}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {o.items.map((i) => i.title).join(", ")}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {new Date(o.createdAt).toLocaleString()} ·{" "}
+                  <span className="text-foreground/80">
+                    {STATUS_LABEL[o.status]}
+                  </span>
+                  {o.shipment?.courier ? ` · ${o.shipment.courier}` : ""}
+                </p>
+              </div>
+              <p className="text-sm font-semibold whitespace-nowrap">
+                ₱{o.total.toLocaleString()}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

@@ -96,6 +96,8 @@ const CartDrawer = () => {
                         src={item.image}
                         alt={item.title}
                         className="w-16 h-20 object-cover rounded-sm"
+                        loading="lazy"
+                        decoding="async"
                       />
                       <div className="flex-1 min-w-0">
                         <h4 className="font-display text-sm text-foreground truncate">
