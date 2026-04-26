@@ -1,6 +1,10 @@
 import { connectLambda, getStore } from "@netlify/blobs";
 import crypto from "node:crypto";
 import { isAuthenticated } from "../lib/admin-auth.js";
+import { captureRequestMeta } from "../lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
+import { appendAuditEvent } from "../lib/audit-log.js";
+import { withSecurityHeaders } from "../lib/security-headers.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -124,13 +128,21 @@ const readStorefrontConfigDirect = async (event) => {
   }
 };
 
-const jsonHeaders = { "Content-Type": "application/json" };
-
 const json = (statusCode, body) => ({
   statusCode,
-  headers: jsonHeaders,
+  headers: withSecurityHeaders(),
   body: JSON.stringify(body),
 });
+
+const maskEmail = (email) => {
+  const s = String(email || "");
+  const at = s.indexOf("@");
+  if (at <= 1) return s ? "***" : "";
+  const local = s.slice(0, at);
+  const domain = s.slice(at);
+  const visible = local.slice(0, 1);
+  return `${visible}${"*".repeat(Math.max(2, local.length - 1))}${domain}`;
+};
 
 const parseBody = (body) => {
   if (!body) return {};
@@ -189,12 +201,18 @@ export const handler = async (event) => {
         const orders = await readOrders(store);
         const order = orders.find((o) => o.id === params.id);
         if (!order) return json(404, { error: "Order not found" });
-        const { orderInfo, ...rest } = order;
+        // Strip admin-only fields before returning to the public.
+        const {
+          orderInfo,
+          requestMeta: _requestMeta,
+          activityLog: _activityLog,
+          ...rest
+        } = order;
         const publicOrderInfo = orderInfo
           ? {
               fullName: orderInfo.fullName,
               city: orderInfo.city,
-              email: orderInfo.email,
+              email: maskEmail(orderInfo.email),
             }
           : undefined;
         return json(200, {
@@ -263,6 +281,12 @@ export const handler = async (event) => {
       const action = body.action;
 
       if (action === "place") {
+        const limit = await consumeRateLimit(event, {
+          bucket: "orders-place",
+          windowMs: 60_000,
+          max: 10,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
         const order = body.order;
         if (!order?.items?.length) {
           return json(400, { error: "Invalid order" });
@@ -360,12 +384,28 @@ export const handler = async (event) => {
           voucherCode: validatedVoucherCode,
           notifications: [],
           review: null,
+          requestMeta: captureRequestMeta(event),
+          activityLog: [
+            {
+              at: new Date().toISOString(),
+              type: "placed",
+              actor: "customer",
+              ...captureRequestMeta(event),
+            },
+          ],
         };
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
         }
+        await appendAuditEvent(event, {
+          type: "order.placed",
+          outcome: "success",
+          subject: safeOrder.id,
+          detail: `Total ₱${safeOrder.total.toLocaleString()}`,
+          ...captureRequestMeta(event),
+        });
         return json(200, { order: safeOrder });
       }
 
@@ -398,6 +438,10 @@ export const handler = async (event) => {
           out_for_delivery: "Your order has shipped and is out for delivery!",
           received: "Your order is marked as received. We'd love your review!",
         };
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
         if (statusChanged) {
           notifications.push({
             type: status,
@@ -405,13 +449,32 @@ export const handler = async (event) => {
             recipient,
             sentAt: new Date().toISOString(),
           });
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: `status:${status}`,
+            actor: "admin",
+            ...meta,
+          });
+          await appendAuditEvent(event, {
+            type: "order.status",
+            outcome: status,
+            subject: orderId,
+            detail: `Status -> ${status}`,
+            ...meta,
+          });
         }
-        orders[idx] = { ...existing, status, notifications };
+        orders[idx] = { ...existing, status, notifications, activityLog };
         await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: orders[idx] });
       }
 
       if (action === "submit-review") {
+        const limit = await consumeRateLimit(event, {
+          bucket: "submit-review",
+          windowMs: 60_000,
+          max: 5,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
         const { orderId, review } = body;
         if (!orderId || typeof orderId !== "string") {
           return json(400, { error: "Invalid orderId" });
@@ -464,9 +527,35 @@ export const handler = async (event) => {
           images,
           submittedAt: new Date().toISOString(),
         };
-        orders[idx] = { ...orders[idx], review: safeReview };
+        const reviewMeta = captureRequestMeta(event);
+        const reviewActivity = Array.isArray(orders[idx].activityLog)
+          ? [...orders[idx].activityLog]
+          : [];
+        reviewActivity.push({
+          at: new Date().toISOString(),
+          type: "review",
+          actor: "customer",
+          ...reviewMeta,
+        });
+        orders[idx] = {
+          ...orders[idx],
+          review: safeReview,
+          activityLog: reviewActivity,
+        };
         await store.setJSON(ORDERS_KEY, orders);
-        const { orderInfo: _pii, ...publicOrder } = orders[idx];
+        await appendAuditEvent(event, {
+          type: "order.review",
+          outcome: "submitted",
+          subject: orderId,
+          detail: `${rating}-star review`,
+          ...reviewMeta,
+        });
+        const {
+          orderInfo: _pii,
+          requestMeta: _rm,
+          activityLog: _al,
+          ...publicOrder
+        } = orders[idx];
         return json(200, { order: publicOrder });
       }
 
@@ -615,8 +704,30 @@ export const handler = async (event) => {
             sentAt: new Date().toISOString(),
           });
         }
-        orders[idx] = { ...existing, refund: refundRecord, notifications };
+        const refundMeta = captureRequestMeta(event);
+        const refundActivity = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        refundActivity.push({
+          at: new Date().toISOString(),
+          type: "refund-requested",
+          actor: "admin",
+          ...refundMeta,
+        });
+        orders[idx] = {
+          ...existing,
+          refund: refundRecord,
+          notifications,
+          activityLog: refundActivity,
+        };
         await store.setJSON(ORDERS_KEY, orders);
+        await appendAuditEvent(event, {
+          type: "order.refund",
+          outcome: refundRecord.status,
+          subject: orderId,
+          detail: `Refund ₱${refundRecord.amount.toLocaleString()} (${refundReason})`,
+          ...refundMeta,
+        });
         return json(200, { order: orders[idx] });
       }
 
@@ -633,8 +744,23 @@ export const handler = async (event) => {
         if (!refund?.id) {
           return json(400, { error: "No refund on this order" });
         }
+        const isAdmin = await isAuthenticated(event);
+        const sanitize = (o) => {
+          if (isAdmin) return o;
+          const { orderInfo, requestMeta: _rm, activityLog: _al, ...rest } = o;
+          return {
+            ...rest,
+            orderInfo: orderInfo
+              ? {
+                  fullName: orderInfo.fullName,
+                  city: orderInfo.city,
+                  email: maskEmail(orderInfo.email),
+                }
+              : undefined,
+          };
+        };
         if (refund.status === "succeeded" || refund.status === "failed") {
-          return json(200, { order: existing });
+          return json(200, { order: sanitize(existing) });
         }
         const secretKey = getPaymongoSecret();
         if (!secretKey) {
@@ -688,7 +814,7 @@ export const handler = async (event) => {
           notifications,
         };
         await store.setJSON(ORDERS_KEY, orders);
-        return json(200, { order: orders[idx] });
+        return json(200, { order: sanitize(orders[idx]) });
       }
 
       return json(400, { error: "Unknown action" });
@@ -697,6 +823,6 @@ export const handler = async (event) => {
     return json(405, { error: "Method not allowed" });
   } catch (error) {
     console.error("orders handler error:", error);
-    return json(500, { error: "Could not manage orders" });
+    return json(500, { error: "Internal error" });
   }
 };

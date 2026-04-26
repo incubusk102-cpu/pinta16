@@ -18,12 +18,14 @@ import {
   verifyTokenWithSecret,
   writeUsers,
 } from "../lib/user-auth.js";
-
-const jsonHeaders = { "Content-Type": "application/json" };
+import { captureRequestMeta } from "../lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
+import { appendAuditEvent } from "../lib/audit-log.js";
+import { withSecurityHeaders } from "../lib/security-headers.js";
 
 const json = (statusCode, body) => ({
   statusCode,
-  headers: jsonHeaders,
+  headers: withSecurityHeaders(),
   body: JSON.stringify(body),
 });
 
@@ -55,6 +57,12 @@ export const handler = async (event) => {
       "";
 
     if (event.httpMethod === "POST" && action === "google-login") {
+      const limit = await consumeRateLimit(event, {
+        bucket: "user-google-login",
+        windowMs: 15 * 60_000,
+        max: 20,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
       const body = parseBody(event.body);
       const credential = String(body.credential || "");
       if (!credential) {
@@ -116,6 +124,13 @@ export const handler = async (event) => {
       await writeUsers(store, users);
 
       const secret = await ensureSessionSecret(store);
+      await appendAuditEvent(event, {
+        type: "user.google-login",
+        outcome: "success",
+        subject: email,
+        detail: "Google ID token verified",
+        ...captureRequestMeta(event),
+      });
       return json(200, {
         token: issueToken(user.id, secret),
         user: publicUser(user),
@@ -123,6 +138,12 @@ export const handler = async (event) => {
     }
 
     if (event.httpMethod === "POST" && action === "signup") {
+      const limit = await consumeRateLimit(event, {
+        bucket: "user-signup",
+        windowMs: 60 * 60_000,
+        max: 10,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
       const body = parseBody(event.body);
       const email = normalizeEmail(body.email);
       const password = String(body.password || "");
@@ -161,6 +182,13 @@ export const handler = async (event) => {
       await writeUsers(store, users);
 
       const secret = await ensureSessionSecret(store);
+      await appendAuditEvent(event, {
+        type: "user.signup",
+        outcome: "success",
+        subject: email,
+        detail: "Account created",
+        ...captureRequestMeta(event),
+      });
       return json(200, {
         token: issueToken(user.id, secret),
         user: publicUser(user),
@@ -168,12 +196,26 @@ export const handler = async (event) => {
     }
 
     if (event.httpMethod === "POST" && action === "login") {
+      const limit = await consumeRateLimit(event, {
+        bucket: "user-login",
+        windowMs: 15 * 60_000,
+        max: 10,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
       const body = parseBody(event.body);
       const email = normalizeEmail(body.email);
       const password = String(body.password || "");
       const users = await readUsers(store);
       const user = users[email];
+      const meta = captureRequestMeta(event);
       if (!user || !verifyPassword(password, user.salt, user.hash)) {
+        await appendAuditEvent(event, {
+          type: "user.login",
+          outcome: "failure",
+          subject: email || "unknown",
+          detail: "Incorrect email or password",
+          ...meta,
+        });
         return json(401, { error: "Incorrect email or password" });
       }
       user.lastSeenAt = new Date().toISOString();
@@ -181,6 +223,13 @@ export const handler = async (event) => {
       await writeUsers(store, users);
 
       const secret = await ensureSessionSecret(store);
+      await appendAuditEvent(event, {
+        type: "user.login",
+        outcome: "success",
+        subject: email,
+        detail: "Password OK",
+        ...meta,
+      });
       return json(200, {
         token: issueToken(user.id, secret),
         user: publicUser(user),
@@ -248,6 +297,6 @@ export const handler = async (event) => {
     return json(400, { error: "Unknown action" });
   } catch (error) {
     console.error("users handler error:", error);
-    return json(500, { error: "User service error" });
+    return json(500, { error: "Internal error" });
   }
 };

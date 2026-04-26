@@ -13,12 +13,14 @@ import {
   writeCredentials,
   writeCredentialsIfNew,
 } from "../lib/admin-auth.js";
-
-const jsonHeaders = { "Content-Type": "application/json" };
+import { captureRequestMeta } from "../lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
+import { appendAuditEvent, readAuditEvents } from "../lib/audit-log.js";
+import { withSecurityHeaders } from "../lib/security-headers.js";
 
 const json = (statusCode, body) => ({
   statusCode,
-  headers: jsonHeaders,
+  headers: withSecurityHeaders(),
   body: JSON.stringify(body),
 });
 
@@ -36,6 +38,17 @@ export const handler = async (event) => {
     const store = getAuthStore(event);
 
     if (event.httpMethod === "GET") {
+      const params = event.queryStringParameters || {};
+      if (params.action === "audit") {
+        const secret = await ensureSessionSecret(store);
+        const token = extractToken(event);
+        if (!token || !verifyTokenWithSecret(token, secret)) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const limit = Math.max(1, Math.min(500, Number(params.limit) || 200));
+        const events = await readAuditEvents(event, { limit });
+        return json(200, { events });
+      }
       const credentials = await readCredentials(store);
       return json(200, { initialized: Boolean(credentials) });
     }
@@ -74,6 +87,13 @@ export const handler = async (event) => {
     }
 
     if (action === "login") {
+      const limit = await consumeRateLimit(event, {
+        bucket: "admin-login",
+        windowMs: 15 * 60_000,
+        max: 8,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+      const meta = captureRequestMeta(event);
       if (!credentials) {
         return json(404, { error: "Admin password not set" });
       }
@@ -90,8 +110,22 @@ export const handler = async (event) => {
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
         constantTimeEquals(password, recoveryPassword);
       if (!matchesStored && !matchesRecovery) {
+        await appendAuditEvent(event, {
+          type: "admin.login",
+          outcome: "failure",
+          subject: "admin",
+          detail: "Incorrect password",
+          ...meta,
+        });
         return json(401, { error: "Incorrect password" });
       }
+      await appendAuditEvent(event, {
+        type: "admin.login",
+        outcome: matchesRecovery ? "recovery" : "success",
+        subject: "admin",
+        detail: matchesRecovery ? "Recovery password used" : "Password OK",
+        ...meta,
+      });
       return json(200, { token: issueToken(secret) });
     }
 
@@ -130,13 +164,19 @@ export const handler = async (event) => {
         updatedAt: new Date().toISOString(),
       });
       const newSecret = await rotateSessionSecret(store);
-
+      await appendAuditEvent(event, {
+        type: "admin.password",
+        outcome: "changed",
+        subject: "admin",
+        detail: "Password updated, session secret rotated",
+        ...captureRequestMeta(event),
+      });
       return json(200, { token: issueToken(newSecret) });
     }
 
     return json(400, { error: "Unknown action" });
   } catch (error) {
     console.error("admin-auth handler error:", error);
-    return json(500, { error: "Authentication service error" });
+    return json(500, { error: "Internal error" });
   }
 };
