@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ArrowLeft } from "lucide-react";
 
 const GOOGLE_CLIENT_ID =
-  "973550464387-halsaqo2c8hgnertjhijr1l0n76921jb.apps.googleusercontent.com";
+  "899774942474-ogttcvtsmd4ffhnn6avadqhjs8m3i2qj.apps.googleusercontent.com";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
