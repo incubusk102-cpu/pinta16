@@ -18,10 +18,14 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
+          // Match the package root, not arbitrary substrings — `id.includes("/react/")`
+          // accidentally bucketed `@floating-ui/react-dom` into the `react` chunk,
+          // creating a circular dep with `vendor` (where the rest of @floating-ui
+          // lived). That manifested as `Cannot set properties of undefined (setting
+          // 'Activity')` because react-dom's module-level assignments ran before
+          // its dependencies were initialized.
           if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("/scheduler/")
+            /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)
           ) {
             return "react";
           }
