@@ -127,6 +127,8 @@ const ReviewsSection = () => {
                       src={src}
                       alt={`Review photo ${j + 1}`}
                       className="aspect-square w-full object-cover rounded-md border border-border/40"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </a>
                 ))}

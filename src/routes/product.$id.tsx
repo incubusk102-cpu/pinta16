@@ -8,6 +8,7 @@ import {
   Heart,
   ShoppingCart,
   Star,
+  Share2,
   ZoomIn,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +16,10 @@ import GalleryNav from "@/components/GalleryNav";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import OrderConfirmation from "@/components/OrderConfirmation";
+import RelatedProducts from "@/components/RelatedProducts";
+import RecentlyViewed from "@/components/RecentlyViewed";
+import ZoomableImage from "@/components/ZoomableImage";
+import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import {
   getDiscountPercent,
   getEffectivePrice,
@@ -87,6 +92,14 @@ function ProductPage() {
     setZoomed(false);
   }, [id]);
 
+  // Track view in localStorage so the "recently viewed" strip can show this
+  // product on the home page and other product pages later.
+  useEffect(() => {
+    if (artwork && artwork.availability !== "draft") {
+      pushRecentlyViewed(artwork.id);
+    }
+  }, [artwork]);
+
   useEffect(() => {
     let cancelled = false;
     setReviewsLoading(true);
@@ -123,6 +136,100 @@ function ProductPage() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [zoomed]);
+
+  const ratingStats = useMemo(() => {
+    if (!reviews.length) return null;
+    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    return { count: reviews.length, average: sum / reviews.length };
+  }, [reviews]);
+
+  // Update document head dynamically with rich product metadata for sharing.
+  useEffect(() => {
+    if (!artwork || typeof document === "undefined") return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/product/${artwork.id}`;
+    const desc =
+      artwork.description ||
+      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`;
+    const imageUrl = artwork.image.startsWith("http")
+      ? artwork.image
+      : `${origin}${artwork.image}`;
+
+    document.title = `${artwork.title} — Pintaterra`;
+
+    const setMeta = (selector: string, attr: string, value: string) => {
+      let tag = document.querySelector<HTMLMetaElement>(selector);
+      if (!tag) {
+        tag = document.createElement("meta");
+        const [k, v] = selector
+          .replace(/^meta\[/, "")
+          .replace(/\]$/, "")
+          .split("=");
+        if (k && v) tag.setAttribute(k, v.replace(/['"]/g, ""));
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute(attr, value);
+    };
+
+    setMeta('meta[name="description"]', "content", desc);
+    setMeta('meta[property="og:title"]', "content", artwork.title);
+    setMeta('meta[property="og:description"]', "content", desc);
+    setMeta('meta[property="og:type"]', "content", "product");
+    setMeta('meta[property="og:url"]', "content", url);
+    setMeta('meta[property="og:image"]', "content", imageUrl);
+    setMeta('meta[property="og:site_name"]', "content", "Pintaterra");
+    setMeta('meta[name="twitter:card"]', "content", "summary_large_image");
+    setMeta('meta[name="twitter:title"]', "content", artwork.title);
+    setMeta('meta[name="twitter:description"]', "content", desc);
+    setMeta('meta[name="twitter:image"]', "content", imageUrl);
+  }, [artwork]);
+
+  const jsonLd = useMemo(() => {
+    if (!artwork) return "{}";
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/product/${artwork.id}`;
+    const imageUrls = (
+      artwork.images.length > 0
+        ? artwork.images.map((img) => img.url)
+        : [artwork.image]
+    ).map((u) => (u.startsWith("http") ? u : `${origin}${u}`));
+    const availability =
+      artwork.availability === "available"
+        ? "https://schema.org/InStock"
+        : artwork.availability === "reserved"
+          ? "https://schema.org/PreOrder"
+          : "https://schema.org/SoldOut";
+
+    const data: Record<string, unknown> = {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      name: artwork.title,
+      description:
+        artwork.description ||
+        `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`,
+      image: imageUrls,
+      sku: artwork.id,
+      brand: { "@type": "Brand", name: "Pintaterra" },
+      offers: {
+        "@type": "Offer",
+        url,
+        priceCurrency: "PHP",
+        price: getEffectivePrice(artwork),
+        availability,
+        itemCondition: "https://schema.org/NewCondition",
+      },
+    };
+    if (ratingStats) {
+      data.aggregateRating = {
+        "@type": "AggregateRating",
+        ratingValue: ratingStats.average.toFixed(2),
+        reviewCount: ratingStats.count,
+      };
+    }
+    // Escape "<" so a stray "</script>" inside a string can't break out
+    // of the surrounding <script type="application/ld+json"> block.
+    return JSON.stringify(data).replace(/</g, "\\u003c");
+  }, [artwork, ratingStats]);
 
   if (!artwork) {
     return (
@@ -208,6 +315,10 @@ function ProductPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd }}
+      />
       <GalleryNav />
       <main className="flex-1 pt-28 md:pt-32 pb-20 px-6 md:px-12 max-w-7xl mx-auto w-full">
         <div className="mb-6">
@@ -239,6 +350,8 @@ function ProductPage() {
                   src={currentImage.url}
                   alt={`${artwork.title} – photo ${activeImage + 1}`}
                   className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
+                  loading="lazy"
+                  decoding="async"
                 />
               </button>
               {showAvailabilityBadge && (
@@ -301,6 +414,8 @@ function ProductPage() {
                       src={img.url}
                       alt={`${artwork.title} thumbnail ${idx + 1}`}
                       className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </button>
                 ))}
@@ -388,6 +503,40 @@ function ProductPage() {
                 />
                 {inWishlist ? "Saved" : "Save"}
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url =
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/product/${artwork.id}`
+                      : "";
+                  const data = {
+                    title: `${artwork.title} — Pintaterra`,
+                    text: `Check out "${artwork.title}" on Pintaterra.`,
+                    url,
+                  };
+                  const nav = navigator as Navigator & {
+                    share?: (d: ShareData) => Promise<void>;
+                  };
+                  if (nav.share) {
+                    nav.share(data).catch(() => {
+                      /* user cancelled */
+                    });
+                  } else if (navigator.clipboard) {
+                    navigator.clipboard
+                      .writeText(url)
+                      .then(() => toast.success("Link copied to clipboard"))
+                      .catch(() => toast.error("Could not copy link"));
+                  } else {
+                    toast.message(url);
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
+                aria-label="Share painting"
+              >
+                <Share2 className="w-4 h-4" />
+                Share
+              </button>
               <Link
                 to="/"
                 hash="gallery"
@@ -421,20 +570,33 @@ function ProductPage() {
         </motion.div>
 
         <ProductReviews loading={reviewsLoading} reviews={reviews} />
+
+        <RelatedProducts currentId={artwork.id} />
+        <RecentlyViewed excludeId={artwork.id} />
       </main>
 
       {zoomed && (
         <div
           role="dialog"
           aria-label={`${artwork.title} – zoomed`}
-          className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center cursor-zoom-out p-6"
-          onClick={() => setZoomed(false)}
+          className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 md:p-6"
         >
-          <img
+          <button
+            type="button"
+            onClick={() => setZoomed(false)}
+            className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-full bg-foreground text-background text-[11px] tracking-[0.2em] uppercase hover:opacity-90"
+            aria-label="Close zoomed view"
+          >
+            Close
+          </button>
+          <ZoomableImage
             src={currentImage.url}
             alt={artwork.title}
-            className="max-w-[95vw] max-h-[95vh] object-contain"
+            className="w-full h-full"
           />
+          <p className="mt-3 text-[10px] tracking-[0.25em] uppercase text-white/60">
+            Pinch · scroll · double-tap to zoom · drag to pan
+          </p>
         </div>
       )}
 
@@ -543,6 +705,8 @@ function ProductReviews({
                       src={src}
                       alt={`Review photo ${j + 1}`}
                       className="aspect-square w-full object-cover rounded-md border border-border/40"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </a>
                 ))}

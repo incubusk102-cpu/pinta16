@@ -5,6 +5,7 @@ import { captureRequestMeta } from "../lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
 import { appendAuditEvent } from "../lib/audit-log.js";
 import { withSecurityHeaders } from "../lib/security-headers.js";
+import { sendOrderEmail, isEmailConfigured } from "../lib/email.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -158,6 +159,37 @@ const getOrdersStore = (event) => {
   return getStore(STORE_NAME);
 };
 
+/**
+ * Send a transactional email for the given notification entry and stamp the
+ * delivery result back onto the entry in place. Never throws.
+ */
+const recordEmail = async (orderForEmail, notification, extra = {}) => {
+  try {
+    const result = await sendOrderEmail({
+      kind: notification.type,
+      order: orderForEmail,
+      extra,
+    });
+    if (result.delivered) {
+      notification.delivered = true;
+      notification.provider = result.provider;
+      if (result.providerId) notification.providerId = result.providerId;
+    } else if (result.skipped) {
+      notification.delivered = false;
+      notification.skipped = true;
+      if (result.reason) notification.skipReason = result.reason;
+    } else if (result.error) {
+      notification.delivered = false;
+      notification.error = String(result.error).slice(0, 400);
+      if (result.provider) notification.provider = result.provider;
+    }
+  } catch (err) {
+    notification.delivered = false;
+    notification.error = err instanceof Error ? err.message : String(err);
+  }
+  return notification;
+};
+
 const readOrders = async (store) => {
   const orders = await store.get(ORDERS_KEY, { type: "json" });
   return Array.isArray(orders) ? orders : [];
@@ -237,6 +269,97 @@ export const handler = async (event) => {
           : undefined;
         return json(200, {
           order: { ...rest, orderInfo: publicOrderInfo },
+        });
+      }
+
+      if (params.metrics === "email-status") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const provider = process.env.RESEND_API_KEY
+          ? "resend"
+          : process.env.BREVO_API_KEY
+            ? "brevo"
+            : null;
+        return json(200, {
+          email: {
+            configured: isEmailConfigured(),
+            provider,
+            from: process.env.EMAIL_FROM || null,
+            replyTo: process.env.EMAIL_REPLY_TO || null,
+          },
+        });
+      }
+
+      if (params.metrics === "analytics") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const days = Math.min(Math.max(Number(params.days) || 30, 7), 90);
+        const orders = await readOrders(store);
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        const series = [];
+        const dayMap = new Map();
+        for (let i = days - 1; i >= 0; i--) {
+          const d = new Date(today.getTime() - i * 86400000);
+          const key = d.toISOString().slice(0, 10);
+          const entry = { date: key, orders: 0, revenue: 0, refunded: 0 };
+          dayMap.set(key, entry);
+          series.push(entry);
+        }
+        const productMap = new Map();
+        const statusCounts = {
+          confirmed: 0,
+          in_progress: 0,
+          out_for_delivery: 0,
+          received: 0,
+        };
+        for (const o of orders) {
+          const total = Number(o.total) || 0;
+          const refunded =
+            o.refund && o.refund.status === "succeeded"
+              ? Number(o.refund.amount) || 0
+              : 0;
+          if (statusCounts[o.status] !== undefined) {
+            statusCounts[o.status] += 1;
+          }
+          const created = new Date(o.createdAt);
+          if (!Number.isNaN(created.getTime())) {
+            const key = created.toISOString().slice(0, 10);
+            const entry = dayMap.get(key);
+            if (entry) {
+              entry.orders += 1;
+              entry.revenue += total;
+              entry.refunded += refunded;
+            }
+          }
+          for (const item of o.items || []) {
+            const id = item.id || item.title;
+            if (!id) continue;
+            const cur = productMap.get(id) || {
+              id,
+              title: item.title || id,
+              image: item.image || "",
+              units: 0,
+              revenue: 0,
+            };
+            const qty = Number(item.quantity) || 1;
+            cur.units += qty;
+            cur.revenue += (Number(item.price) || 0) * qty;
+            productMap.set(id, cur);
+          }
+        }
+        const topProducts = Array.from(productMap.values())
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5);
+        return json(200, {
+          analytics: {
+            days,
+            series,
+            topProducts,
+            statusCounts,
+          },
         });
       }
 
@@ -402,7 +525,14 @@ export const handler = async (event) => {
               ? order.qrCodeImageUrl.slice(0, 4000)
               : "",
           voucherCode: validatedVoucherCode,
-          notifications: [],
+          notifications: [
+            {
+              type: "confirmed",
+              message: "Your order has been confirmed.",
+              recipient: String(info.email).slice(0, 200),
+              sentAt: new Date().toISOString(),
+            },
+          ],
           review: null,
           requestMeta: captureRequestMeta(event),
           activityLog: [
@@ -414,6 +544,10 @@ export const handler = async (event) => {
             },
           ],
         };
+        // Send order-confirmation email and stamp delivery info onto the
+        // notification entry. We persist after the email to capture the
+        // provider id / error.
+        await recordEmail(safeOrder, safeOrder.notifications[0]);
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
@@ -463,12 +597,25 @@ export const handler = async (event) => {
           ? [...existing.activityLog]
           : [];
         if (statusChanged) {
-          notifications.push({
+          const note = {
             type: status,
             message: NOTIFICATION_MESSAGES[status],
             recipient,
             sentAt: new Date().toISOString(),
-          });
+          };
+          await recordEmail(
+            { ...existing, status, shipment: existing.shipment },
+            note,
+            existing.shipment
+              ? {
+                  shipment: existing.shipment,
+                  trackingUrl: existing.shipment.trackingUrl,
+                  courier: existing.shipment.courier,
+                  trackingNumber: existing.shipment.trackingNumber,
+                }
+              : {},
+          );
+          notifications.push(note);
           activityLog.push({
             at: new Date().toISOString(),
             type: `status:${status}`,
@@ -484,6 +631,173 @@ export const handler = async (event) => {
           });
         }
         orders[idx] = { ...existing, status, notifications, activityLog };
+        await store.setJSON(ORDERS_KEY, orders);
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "resend-email") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, notificationIndex } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const idx = Number(notificationIndex);
+        if (!Number.isInteger(idx) || idx < 0) {
+          return json(400, { error: "Invalid notificationIndex" });
+        }
+        const orders = await readOrders(store);
+        const orderIdx = orders.findIndex((o) => o.id === orderId);
+        if (orderIdx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[orderIdx];
+        const notifications = Array.isArray(existing.notifications)
+          ? [...existing.notifications]
+          : [];
+        if (idx >= notifications.length) {
+          return json(404, { error: "Notification not found" });
+        }
+        const target = { ...notifications[idx] };
+        delete target.delivered;
+        delete target.error;
+        delete target.skipped;
+        delete target.skipReason;
+        delete target.providerId;
+        delete target.provider;
+        target.recipient = existing.orderInfo?.email || target.recipient || "";
+        target.sentAt = new Date().toISOString();
+        await recordEmail(existing, target, {
+          shipment: existing.shipment,
+          trackingUrl: existing.shipment?.trackingUrl,
+          courier: existing.shipment?.courier,
+          trackingNumber: existing.shipment?.trackingNumber,
+          refundAmount: existing.refund?.amount,
+          failureMessage: existing.refund?.failureMessage,
+        });
+        notifications[idx] = target;
+        orders[orderIdx] = { ...existing, notifications };
+        await store.setJSON(ORDERS_KEY, orders);
+        return json(200, { order: orders[orderIdx], notification: target });
+      }
+
+      if (action === "update-shipment") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, shipment } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        const notifications = Array.isArray(existing.notifications)
+          ? [...existing.notifications]
+          : [];
+
+        if (shipment === null) {
+          if (!existing.shipment) {
+            return json(200, { order: existing });
+          }
+          const next = { ...existing };
+          delete next.shipment;
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "shipment:cleared",
+            actor: "admin",
+            ...meta,
+          });
+          orders[idx] = { ...next, activityLog, notifications };
+          await store.setJSON(ORDERS_KEY, orders);
+          return json(200, { order: orders[idx] });
+        }
+
+        if (!shipment || typeof shipment !== "object") {
+          return json(400, { error: "Invalid shipment" });
+        }
+        const courier =
+          typeof shipment.courier === "string"
+            ? shipment.courier.trim().slice(0, 80)
+            : "";
+        const trackingNumber =
+          typeof shipment.trackingNumber === "string"
+            ? shipment.trackingNumber.trim().slice(0, 120)
+            : "";
+        const trackingUrlRaw =
+          typeof shipment.trackingUrl === "string"
+            ? shipment.trackingUrl.trim().slice(0, 400)
+            : "";
+        const notes =
+          typeof shipment.notes === "string"
+            ? shipment.notes.trim().slice(0, 400)
+            : "";
+        if (!courier || !trackingNumber) {
+          return json(400, {
+            error: "Courier and tracking number are required",
+          });
+        }
+        if (trackingUrlRaw && !/^https?:\/\//i.test(trackingUrlRaw)) {
+          return json(400, {
+            error: "Tracking URL must start with http(s)://",
+          });
+        }
+        const safeShipment = {
+          courier,
+          trackingNumber,
+          ...(trackingUrlRaw ? { trackingUrl: trackingUrlRaw } : {}),
+          ...(notes ? { notes } : {}),
+          updatedAt: new Date().toISOString(),
+        };
+        const isNew =
+          !existing.shipment ||
+          existing.shipment.trackingNumber !== safeShipment.trackingNumber ||
+          existing.shipment.courier !== safeShipment.courier;
+        if (isNew) {
+          const note = {
+            type: "shipped",
+            message: `Your order has shipped via ${courier} (tracking ${trackingNumber}).`,
+            recipient: existing.orderInfo?.email || "",
+            sentAt: new Date().toISOString(),
+          };
+          await recordEmail({ ...existing, shipment: safeShipment }, note, {
+            shipment: safeShipment,
+            trackingUrl: safeShipment.trackingUrl,
+            courier: safeShipment.courier,
+            trackingNumber: safeShipment.trackingNumber,
+          });
+          notifications.push(note);
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "shipment:set",
+            actor: "admin",
+            ...meta,
+          });
+          await appendAuditEvent(event, {
+            type: "order.shipment",
+            outcome: "set",
+            subject: orderId,
+            detail: `${courier} ${trackingNumber}`,
+            ...meta,
+          });
+        } else {
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "shipment:updated",
+            actor: "admin",
+            ...meta,
+          });
+        }
+        orders[idx] = {
+          ...existing,
+          shipment: safeShipment,
+          notifications,
+          activityLog,
+        };
         await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: orders[idx] });
       }
@@ -763,19 +1077,31 @@ export const handler = async (event) => {
         const notifications = Array.isArray(existing.notifications)
           ? [...existing.notifications]
           : [];
-        notifications.push({
+        const refundRequestedNote = {
           type: "refund_requested",
           message: `Your refund of \u20b1${refundRecord.amount.toLocaleString()} has been initiated and is being processed via QR Ph back to your wallet.`,
           recipient,
           sentAt: new Date().toISOString(),
-        });
+        };
+        await recordEmail(
+          { ...existing, refund: refundRecord },
+          refundRequestedNote,
+          { refundAmount: refundRecord.amount },
+        );
+        notifications.push(refundRequestedNote);
         if (refundRecord.status === "succeeded") {
-          notifications.push({
+          const refundDoneNote = {
             type: "refund_succeeded",
             message: `Your refund of \u20b1${refundRecord.amount.toLocaleString()} has been completed.`,
             recipient,
             sentAt: new Date().toISOString(),
-          });
+          };
+          await recordEmail(
+            { ...existing, refund: refundRecord },
+            refundDoneNote,
+            { refundAmount: refundRecord.amount },
+          );
+          notifications.push(refundDoneNote);
         }
         const refundMeta = captureRequestMeta(event);
         const refundActivity = Array.isArray(existing.activityLog)
@@ -863,22 +1189,31 @@ export const handler = async (event) => {
         if (newStatus !== refund.status) {
           if (newStatus === "succeeded") {
             updatedRefund.completedAt = new Date().toISOString();
-            notifications.push({
+            const note = {
               type: "refund_succeeded",
               message: `Your refund of \u20b1${refund.amount.toLocaleString()} has been completed and credited back to your QR Ph wallet.`,
               recipient,
               sentAt: new Date().toISOString(),
+            };
+            await recordEmail({ ...existing, refund: updatedRefund }, note, {
+              refundAmount: refund.amount,
             });
+            notifications.push(note);
           } else if (newStatus === "failed") {
             updatedRefund.completedAt = new Date().toISOString();
             updatedRefund.failureMessage =
               attrs.failure_reason || attrs.failure_message || "Refund failed";
-            notifications.push({
+            const note = {
               type: "refund_failed",
               message: `Your refund could not be processed: ${updatedRefund.failureMessage}. Please contact support.`,
               recipient,
               sentAt: new Date().toISOString(),
+            };
+            await recordEmail({ ...existing, refund: updatedRefund }, note, {
+              refundAmount: refund.amount,
+              failureMessage: updatedRefund.failureMessage,
             });
+            notifications.push(note);
           }
         }
         orders[idx] = {
