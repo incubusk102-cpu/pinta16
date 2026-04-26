@@ -9,8 +9,14 @@ import {
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
   type Product,
+  type ProductAvailability,
   type ProductImage,
 } from "@/contexts/ProductContext";
+import {
+  AVAILABILITY_LABEL,
+  AVAILABILITY_OPTIONS,
+  getAvailability,
+} from "@/lib/artworks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -407,10 +413,13 @@ function ProductsSection() {
   const [dimensions, setDimensions] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterAvailability, setFilterAvailability] = useState<string>("all");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
+  const [availability, setAvailability] =
+    useState<ProductAvailability>("available");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -426,6 +435,7 @@ function ProductsSection() {
     setSalePrice("");
     setDiscountPercent("");
     setDescription("");
+    setAvailability("available");
   };
 
   const handlePriceChange = (value: string) => {
@@ -484,6 +494,7 @@ function ProductsSection() {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
+        availability,
       });
       toast.success(`"${title.trim()}" added to the collection`);
       reset();
@@ -502,6 +513,9 @@ function ProductsSection() {
     } else if (filterCategory !== "all") {
       if ((p.category || "") !== filterCategory) return false;
     }
+    if (filterAvailability !== "all") {
+      if (getAvailability(p) !== filterAvailability) return false;
+    }
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
     const haystack = [
@@ -514,6 +528,7 @@ function ProductsSection() {
       p.imageFileName,
       p.mockupFileName,
       p.id,
+      AVAILABILITY_LABEL[getAvailability(p)],
     ]
       .filter(Boolean)
       .join(" ")
@@ -672,6 +687,30 @@ function ProductsSection() {
             </div>
 
             <div>
+              <Label htmlFor="availability">Availability</Label>
+              <Select
+                value={availability}
+                onValueChange={(value) =>
+                  setAvailability(value as ProductAvailability)
+                }
+              >
+                <SelectTrigger id="availability">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABILITY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Draft hides the painting from the public storefront.
+              </p>
+            </div>
+
+            <div>
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
@@ -723,6 +762,22 @@ function ProductsSection() {
                   {PRODUCT_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={filterAvailability}
+                onValueChange={setFilterAvailability}
+              >
+                <SelectTrigger className="h-9 w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any availability</SelectItem>
+                  {AVAILABILITY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -784,7 +839,24 @@ function ProductsSection() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate">{product.title}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-medium truncate">
+                          {product.title}
+                        </h3>
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded ${
+                            getAvailability(product) === "available"
+                              ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                              : getAvailability(product) === "reserved"
+                                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                                : getAvailability(product) === "sold"
+                                  ? "bg-slate-700 text-white"
+                                  : "bg-muted text-foreground"
+                          }`}
+                        >
+                          {AVAILABILITY_LABEL[getAvailability(product)]}
+                        </span>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {product.medium} · {product.year}
                         {product.dimensions ? ` · ${product.dimensions}` : ""}

@@ -1,8 +1,14 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { Link } from "@tanstack/react-router";
+import { Search, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
-import { getEffectivePrice, useProducts } from "@/contexts/ProductContext";
+import {
+  getEffectivePrice,
+  PRODUCT_CATEGORIES,
+  useProducts,
+} from "@/contexts/ProductContext";
 import {
   Select,
   SelectContent,
@@ -10,6 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import {
+  AVAILABILITY_LABEL,
+  getStorefrontArtworks,
+  type Availability,
+  type DisplayArtwork,
+} from "@/lib/artworks";
 
 type SortOption =
   | "featured"
@@ -26,200 +39,106 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "price-desc", label: "Price: High to Low" },
 ];
 
-const defaultArtworks = [
-  {
-    image: "/images/1.png",
-    mockup: "/images/2.png",
-    title: "Rice Field Guardians",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3599,
-    description:
-      "Colorful mosaic-style painting shows women bent in vibrant conical hats—pinks, blues, yellows—tending flooded rice fields at sunset, with trees, birds, and green-yellow glow.",
-  },
-  {
-    image: "/images/4.png",
-    mockup: "/images/3.jpeg",
-    title: "Koi Fish Painting",
-    medium: "Oil on Canvas",
-    year: "2025",
-    price: 3599,
-    description:
-      "Beautiful painting featuring koi fish arranged in an infinity symbol. The artwork is set against a green background and framed in a sleek black frame, adding a touch of elegance to any room.",
-  },
-  {
-    image: "/images/21.png",
-    mockup: "/images/22.png",
-    title: "Dynamic Geometric Figure Abstraction",
-    medium: "Oil on Canvas",
-    year: "2025",
-    price: 3499,
-    description:
-      "Fluid arcs and blocks form limbs, torso, and head in joyous color symphony, channeling Matisse-like Fauvism meets modern geometry for rhythmic vitality.",
-  },
-  {
-    image: "/images/5.png",
-    mockup: "/images/6.png",
-    title: "Cubist Family of Four",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3799,
-    description:
-      "A striking framed modernist artwork featuring a father, mother, and their two children in a warm embrace—a vibrant celebration of family ties and the abundance of nature.",
-  },
-  {
-    image: "/images/15.png",
-    mockup: "/images/16.png",
-    title: "Pinay Farmers' Bounty",
-    medium: "Oil on Canvas",
-    year: "2025",
-    price: 3499,
-    description:
-      "Colorful folk painting portrays a group of Philippine farmers—women in traditional salakot hats and vibrant attire—poised with woven baskets before village huts under a golden sunset glow.",
-  },
-  {
-    image: "/images/9.png",
-    mockup: "/images/10.png",
-    title: "Golden Harvest Kin",
-    medium: "Oil on Canvas",
-    year: "2025",
-    price: 3499,
-    description:
-      "Vibrant painting portrays a family of magsasaka—women and child in colorful skirts and hats—gathering ripe golden palay stalks amid rippling waves of harvest fields.",
-  },
-  {
-    image: "/images/13.png",
-    mockup: "/images/14.png",
-    title: "Cosmic Iris Dance",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3699,
-    description:
-      "Dynamic painting features stylized iris flowers with ruffled, ribbon-like petals in a rainbow spectrum, twisting dynamically on a deep cosmic background under gallery spotlights.",
-  },
-  {
-    image: "/images/33.png",
-    mockup: "/images/34.jpg",
-    title: "Mayon Village Path",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3699,
-    description:
-      "A vibrant tropical scene with the majestic Mayon volcano framed by a swaying palm, a nipa hut, and a Filipina walking a sunlit path past golden haystacks and ancient bell tower ruins.",
-  },
-  {
-    image: "/images/29.png",
-    mockup: "/images/30.jpeg",
-    title: "Autumn Falls",
-    medium: "Oil on Canvas",
-    year: "2025",
-    price: 3699,
-    description:
-      "Golden and amber autumn trees frame a small waterfall flowing into a vivid blue pond — a serene seasonal landscape rendered in rich, warm strokes.",
-  },
-  {
-    image: "/images/27.png",
-    mockup: "/images/28.jpg",
-    title: "Pink Tulips at Dawn",
-    medium: "Oil on Canvas",
-    year: "2025",
-    price: 3499,
-    description:
-      "A row of soft pink tulips rises against a dreamy gradient of lavender and peach — a delicate spring composition that brings quiet warmth to any room.",
-  },
-  {
-    image: "/images/23.png",
-    mockup: "/images/24.jpg",
-    title: "Peacock Mandala",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3899,
-    description:
-      "A radiant stylized peacock blooms outward in symmetrical petals of rainbow yarn-like strokes — a meditative mandala bursting with color and craft.",
-  },
-  {
-    image: "/images/19.png",
-    mockup: "/images/20.png",
-    title: "Butterfly Kaleidoscope",
-    medium: "Oil Pastel on Canvas",
-    year: "2025",
-    price: 3899,
-    description:
-      "A jubilant flock of butterflies in electric jewel tones dances across a midnight field of ferns — a kaleidoscopic celebration of color, movement, and tropical wonder.",
-  },
-  {
-    image: "/images/17.png",
-    mockup: "/images/18.png",
-    title: "Bird of Paradise",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3899,
-    description:
-      "Bold bird-of-paradise blooms and tropical leaves create a fresh botanical composition with crisp lines and luminous island color.",
-  },
-  {
-    image: "/images/31.png",
-    mockup: "/images/32.png",
-    title: "Riverside Serenity",
-    medium: "Mixed Media Pyro-Art",
-    year: "2025",
-    price: 3999,
-    description:
-      "A calm mangrove and river landscape in soft natural tones evokes a quiet moment of still water, trees, and distant sky.",
-  },
-  {
-    image: "/images/25.png",
-    mockup: "/images/26.jpg",
-    title: "Woven Cubist Symphony",
-    medium: "Acrylic on Canvas",
-    year: "2025",
-    price: 3899,
-    description:
-      "A vibrant abstract tapestry of interwoven color blocks and rope-like textures — a bold cubist composition celebrating Filipino weaving heritage in modern form.",
-  },
+const STOREFRONT_AVAILABILITIES: Availability[] = [
+  "available",
+  "reserved",
+  "sold",
 ];
 
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+const PRICE_BUCKETS: {
+  value: string;
+  label: string;
+  match: (price: number) => boolean;
+}[] = [
+  { value: "all", label: "Any price", match: () => true },
+  { value: "lt-3000", label: "Under ₱3,000", match: (p) => p < 3000 },
+  {
+    value: "3000-3500",
+    label: "₱3,000 – ₱3,500",
+    match: (p) => p >= 3000 && p <= 3500,
+  },
+  {
+    value: "3500-3800",
+    label: "₱3,500 – ₱3,800",
+    match: (p) => p > 3500 && p <= 3800,
+  },
+  {
+    value: "3800-4500",
+    label: "₱3,800 – ₱4,500",
+    match: (p) => p > 3800 && p <= 4500,
+  },
+  { value: "gt-4500", label: "Over ₱4,500", match: (p) => p > 4500 },
+];
+
+const matchesArtwork = (
+  art: DisplayArtwork,
+  query: string,
+  category: string,
+  availability: string,
+  priceBucket: string,
+): boolean => {
+  if (availability !== "all" && art.availability !== availability) return false;
+  if (category !== "all") {
+    if (category === "__uncategorized__") {
+      if (art.category && art.category.trim()) return false;
+    } else if ((art.category || "") !== category) return false;
+  }
+  const bucket = PRICE_BUCKETS.find((b) => b.value === priceBucket);
+  if (bucket && !bucket.match(getEffectivePrice(art))) return false;
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [
+    art.title,
+    art.medium,
+    art.year,
+    art.category,
+    art.dimensions,
+    art.description,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(q);
+};
 
 const GallerySection = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("featured");
+  const [query, setQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterAvailability, setFilterAvailability] = useState<string>("all");
+  const [filterPrice, setFilterPrice] = useState<string>("all");
   const { products } = useProducts();
 
-  const allArtworks: {
-    id: string;
-    image: string;
-    mockup?: string;
-    title: string;
-    medium: string;
-    year: string;
-    price: number;
-    salePrice?: number;
-    description: string;
-  }[] = [
-    ...defaultArtworks.map((art) => ({
-      ...art,
-      id: `default-${slugify(art.title)}`,
-    })),
-    ...products.map((product) => ({
-      image: product.image,
-      mockup: product.mockup || product.image,
-      title: product.title,
-      medium: product.medium,
-      year: product.year,
-      price: product.price,
-      salePrice: product.salePrice,
-      description: product.description,
-      id: `product-${product.id}`,
-    })),
-  ];
+  const allArtworks = useMemo(
+    () => getStorefrontArtworks(products),
+    [products],
+  );
+
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const art of allArtworks) {
+      const c = (art.category || "").trim();
+      if (c) set.add(c);
+    }
+    const merged = new Set<string>([...PRODUCT_CATEGORIES, ...set]);
+    return Array.from(merged).sort();
+  }, [allArtworks]);
+
+  const filteredArtworks = useMemo(() => {
+    return allArtworks.filter((art) =>
+      matchesArtwork(
+        art,
+        query,
+        filterCategory,
+        filterAvailability,
+        filterPrice,
+      ),
+    );
+  }, [allArtworks, query, filterCategory, filterAvailability, filterPrice]);
 
   const sortedArtworks = useMemo(() => {
-    const copy = [...allArtworks];
+    const copy = [...filteredArtworks];
     switch (sortBy) {
       case "name-asc":
         return copy.sort((a, b) =>
@@ -236,10 +155,20 @@ const GallerySection = () => {
       default:
         return copy;
     }
-    // allArtworks is intentionally omitted: defaultArtworks is a module-level
-    // constant and the mapped products array only changes when `products` does.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, sortBy]);
+  }, [filteredArtworks, sortBy]);
+
+  const hasFilters =
+    query.trim().length > 0 ||
+    filterCategory !== "all" ||
+    filterAvailability !== "all" ||
+    filterPrice !== "all";
+
+  const clearFilters = () => {
+    setQuery("");
+    setFilterCategory("all");
+    setFilterAvailability("all");
+    setFilterPrice("all");
+  };
 
   return (
     <section
@@ -260,48 +189,195 @@ const GallerySection = () => {
           Our Paintings
         </h2>
       </motion.div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
-        <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground">
+
+      <div className="space-y-3 mb-8">
+        <div className="relative max-w-md mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search paintings, mediums, or styles…"
+            aria-label="Search paintings"
+            className="pl-9 pr-9 h-10 font-body text-sm"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end justify-center gap-3">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="filter-category"
+              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+            >
+              Category
+            </label>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger
+                id="filter-category"
+                className="w-[170px] font-body text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                <SelectItem value="__uncategorized__">Uncategorized</SelectItem>
+                {availableCategories.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="filter-price"
+              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+            >
+              Price
+            </label>
+            <Select value={filterPrice} onValueChange={setFilterPrice}>
+              <SelectTrigger
+                id="filter-price"
+                className="w-[170px] font-body text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRICE_BUCKETS.map((b) => (
+                  <SelectItem key={b.value} value={b.value}>
+                    {b.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="filter-availability"
+              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+            >
+              Availability
+            </label>
+            <Select
+              value={filterAvailability}
+              onValueChange={setFilterAvailability}
+            >
+              <SelectTrigger
+                id="filter-availability"
+                className="w-[170px] font-body text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {STOREFRONT_AVAILABILITIES.map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {AVAILABILITY_LABEL[a]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="gallery-sort"
+              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+            >
+              Sort
+            </label>
+            <Select
+              value={sortBy}
+              onValueChange={(value) => setSortBy(value as SortOption)}
+            >
+              <SelectTrigger
+                id="gallery-sort"
+                className="w-[170px] font-body text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline pb-2"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
           {sortedArtworks.length}{" "}
           {sortedArtworks.length === 1 ? "piece" : "pieces"}
         </p>
-        <div className="flex items-center gap-3">
-          <label
-            htmlFor="gallery-sort"
-            className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground"
-          >
-            Sort by
-          </label>
-          <Select
-            value={sortBy}
-            onValueChange={(value) => setSortBy(value as SortOption)}
-          >
-            <SelectTrigger
-              id="gallery-sort"
-              className="w-[200px] font-body text-xs"
+      </div>
+
+      {sortedArtworks.length === 0 ? (
+        <div className="py-20 text-center">
+          <p className="font-body text-sm text-muted-foreground">
+            No paintings match your filters yet.
+          </p>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-4 font-body text-xs tracking-[0.25em] uppercase text-foreground underline underline-offset-4"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              Clear filters
+            </button>
+          )}
         </div>
-      </div>
-      <div className="columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8">
-        {sortedArtworks.map((art, index) => (
-          <ArtworkCard
-            key={art.id}
-            {...art}
-            index={index}
-            onClick={() => setLightboxIndex(index)}
-          />
-        ))}
-      </div>
+      ) : (
+        <div className="columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8">
+          {sortedArtworks.map((art, index) => (
+            <ArtworkCard
+              key={art.id}
+              {...art}
+              index={index}
+              onClick={() => setLightboxIndex(index)}
+            />
+          ))}
+        </div>
+      )}
+
+      {sortedArtworks.length > 0 && (
+        <p className="mt-10 text-center font-body text-xs tracking-[0.25em] uppercase text-muted-foreground">
+          Click any painting for details, or{" "}
+          <Link
+            to="/"
+            hash="gallery"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            browse the full collection
+          </Link>
+          .
+        </p>
+      )}
+
       <Lightbox
         artworks={sortedArtworks}
         currentIndex={lightboxIndex ?? 0}

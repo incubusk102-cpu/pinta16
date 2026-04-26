@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingCart, Menu, X, UserCircle } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -10,6 +10,11 @@ const GalleryNav = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { itemCount, openCart } = useCart();
   const { user } = useUserAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({
+    select: (s) => s.location.pathname,
+  });
+  const onIndex = pathname === "/";
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -18,8 +23,12 @@ const GalleryNav = () => {
   }, []);
 
   const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     setMenuOpen(false);
+    if (onIndex) {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      void navigate({ to: "/", hash: id });
+    }
   };
 
   return (
