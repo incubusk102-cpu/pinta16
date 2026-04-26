@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import HeroSection from "@/components/HeroSection";
+import HeroSlider from "@/components/HeroSlider";
+import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import GallerySection from "@/components/GallerySection";
 import AboutSection from "@/components/AboutSection";
 import ReviewsSection from "@/components/ReviewsSection";
@@ -30,11 +32,18 @@ export const Route = createFileRoute("/")({
   }),
 });
 
+function HeroOrFallback() {
+  const { slides, loading } = useHeroSlides();
+  // While loading, show static hero so the first paint isn't blank.
+  if (loading || slides.length === 0) return <HeroSection />;
+  return <HeroSlider />;
+}
+
 function Index() {
   return (
     <div className="smooth-scroll">
       <GalleryNav />
-      <HeroSection />
+      <HeroOrFallback />
       <GallerySection />
       <section className="px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />

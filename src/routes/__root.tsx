@@ -9,6 +9,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
 import { PoliciesProvider } from "@/contexts/PoliciesContext";
+import { HeroSlidesProvider } from "@/contexts/HeroSlidesContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import ChatWidget from "@/components/ChatWidget";
 import PwaPrompts from "@/components/PwaPrompts";
@@ -80,16 +81,18 @@ function RootComponent() {
             <WishlistProvider>
               <StorefrontConfigProvider>
                 <PoliciesProvider>
-                  <ProductProvider>
-                    <CartProvider>
-                      <HeartbeatBridge />
-                      <ConditionalAnnouncementBar />
-                      <Outlet />
-                      <ConditionalSiteFooter />
-                      <ChatWidget />
-                      <PwaPrompts />
-                    </CartProvider>
-                  </ProductProvider>
+                  <HeroSlidesProvider>
+                    <ProductProvider>
+                      <CartProvider>
+                        <HeartbeatBridge />
+                        <ConditionalAnnouncementBar />
+                        <Outlet />
+                        <ConditionalSiteFooter />
+                        <ChatWidget />
+                        <PwaPrompts />
+                      </CartProvider>
+                    </ProductProvider>
+                  </HeroSlidesProvider>
                 </PoliciesProvider>
               </StorefrontConfigProvider>
             </WishlistProvider>
