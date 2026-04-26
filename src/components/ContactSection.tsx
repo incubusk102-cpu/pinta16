@@ -21,7 +21,7 @@ const ContactSection = () => {
           {t("contact.title")}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
-          {t("contact.title")}
+          {t("contact.heading")}
         </h2>
       </motion.div>
       <motion.div

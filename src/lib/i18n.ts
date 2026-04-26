@@ -43,6 +43,7 @@ const en = {
   "about.title": "Original art, made to live with",
   // Contact
   "contact.title": "Get in touch",
+  "contact.heading": "Contact us",
   "contact.subtitle":
     "Questions about a painting, a custom request, or trade pricing? Send us a note.",
   // Newsletter
@@ -115,6 +116,7 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "about.eyebrow": "Tungkol sa Pintaterra",
   "about.title": "Orihinal na sining, ginawa para samahan ka",
   "contact.title": "Kausapin kami",
+  "contact.heading": "Kontakin kami",
   "contact.subtitle":
     "Mga tanong tungkol sa pinta, custom na request, o trade pricing? Magpadala ng note.",
   "newsletter.title": "Manatiling updated",

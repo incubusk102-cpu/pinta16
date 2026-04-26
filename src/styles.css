@@ -127,6 +127,9 @@
   --gallery-glow: oklch(0.18 0 0);
   --gallery-surface: oklch(0.96 0 0);
   --gallery-frame: oklch(0.78 0 0);
+
+  --gradient-elegant-bright: oklch(0.18 0 0);
+  --gradient-elegant-mid: oklch(0.42 0 0);
 }
 
 :root[data-theme="light"] ::selection {
@@ -188,9 +191,9 @@
   .text-gradient-elegant {
     background: linear-gradient(
       135deg,
-      oklch(1 0 0) 0%,
-      oklch(0.7 0 0) 50%,
-      oklch(1 0 0) 100%
+      var(--gradient-elegant-bright, oklch(1 0 0)) 0%,
+      var(--gradient-elegant-mid, oklch(0.7 0 0)) 50%,
+      var(--gradient-elegant-bright, oklch(1 0 0)) 100%
     );
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;

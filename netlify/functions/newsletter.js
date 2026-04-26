@@ -135,14 +135,11 @@ export const handler = async (event) => {
       const subs = await readSubscribers(store);
       const existing = subs.find((s) => s.email === email);
       if (existing) {
+        // Don't leak PII (ip, userAgent, subscribedAt) to unauthenticated callers.
         return {
           statusCode: 200,
           headers: jsonHeaders,
-          body: JSON.stringify({
-            ok: true,
-            already: true,
-            subscriber: existing,
-          }),
+          body: JSON.stringify({ ok: true, already: true }),
         };
       }
 
@@ -171,11 +168,7 @@ export const handler = async (event) => {
       return {
         statusCode: 200,
         headers: jsonHeaders,
-        body: JSON.stringify({
-          ok: true,
-          already: false,
-          subscriber: stored,
-        }),
+        body: JSON.stringify({ ok: true, already: false }),
       };
     }
 
