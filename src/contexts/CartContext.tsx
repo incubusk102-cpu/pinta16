@@ -52,6 +52,9 @@ export interface OrderReview {
   images: string[];
   submittedAt: string;
   publishedToHomepage?: boolean;
+  productId?: string;
+  productTitle?: string;
+  productImage?: string;
 }
 
 export interface RequestMeta {
@@ -84,7 +87,9 @@ export interface CompletedOrder {
   qrCodeImageUrl?: string;
   voucherCode?: string;
   notifications?: OrderNotification[];
+  /** @deprecated use `reviews` (one entry per item). Kept for backward compatibility. */
   review?: OrderReview;
+  reviews?: OrderReview[];
   refund?: OrderRefund;
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];
@@ -161,6 +166,7 @@ interface CartContextType {
     status: CompletedOrder["status"],
   ) => void;
   submitOrderReview: (orderId: string, review: OrderReview) => void;
+  getOrderReviews: (order: CompletedOrder) => OrderReview[];
   applyOrderUpdate: (order: CompletedOrder) => void;
   showCheckout: boolean;
   setShowCheckout: (show: boolean) => void;
@@ -355,14 +361,41 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     saveOrders(newOrders);
   };
 
-  const submitOrderReview = (orderId: string, review: OrderReview) => {
-    const newOrders = orders.map((o) =>
-      o.id === orderId ? { ...o, review } : o,
+  const mergeReviews = (
+    existing: OrderReview[] | undefined,
+    legacy: OrderReview | undefined,
+    next: OrderReview,
+  ): OrderReview[] => {
+    const seed: OrderReview[] = existing
+      ? [...existing]
+      : legacy
+        ? [legacy]
+        : [];
+    const idx = seed.findIndex(
+      (r) => (r.productId ?? "") === (next.productId ?? ""),
     );
+    if (idx >= 0) seed[idx] = next;
+    else seed.push(next);
+    return seed;
+  };
+
+  const submitOrderReview = (orderId: string, review: OrderReview) => {
+    const newOrders = orders.map((o) => {
+      if (o.id !== orderId) return o;
+      const reviews = mergeReviews(o.reviews, o.review, review);
+      return { ...o, reviews, review };
+    });
     saveOrders(newOrders);
     if (lastOrder?.id === orderId) {
-      setLastOrder({ ...lastOrder, review });
+      const reviews = mergeReviews(lastOrder.reviews, lastOrder.review, review);
+      setLastOrder({ ...lastOrder, reviews, review });
     }
+  };
+
+  const getOrderReviews = (order: CompletedOrder): OrderReview[] => {
+    if (order.reviews && order.reviews.length > 0) return order.reviews;
+    if (order.review) return [order.review];
+    return [];
   };
 
   const applyOrderUpdate = (updated: CompletedOrder) => {
@@ -406,6 +439,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         placeOrder,
         updateOrderStatus,
         submitOrderReview,
+        getOrderReviews,
         applyOrderUpdate,
         showCheckout,
         setShowCheckout,

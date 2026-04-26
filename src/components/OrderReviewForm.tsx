@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Star, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   REVIEW_MIN_CHARS,
   REVIEW_MAX_IMAGES,
+  type CartItem,
   type OrderReview,
   useCart,
 } from "@/contexts/CartContext";
@@ -11,6 +12,8 @@ import {
 interface OrderReviewFormProps {
   orderId: string;
   customerEmail?: string;
+  items: CartItem[];
+  existingReviews: OrderReview[];
   onSubmitted?: (review: OrderReview) => void;
 }
 
@@ -27,19 +30,46 @@ const fileToDataUrl = (file: File): Promise<string> =>
 const OrderReviewForm = ({
   orderId,
   customerEmail,
+  items,
+  existingReviews,
   onSubmitted,
 }: OrderReviewFormProps) => {
   const { submitOrderReview } = useCart();
+
+  const reviewableItems = useMemo(() => {
+    const reviewedIds = new Set(
+      existingReviews.map((r) => r.productId).filter(Boolean) as string[],
+    );
+    return items.filter((item) => !reviewedIds.has(item.id));
+  }, [items, existingReviews]);
+
+  const [productId, setProductId] = useState<string>(
+    reviewableItems[0]?.id ?? "",
+  );
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (
+      reviewableItems.length > 0 &&
+      !reviewableItems.some((i) => i.id === productId)
+    ) {
+      setProductId(reviewableItems[0].id);
+    }
+  }, [reviewableItems, productId]);
+
   const charCount = text.length;
   const charsLeft = Math.max(0, REVIEW_MIN_CHARS - charCount);
+  const selectedItem = reviewableItems.find((i) => i.id === productId);
   const canSubmit =
-    rating >= 1 && rating <= 5 && charCount >= REVIEW_MIN_CHARS && !submitting;
+    !!selectedItem &&
+    rating >= 1 &&
+    rating <= 5 &&
+    charCount >= REVIEW_MIN_CHARS &&
+    !submitting;
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -65,13 +95,16 @@ const OrderReviewForm = ({
   };
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !selectedItem) return;
     setSubmitting(true);
     const review: OrderReview = {
       rating,
       text: text.trim(),
       images,
       submittedAt: new Date().toISOString(),
+      productId: selectedItem.id,
+      productTitle: selectedItem.title,
+      productImage: selectedItem.image,
     };
     try {
       const res = await fetch("/api/orders", {
@@ -84,8 +117,11 @@ const OrderReviewForm = ({
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       submitOrderReview(orderId, review);
-      toast.success("Thanks for your review!");
+      toast.success(`Review for "${selectedItem.title}" submitted. Thank you!`);
       onSubmitted?.(review);
+      setRating(0);
+      setText("");
+      setImages([]);
     } catch (err) {
       console.error(err);
       toast.error(
@@ -95,6 +131,16 @@ const OrderReviewForm = ({
       setSubmitting(false);
     }
   };
+
+  if (reviewableItems.length === 0) {
+    return (
+      <div className="p-4 bg-muted/30 border border-border/10 rounded-sm">
+        <p className="font-body text-xs text-muted-foreground">
+          You've reviewed every painting in this order — thank you!
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 bg-muted/30 border border-border/10 rounded-sm space-y-3">
@@ -109,6 +155,46 @@ const OrderReviewForm = ({
           Reviewing as {customerEmail}
         </p>
       )}
+
+      {/* Product picker */}
+      <div>
+        <label
+          htmlFor={`review-product-${orderId}`}
+          className="font-body text-[10px] tracking-[0.2em] uppercase text-muted-foreground"
+        >
+          Painting being reviewed
+        </label>
+        {reviewableItems.length === 1 ? (
+          <div className="mt-1 flex items-center gap-3 px-3 py-2 border border-border/30 rounded-sm">
+            <img
+              src={reviewableItems[0].image}
+              alt={reviewableItems[0].title}
+              className="w-10 h-10 object-cover rounded-sm"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-body text-sm text-foreground truncate">
+                {reviewableItems[0].title}
+              </p>
+              <p className="font-body text-[10px] text-muted-foreground">
+                {reviewableItems[0].medium} · {reviewableItems[0].year}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <select
+            id={`review-product-${orderId}`}
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className="mt-1 w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm rounded-sm focus:outline-none focus:border-foreground/30"
+          >
+            {reviewableItems.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       {/* Stars */}
       <div className="flex items-center gap-1">
@@ -230,7 +316,7 @@ const OrderReviewForm = ({
             <Loader2 className="w-4 h-4 animate-spin" /> Submitting...
           </>
         ) : (
-          "Submit Review"
+          `Submit review${reviewableItems.length > 1 ? " for this painting" : ""}`
         )}
       </button>
     </div>

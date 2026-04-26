@@ -172,22 +172,42 @@ export const handler = async (event) => {
 
     if (method === "GET") {
       if (params.reviews === "published") {
+        const filterProductId =
+          typeof params.productId === "string" && params.productId.trim()
+            ? params.productId.trim()
+            : "";
         const orders = await readOrders(store);
         const reviews = [];
         for (const o of orders) {
-          if (!o.review || !o.review.publishedToHomepage) continue;
+          const reviewsList = Array.isArray(o.reviews)
+            ? o.reviews
+            : o.review
+              ? [o.review]
+              : [];
+          if (reviewsList.length === 0) continue;
           const firstName = (o.orderInfo?.fullName || "")
             .trim()
             .split(/\s+/)[0];
-          reviews.push({
-            orderId: o.id,
-            rating: o.review.rating,
-            text: o.review.text,
-            images: Array.isArray(o.review.images) ? o.review.images : [],
-            submittedAt: o.review.submittedAt,
-            customerName: firstName || "Customer",
-            customerCity: o.orderInfo?.city || "",
-          });
+          for (const r of reviewsList) {
+            if (filterProductId) {
+              if ((r.productId || "") !== filterProductId) continue;
+              if (!r.publishedToHomepage) continue;
+            } else if (!r.publishedToHomepage) {
+              continue;
+            }
+            reviews.push({
+              orderId: o.id,
+              rating: r.rating,
+              text: r.text,
+              images: Array.isArray(r.images) ? r.images : [],
+              submittedAt: r.submittedAt,
+              customerName: firstName || "Customer",
+              customerCity: o.orderInfo?.city || "",
+              productId: r.productId || undefined,
+              productTitle: r.productTitle || undefined,
+              productImage: r.productImage || undefined,
+            });
+          }
         }
         reviews.sort(
           (a, b) =>
@@ -518,15 +538,44 @@ export const handler = async (event) => {
             error: "Reviews can only be submitted after the order is received",
           });
         }
-        if (orders[idx].review) {
-          return json(409, { error: "Review already submitted" });
+        const productId =
+          typeof review.productId === "string" && review.productId.trim()
+            ? review.productId.trim().slice(0, 200)
+            : "";
+        const productTitle =
+          typeof review.productTitle === "string"
+            ? review.productTitle.slice(0, 200)
+            : undefined;
+        const productImage =
+          typeof review.productImage === "string" &&
+          review.productImage.length <= 800_000
+            ? review.productImage
+            : undefined;
+        const existingReviews = Array.isArray(orders[idx].reviews)
+          ? orders[idx].reviews
+          : orders[idx].review
+            ? [orders[idx].review]
+            : [];
+        const alreadyReviewed = existingReviews.some(
+          (r) => (r.productId || "") === productId,
+        );
+        if (alreadyReviewed) {
+          return json(409, {
+            error: productId
+              ? "This painting has already been reviewed"
+              : "Review already submitted",
+          });
         }
         const safeReview = {
           rating,
           text: text.slice(0, 5000),
           images,
           submittedAt: new Date().toISOString(),
+          ...(productId ? { productId } : {}),
+          ...(productTitle ? { productTitle } : {}),
+          ...(productImage ? { productImage } : {}),
         };
+        const nextReviews = [...existingReviews, safeReview];
         const reviewMeta = captureRequestMeta(event);
         const reviewActivity = Array.isArray(orders[idx].activityLog)
           ? [...orders[idx].activityLog]
@@ -540,6 +589,7 @@ export const handler = async (event) => {
         orders[idx] = {
           ...orders[idx],
           review: safeReview,
+          reviews: nextReviews,
           activityLog: reviewActivity,
         };
         await store.setJSON(ORDERS_KEY, orders);
@@ -563,25 +613,48 @@ export const handler = async (event) => {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
         }
-        const { orderId, publishedToHomepage } = body;
+        const { orderId, publishedToHomepage, productId } = body;
         if (!orderId || typeof orderId !== "string") {
           return json(400, { error: "Invalid orderId" });
         }
         if (typeof publishedToHomepage !== "boolean") {
           return json(400, { error: "publishedToHomepage must be a boolean" });
         }
+        const targetProductId =
+          typeof productId === "string" ? productId.trim() : "";
         const orders = await readOrders(store);
         const idx = orders.findIndex((o) => o.id === orderId);
         if (idx === -1) return json(404, { error: "Order not found" });
         const existing = orders[idx];
-        if (!existing.review) {
+        const reviewsList = Array.isArray(existing.reviews)
+          ? existing.reviews
+          : existing.review
+            ? [existing.review]
+            : [];
+        if (reviewsList.length === 0) {
           return json(400, { error: "Order has no review" });
         }
-        const updatedReview = {
-          ...existing.review,
-          publishedToHomepage,
+        let matched = false;
+        const updatedReviews = reviewsList.map((r) => {
+          if ((r.productId || "") === targetProductId) {
+            matched = true;
+            return { ...r, publishedToHomepage };
+          }
+          return r;
+        });
+        if (!matched) {
+          return json(404, { error: "Review for that product not found" });
+        }
+        const legacyReview =
+          existing.review &&
+          (existing.review.productId || "") === targetProductId
+            ? { ...existing.review, publishedToHomepage }
+            : existing.review;
+        orders[idx] = {
+          ...existing,
+          reviews: updatedReviews,
+          review: legacyReview,
         };
-        orders[idx] = { ...existing, review: updatedReview };
         await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: orders[idx] });
       }

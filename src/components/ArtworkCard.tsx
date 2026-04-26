@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, Eye } from "lucide-react";
+import { ShoppingCart, Eye, Heart } from "lucide-react";
+import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
+import { useWishlist } from "@/contexts/WishlistContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
@@ -49,10 +51,27 @@ const ArtworkCard = ({
   onClick,
 }: ArtworkCardProps) => {
   const { addToCart } = useCart();
+  const wishlist = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
   const effectivePrice = getEffectivePrice({ price, salePrice });
   const discount = getDiscountPercent({ price, salePrice });
   const purchasable = isPurchasable(availability);
+  const inWishlist = wishlist.has(id);
+
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const added = wishlist.toggle({
+      id,
+      title,
+      image,
+      price: effectivePrice,
+    });
+    toast.success(
+      added
+        ? `Saved "${title}" to your wishlist`
+        : `Removed "${title}" from your wishlist`,
+    );
+  };
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -103,7 +122,7 @@ const ArtworkCard = ({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-sm"
+              className="absolute top-3 right-12 flex items-center gap-1.5 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-sm"
             >
               <Eye className="w-3 h-3 text-white/80" />
               <span className="font-body text-[9px] tracking-[0.2em] uppercase text-white/80">
@@ -112,6 +131,25 @@ const ArtworkCard = ({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Wishlist heart */}
+        <button
+          type="button"
+          onClick={handleToggleWishlist}
+          aria-pressed={inWishlist}
+          aria-label={
+            inWishlist
+              ? `Remove ${title} from wishlist`
+              : `Save ${title} to wishlist`
+          }
+          className="absolute top-3 right-3 z-[3] p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-colors"
+        >
+          <Heart
+            className={`w-4 h-4 transition-colors ${
+              inWishlist ? "fill-red-500 text-red-500" : "text-white/80"
+            }`}
+          />
+        </button>
 
         {/* Availability badge */}
         {availability !== "available" && (

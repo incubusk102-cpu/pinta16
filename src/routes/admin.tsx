@@ -69,7 +69,11 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { ORDER_STEPS, type CompletedOrder } from "@/contexts/CartContext";
+import {
+  ORDER_STEPS,
+  type CompletedOrder,
+  type OrderReview,
+} from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 
 export const Route = createFileRoute("/admin")({
@@ -1136,6 +1140,7 @@ function OrdersSection() {
   const handleSetReviewPublished = async (
     orderId: string,
     publishedToHomepage: boolean,
+    productId?: string,
   ) => {
     setUpdatingId(orderId);
     try {
@@ -1149,6 +1154,7 @@ function OrdersSection() {
         body: JSON.stringify({
           action: "set-review-published",
           orderId,
+          productId,
           publishedToHomepage,
         }),
       });
@@ -1159,14 +1165,24 @@ function OrdersSection() {
       const data = await res.json();
       const updated = data.order as CompletedOrder | undefined;
       setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? (updated ??
-              (o.review
-                ? { ...o, review: { ...o.review, publishedToHomepage } }
-                : o))
-            : o,
-        ),
+        prev.map((o) => {
+          if (o.id !== orderId) return o;
+          if (updated) return updated;
+          const reviews = o.reviews
+            ? o.reviews.map((r) =>
+                (r.productId ?? "") === (productId ?? "")
+                  ? { ...r, publishedToHomepage }
+                  : r,
+              )
+            : o.review
+              ? [{ ...o.review, publishedToHomepage }]
+              : [];
+          const legacy =
+            o.review && (o.review.productId ?? "") === (productId ?? "")
+              ? { ...o.review, publishedToHomepage }
+              : o.review;
+          return { ...o, reviews, review: legacy };
+        }),
       );
       toast.success(
         publishedToHomepage
@@ -1465,90 +1481,102 @@ function OrdersSection() {
               </div>
             )}
 
-            {/* Review */}
-            {order.review && (
-              <div className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md">
-                <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
-                  <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                  <span className="text-[10px] uppercase tracking-wider">
-                    Customer review
-                  </span>
-                  {order.review.publishedToHomepage && (
-                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded">
-                      On homepage
+            {/* Reviews (per painting) */}
+            {(() => {
+              const reviewsList: OrderReview[] =
+                order.reviews && order.reviews.length > 0
+                  ? order.reviews
+                  : order.review
+                    ? [order.review]
+                    : [];
+              if (reviewsList.length === 0) return null;
+              return reviewsList.map((rev, idx) => (
+                <div
+                  key={`${rev.productId ?? "legacy"}-${idx}`}
+                  className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md"
+                >
+                  <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
+                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                    <span className="text-[10px] uppercase tracking-wider">
+                      Customer review
+                      {rev.productTitle ? ` · ${rev.productTitle}` : ""}
                     </span>
-                  )}
-                  <span className="ml-auto text-[10px]">
-                    {new Date(order.review.submittedAt).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <Star
-                      key={n}
-                      className={`w-3.5 h-3.5 ${
-                        n <= order.review!.rating
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-muted-foreground"
-                      }`}
-                    />
-                  ))}
-                  <span className="ml-1 text-muted-foreground">
-                    {order.review.rating}/5
-                  </span>
-                </div>
-                <p className="text-foreground whitespace-pre-wrap">
-                  {order.review.text}
-                </p>
-                {order.review.images.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {order.review.images.map((src, i) => (
-                      <a
-                        key={i}
-                        href={src}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <img
-                          src={src}
-                          alt={`Review image ${i + 1}`}
-                          className="aspect-square w-full object-cover rounded-sm border border-border/20"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                )}
-                <div className="flex justify-end pt-1">
-                  <Button
-                    type="button"
-                    variant={
-                      order.review.publishedToHomepage ? "outline" : "default"
-                    }
-                    size="sm"
-                    disabled={updatingId === order.id}
-                    onClick={() =>
-                      void handleSetReviewPublished(
-                        order.id,
-                        !order.review!.publishedToHomepage,
-                      )
-                    }
-                    className="text-xs h-7"
-                  >
-                    {order.review.publishedToHomepage ? (
-                      <>
-                        <EyeOff className="w-3.5 h-3.5 mr-1" />
-                        Unpublish from homepage
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        Publish to homepage
-                      </>
+                    {rev.publishedToHomepage && (
+                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded">
+                        On homepage
+                      </span>
                     )}
-                  </Button>
+                    <span className="ml-auto text-[10px]">
+                      {new Date(rev.submittedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        className={`w-3.5 h-3.5 ${
+                          n <= rev.rating
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-muted-foreground"
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-1 text-muted-foreground">
+                      {rev.rating}/5
+                    </span>
+                  </div>
+                  <p className="text-foreground whitespace-pre-wrap">
+                    {rev.text}
+                  </p>
+                  {rev.images.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {rev.images.map((src, i) => (
+                        <a
+                          key={i}
+                          href={src}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={src}
+                            alt={`Review image ${i + 1}`}
+                            className="aspect-square w-full object-cover rounded-sm border border-border/20"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="button"
+                      variant={rev.publishedToHomepage ? "outline" : "default"}
+                      size="sm"
+                      disabled={updatingId === order.id}
+                      onClick={() =>
+                        void handleSetReviewPublished(
+                          order.id,
+                          !rev.publishedToHomepage,
+                          rev.productId,
+                        )
+                      }
+                      className="text-xs h-7"
+                    >
+                      {rev.publishedToHomepage ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5 mr-1" />
+                          Unpublish
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          Publish to homepage
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              ));
+            })()}
 
             {/* Journey Map */}
             <div className="flex items-center gap-1">

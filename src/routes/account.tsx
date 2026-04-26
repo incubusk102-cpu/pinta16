@@ -13,13 +13,16 @@ import { Toaster } from "@/components/ui/sonner";
 import {
   ArrowLeft,
   Bell,
+  Heart,
   LogOut,
   Mail,
   Package,
   Search,
   Star,
+  Trash2,
   UserCircle,
 } from "lucide-react";
+import { useWishlist } from "@/contexts/WishlistContext";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
 
@@ -44,7 +47,7 @@ function OrderTracker() {
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<CompletedOrder | null>(null);
   const [searching, setSearching] = useState(false);
-  const { orders: localOrders } = useCart();
+  const { orders: localOrders, getOrderReviews } = useCart();
 
   const lookup = async () => {
     const id = orderId.trim().toUpperCase();
@@ -182,52 +185,153 @@ function OrderTracker() {
             />
           )}
 
-          {/* Review form / submitted review */}
-          {order.status === "received" && !order.review && !order.refund && (
-            <OrderReviewForm
-              orderId={order.id}
-              customerEmail={order.orderInfo?.email}
-              onSubmitted={(review) => setOrder({ ...order, review })}
-            />
-          )}
-          {order.review && (
-            <div className="pt-2 border-t border-border/10 space-y-2">
-              <div className="flex items-center gap-2">
-                <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Your Review
+          {/* Review form / submitted reviews */}
+          {(() => {
+            const reviews = getOrderReviews(order);
+            const showForm = order.status === "received" && !order.refund;
+            return (
+              <>
+                {showForm && (
+                  <OrderReviewForm
+                    orderId={order.id}
+                    customerEmail={order.orderInfo?.email}
+                    items={order.items}
+                    existingReviews={reviews}
+                    onSubmitted={(review) => {
+                      const idx = reviews.findIndex(
+                        (r) => (r.productId ?? "") === (review.productId ?? ""),
+                      );
+                      const next = [...reviews];
+                      if (idx >= 0) next[idx] = review;
+                      else next.push(review);
+                      setOrder({ ...order, reviews: next, review });
+                    }}
+                  />
+                )}
+                {reviews.map((rev, idx) => (
+                  <div
+                    key={`${rev.productId ?? "order"}-${idx}`}
+                    className="pt-2 border-t border-border/10 space-y-2"
+                  >
+                    <div className="flex items-center gap-2 justify-between">
+                      <div className="flex items-center gap-2">
+                        <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Your review
+                          {rev.productTitle ? ` · ${rev.productTitle}` : ""}
+                        </p>
+                      </div>
+                      {rev.publishedToHomepage && (
+                        <span className="px-1.5 py-0.5 bg-foreground/10 text-foreground text-[10px] tracking-[0.2em] uppercase rounded-sm">
+                          Featured
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Star
+                          key={n}
+                          className={`w-3.5 h-3.5 ${
+                            n <= rev.rating
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs text-foreground whitespace-pre-wrap">
+                      {rev.text}
+                    </p>
+                    {rev.images.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {rev.images.map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt={`Review image ${i + 1}`}
+                            className="aspect-square w-full object-cover rounded-sm border border-border/10"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WishlistSection() {
+  const { items, remove } = useWishlist();
+  return (
+    <div className="bg-card/40 border border-border/60 rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+          <Heart className="w-4 h-4" /> My wishlist
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {items.length} saved
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Tap the heart on any painting to save it for later.
+        </p>
+      ) : (
+        <ul className="grid sm:grid-cols-2 gap-3">
+          {items.map((entry) => (
+            <li
+              key={entry.id}
+              className="flex gap-3 p-3 border border-border/40 rounded-md bg-background/40"
+            >
+              {entry.image && (
+                <Link
+                  to="/product/$id"
+                  params={{ id: entry.id }}
+                  className="shrink-0"
+                >
+                  <img
+                    src={entry.image}
+                    alt={entry.title || entry.id}
+                    className="w-16 h-16 object-cover rounded-sm"
+                  />
+                </Link>
+              )}
+              <div className="flex-1 min-w-0 flex flex-col">
+                <Link
+                  to="/product/$id"
+                  params={{ id: entry.id }}
+                  className="text-sm font-medium text-foreground truncate hover:underline"
+                >
+                  {entry.title || entry.id}
+                </Link>
+                {entry.price !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    ₱{entry.price.toLocaleString()}
+                  </p>
+                )}
+                <p className="text-[10px] text-muted-foreground mt-auto">
+                  Saved {formatDate(entry.addedAt)}
                 </p>
               </div>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <Star
-                    key={n}
-                    className={`w-3.5 h-3.5 ${
-                      n <= order.review!.rating
-                        ? "fill-yellow-400 text-yellow-400"
-                        : "text-muted-foreground"
-                    }`}
-                  />
-                ))}
-              </div>
-              <p className="text-xs text-foreground whitespace-pre-wrap">
-                {order.review.text}
-              </p>
-              {order.review.images.length > 0 && (
-                <div className="grid grid-cols-3 gap-2">
-                  {order.review.images.map((src, i) => (
-                    <img
-                      key={i}
-                      src={src}
-                      alt={`Review image ${i + 1}`}
-                      className="aspect-square w-full object-cover rounded-sm border border-border/10"
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+              <button
+                type="button"
+                onClick={() => {
+                  remove(entry.id);
+                  toast.success("Removed from wishlist");
+                }}
+                aria-label={`Remove ${entry.title || entry.id} from wishlist`}
+                className="self-start p-1.5 text-muted-foreground hover:text-foreground"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -285,6 +389,8 @@ function AccountPage() {
         </div>
 
         <OrderTracker />
+
+        <WishlistSection />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="bg-card/40 border border-border/60 rounded-xl p-5">
