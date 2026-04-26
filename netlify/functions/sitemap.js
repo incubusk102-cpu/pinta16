@@ -19,15 +19,25 @@ const STATIC_PATHS = [
 ];
 
 export const handler = async (event) => {
-  const proto =
-    event.headers?.["x-forwarded-proto"] ||
-    event.headers?.["X-Forwarded-Proto"] ||
-    "https";
-  const host =
-    event.headers?.["x-forwarded-host"] ||
-    event.headers?.host ||
-    "pintaterra.com";
-  const origin = `${proto}://${host}`;
+  // proto / host come from request headers, which are user-controlled.
+  // Reject anything outside a strict allowlist so a crafted Host header
+  // can't inject arbitrary characters into the sitemap.
+  const safeProto = (() => {
+    const v =
+      event.headers?.["x-forwarded-proto"] ||
+      event.headers?.["X-Forwarded-Proto"] ||
+      "https";
+    return v === "http" ? "http" : "https";
+  })();
+  const safeHost = (() => {
+    const v =
+      event.headers?.["x-forwarded-host"] ||
+      event.headers?.host ||
+      "pintaterra.com";
+    // Allow only hostname-y characters: letters, digits, dots, hyphens, colons (port).
+    return /^[a-zA-Z0-9.\-:]+$/.test(String(v)) ? String(v) : "pintaterra.com";
+  })();
+  const origin = `${safeProto}://${safeHost}`;
 
   let products = [];
   try {
@@ -47,7 +57,7 @@ export const handler = async (event) => {
 
   for (const route of STATIC_PATHS) {
     lines.push("  <url>");
-    lines.push(`    <loc>${origin}${route.path}</loc>`);
+    lines.push(`    <loc>${xmlEscape(`${origin}${route.path}`)}</loc>`);
     lines.push(`    <lastmod>${now}</lastmod>`);
     lines.push(`    <changefreq>${route.changefreq}</changefreq>`);
     lines.push(`    <priority>${route.priority}</priority>`);
