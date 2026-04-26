@@ -73,8 +73,10 @@ import {
   ORDER_STEPS,
   type CompletedOrder,
   type OrderReview,
+  type OrderShipment,
 } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import { COURIERS, buildTrackingUrl } from "@/lib/shipment";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -943,22 +945,59 @@ interface OrdersSummary {
 const formatPHP = (n: number) =>
   `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
 
+interface AnalyticsPoint {
+  date: string;
+  orders: number;
+  revenue: number;
+  refunded: number;
+}
+
+interface AnalyticsData {
+  days: number;
+  series: AnalyticsPoint[];
+  topProducts: {
+    id: string;
+    title: string;
+    image: string;
+    units: number;
+    revenue: number;
+  }[];
+  statusCounts: Record<string, number>;
+}
+
+const ANALYTICS_RANGES: { days: number; label: string }[] = [
+  { days: 7, label: "7d" },
+  { days: 30, label: "30d" },
+  { days: 90, label: "90d" },
+];
+
 function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
   const [summary, setSummary] = useState<OrdersSummary | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analyticsDays, setAnalyticsDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = async () => {
+  const refresh = async (days: number = analyticsDays) => {
     setLoading(true);
     setError(null);
     try {
       const token = getAdminToken();
-      const res = await fetch("/api/orders?metrics=summary", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setSummary(data.summary as OrdersSummary);
+      const [summaryRes, analyticsRes] = await Promise.all([
+        fetch("/api/orders?metrics=summary", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/orders?metrics=analytics&days=${days}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      if (!summaryRes.ok) throw new Error(`HTTP ${summaryRes.status}`);
+      const summaryData = await summaryRes.json();
+      setSummary(summaryData.summary as OrdersSummary);
+      if (analyticsRes.ok) {
+        const analyticsData = await analyticsRes.json();
+        setAnalytics(analyticsData.analytics as AnalyticsData);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load metrics");
     } finally {
@@ -967,8 +1006,9 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
   };
 
   useEffect(() => {
-    void refresh();
-  }, []);
+    void refresh(analyticsDays);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyticsDays]);
 
   return (
     <div className="space-y-6">
@@ -1036,6 +1076,159 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
               hint="Successfully credited back to customers"
             />
           </div>
+        </>
+      )}
+
+      <AnalyticsPanel
+        analytics={analytics}
+        days={analyticsDays}
+        onChangeDays={setAnalyticsDays}
+        loading={loading}
+      />
+    </div>
+  );
+}
+
+function AnalyticsPanel({
+  analytics,
+  days,
+  onChangeDays,
+  loading,
+}: {
+  analytics: AnalyticsData | null;
+  days: number;
+  onChangeDays: (d: number) => void;
+  loading: boolean;
+}) {
+  const series = analytics?.series ?? [];
+  const maxRevenue = series.reduce((m, p) => Math.max(m, p.revenue), 0);
+  const maxOrders = series.reduce((m, p) => Math.max(m, p.orders), 0);
+  const totalRevenue = series.reduce((s, p) => s + p.revenue, 0);
+  const totalOrders = series.reduce((s, p) => s + p.orders, 0);
+  const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  return (
+    <div className="border border-border/40 rounded-lg p-4 space-y-4 bg-card/40">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Analytics
+          </div>
+          <p className="font-display text-lg">
+            {formatPHP(totalRevenue)}{" "}
+            <span className="text-sm text-muted-foreground font-body">
+              · {totalOrders} order{totalOrders === 1 ? "" : "s"} · avg{" "}
+              {formatPHP(avgOrderValue)}
+            </span>
+          </p>
+        </div>
+        <div className="flex items-center gap-1 bg-muted/40 rounded-md p-0.5">
+          {ANALYTICS_RANGES.map((r) => (
+            <button
+              key={r.days}
+              type="button"
+              onClick={() => onChangeDays(r.days)}
+              className={`px-2 py-1 text-[11px] rounded ${
+                days === r.days
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && !analytics ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <div className="flex items-end gap-[2px] h-32">
+              {series.map((p) => {
+                const h = maxRevenue > 0 ? (p.revenue / maxRevenue) * 100 : 0;
+                return (
+                  <div
+                    key={p.date}
+                    className="flex-1 flex flex-col justify-end"
+                    title={`${p.date}: ${formatPHP(p.revenue)} (${p.orders} orders)`}
+                  >
+                    <div
+                      className="bg-foreground/70 hover:bg-foreground rounded-sm transition-all"
+                      style={{
+                        height: `${Math.max(h, p.revenue > 0 ? 2 : 0)}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>{series[0]?.date ?? ""}</span>
+              <span>Daily revenue · max {formatPHP(maxRevenue)}</span>
+              <span>{series[series.length - 1]?.date ?? ""}</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-end gap-[2px] h-16">
+              {series.map((p) => {
+                const h = maxOrders > 0 ? (p.orders / maxOrders) * 100 : 0;
+                return (
+                  <div
+                    key={`o-${p.date}`}
+                    className="flex-1 flex flex-col justify-end"
+                    title={`${p.date}: ${p.orders} orders`}
+                  >
+                    <div
+                      className="bg-emerald-500/70 rounded-sm"
+                      style={{
+                        height: `${Math.max(h, p.orders > 0 ? 2 : 0)}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Daily orders · max {maxOrders}
+            </div>
+          </div>
+
+          {analytics?.topProducts && analytics.topProducts.length > 0 && (
+            <div className="pt-2 border-t border-border/40">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                Top paintings (all-time)
+              </div>
+              <ul className="space-y-2">
+                {analytics.topProducts.map((p, i) => (
+                  <li key={p.id} className="flex items-center gap-3 text-sm">
+                    <span className="w-5 text-xs text-muted-foreground">
+                      #{i + 1}
+                    </span>
+                    {p.image ? (
+                      <img
+                        src={p.image}
+                        alt=""
+                        className="w-9 h-9 object-cover rounded-sm border border-border/40"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-sm bg-muted" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-foreground">{p.title}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {p.units} sold · {formatPHP(p.revenue)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -1192,6 +1385,71 @@ function OrdersSection() {
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Could not update review",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleSaveShipment = async (
+    orderId: string,
+    shipment: { courier: string; trackingNumber: string; trackingUrl?: string },
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "update-shipment",
+          orderId,
+          shipment,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      toast.success("Tracking saved");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not save tracking",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleClearShipment = async (orderId: string) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "update-shipment",
+          orderId,
+          shipment: null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      toast.success("Tracking cleared");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not clear tracking",
       );
     } finally {
       setUpdatingId(null);
@@ -1481,6 +1739,14 @@ function OrdersSection() {
               </div>
             )}
 
+            {/* Shipment / tracking */}
+            <ShipmentEditor
+              order={order}
+              busy={updatingId === order.id}
+              onSave={(s) => handleSaveShipment(order.id, s)}
+              onClear={() => handleClearShipment(order.id)}
+            />
+
             {/* Reviews (per painting) */}
             {(() => {
               const reviewsList: OrderReview[] =
@@ -1721,6 +1987,138 @@ function OrdersSection() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ShipmentEditor({
+  order,
+  busy,
+  onSave,
+  onClear,
+}: {
+  order: CompletedOrder;
+  busy: boolean;
+  onSave: (s: {
+    courier: string;
+    trackingNumber: string;
+    trackingUrl?: string;
+  }) => void;
+  onClear: () => void;
+}) {
+  const existing: OrderShipment | undefined = order.shipment;
+  const [courier, setCourier] = useState<string>(existing?.courier ?? "");
+  const [trackingNumber, setTrackingNumber] = useState<string>(
+    existing?.trackingNumber ?? "",
+  );
+  const [trackingUrl, setTrackingUrl] = useState<string>(
+    existing?.trackingUrl ?? "",
+  );
+
+  useEffect(() => {
+    setCourier(existing?.courier ?? "");
+    setTrackingNumber(existing?.trackingNumber ?? "");
+    setTrackingUrl(existing?.trackingUrl ?? "");
+  }, [existing?.courier, existing?.trackingNumber, existing?.trackingUrl]);
+
+  const previewUrl = buildTrackingUrl(courier, trackingNumber, trackingUrl);
+  const dirty =
+    (existing?.courier ?? "") !== courier ||
+    (existing?.trackingNumber ?? "") !== trackingNumber ||
+    (existing?.trackingUrl ?? "") !== trackingUrl;
+  const canSave = courier.trim() && trackingNumber.trim() && dirty;
+
+  return (
+    <div className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Truck className="w-3.5 h-3.5" />
+        <span className="text-[10px] uppercase tracking-wider">
+          Shipment / tracking
+        </span>
+        {existing && (
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            Saved {new Date(existing.updatedAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Courier
+          </Label>
+          <Select value={courier || ""} onValueChange={setCourier}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Select courier" />
+            </SelectTrigger>
+            <SelectContent>
+              {COURIERS.map((c) => (
+                <SelectItem key={c.id} value={c.label}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Tracking number
+          </Label>
+          <Input
+            value={trackingNumber}
+            onChange={(e) => setTrackingNumber(e.target.value)}
+            placeholder="e.g. JT1234567890"
+            className="h-8 text-xs"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Custom tracking URL (optional)
+        </Label>
+        <Input
+          value={trackingUrl}
+          onChange={(e) => setTrackingUrl(e.target.value)}
+          placeholder="Leave blank to auto-build from courier"
+          className="h-8 text-xs"
+        />
+        {previewUrl && (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-foreground/70 underline break-all"
+          >
+            Preview: {previewUrl}
+          </a>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={busy || !canSave}
+          onClick={() =>
+            onSave({
+              courier: courier.trim(),
+              trackingNumber: trackingNumber.trim(),
+              trackingUrl: trackingUrl.trim() || undefined,
+            })
+          }
+        >
+          {existing ? "Update tracking" : "Save tracking"}
+        </Button>
+        {existing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={busy}
+            onClick={onClear}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

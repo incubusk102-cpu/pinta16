@@ -240,6 +240,78 @@ export const handler = async (event) => {
         });
       }
 
+      if (params.metrics === "analytics") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const days = Math.min(Math.max(Number(params.days) || 30, 7), 90);
+        const orders = await readOrders(store);
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        const series = [];
+        const dayMap = new Map();
+        for (let i = days - 1; i >= 0; i--) {
+          const d = new Date(today.getTime() - i * 86400000);
+          const key = d.toISOString().slice(0, 10);
+          const entry = { date: key, orders: 0, revenue: 0, refunded: 0 };
+          dayMap.set(key, entry);
+          series.push(entry);
+        }
+        const productMap = new Map();
+        const statusCounts = {
+          confirmed: 0,
+          in_progress: 0,
+          out_for_delivery: 0,
+          received: 0,
+        };
+        for (const o of orders) {
+          const total = Number(o.total) || 0;
+          const refunded =
+            o.refund && o.refund.status === "succeeded"
+              ? Number(o.refund.amount) || 0
+              : 0;
+          if (statusCounts[o.status] !== undefined) {
+            statusCounts[o.status] += 1;
+          }
+          const created = new Date(o.createdAt);
+          if (!Number.isNaN(created.getTime())) {
+            const key = created.toISOString().slice(0, 10);
+            const entry = dayMap.get(key);
+            if (entry) {
+              entry.orders += 1;
+              entry.revenue += total;
+              entry.refunded += refunded;
+            }
+          }
+          for (const item of o.items || []) {
+            const id = item.id || item.title;
+            if (!id) continue;
+            const cur = productMap.get(id) || {
+              id,
+              title: item.title || id,
+              image: item.image || "",
+              units: 0,
+              revenue: 0,
+            };
+            const qty = Number(item.quantity) || 1;
+            cur.units += qty;
+            cur.revenue += (Number(item.price) || 0) * qty;
+            productMap.set(id, cur);
+          }
+        }
+        const topProducts = Array.from(productMap.values())
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5);
+        return json(200, {
+          analytics: {
+            days,
+            series,
+            topProducts,
+            statusCounts,
+          },
+        });
+      }
+
       if (params.metrics === "summary") {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
@@ -484,6 +556,121 @@ export const handler = async (event) => {
           });
         }
         orders[idx] = { ...existing, status, notifications, activityLog };
+        await store.setJSON(ORDERS_KEY, orders);
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "update-shipment") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, shipment } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        const notifications = Array.isArray(existing.notifications)
+          ? [...existing.notifications]
+          : [];
+
+        if (shipment === null) {
+          if (!existing.shipment) {
+            return json(200, { order: existing });
+          }
+          const next = { ...existing };
+          delete next.shipment;
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "shipment:cleared",
+            actor: "admin",
+            ...meta,
+          });
+          orders[idx] = { ...next, activityLog, notifications };
+          await store.setJSON(ORDERS_KEY, orders);
+          return json(200, { order: orders[idx] });
+        }
+
+        if (!shipment || typeof shipment !== "object") {
+          return json(400, { error: "Invalid shipment" });
+        }
+        const courier =
+          typeof shipment.courier === "string"
+            ? shipment.courier.trim().slice(0, 80)
+            : "";
+        const trackingNumber =
+          typeof shipment.trackingNumber === "string"
+            ? shipment.trackingNumber.trim().slice(0, 120)
+            : "";
+        const trackingUrlRaw =
+          typeof shipment.trackingUrl === "string"
+            ? shipment.trackingUrl.trim().slice(0, 400)
+            : "";
+        const notes =
+          typeof shipment.notes === "string"
+            ? shipment.notes.trim().slice(0, 400)
+            : "";
+        if (!courier || !trackingNumber) {
+          return json(400, {
+            error: "Courier and tracking number are required",
+          });
+        }
+        if (trackingUrlRaw && !/^https?:\/\//i.test(trackingUrlRaw)) {
+          return json(400, {
+            error: "Tracking URL must start with http(s)://",
+          });
+        }
+        const safeShipment = {
+          courier,
+          trackingNumber,
+          ...(trackingUrlRaw ? { trackingUrl: trackingUrlRaw } : {}),
+          ...(notes ? { notes } : {}),
+          updatedAt: new Date().toISOString(),
+        };
+        const isNew =
+          !existing.shipment ||
+          existing.shipment.trackingNumber !== safeShipment.trackingNumber ||
+          existing.shipment.courier !== safeShipment.courier;
+        if (isNew) {
+          notifications.push({
+            type: "shipped",
+            message: `Your order has shipped via ${courier} (tracking ${trackingNumber}).`,
+            recipient: existing.orderInfo?.email || "",
+            sentAt: new Date().toISOString(),
+          });
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "shipment:set",
+            actor: "admin",
+            ...meta,
+          });
+          await appendAuditEvent(event, {
+            type: "order.shipment",
+            outcome: "set",
+            subject: orderId,
+            detail: `${courier} ${trackingNumber}`,
+            ...meta,
+          });
+        } else {
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "shipment:updated",
+            actor: "admin",
+            ...meta,
+          });
+        }
+        orders[idx] = {
+          ...existing,
+          shipment: safeShipment,
+          notifications,
+          activityLog,
+        };
         await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: orders[idx] });
       }

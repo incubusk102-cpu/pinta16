@@ -20,9 +20,11 @@ import {
   Search,
   Star,
   Trash2,
+  Truck,
   UserCircle,
 } from "lucide-react";
 import { useWishlist } from "@/contexts/WishlistContext";
+import { buildTrackingUrl } from "@/lib/shipment";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
 
@@ -149,6 +151,41 @@ function OrderTracker() {
               );
             })}
           </div>
+
+          {/* Shipment tracking */}
+          {order.shipment && (
+            <div className="pt-2 border-t border-border/10">
+              <div className="flex items-center gap-2 mb-2">
+                <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  In transit
+                </span>
+              </div>
+              <p className="text-sm text-foreground">
+                {order.shipment.courier} ·{" "}
+                <span className="font-mono text-xs">
+                  {order.shipment.trackingNumber}
+                </span>
+              </p>
+              {(() => {
+                const url = buildTrackingUrl(
+                  order.shipment.courier,
+                  order.shipment.trackingNumber,
+                  order.shipment.trackingUrl,
+                );
+                return url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-foreground underline mt-1"
+                  >
+                    Track shipment ↗
+                  </a>
+                ) : null;
+              })()}
+            </div>
+          )}
 
           {/* Notifications log */}
           {order.notifications && order.notifications.length > 0 && (

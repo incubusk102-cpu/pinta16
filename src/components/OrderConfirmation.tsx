@@ -12,6 +12,7 @@ import {
   Star,
 } from "lucide-react";
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
+import { buildTrackingUrl } from "@/lib/shipment";
 import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
 import RefundBanner from "./RefundBanner";
@@ -181,6 +182,41 @@ const OrderConfirmation = () => {
                   <p className="font-body text-xs text-muted-foreground">
                     Estimated creation: {lastOrder.estimatedCreationDays}
                   </p>
+                </div>
+              )}
+
+              {/* Shipment tracking */}
+              {lastOrder.shipment && (
+                <div className="p-4 bg-muted/30 border border-border/10 rounded-sm space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-muted-foreground" />
+                    <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                      In transit
+                    </p>
+                  </div>
+                  <p className="font-body text-sm text-foreground">
+                    {lastOrder.shipment.courier} · Tracking{" "}
+                    <span className="font-mono">
+                      {lastOrder.shipment.trackingNumber}
+                    </span>
+                  </p>
+                  {(() => {
+                    const url = buildTrackingUrl(
+                      lastOrder.shipment.courier,
+                      lastOrder.shipment.trackingNumber,
+                      lastOrder.shipment.trackingUrl,
+                    );
+                    return url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-foreground underline mt-1"
+                      >
+                        Track shipment ↗
+                      </a>
+                    ) : null;
+                  })()}
                 </div>
               )}
 

@@ -46,6 +46,14 @@ export interface OrderRefund {
   failureMessage?: string;
 }
 
+export interface OrderShipment {
+  courier: string;
+  trackingNumber: string;
+  trackingUrl?: string;
+  notes?: string;
+  updatedAt: string;
+}
+
 export interface OrderReview {
   rating: number;
   text: string;
@@ -91,6 +99,7 @@ export interface CompletedOrder {
   review?: OrderReview;
   reviews?: OrderReview[];
   refund?: OrderRefund;
+  shipment?: OrderShipment;
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];
 }
