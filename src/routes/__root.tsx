@@ -12,6 +12,8 @@ import AnnouncementBar from "@/components/AnnouncementBar";
 import PwaPrompts from "@/components/PwaPrompts";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { LocaleProvider } from "@/contexts/LocaleContext";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
 
@@ -60,21 +62,25 @@ function ConditionalAnnouncementBar() {
 
 function RootComponent() {
   return (
-    <AdminAuthProvider>
-      <UserAuthProvider>
-        <WishlistProvider>
-          <StorefrontConfigProvider>
-            <ProductProvider>
-              <CartProvider>
-                <HeartbeatBridge />
-                <ConditionalAnnouncementBar />
-                <Outlet />
-                <PwaPrompts />
-              </CartProvider>
-            </ProductProvider>
-          </StorefrontConfigProvider>
-        </WishlistProvider>
-      </UserAuthProvider>
-    </AdminAuthProvider>
+    <ThemeProvider>
+      <LocaleProvider>
+        <AdminAuthProvider>
+          <UserAuthProvider>
+            <WishlistProvider>
+              <StorefrontConfigProvider>
+                <ProductProvider>
+                  <CartProvider>
+                    <HeartbeatBridge />
+                    <ConditionalAnnouncementBar />
+                    <Outlet />
+                    <PwaPrompts />
+                  </CartProvider>
+                </ProductProvider>
+              </StorefrontConfigProvider>
+            </WishlistProvider>
+          </UserAuthProvider>
+        </AdminAuthProvider>
+      </LocaleProvider>
+    </ThemeProvider>
   );
 }

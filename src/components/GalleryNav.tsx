@@ -4,12 +4,15 @@ import { ShoppingCart, Menu, X, UserCircle } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
+import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { itemCount, openCart } = useCart();
   const { user } = useUserAuth();
+  const { t } = useLocale();
   const navigate = useNavigate();
   const pathname = useRouterState({
     select: (s) => s.location.pathname,
@@ -51,8 +54,8 @@ const GalleryNav = () => {
         </button>
         <div className="hidden md:flex items-center gap-10">
           {[
-            { id: "gallery", label: "Collection" },
-            { id: "contact", label: "Contact" },
+            { id: "gallery", label: t("nav.gallery") },
+            { id: "contact", label: t("nav.contact") },
           ].map((item) => (
             <button
               key={item.id}
@@ -68,9 +71,10 @@ const GalleryNav = () => {
               className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors duration-500 inline-flex items-center gap-2"
             >
               <UserCircle className="w-4 h-4" />
-              {user.name?.split(" ")[0] || "Account"}
+              {user.name?.split(" ")[0] || t("nav.account")}
             </Link>
           )}
+          <ThemeLocaleToggle />
           <button onClick={openCart} className="relative p-2">
             <ShoppingCart className="w-5 h-5 text-foreground" />
             {itemCount > 0 && (
@@ -111,8 +115,8 @@ const GalleryNav = () => {
             className="md:hidden bg-background/95 backdrop-blur-xl border-b border-border/10 px-6 pb-6 flex flex-col gap-4"
           >
             {[
-              { id: "gallery", label: "Collection" },
-              { id: "contact", label: "Contact" },
+              { id: "gallery", label: t("nav.gallery") },
+              { id: "contact", label: t("nav.contact") },
             ].map((item) => (
               <button
                 key={item.id}
@@ -129,9 +133,12 @@ const GalleryNav = () => {
                 className="font-body text-sm tracking-[0.3em] uppercase text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
               >
                 <UserCircle className="w-4 h-4" />
-                Account
+                {t("nav.account")}
               </Link>
             )}
+            <div className="pt-2">
+              <ThemeLocaleToggle />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

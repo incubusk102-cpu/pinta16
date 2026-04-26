@@ -142,6 +142,9 @@ export const publicUser = (user) => {
     name: user.name || "",
     createdAt: user.createdAt,
     lastSeenAt: user.lastSeenAt,
+    addresses: Array.isArray(user.addresses) ? user.addresses : [],
+    defaultAddressId: user.defaultAddressId || null,
+    updatedAt: user.updatedAt || user.createdAt,
   };
   if (user.picture) out.picture = user.picture;
   if (user.provider) out.provider = user.provider;
