@@ -350,39 +350,35 @@ export const handler = async (event) => {
       const users = await readUsers(store);
       const stored = users[normalizeEmail(user.email)];
       if (!stored) return json(404, { error: "User not found" });
-      if (!stored.passwordHash || !stored.passwordSalt) {
+      if (!stored.hash || !stored.salt) {
         return json(400, {
           error:
             "This account uses a social provider — password change is not supported.",
         });
       }
-      const ok = verifyPassword(
-        oldPassword,
-        stored.passwordSalt,
-        stored.passwordHash,
-      );
+      const ok = verifyPassword(oldPassword, stored.salt, stored.hash);
       if (!ok) {
-        const meta = captureRequestMeta(event);
-        await appendAuditEvent({
-          actor: user.email,
-          action: "user-password-change-failed",
+        await appendAuditEvent(event, {
+          type: "user.change-password",
+          outcome: "failure",
+          subject: user.email,
           detail: "Bad current password",
-          ...meta,
+          ...captureRequestMeta(event),
         });
         return json(400, { error: "Current password is incorrect" });
       }
-      const { hash, salt } = hashPassword(newPassword);
-      stored.passwordHash = hash;
-      stored.passwordSalt = salt;
+      const { hash: newHash, salt: newSalt } = hashPassword(newPassword);
+      stored.hash = newHash;
+      stored.salt = newSalt;
       stored.passwordChangedAt = new Date().toISOString();
       stored.updatedAt = stored.passwordChangedAt;
       await writeUsers(store, users);
-      const meta = captureRequestMeta(event);
-      await appendAuditEvent({
-        actor: user.email,
-        action: "user-password-changed",
+      await appendAuditEvent(event, {
+        type: "user.change-password",
+        outcome: "success",
+        subject: user.email,
         detail: "Password updated via /account",
-        ...meta,
+        ...captureRequestMeta(event),
       });
       return json(200, { ok: true });
     }
