@@ -41,6 +41,18 @@ import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import ExportPanel from "@/admin/ExportPanel";
+import { OrdersToolbar } from "@/admin/OrdersToolbar";
+import {
+  EMPTY_FILTER,
+  ORDER_STATUS_LABEL,
+  applyOrderFilter,
+  deleteView,
+  getSavedViews,
+  saveView,
+  type OrderFilter,
+  type SavedView,
+} from "@/admin/orderFilters";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ArrowLeft,
   Activity,
@@ -1285,6 +1297,12 @@ function OrdersSection() {
   } | null>(null);
   const [confirmRefundFor, setConfirmRefundFor] =
     useState<CompletedOrder | null>(null);
+  const [filter, setFilter] = useState<OrderFilter>(EMPTY_FILTER);
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() =>
+    getSavedViews(),
+  );
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -1624,6 +1642,120 @@ function OrdersSection() {
     });
   };
 
+  const filteredOrders = applyOrderFilter(orders, filter);
+  const filteredIds = filteredOrders.map((o) => o.id);
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selection.has(id));
+
+  const toggleOrderSelected = (orderId: string) => {
+    setSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelection((prev) => {
+      if (allFilteredSelected) {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      const next = new Set(prev);
+      filteredIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelection(new Set());
+
+  const handleBulkStatus = async (status: CompletedOrder["status"]) => {
+    if (bulkUpdating) return;
+    const ids = Array.from(selection).filter((id) =>
+      orders.some((o) => o.id === id && o.status !== status),
+    );
+    if (ids.length === 0) {
+      toast.info("Nothing to update");
+      return;
+    }
+    setBulkUpdating(true);
+    try {
+      const token = getAdminToken();
+      const results = await Promise.allSettled(
+        ids.map((orderId) =>
+          fetch("/api/orders", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              action: "update-status",
+              orderId,
+              status,
+            }),
+          }).then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            return data.order as CompletedOrder | undefined;
+          }),
+        ),
+      );
+
+      const updatedById = new Map<string, CompletedOrder>();
+      let failed = 0;
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") {
+          const updated = r.value ?? null;
+          if (updated) updatedById.set(updated.id, updated);
+          else updatedById.set(ids[idx], {} as CompletedOrder);
+        } else {
+          failed += 1;
+        }
+      });
+
+      setOrders((prev) =>
+        prev.map((o) => {
+          const u = updatedById.get(o.id);
+          if (!u) return o;
+          if (Object.keys(u).length === 0) return { ...o, status };
+          return u;
+        }),
+      );
+
+      const ok = ids.length - failed;
+      if (failed === 0) {
+        toast.success(
+          `Marked ${ok} order${ok === 1 ? "" : "s"} as ${ORDER_STATUS_LABEL[status]}`,
+        );
+      } else if (ok === 0) {
+        toast.error(`All ${failed} updates failed`);
+      } else {
+        toast.warning(
+          `Updated ${ok} · ${failed} failed — refresh and retry the rest`,
+        );
+      }
+      clearSelection();
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleSaveView = (name: string) => {
+    setSavedViews(saveView(name, filter));
+    toast.success(`Saved view "${name}"`);
+  };
+
+  const handleDeleteView = (id: string) => {
+    setSavedViews(deleteView(id));
+  };
+
+  const handleApplyView = (view: SavedView) => {
+    setFilter({ ...EMPTY_FILTER, ...view.filter });
+  };
+
   if (loadingOrders) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1649,6 +1781,62 @@ function OrdersSection() {
           Refresh
         </Button>
       </div>
+
+      <OrdersToolbar
+        filter={filter}
+        onChange={setFilter}
+        savedViews={savedViews}
+        onSaveView={handleSaveView}
+        onDeleteView={handleDeleteView}
+        onApplyView={handleApplyView}
+        matchedCount={filteredOrders.length}
+        totalCount={orders.length}
+      />
+
+      {filteredOrders.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+            <Checkbox
+              checked={allFilteredSelected}
+              onCheckedChange={toggleSelectAll}
+              aria-label="Select all visible orders"
+            />
+            <span className="text-muted-foreground">
+              {allFilteredSelected ? "Deselect all" : "Select all visible"}
+            </span>
+          </label>
+          {selection.size > 0 && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-medium">{selection.size} selected</span>
+              <span className="text-muted-foreground">Mark as:</span>
+              {ORDER_STEPS.map((step) => (
+                <Button
+                  key={step.key}
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkUpdating}
+                  onClick={() => void handleBulkStatus(step.key)}
+                  className="h-7 text-xs"
+                >
+                  {bulkUpdating ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : null}
+                  {step.label}
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={clearSelection}
+                className="h-7 text-xs"
+              >
+                Clear
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
       {emailStatus && (
         <div
@@ -1677,23 +1865,45 @@ function OrdersSection() {
         </div>
       )}
 
-      {orders.map((order) => {
+      {filteredOrders.length === 0 && (
+        <div className="text-center py-12 border border-dashed border-border/60 rounded-lg">
+          <Package className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            No orders match the current filter.
+          </p>
+        </div>
+      )}
+
+      {filteredOrders.map((order) => {
         const currentStepIdx = ORDER_STEPS.findIndex(
           (s) => s.key === order.status,
         );
+        const isSelected = selection.has(order.id);
         return (
           <div
             key={order.id}
-            className="border border-border/40 rounded-lg p-5 space-y-4"
+            className={`border rounded-lg p-5 space-y-4 transition-colors ${
+              isSelected
+                ? "border-primary/60 bg-primary/[0.03]"
+                : "border-border/40"
+            }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-body text-sm font-semibold">{order.id}</p>
-                <p className="font-body text-xs text-muted-foreground">
-                  {formatDate(order.createdAt)} ·{" "}
-                  {order.orderInfo?.fullName ?? "—"} ·{" "}
-                  {order.orderInfo?.email ?? "—"}
-                </p>
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => toggleOrderSelected(order.id)}
+                  aria-label={`Select order ${order.id}`}
+                  className="mt-1"
+                />
+                <div>
+                  <p className="font-body text-sm font-semibold">{order.id}</p>
+                  <p className="font-body text-xs text-muted-foreground">
+                    {formatDate(order.createdAt)} ·{" "}
+                    {order.orderInfo?.fullName ?? "—"} ·{" "}
+                    {order.orderInfo?.email ?? "—"}
+                  </p>
+                </div>
               </div>
               <p className="font-body text-sm font-semibold">
                 ₱{(order.total ?? 0).toLocaleString()}
