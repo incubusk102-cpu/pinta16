@@ -1,11 +1,17 @@
 import { useEffect, useCallback, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
 } from "@/contexts/ProductContext";
+import {
+  AVAILABILITY_LABEL,
+  isPurchasable,
+  type Availability,
+} from "@/lib/artworks";
 
 interface LightboxProps {
   artworks: {
@@ -18,6 +24,7 @@ interface LightboxProps {
     price: number;
     salePrice?: number;
     description: string;
+    availability?: Availability;
   }[];
   currentIndex: number;
   isOpen: boolean;
@@ -183,22 +190,54 @@ const Lightbox = ({
                   <>₱{art.price.toLocaleString()}</>
                 )}
               </div>
-              <button
-                onClick={() =>
-                  addToCart({
-                    id: art.id,
-                    image: art.image,
-                    title: art.title,
-                    medium: art.medium,
-                    year: art.year,
-                    price: getEffectivePrice(art),
-                  })
-                }
-                className="inline-flex items-center gap-2 px-8 py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                Add to Cart
-              </button>
+              {(() => {
+                const availability: Availability =
+                  art.availability || "available";
+                const purchasable = isPurchasable(availability);
+                return (
+                  <div className="flex flex-col gap-3">
+                    {availability !== "available" && (
+                      <span className="inline-flex w-fit items-center px-2.5 py-1 bg-foreground text-background font-body text-[10px] tracking-[0.3em] uppercase rounded-sm">
+                        {AVAILABILITY_LABEL[availability]}
+                      </span>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={() => {
+                          if (!purchasable) return;
+                          addToCart({
+                            id: art.id,
+                            image: art.image,
+                            title: art.title,
+                            medium: art.medium,
+                            year: art.year,
+                            price: getEffectivePrice(art),
+                          });
+                        }}
+                        disabled={!purchasable}
+                        className={`inline-flex items-center gap-2 px-8 py-3 font-body text-xs tracking-[0.2em] uppercase transition-all duration-300 rounded-sm ${
+                          purchasable
+                            ? "bg-foreground text-background hover:bg-foreground/90"
+                            : "bg-muted text-muted-foreground cursor-not-allowed"
+                        }`}
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                        {purchasable
+                          ? "Add to Cart"
+                          : `${AVAILABILITY_LABEL[availability]}`}
+                      </button>
+                      <Link
+                        to="/product/$id"
+                        params={{ id: art.id }}
+                        onClick={onClose}
+                        className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all duration-300 rounded-sm"
+                      >
+                        View details
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </motion.div>

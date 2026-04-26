@@ -25,9 +25,11 @@ import {
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
   type Product,
+  type ProductAvailability,
   type ProductImage,
 } from "@/contexts/ProductContext";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
+import { AVAILABILITY_OPTIONS, getAvailability } from "@/lib/artworks";
 
 interface Props {
   product: Product | null;
@@ -47,6 +49,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
   const [description, setDescription] = useState("");
+  const [availability, setAvailability] =
+    useState<ProductAvailability>("available");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -71,6 +75,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         : "",
     );
     setDescription(product.description ?? "");
+    setAvailability(getAvailability(product));
   }, [product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -98,6 +103,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
+        availability,
       });
       toast.success("Product updated");
       onClose();
@@ -261,6 +267,30 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
                 }}
               />
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-availability">Availability</Label>
+            <Select
+              value={availability}
+              onValueChange={(value) =>
+                setAvailability(value as ProductAvailability)
+              }
+            >
+              <SelectTrigger id="edit-availability">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AVAILABILITY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Draft hides the painting from the public storefront.
+            </p>
           </div>
 
           <div>

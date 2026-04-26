@@ -6,6 +6,11 @@ import {
   getEffectivePrice,
   getDiscountPercent,
 } from "@/contexts/ProductContext";
+import {
+  AVAILABILITY_LABEL,
+  isPurchasable,
+  type Availability,
+} from "@/lib/artworks";
 
 interface ArtworkCardProps {
   id: string;
@@ -18,8 +23,16 @@ interface ArtworkCardProps {
   salePrice?: number;
   description: string;
   index: number;
+  availability?: Availability;
   onClick: () => void;
 }
+
+const availabilityBadgeClass: Record<Availability, string> = {
+  available: "",
+  reserved: "bg-amber-500 text-white",
+  sold: "bg-slate-900 text-white",
+  draft: "bg-muted text-foreground",
+};
 
 const ArtworkCard = ({
   id,
@@ -32,15 +45,18 @@ const ArtworkCard = ({
   salePrice,
   description,
   index,
+  availability = "available",
   onClick,
 }: ArtworkCardProps) => {
   const { addToCart } = useCart();
   const [isHovered, setIsHovered] = useState(false);
   const effectivePrice = getEffectivePrice({ price, salePrice });
   const discount = getDiscountPercent({ price, salePrice });
+  const purchasable = isPurchasable(availability);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!purchasable) return;
     addToCart({
       id,
       image,
@@ -52,6 +68,7 @@ const ArtworkCard = ({
   };
 
   const displayImage = isHovered && mockup ? mockup : image;
+  const isDimmed = availability === "sold" || availability === "draft";
 
   return (
     <motion.div
@@ -74,7 +91,7 @@ const ArtworkCard = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.4 }}
-            className="w-full object-cover"
+            className={`w-full object-cover ${isDimmed ? "grayscale opacity-80" : ""}`}
             loading="lazy"
           />
         </AnimatePresence>
@@ -96,8 +113,17 @@ const ArtworkCard = ({
           )}
         </AnimatePresence>
 
+        {/* Availability badge */}
+        {availability !== "available" && (
+          <div
+            className={`absolute top-3 left-3 z-[2] px-2 py-0.5 font-body text-[10px] tracking-[0.2em] uppercase rounded-sm ${availabilityBadgeClass[availability]}`}
+          >
+            {AVAILABILITY_LABEL[availability]}
+          </div>
+        )}
+
         {/* Discount badge */}
-        {discount > 0 && (
+        {discount > 0 && availability === "available" && (
           <div className="absolute top-3 left-3 z-[1] px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
             {discount}% OFF
           </div>
@@ -127,7 +153,17 @@ const ArtworkCard = ({
             </span>
             <button
               onClick={handleAddToCart}
-              className="p-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors rounded-sm"
+              disabled={!purchasable}
+              aria-label={
+                purchasable
+                  ? "Add to cart"
+                  : `${AVAILABILITY_LABEL[availability]} — not available`
+              }
+              className={`p-2.5 rounded-sm transition-colors ${
+                purchasable
+                  ? "bg-white/10 backdrop-blur-sm hover:bg-white/20"
+                  : "bg-white/5 cursor-not-allowed opacity-50"
+              }`}
             >
               <ShoppingCart className="w-4 h-4 text-white" />
             </button>
