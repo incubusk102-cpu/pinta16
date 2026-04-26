@@ -5,6 +5,10 @@ import {
   getDiscountPercent,
   getProductImages,
   buildImageFields,
+  isLowStock,
+  isOutOfStock,
+  isStockTracked,
+  DEFAULT_LOW_STOCK_THRESHOLD,
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
   type Product,
@@ -435,6 +439,8 @@ function ProductsSection() {
   const [description, setDescription] = useState("");
   const [availability, setAvailability] =
     useState<ProductAvailability>("available");
+  const [stockCount, setStockCount] = useState("1");
+  const [lowStockThreshold, setLowStockThreshold] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -451,6 +457,8 @@ function ProductsSection() {
     setDiscountPercent("");
     setDescription("");
     setAvailability("available");
+    setStockCount("1");
+    setLowStockThreshold("");
   };
 
   const handlePriceChange = (value: string) => {
@@ -492,11 +500,32 @@ function ProductsSection() {
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
 
+    const stockTrim = stockCount.trim();
+    const stockNum = stockTrim === "" ? undefined : Number(stockTrim);
+    if (
+      stockNum !== undefined &&
+      (!Number.isFinite(stockNum) || stockNum < 0)
+    ) {
+      return toast.error("Stock count must be 0 or higher");
+    }
+    const thresholdTrim = lowStockThreshold.trim();
+    const thresholdNum =
+      thresholdTrim === "" ? undefined : Number(thresholdTrim);
+    if (
+      thresholdNum !== undefined &&
+      (!Number.isFinite(thresholdNum) || thresholdNum < 0)
+    ) {
+      return toast.error("Low-stock threshold must be 0 or higher");
+    }
+
     setSubmitting(true);
 
     const salePriceNum = Number(salePrice);
     const effectiveSalePrice =
       salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
+
+    const nextAvailability: ProductAvailability =
+      stockNum === 0 ? "sold" : availability;
 
     try {
       await addProduct({
@@ -509,7 +538,9 @@ function ProductsSection() {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
-        availability,
+        availability: nextAvailability,
+        stockCount: stockNum,
+        lowStockThreshold: thresholdNum,
       });
       toast.success(`"${title.trim()}" added to the collection`);
       reset();
@@ -725,6 +756,45 @@ function ProductsSection() {
               </p>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="stockCount">
+                  Stock count{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (blank = not tracked)
+                  </span>
+                </Label>
+                <Input
+                  id="stockCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={stockCount}
+                  onChange={(e) => setStockCount(e.target.value)}
+                  placeholder="1"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Auto-decrements on each order. Marks the painting as sold when
+                  it hits 0.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="lowStockThreshold">Low-stock alert ≤</Label>
+                <Input
+                  id="lowStockThreshold"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={lowStockThreshold}
+                  onChange={(e) => setLowStockThreshold(e.target.value)}
+                  placeholder={String(DEFAULT_LOW_STOCK_THRESHOLD)}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Default is {DEFAULT_LOW_STOCK_THRESHOLD}.
+                </p>
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="description">Description</Label>
               <Textarea
@@ -754,6 +824,8 @@ function ProductsSection() {
         </section>
 
         <section>
+          <InventoryAlertBanner products={products} />
+
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <h2 className="font-display text-lg">
               Your uploads ({filteredProducts.length})
@@ -875,6 +947,19 @@ function ProductsSection() {
                         >
                           {AVAILABILITY_LABEL[getAvailability(product)]}
                         </span>
+                        {isOutOfStock(product) ? (
+                          <span className="px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded bg-destructive/20 text-destructive">
+                            Out of stock
+                          </span>
+                        ) : isLowStock(product) ? (
+                          <span className="px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                            Low: {product.stockCount} left
+                          </span>
+                        ) : isStockTracked(product) ? (
+                          <span className="px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded bg-muted text-muted-foreground">
+                            Stock: {product.stockCount}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {product.medium} · {product.year}
@@ -2613,6 +2698,46 @@ function ExportsSection() {
         </p>
       </div>
       <ExportPanel token={token} />
+    </div>
+  );
+}
+
+function InventoryAlertBanner({ products }: { products: Product[] }) {
+  const lowStock = products.filter((p) => isLowStock(p));
+  const outOfStock = products.filter((p) => isOutOfStock(p));
+  if (lowStock.length === 0 && outOfStock.length === 0) return null;
+
+  return (
+    <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs space-y-2">
+      <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+        <Bell className="w-3.5 h-3.5" />
+        <span className="font-semibold">Inventory needs attention</span>
+        <span className="text-muted-foreground">
+          {outOfStock.length > 0 && `${outOfStock.length} sold out`}
+          {outOfStock.length > 0 && lowStock.length > 0 && " · "}
+          {lowStock.length > 0 && `${lowStock.length} low stock`}
+        </span>
+      </div>
+      {lowStock.length > 0 && (
+        <div className="text-muted-foreground">
+          <span className="text-foreground/80 font-medium">Low: </span>
+          {lowStock
+            .slice(0, 6)
+            .map((p) => `${p.title} (${p.stockCount})`)
+            .join(", ")}
+          {lowStock.length > 6 ? ` …and ${lowStock.length - 6} more` : ""}
+        </div>
+      )}
+      {outOfStock.length > 0 && (
+        <div className="text-muted-foreground">
+          <span className="text-foreground/80 font-medium">Sold out: </span>
+          {outOfStock
+            .slice(0, 6)
+            .map((p) => p.title)
+            .join(", ")}
+          {outOfStock.length > 6 ? ` …and ${outOfStock.length - 6} more` : ""}
+        </div>
+      )}
     </div>
   );
 }
