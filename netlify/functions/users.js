@@ -38,6 +38,44 @@ const parseBody = (body) => {
   }
 };
 
+const ADDRESS_FIELDS = [
+  "label",
+  "fullName",
+  "phone",
+  "line1",
+  "line2",
+  "city",
+  "province",
+  "postalCode",
+  "country",
+];
+
+const sanitizeAddress = (raw) => {
+  if (!raw || typeof raw !== "object") {
+    return { ok: false, error: "Address payload required" };
+  }
+  const out = {};
+  for (const key of ADDRESS_FIELDS) {
+    const v = raw[key];
+    if (v == null) {
+      out[key] = "";
+    } else if (typeof v !== "string") {
+      return { ok: false, error: `${key} must be a string` };
+    } else {
+      const trimmed = v.trim();
+      if (trimmed.length > 200) {
+        return { ok: false, error: `${key} too long` };
+      }
+      out[key] = trimmed;
+    }
+  }
+  if (!out.fullName) return { ok: false, error: "Recipient name is required" };
+  if (!out.line1) return { ok: false, error: "Street address is required" };
+  if (!out.city) return { ok: false, error: "City is required" };
+  if (!out.country) out.country = "Philippines";
+  return { ok: true, value: out };
+};
+
 const getCurrentUser = async (event, store) => {
   const token = extractToken(event);
   if (!token) return null;
@@ -254,6 +292,201 @@ export const handler = async (event) => {
       const user = await getCurrentUser(event, store);
       if (!user) return json(401, { error: "Not authenticated" });
       return json(200, { user: publicUser(user) });
+    }
+
+    if (event.httpMethod === "POST" && action === "update-profile") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const body = parseBody(event.body);
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored) return json(404, { error: "User not found" });
+      if (typeof body.name === "string") {
+        const trimmed = body.name.trim();
+        if (trimmed.length > 80) {
+          return json(400, { error: "Name too long" });
+        }
+        stored.name = trimmed;
+      }
+      if (typeof body.picture === "string") {
+        const value = body.picture.trim();
+        if (value && value.length > 200_000) {
+          return json(400, { error: "Picture data too large (max 200KB)" });
+        }
+        if (!value) {
+          delete stored.picture;
+        } else if (
+          value.startsWith("data:image/") ||
+          value.startsWith("https://") ||
+          value.startsWith("http://")
+        ) {
+          stored.picture = value;
+        } else {
+          return json(400, { error: "Invalid picture URL" });
+        }
+      }
+      stored.updatedAt = new Date().toISOString();
+      await writeUsers(store, users);
+      return json(200, { user: publicUser(stored) });
+    }
+
+    if (event.httpMethod === "POST" && action === "change-password") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const limit = await consumeRateLimit(event, {
+        bucket: `user-change-password:${user.id}`,
+        windowMs: 15 * 60_000,
+        max: 8,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+      const body = parseBody(event.body);
+      const oldPassword = String(body.oldPassword || "");
+      const newPassword = String(body.newPassword || "");
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+        return json(400, {
+          error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        });
+      }
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored) return json(404, { error: "User not found" });
+      if (!stored.passwordHash || !stored.passwordSalt) {
+        return json(400, {
+          error:
+            "This account uses a social provider — password change is not supported.",
+        });
+      }
+      const ok = verifyPassword(
+        oldPassword,
+        stored.passwordSalt,
+        stored.passwordHash,
+      );
+      if (!ok) {
+        const meta = captureRequestMeta(event);
+        await appendAuditEvent({
+          actor: user.email,
+          action: "user-password-change-failed",
+          detail: "Bad current password",
+          ...meta,
+        });
+        return json(400, { error: "Current password is incorrect" });
+      }
+      const { hash, salt } = hashPassword(newPassword);
+      stored.passwordHash = hash;
+      stored.passwordSalt = salt;
+      stored.passwordChangedAt = new Date().toISOString();
+      stored.updatedAt = stored.passwordChangedAt;
+      await writeUsers(store, users);
+      const meta = captureRequestMeta(event);
+      await appendAuditEvent({
+        actor: user.email,
+        action: "user-password-changed",
+        detail: "Password updated via /account",
+        ...meta,
+      });
+      return json(200, { ok: true });
+    }
+
+    if (event.httpMethod === "POST" && action === "addresses-add") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const body = parseBody(event.body);
+      const addr = sanitizeAddress(body.address);
+      if (!addr.ok) return json(400, { error: addr.error });
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored) return json(404, { error: "User not found" });
+      stored.addresses = Array.isArray(stored.addresses)
+        ? stored.addresses
+        : [];
+      if (stored.addresses.length >= 8) {
+        return json(400, { error: "Address limit reached (max 8)" });
+      }
+      const id = crypto.randomUUID();
+      const entry = {
+        id,
+        ...addr.value,
+        createdAt: new Date().toISOString(),
+      };
+      stored.addresses.push(entry);
+      if (!stored.defaultAddressId || stored.addresses.length === 1) {
+        stored.defaultAddressId = id;
+      }
+      stored.updatedAt = new Date().toISOString();
+      await writeUsers(store, users);
+      return json(200, { user: publicUser(stored), address: entry });
+    }
+
+    if (event.httpMethod === "POST" && action === "addresses-update") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const body = parseBody(event.body);
+      const id = String(body.id || "");
+      if (!id) return json(400, { error: "id is required" });
+      const addr = sanitizeAddress(body.address);
+      if (!addr.ok) return json(400, { error: addr.error });
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored || !Array.isArray(stored.addresses)) {
+        return json(404, { error: "Address not found" });
+      }
+      const idx = stored.addresses.findIndex((a) => a.id === id);
+      if (idx === -1) return json(404, { error: "Address not found" });
+      stored.addresses[idx] = {
+        ...stored.addresses[idx],
+        ...addr.value,
+        id,
+        updatedAt: new Date().toISOString(),
+      };
+      stored.updatedAt = new Date().toISOString();
+      await writeUsers(store, users);
+      return json(200, {
+        user: publicUser(stored),
+        address: stored.addresses[idx],
+      });
+    }
+
+    if (event.httpMethod === "POST" && action === "addresses-remove") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const body = parseBody(event.body);
+      const id = String(body.id || "");
+      if (!id) return json(400, { error: "id is required" });
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored || !Array.isArray(stored.addresses)) {
+        return json(404, { error: "Address not found" });
+      }
+      const next = stored.addresses.filter((a) => a.id !== id);
+      if (next.length === stored.addresses.length) {
+        return json(404, { error: "Address not found" });
+      }
+      stored.addresses = next;
+      if (stored.defaultAddressId === id) {
+        stored.defaultAddressId = next[0]?.id || null;
+      }
+      stored.updatedAt = new Date().toISOString();
+      await writeUsers(store, users);
+      return json(200, { user: publicUser(stored) });
+    }
+
+    if (event.httpMethod === "POST" && action === "addresses-set-default") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const body = parseBody(event.body);
+      const id = String(body.id || "");
+      if (!id) return json(400, { error: "id is required" });
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored || !Array.isArray(stored.addresses)) {
+        return json(404, { error: "Address not found" });
+      }
+      const found = stored.addresses.some((a) => a.id === id);
+      if (!found) return json(404, { error: "Address not found" });
+      stored.defaultAddressId = id;
+      stored.updatedAt = new Date().toISOString();
+      await writeUsers(store, users);
+      return json(200, { user: publicUser(stored) });
     }
 
     // Admin-only operations: list / delete

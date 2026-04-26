@@ -27,6 +27,9 @@ import { useWishlist } from "@/contexts/WishlistContext";
 import { buildTrackingUrl } from "@/lib/shipment";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
+import ProfileEditor from "@/components/account/ProfileEditor";
+import AddressBook from "@/components/account/AddressBook";
+import MyOrders from "@/components/account/MyOrders";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -429,58 +432,30 @@ function AccountPage() {
           </p>
         </div>
 
+        <ProfileEditor />
+
+        <MyOrders />
+
         <OrderTracker />
+
+        <AddressBook />
 
         <WishlistSection />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="bg-card/40 border border-border/60 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-              <UserCircle className="w-4 h-4" /> Profile
-            </div>
-            <div className="mt-3 space-y-1 text-sm">
-              {user.picture && (
-                <img
-                  src={user.picture}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="w-12 h-12 rounded-full mb-2"
-                  loading="lazy"
-                  decoding="async"
-                />
-              )}
-              <p>
-                <span className="text-muted-foreground">Name:</span>{" "}
-                {user.name || "—"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Email:</span>{" "}
-                {user.email}
-              </p>
-              {user.provider === "google" && (
-                <p className="text-xs text-muted-foreground">
-                  Signed in with Google
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground mt-3">
-                Joined {formatDate(user.createdAt)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Last seen {formatDate(user.lastSeenAt)}
-              </p>
-            </div>
+        <div className="bg-card/40 border border-border/60 rounded-xl p-5">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+            <Mail className="w-4 h-4" /> Inactivity
           </div>
-          <div className="bg-card/40 border border-border/60 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-              <Mail className="w-4 h-4" /> Inactivity
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Pintaterra removes accounts that have been inactive for{" "}
-              <strong className="text-foreground">30 days</strong> and emails
-              you when this happens. Just visit your account any time to keep it
-              active.
-            </p>
-          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Pintaterra removes accounts that have been inactive for{" "}
+            <strong className="text-foreground">30 days</strong> and emails you
+            when this happens. Just visit your account any time to keep it
+            active.
+          </p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Joined {formatDate(user.createdAt)} · Last seen{" "}
+            {formatDate(user.lastSeenAt)}
+          </p>
         </div>
       </main>
     </div>
