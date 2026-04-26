@@ -287,6 +287,8 @@ function OrderTracker() {
                             src={src}
                             alt={`Review image ${i + 1}`}
                             className="aspect-square w-full object-cover rounded-sm border border-border/10"
+                            loading="lazy"
+                            decoding="async"
                           />
                         ))}
                       </div>
@@ -335,6 +337,8 @@ function WishlistSection() {
                     src={entry.image}
                     alt={entry.title || entry.id}
                     className="w-16 h-16 object-cover rounded-sm"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </Link>
               )}
@@ -441,6 +445,8 @@ function AccountPage() {
                   alt=""
                   referrerPolicy="no-referrer"
                   className="w-12 h-12 rounded-full mb-2"
+                  loading="lazy"
+                  decoding="async"
                 />
               )}
               <p>

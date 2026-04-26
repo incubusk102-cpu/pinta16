@@ -124,6 +124,98 @@ function ProductPage() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [zoomed]);
 
+  const ratingStats = useMemo(() => {
+    if (!reviews.length) return null;
+    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    return { count: reviews.length, average: sum / reviews.length };
+  }, [reviews]);
+
+  // Update document head dynamically with rich product metadata for sharing.
+  useEffect(() => {
+    if (!artwork || typeof document === "undefined") return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/product/${artwork.id}`;
+    const desc =
+      artwork.description ||
+      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`;
+    const imageUrl = artwork.image.startsWith("http")
+      ? artwork.image
+      : `${origin}${artwork.image}`;
+
+    document.title = `${artwork.title} — Pintaterra`;
+
+    const setMeta = (selector: string, attr: string, value: string) => {
+      let tag = document.querySelector<HTMLMetaElement>(selector);
+      if (!tag) {
+        tag = document.createElement("meta");
+        const [k, v] = selector
+          .replace(/^meta\[/, "")
+          .replace(/\]$/, "")
+          .split("=");
+        if (k && v) tag.setAttribute(k, v.replace(/['"]/g, ""));
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute(attr, value);
+    };
+
+    setMeta('meta[name="description"]', "content", desc);
+    setMeta('meta[property="og:title"]', "content", artwork.title);
+    setMeta('meta[property="og:description"]', "content", desc);
+    setMeta('meta[property="og:type"]', "content", "product");
+    setMeta('meta[property="og:url"]', "content", url);
+    setMeta('meta[property="og:image"]', "content", imageUrl);
+    setMeta('meta[property="og:site_name"]', "content", "Pintaterra");
+    setMeta('meta[name="twitter:card"]', "content", "summary_large_image");
+    setMeta('meta[name="twitter:title"]', "content", artwork.title);
+    setMeta('meta[name="twitter:description"]', "content", desc);
+    setMeta('meta[name="twitter:image"]', "content", imageUrl);
+  }, [artwork]);
+
+  const jsonLd = useMemo(() => {
+    if (!artwork) return "{}";
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/product/${artwork.id}`;
+    const imageUrls = (
+      artwork.images.length > 0
+        ? artwork.images.map((img) => img.url)
+        : [artwork.image]
+    ).map((u) => (u.startsWith("http") ? u : `${origin}${u}`));
+    const availability =
+      artwork.availability === "available"
+        ? "https://schema.org/InStock"
+        : artwork.availability === "reserved"
+          ? "https://schema.org/PreOrder"
+          : "https://schema.org/SoldOut";
+
+    const data: Record<string, unknown> = {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      name: artwork.title,
+      description:
+        artwork.description ||
+        `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`,
+      image: imageUrls,
+      sku: artwork.id,
+      brand: { "@type": "Brand", name: "Pintaterra" },
+      offers: {
+        "@type": "Offer",
+        url,
+        priceCurrency: "PHP",
+        price: getEffectivePrice(artwork),
+        availability,
+        itemCondition: "https://schema.org/NewCondition",
+      },
+    };
+    if (ratingStats) {
+      data.aggregateRating = {
+        "@type": "AggregateRating",
+        ratingValue: ratingStats.average.toFixed(2),
+        reviewCount: ratingStats.count,
+      };
+    }
+    return JSON.stringify(data);
+  }, [artwork, ratingStats]);
+
   if (!artwork) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -208,6 +300,10 @@ function ProductPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd }}
+      />
       <GalleryNav />
       <main className="flex-1 pt-28 md:pt-32 pb-20 px-6 md:px-12 max-w-7xl mx-auto w-full">
         <div className="mb-6">
@@ -239,6 +335,8 @@ function ProductPage() {
                   src={currentImage.url}
                   alt={`${artwork.title} – photo ${activeImage + 1}`}
                   className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
+                  loading="lazy"
+                  decoding="async"
                 />
               </button>
               {showAvailabilityBadge && (
@@ -301,6 +399,8 @@ function ProductPage() {
                       src={img.url}
                       alt={`${artwork.title} thumbnail ${idx + 1}`}
                       className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </button>
                 ))}
@@ -434,6 +534,8 @@ function ProductPage() {
             src={currentImage.url}
             alt={artwork.title}
             className="max-w-[95vw] max-h-[95vh] object-contain"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       )}
@@ -543,6 +645,8 @@ function ProductReviews({
                       src={src}
                       alt={`Review photo ${j + 1}`}
                       className="aspect-square w-full object-cover rounded-md border border-border/40"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </a>
                 ))}

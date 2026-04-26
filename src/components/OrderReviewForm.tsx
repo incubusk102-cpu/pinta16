@@ -170,6 +170,8 @@ const OrderReviewForm = ({
               src={reviewableItems[0].image}
               alt={reviewableItems[0].title}
               className="w-10 h-10 object-cover rounded-sm"
+              loading="lazy"
+              decoding="async"
             />
             <div className="flex-1 min-w-0">
               <p className="font-body text-sm text-foreground truncate">
@@ -268,6 +270,8 @@ const OrderReviewForm = ({
                 src={src}
                 alt={`Review image ${i + 1}`}
                 className="w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
               />
               <button
                 type="button"
