@@ -78,6 +78,10 @@ function LoginPage() {
       g.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: window.handleGoogleCredential,
+        ux_mode: "popup",
+        itp_support: true,
+        use_fedcm_for_button: true,
+        use_fedcm_for_prompt: true,
       });
       g.accounts.id.renderButton(btnRef.current, {
         theme: "outline",
