@@ -258,10 +258,7 @@ export default function ProfileEditor() {
             size="sm"
             onClick={() => void onChangePassword()}
             disabled={
-              savingPassword ||
-              !oldPassword ||
-              !newPassword ||
-              !confirmPassword
+              savingPassword || !oldPassword || !newPassword || !confirmPassword
             }
           >
             {savingPassword ? (

@@ -8,6 +8,7 @@ import ContactSection from "@/components/ContactSection";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import OrderConfirmation from "@/components/OrderConfirmation";
+import RecentlyViewed from "@/components/RecentlyViewed";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -35,6 +36,9 @@ function Index() {
       <GalleryNav />
       <HeroSection />
       <GallerySection />
+      <section className="px-6 md:px-12 max-w-7xl mx-auto">
+        <RecentlyViewed />
+      </section>
       <AboutSection />
       <ReviewsSection />
       <ContactSection />
