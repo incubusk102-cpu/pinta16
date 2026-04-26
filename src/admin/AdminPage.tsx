@@ -1690,13 +1690,13 @@ function OrdersSection() {
     order: CompletedOrder,
     decision: "approved" | "denied",
   ) => {
-    const decisionNote =
-      window.prompt(
-        decision === "approved"
-          ? "Optional note for the customer about the approved refund:"
-          : "Optional note for the customer explaining the denial:",
-        "",
-      ) ?? "";
+    const decisionNote = window.prompt(
+      decision === "approved"
+        ? "Optional note for the customer about the approved refund:"
+        : "Optional note for the customer explaining the denial:",
+      "",
+    );
+    if (decisionNote === null) return;
     setRefundingId(order.id);
     try {
       const adminToken = getAdminToken();
