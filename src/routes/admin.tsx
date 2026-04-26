@@ -50,6 +50,7 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
+  Mail,
   Menu,
   Package,
   Pencil,
@@ -1273,6 +1274,13 @@ function OrdersSection() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [resendingKey, setResendingKey] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{
+    configured: boolean;
+    provider: string | null;
+    from: string | null;
+    replyTo: string | null;
+  } | null>(null);
   const [confirmRefundFor, setConfirmRefundFor] =
     useState<CompletedOrder | null>(null);
 
@@ -1294,6 +1302,20 @@ function OrdersSection() {
 
   useEffect(() => {
     void fetchOrders();
+    void (async () => {
+      try {
+        const token = getAdminToken();
+        const res = await fetch("/api/orders?metrics=email-status", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setEmailStatus(data.email);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
   }, []);
 
   const handleStatusUpdate = async (
@@ -1456,6 +1478,47 @@ function OrdersSection() {
     }
   };
 
+  const handleResendEmail = async (
+    orderId: string,
+    notificationIndex: number,
+  ) => {
+    const key = `${orderId}:${notificationIndex}`;
+    setResendingKey(key);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "resend-email",
+          orderId,
+          notificationIndex,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      const note = data.notification;
+      if (note?.delivered) {
+        toast.success("Email resent");
+      } else if (note?.skipped) {
+        toast.message(`Email skipped: ${note.skipReason || "not configured"}`);
+      } else if (note?.error) {
+        toast.error(`Email failed: ${note.error}`);
+      } else {
+        toast.success("Notification updated");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not resend");
+    } finally {
+      setResendingKey(null);
+    }
+  };
+
   const handleRefund = async (order: CompletedOrder) => {
     setRefundingId(order.id);
     try {
@@ -1584,6 +1647,33 @@ function OrdersSection() {
           Refresh
         </Button>
       </div>
+
+      {emailStatus && (
+        <div
+          className={`text-xs rounded-md border px-3 py-2 ${
+            emailStatus.configured
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800"
+              : "bg-amber-500/10 border-amber-500/30 text-amber-800"
+          }`}
+        >
+          <Mail className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+          {emailStatus.configured ? (
+            <>
+              Email notifications active via{" "}
+              <strong>{emailStatus.provider}</strong>
+              {emailStatus.from ? ` · from ${emailStatus.from}` : ""}
+            </>
+          ) : (
+            <>
+              Email notifications not configured. Set{" "}
+              <code className="font-mono">RESEND_API_KEY</code> or{" "}
+              <code className="font-mono">BREVO_API_KEY</code> plus{" "}
+              <code className="font-mono">EMAIL_FROM</code> in Netlify env to
+              start sending. Notification history is still recorded.
+            </>
+          )}
+        </div>
+      )}
 
       {orders.map((order) => {
         const currentStepIdx = ORDER_STEPS.findIndex(
@@ -1728,13 +1818,81 @@ function OrdersSection() {
                     Notifications sent
                   </span>
                 </div>
-                <ul className="space-y-1 pl-5 list-disc text-muted-foreground">
-                  {order.notifications.map((n, idx) => (
-                    <li key={`${n.sentAt}-${idx}`}>
-                      <span className="text-foreground">{n.message}</span> — to{" "}
-                      {n.recipient} on {new Date(n.sentAt).toLocaleString()}
-                    </li>
-                  ))}
+                <ul className="space-y-2 text-muted-foreground">
+                  {order.notifications.map((n, idx) => {
+                    let badge: {
+                      text: string;
+                      className: string;
+                    } | null = null;
+                    if (n.delivered) {
+                      badge = {
+                        text: `Email delivered${n.provider ? ` · ${n.provider}` : ""}`,
+                        className:
+                          "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+                      };
+                    } else if (n.skipped) {
+                      badge = {
+                        text: `Email skipped${
+                          n.skipReason ? ` · ${n.skipReason}` : ""
+                        }`,
+                        className:
+                          "bg-muted text-muted-foreground border-border/40",
+                      };
+                    } else if (n.error) {
+                      badge = {
+                        text: `Email failed`,
+                        className:
+                          "bg-red-500/15 text-red-700 border-red-500/30",
+                      };
+                    }
+                    return (
+                      <li
+                        key={`${n.sentAt}-${idx}`}
+                        className="border border-border/30 rounded-md p-2 bg-muted/20"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-foreground">{n.message}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {n.recipient} ·{" "}
+                              {new Date(n.sentAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px]"
+                            disabled={resendingKey === `${order.id}:${idx}`}
+                            onClick={() => handleResendEmail(order.id, idx)}
+                          >
+                            {resendingKey === `${order.id}:${idx}`
+                              ? "Resending…"
+                              : "Resend email"}
+                          </Button>
+                        </div>
+                        {badge && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <span
+                              className={`inline-block text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${badge.className}`}
+                            >
+                              {badge.text}
+                            </span>
+                            {n.providerId && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {n.providerId}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {n.error && (
+                          <p className="mt-1 text-[10px] text-red-700">
+                            {n.error}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

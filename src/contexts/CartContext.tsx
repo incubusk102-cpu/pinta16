@@ -33,6 +33,12 @@ export interface OrderNotification {
   message: string;
   recipient: string;
   sentAt: string;
+  delivered?: boolean;
+  provider?: "resend" | "brevo" | string;
+  providerId?: string;
+  error?: string;
+  skipped?: boolean;
+  skipReason?: string;
 }
 
 export interface OrderRefund {
