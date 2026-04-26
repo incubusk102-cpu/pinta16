@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { Megaphone, Truck, Tag, Plus, Trash2, Loader2 } from "lucide-react";
+import { HeroPanel } from "./HeroPanel";
+import { CollectionsPanel } from "./CollectionsPanel";
+import { CampaignsPanel } from "./CampaignsPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -808,6 +811,10 @@ export function StorefrontSection() {
           </ul>
         )}
       </section>
+
+      <HeroPanel />
+      <CollectionsPanel />
+      <CampaignsPanel />
     </div>
   );
 }

@@ -1686,6 +1686,51 @@ function OrdersSection() {
     }
   };
 
+  const handleDecideRefundRequest = async (
+    order: CompletedOrder,
+    decision: "approved" | "denied",
+  ) => {
+    const decisionNote = window.prompt(
+      decision === "approved"
+        ? "Optional note for the customer about the approved refund:"
+        : "Optional note for the customer explaining the denial:",
+      "",
+    );
+    if (decisionNote === null) return;
+    setRefundingId(order.id);
+    try {
+      const adminToken = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+        },
+        body: JSON.stringify({
+          action: "decide-refund-request",
+          orderId: order.id,
+          decision,
+          decisionNote,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const updated = data.order as CompletedOrder;
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
+      toast.success(
+        decision === "approved"
+          ? "Refund request approved. You can now process the refund."
+          : "Refund request denied",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not save decision",
+      );
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
   // Auto-poll pending refunds every 30s while the section is visible
   useEffect(() => {
     const pendingIds = orders
@@ -2328,6 +2373,73 @@ function OrdersSection() {
               })}
             </div>
 
+            {/* Customer refund request */}
+            {order.refundRequest && (
+              <div
+                className={`flex flex-wrap items-start gap-2 pt-2 border-t border-border/30 ${
+                  order.refundRequest.status === "pending"
+                    ? "bg-amber-500/5 -mx-3 px-3 -mb-1 pb-2 rounded-md"
+                    : ""
+                }`}
+              >
+                <div className="flex-1 min-w-[260px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] uppercase tracking-wider ${
+                        order.refundRequest.status === "pending"
+                          ? "bg-amber-500/15 text-amber-600"
+                          : order.refundRequest.status === "approved"
+                            ? "bg-emerald-500/15 text-emerald-600"
+                            : order.refundRequest.status === "denied"
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-foreground/10 text-foreground"
+                      }`}
+                    >
+                      Customer refund request · {order.refundRequest.status}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {order.refundRequest.reason} ·{" "}
+                      {new Date(
+                        order.refundRequest.requestedAt,
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground italic">
+                    "{order.refundRequest.note}"
+                  </p>
+                  {order.refundRequest.decisionNote && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Decision note: {order.refundRequest.decisionNote}
+                    </p>
+                  )}
+                </div>
+                {order.refundRequest.status === "pending" && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() =>
+                        void handleDecideRefundRequest(order, "denied")
+                      }
+                    >
+                      Deny
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={refundingId === order.id}
+                      onClick={() =>
+                        void handleDecideRefundRequest(order, "approved")
+                      }
+                    >
+                      Approve
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Refund block */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
               {order.refund ? (
@@ -2755,16 +2867,52 @@ interface AuditEvent {
   detail?: string;
 }
 
+type SecurityWindow = "24h" | "7d" | "30d" | "all";
+const WINDOW_HOURS: Record<SecurityWindow, number | null> = {
+  "24h": 24,
+  "7d": 24 * 7,
+  "30d": 24 * 30,
+  all: null,
+};
+const WINDOW_LABELS: Record<SecurityWindow, string> = {
+  "24h": "Last 24 hours",
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  all: "All time",
+};
+
+const SUSPICIOUS_FAILURE_THRESHOLD = 3;
+
+const csvField = (s: string) => {
+  const v = String(s ?? "");
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
+
+const downloadCsv = (filename: string, rows: string[][]) => {
+  const csv = rows.map((r) => r.map(csvField).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
 function SecuritySection() {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<string>("");
+  const [windowKey, setWindowKey] = useState<SecurityWindow>("7d");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const refresh = async () => {
     setLoading(true);
     try {
       const token = getAdminToken();
-      const res = await fetch("/api/admin-auth?action=audit&limit=300", {
+      const res = await fetch("/api/admin-auth?action=audit&limit=500", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2782,7 +2930,22 @@ function SecuritySection() {
     void refresh();
   }, []);
 
-  const filtered = (events ?? []).filter((e) => {
+  const allEvents = events ?? [];
+
+  const types = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of allEvents) set.add(e.type);
+    return [...set].sort();
+  }, [allEvents]);
+
+  const inWindow = useMemo(() => {
+    const hours = WINDOW_HOURS[windowKey];
+    const cutoff = hours === null ? 0 : Date.now() - hours * 3600_000;
+    return allEvents.filter((e) => Date.parse(e.at) >= cutoff);
+  }, [allEvents, windowKey]);
+
+  const filtered = inWindow.filter((e) => {
+    if (typeFilter !== "all" && e.type !== typeFilter) return false;
     if (!filter) return true;
     const q = filter.toLowerCase();
     return (
@@ -2796,11 +2959,70 @@ function SecuritySection() {
     );
   });
 
-  const failedLogins = (events ?? []).filter(
+  const failedLogins = inWindow.filter(
     (e) =>
       (e.type === "admin.login" || e.type === "user.login") &&
       e.outcome === "failure",
   );
+
+  const rateLimitDenies = inWindow.filter(
+    (e) => e.type === "rate_limit.exceeded",
+  );
+
+  const failuresByIp = useMemo(() => {
+    const map = new Map<
+      string,
+      { ip: string; count: number; types: Set<string> }
+    >();
+    for (const e of inWindow) {
+      if (e.outcome !== "failure") continue;
+      const ip = e.ip || "(no ip)";
+      const prior = map.get(ip) || { ip, count: 0, types: new Set() };
+      prior.count += 1;
+      prior.types.add(e.type);
+      map.set(ip, prior);
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  }, [inWindow]);
+
+  const suspiciousIps = failuresByIp.filter(
+    (r) => r.count >= SUSPICIOUS_FAILURE_THRESHOLD,
+  );
+
+  const handleExportCsv = () => {
+    const rows: string[][] = [
+      [
+        "at",
+        "type",
+        "outcome",
+        "ip",
+        "browser",
+        "os",
+        "device",
+        "subject",
+        "detail",
+        "userAgent",
+      ],
+    ];
+    for (const e of filtered) {
+      rows.push([
+        e.at,
+        e.type,
+        e.outcome,
+        e.ip || "",
+        e.browser || "",
+        e.os || "",
+        e.device || "",
+        e.subject || "",
+        e.detail || "",
+        e.userAgent || "",
+      ]);
+    }
+    downloadCsv(
+      `audit-log-${windowKey}-${new Date().toISOString().slice(0, 10)}.csv`,
+      rows,
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -2808,17 +3030,53 @@ function SecuritySection() {
         <div>
           <h1 className="font-display text-2xl">Security</h1>
           <p className="text-xs text-muted-foreground">
-            Authentication events, order activity, refunds. IP + device captured
-            on every sensitive action.
+            Authentication events, order activity, refunds, rate-limit denies.
+            IP + device captured on every sensitive action.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select
+            value={windowKey}
+            onValueChange={(v) => setWindowKey(v as SecurityWindow)}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(WINDOW_LABELS) as SecurityWindow[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {WINDOW_LABELS[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All event types</SelectItem>
+              {types.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input
-            placeholder="Filter (type / IP / email / browser…)"
+            placeholder="Filter (IP / email / browser / detail)"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="w-72"
           />
+          <Button
+            onClick={handleExportCsv}
+            variant="outline"
+            disabled={filtered.length === 0}
+            title="Export the filtered audit log to CSV"
+          >
+            <Download className="w-4 h-4 mr-1" /> CSV
+          </Button>
           <Button onClick={refresh} variant="outline" disabled={loading}>
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -2829,27 +3087,56 @@ function SecuritySection() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryCard label="Recorded events" value={events?.length ?? 0} />
+      <div className="grid gap-3 sm:grid-cols-4">
         <SummaryCard
-          label="Failed logins (recent)"
-          value={failedLogins.length}
+          label={`Events · ${WINDOW_LABELS[windowKey]}`}
+          value={inWindow.length}
         />
-        <SummaryCard
-          label="Unique IPs"
-          value={
-            new Set(
-              (events ?? [])
-                .map((e) => e.ip)
-                .filter((ip): ip is string => Boolean(ip)),
-            ).size
-          }
-        />
+        <SummaryCard label="Failed logins" value={failedLogins.length} />
+        <SummaryCard label="Rate-limit denies" value={rateLimitDenies.length} />
+        <SummaryCard label="Suspicious IPs" value={suspiciousIps.length} />
       </div>
+
+      {suspiciousIps.length > 0 && (
+        <section className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-3">
+          <div>
+            <h2 className="font-display text-base">Suspicious activity</h2>
+            <p className="text-xs text-muted-foreground">
+              IPs with {SUSPICIOUS_FAILURE_THRESHOLD}+ failed events in{" "}
+              {WINDOW_LABELS[windowKey].toLowerCase()}.
+            </p>
+          </div>
+          <ul className="space-y-2">
+            {suspiciousIps.slice(0, 8).map((row) => (
+              <li
+                key={row.ip}
+                className="flex flex-wrap items-center gap-2 bg-card/40 border border-amber-500/30 rounded px-3 py-2 text-xs"
+              >
+                <span className="font-mono">{row.ip}</span>
+                <span className="text-amber-700 dark:text-amber-300 font-medium">
+                  {row.count} failures
+                </span>
+                <span className="text-muted-foreground">
+                  ({[...row.types].slice(0, 4).join(", ")}
+                  {row.types.size > 4 ? "…" : ""})
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto"
+                  onClick={() => setFilter(row.ip)}
+                >
+                  Inspect
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
         <div className="p-3 border-b border-border/60 bg-muted/20 text-xs uppercase tracking-wider text-muted-foreground">
-          Audit log ({filtered.length})
+          Audit log ({filtered.length} of {inWindow.length})
         </div>
         {events === null ? (
           <div className="p-6 text-sm text-muted-foreground">Loading…</div>
