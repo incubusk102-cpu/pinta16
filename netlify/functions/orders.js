@@ -1203,6 +1203,12 @@ export const handler = async (event) => {
       }
 
       if (action === "customer-refund-request") {
+        const limit = await consumeRateLimit(event, {
+          bucket: "customer-refund-request",
+          windowMs: 60_000,
+          max: 5,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
         const VALID_REASONS = new Set([
           "damaged",
           "wrong_item",
