@@ -2938,15 +2938,11 @@ function SecuritySection() {
     return [...set].sort();
   }, [allEvents]);
 
-  const cutoff = useMemo(() => {
+  const inWindow = useMemo(() => {
     const hours = WINDOW_HOURS[windowKey];
-    return hours === null ? 0 : Date.now() - hours * 3600_000;
-  }, [windowKey]);
-
-  const inWindow = useMemo(
-    () => allEvents.filter((e) => Date.parse(e.at) >= cutoff),
-    [allEvents, cutoff],
-  );
+    const cutoff = hours === null ? 0 : Date.now() - hours * 3600_000;
+    return allEvents.filter((e) => Date.parse(e.at) >= cutoff);
+  }, [allEvents, windowKey]);
 
   const filtered = inWindow.filter((e) => {
     if (typeFilter !== "all" && e.type !== typeFilter) return false;
