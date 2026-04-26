@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   useProducts,
@@ -53,6 +53,7 @@ import {
   LogOut,
   Mail,
   Menu,
+  MessageSquare,
   Package,
   Pencil,
   Plus,
@@ -83,6 +84,7 @@ type AdminSection =
   | "dashboard"
   | "products"
   | "orders"
+  | "messages"
   | "visitors"
   | "users"
   | "storefront"
@@ -94,6 +96,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   dashboard: "Dashboard",
   products: "Products",
   orders: "Orders",
+  messages: "Messages",
   visitors: "Visitors",
   users: "Users",
   storefront: "Storefront",
@@ -300,6 +303,13 @@ function AdminDashboard() {
               hint="Track & update"
             />
             <NavLink
+              icon={<MessageSquare className="w-4 h-4" />}
+              label="Messages"
+              active={section === "messages"}
+              onClick={() => navigate("messages")}
+              hint="Customer chat threads"
+            />
+            <NavLink
               icon={<Activity className="w-4 h-4" />}
               label="Visitors"
               active={section === "visitors"}
@@ -359,6 +369,7 @@ function AdminDashboard() {
         )}
         {section === "products" && <ProductsSection />}
         {section === "orders" && <OrdersSection />}
+        {section === "messages" && <MessagesSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "storefront" && <StorefrontSection />}
@@ -2579,6 +2590,315 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
         {label}
       </p>
       <p className="text-2xl font-semibold mt-1">{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+interface ChatMessage {
+  at: string;
+  from: "customer" | "admin";
+  body: string;
+}
+
+interface ChatThreadIndexEntry {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+  customerLastMessageAt?: string;
+  lastReadByAdminAt?: string;
+  lastFromAdmin?: boolean;
+  messageCount?: number;
+  ip?: string;
+  browser?: string;
+  os?: string;
+  device?: string;
+}
+
+interface ChatThreadDetail {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  messages: ChatMessage[];
+}
+
+const isThreadUnread = (t: ChatThreadIndexEntry) => {
+  if (!t.customerLastMessageAt) return false;
+  if (!t.lastReadByAdminAt) return true;
+  return Date.parse(t.customerLastMessageAt) > Date.parse(t.lastReadByAdminAt);
+};
+
+function MessagesSection() {
+  const [threads, setThreads] = useState<ChatThreadIndexEntry[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeThread, setActiveThread] = useState<ChatThreadDetail | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshThreads = async () => {
+    setLoading(true);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/chat?action=list", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const list: ChatThreadIndexEntry[] = Array.isArray(data.threads)
+        ? data.threads
+        : [];
+      list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+      setThreads(list);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load chat threads");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadThread = async (id: string) => {
+    try {
+      const res = await fetch(
+        `/api/chat?action=thread&id=${encodeURIComponent(id)}`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.thread) setActiveThread(data.thread);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load thread");
+    }
+  };
+
+  const markRead = async (id: string) => {
+    try {
+      const token = getAdminToken();
+      await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: "admin-mark-read", id }),
+      });
+    } catch {
+      // ignore — not critical
+    }
+  };
+
+  useEffect(() => {
+    void refreshThreads();
+    const id = window.setInterval(() => void refreshThreads(), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) {
+      setActiveThread(null);
+      return;
+    }
+    void loadThread(activeId);
+    void markRead(activeId);
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === activeId
+          ? { ...t, lastReadByAdminAt: new Date().toISOString() }
+          : t,
+      ),
+    );
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    const id = window.setInterval(() => void loadThread(activeId), 5_000);
+    return () => window.clearInterval(id);
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [activeThread?.messages.length]);
+
+  const sendReply = async () => {
+    if (!activeId) return;
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    setSending(true);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: "admin-reply",
+          id: activeId,
+          message: trimmed,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not send reply");
+      if (data.thread) setActiveThread(data.thread);
+      setDraft("");
+      void refreshThreads();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send reply");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const unreadCount = threads.filter(isThreadUnread).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-display text-2xl">Messages</h1>
+          <p className="text-xs text-muted-foreground">
+            {threads.length} thread{threads.length === 1 ? "" : "s"}
+            {unreadCount > 0 ? ` · ${unreadCount} unread` : ""}.
+          </p>
+        </div>
+        <Button onClick={refreshThreads} variant="outline" disabled={loading}>
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
+        </Button>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[280px,1fr] min-h-[480px]">
+        <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
+          {threads.length === 0 ? (
+            <div className="p-6 text-sm text-muted-foreground">
+              No chat threads yet.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/40 max-h-[600px] overflow-y-auto">
+              {threads.map((t) => {
+                const unread = isThreadUnread(t);
+                return (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveId(t.id)}
+                      className={`w-full text-left p-3 hover:bg-muted/30 transition flex flex-col gap-0.5 ${
+                        activeId === t.id ? "bg-muted/40" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">
+                          {t.name}
+                        </span>
+                        {unread && (
+                          <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+                        )}
+                        <span className="text-[10px] text-muted-foreground ml-auto">
+                          {new Date(t.updatedAt).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground truncate">
+                        {t.email}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {t.messageCount ?? 0} msg
+                        {(t.messageCount ?? 0) === 1 ? "" : "s"}
+                        {t.lastFromAdmin ? " · last: you" : ""}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-card flex flex-col min-h-[480px]">
+          {!activeId || !activeThread ? (
+            <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
+              Select a thread to read and reply.
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-3 border-b border-border/60 bg-muted/20">
+                <p className="text-sm font-medium">{activeThread.name}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {activeThread.email} · started{" "}
+                  {new Date(activeThread.createdAt).toLocaleString()}
+                </p>
+              </div>
+              <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto px-4 py-3 space-y-2 max-h-[480px]"
+              >
+                {activeThread.messages.map((m, idx) => (
+                  <div
+                    key={`${m.at}-${idx}`}
+                    className={`flex flex-col ${
+                      m.from === "admin" ? "items-end" : "items-start"
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                        m.from === "admin"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-foreground"
+                      }`}
+                    >
+                      {m.body}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
+                      {m.from === "admin" ? "You" : activeThread.name} ·{" "}
+                      {new Date(m.at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-border/60 px-3 py-2 flex items-end gap-2">
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      if (!sending && draft.trim()) void sendReply();
+                    }
+                  }}
+                  placeholder="Reply to the customer (Ctrl+Enter to send)"
+                  className="resize-none min-h-[44px] max-h-[120px] text-sm"
+                  maxLength={2000}
+                />
+                <Button
+                  onClick={() => void sendReply()}
+                  disabled={sending || !draft.trim()}
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Send"
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
