@@ -1245,6 +1245,12 @@ export const handler = async (event) => {
           // both surface as the same opaque error.
           return json(404, { error: "Order not found" });
         }
+        if (existing.status !== "received") {
+          return json(400, {
+            error:
+              "Refund requests can only be submitted after the order is received",
+          });
+        }
         if (existing.refund && existing.refund.status !== "failed") {
           return json(409, {
             error: "A refund is already in progress on this order",
