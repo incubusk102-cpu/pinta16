@@ -145,10 +145,13 @@ const HeroSlider = () => {
     [count, index],
   );
 
-  // Clamp index when slides change underneath us (admin add/remove during view).
+  // Synchronously clamp during render so we never index past the end of a
+  // shrunk slides array. The effect below only converges state for subsequent
+  // renders (so navigation keeps working from a sane baseline).
+  const safeIndex = count > 0 ? Math.min(index, count - 1) : 0;
   useEffect(() => {
-    if (count > 0 && index >= count) setIndex(0);
-  }, [count, index]);
+    if (index !== safeIndex) setIndex(safeIndex);
+  }, [index, safeIndex]);
 
   // Autoplay. Including `index` in deps re-arms the timer on manual
   // navigation, so clicking next/prev/dot doesn't fire an immediate auto-advance.
@@ -201,7 +204,7 @@ const HeroSlider = () => {
   if (count === 0) return null;
 
   const variants = transitionVariants(settings.transition, reduced);
-  const slide = slides[index];
+  const slide = slides[safeIndex];
   const showKenBurns = settings.transition === "kenburns" && !reduced;
 
   return (
@@ -232,12 +235,12 @@ const HeroSlider = () => {
           className="absolute inset-0"
           aria-hidden={false}
           aria-roledescription="slide"
-          aria-label={`Slide ${index + 1} of ${count}`}
+          aria-label={`Slide ${safeIndex + 1} of ${count}`}
         >
           {slide.image && (
             <motion.img
               src={slide.image}
-              alt={slide.headline || slide.eyebrow || `Slide ${index + 1}`}
+              alt={slide.headline || slide.eyebrow || `Slide ${safeIndex + 1}`}
               className="absolute inset-0 w-full h-full object-cover"
               initial={showKenBurns ? { scale: 1.05 } : false}
               animate={showKenBurns ? { scale: 1.18 } : { scale: 1 }}
@@ -256,7 +259,7 @@ const HeroSlider = () => {
 
       {/* aria-live announcement of current slide for screen readers */}
       <div className="sr-only" aria-live="polite">
-        Slide {index + 1} of {count}
+        Slide {safeIndex + 1} of {count}
         {slide.headline ? `: ${slide.headline}` : ""}
       </div>
 
@@ -289,11 +292,11 @@ const HeroSlider = () => {
                 key={s.id}
                 type="button"
                 role="tab"
-                aria-selected={i === index}
+                aria-selected={i === safeIndex}
                 aria-label={`Go to slide ${i + 1}`}
                 onClick={() => goTo(i)}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === index
+                  i === safeIndex
                     ? "w-10 bg-foreground"
                     : "w-4 bg-foreground/40 hover:bg-foreground/60"
                 }`}
