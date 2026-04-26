@@ -73,7 +73,11 @@ export default function MyOrders() {
           <Package className="w-4 h-4" /> My orders
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          No orders yet. <Link to="/" className="underline">Browse the gallery</Link> to start collecting.
+          No orders yet.{" "}
+          <Link to="/" className="underline">
+            Browse the gallery
+          </Link>{" "}
+          to start collecting.
         </p>
       </section>
     );
@@ -153,7 +157,12 @@ export default function MyOrders() {
             />
           </label>
           {filtersActive && (
-            <Button size="sm" variant="ghost" onClick={reset} className="self-end">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={reset}
+              className="self-end"
+            >
               <X className="w-3.5 h-3.5 mr-1" /> Reset
             </Button>
           )}
@@ -167,7 +176,10 @@ export default function MyOrders() {
       ) : (
         <ul className="divide-y divide-border/30">
           {filtered.map((o) => (
-            <li key={o.id} className="py-3 flex items-start justify-between gap-3">
+            <li
+              key={o.id}
+              className="py-3 flex items-start justify-between gap-3"
+            >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{o.id}</p>
                 <p className="text-xs text-muted-foreground truncate">
