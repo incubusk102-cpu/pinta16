@@ -1172,11 +1172,24 @@ export const handler = async (event) => {
           actor: "admin",
           ...refundMeta,
         });
+        // If the customer had submitted a refund request, mark it as
+        // processed once the actual PayMongo refund record exists.
+        const closedRefundRequest = existing.refundRequest
+          ? {
+              ...existing.refundRequest,
+              status: "processed",
+              decidedAt:
+                existing.refundRequest.decidedAt || new Date().toISOString(),
+            }
+          : undefined;
         orders[idx] = {
           ...existing,
           refund: refundRecord,
           notifications,
           activityLog: refundActivity,
+          ...(closedRefundRequest
+            ? { refundRequest: closedRefundRequest }
+            : {}),
         };
         await store.setJSON(ORDERS_KEY, orders);
         await appendAuditEvent(event, {
@@ -1185,6 +1198,177 @@ export const handler = async (event) => {
           subject: orderId,
           detail: `Refund ₱${refundRecord.amount.toLocaleString()} (${refundReason})`,
           ...refundMeta,
+        });
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "customer-refund-request") {
+        const limit = await consumeRateLimit(event, {
+          bucket: "customer-refund-request",
+          windowMs: 60_000,
+          max: 5,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+        const VALID_REASONS = new Set([
+          "damaged",
+          "wrong_item",
+          "not_as_described",
+          "no_longer_wanted",
+          "other",
+        ]);
+        const orderId = String(body.orderId || "")
+          .trim()
+          .toUpperCase();
+        const email = String(body.email || "")
+          .trim()
+          .toLowerCase();
+        const reason = VALID_REASONS.has(body.reason) ? body.reason : "other";
+        const note = String(body.note || "").slice(0, 1000);
+        if (!orderId) return json(400, { error: "orderId required" });
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return json(400, { error: "Valid email required" });
+        }
+        if (note.trim().length < 10) {
+          return json(400, {
+            error: "Please describe the issue (min 10 characters)",
+          });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const onFile = String(existing.orderInfo?.email || "")
+          .trim()
+          .toLowerCase();
+        if (!onFile || onFile !== email) {
+          // Don't leak whether the email is wrong vs. order missing —
+          // both surface as the same opaque error.
+          return json(404, { error: "Order not found" });
+        }
+        if (existing.status !== "received") {
+          return json(400, {
+            error:
+              "Refund requests can only be submitted after the order is received",
+          });
+        }
+        if (existing.refund && existing.refund.status !== "failed") {
+          return json(409, {
+            error: "A refund is already in progress on this order",
+          });
+        }
+        if (
+          existing.refundRequest &&
+          (existing.refundRequest.status === "pending" ||
+            existing.refundRequest.status === "approved" ||
+            existing.refundRequest.status === "processed")
+        ) {
+          return json(409, {
+            error: "A refund request is already in progress on this order",
+          });
+        }
+        const requestRecord = {
+          reason,
+          note: note.trim(),
+          requestedAt: new Date().toISOString(),
+          status: "pending",
+        };
+        const customerMeta = captureRequestMeta(event);
+        const customerActivity = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        customerActivity.push({
+          at: requestRecord.requestedAt,
+          type: "refund-request-submitted",
+          actor: "customer",
+          ...customerMeta,
+        });
+        orders[idx] = {
+          ...existing,
+          refundRequest: requestRecord,
+          activityLog: customerActivity,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+        await appendAuditEvent(event, {
+          type: "order.refund_request",
+          outcome: "pending",
+          subject: orderId,
+          detail: `Reason: ${reason}`,
+          ...customerMeta,
+        });
+        // Return the public-shape order so the customer sees the new
+        // pending state immediately.
+        const updated = orders[idx];
+        const {
+          orderInfo: _oi,
+          requestMeta: _rm,
+          activityLog: _al,
+          ...rest
+        } = updated;
+        return json(200, {
+          order: {
+            ...rest,
+            orderInfo: updated.orderInfo
+              ? {
+                  fullName: updated.orderInfo.fullName,
+                  city: updated.orderInfo.city,
+                  email: maskEmail(updated.orderInfo.email),
+                }
+              : undefined,
+          },
+        });
+      }
+
+      if (action === "decide-refund-request") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const orderId = String(body.orderId || "").trim();
+        const decision = body.decision;
+        const decisionNote = String(body.decisionNote || "").slice(0, 500);
+        if (!orderId) return json(400, { error: "orderId required" });
+        if (decision !== "approved" && decision !== "denied") {
+          return json(400, { error: "decision must be approved or denied" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        if (!existing.refundRequest) {
+          return json(404, { error: "No refund request on this order" });
+        }
+        if (existing.refundRequest.status !== "pending") {
+          return json(409, {
+            error: `Request already ${existing.refundRequest.status}`,
+          });
+        }
+        const decisionMeta = captureRequestMeta(event);
+        const updatedRequest = {
+          ...existing.refundRequest,
+          status: decision,
+          decidedAt: new Date().toISOString(),
+          decisionNote: decisionNote || undefined,
+        };
+        const decisionActivity = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        decisionActivity.push({
+          at: updatedRequest.decidedAt,
+          type: `refund-request-${decision}`,
+          actor: "admin",
+          ...decisionMeta,
+        });
+        orders[idx] = {
+          ...existing,
+          refundRequest: updatedRequest,
+          activityLog: decisionActivity,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+        await appendAuditEvent(event, {
+          type: "order.refund_request",
+          outcome: decision,
+          subject: orderId,
+          detail: decisionNote || decision,
+          ...decisionMeta,
         });
         return json(200, { order: orders[idx] });
       }
