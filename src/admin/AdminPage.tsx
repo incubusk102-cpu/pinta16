@@ -40,11 +40,13 @@ import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
+import ExportPanel from "@/admin/ExportPanel";
 import {
   ArrowLeft,
   Activity,
   Bell,
   CheckCircle2,
+  Download,
   KeyRound,
   LayoutDashboard,
   Loader2,
@@ -84,6 +86,7 @@ type AdminSection =
   | "visitors"
   | "users"
   | "storefront"
+  | "exports"
   | "security"
   | "settings";
 
@@ -94,6 +97,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   visitors: "Visitors",
   users: "Users",
   storefront: "Storefront",
+  exports: "Exports",
   security: "Security",
   settings: "Settings",
 };
@@ -317,6 +321,13 @@ function AdminDashboard() {
               hint="Announcement, shipping, promo codes"
             />
             <NavLink
+              icon={<Download className="w-4 h-4" />}
+              label="Exports"
+              active={section === "exports"}
+              onClick={() => navigate("exports")}
+              hint="Download orders / customers / newsletter"
+            />
+            <NavLink
               icon={<Shield className="w-4 h-4" />}
               label="Security"
               active={section === "security"}
@@ -351,6 +362,7 @@ function AdminDashboard() {
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "storefront" && <StorefrontSection />}
+        {section === "exports" && <ExportsSection />}
         {section === "security" && <SecuritySection />}
         {section === "settings" && <SettingsSection />}
       </main>
@@ -2374,6 +2386,23 @@ function SettingsSection() {
           <LogOut className="w-4 h-4 mr-2" /> Sign out
         </Button>
       </section>
+    </div>
+  );
+}
+
+function ExportsSection() {
+  const token = getAdminToken() ?? "";
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div>
+        <h2 className="font-display text-xl mb-1">Data exports</h2>
+        <p className="text-sm text-muted-foreground">
+          Pull the live snapshot of orders, customers, or newsletter
+          subscribers. CSV opens cleanly in Excel / Google Sheets; JSON keeps
+          every nested field for backups and migrations.
+        </p>
+      </div>
+      <ExportPanel token={token} />
     </div>
   );
 }
