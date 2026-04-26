@@ -76,15 +76,13 @@ const sanitizeIndexEntry = (entry) => ({
 });
 
 const readIndexWithMeta = async (store) => {
-  try {
-    const result = await store.getWithMetadata(INDEX_KEY, { type: "json" });
-    const list = Array.isArray(result?.data?.threads)
-      ? result.data.threads
-      : [];
-    return { etag: result?.etag, threads: list.map(sanitizeIndexEntry) };
-  } catch {
-    return { etag: undefined, threads: [] };
-  }
+  // Throws on read failure so the CAS retry loop can distinguish a transient
+  // error from a genuinely empty index. Swallowing here would let an
+  // unconditional write (etag === undefined) overwrite a populated index
+  // with a single new entry on the retry path.
+  const result = await store.getWithMetadata(INDEX_KEY, { type: "json" });
+  const list = Array.isArray(result?.data?.threads) ? result.data.threads : [];
+  return { etag: result?.etag, threads: list.map(sanitizeIndexEntry) };
 };
 
 const writeIndex = async (store, threads, etag) => {
@@ -132,7 +130,15 @@ const generateThreadId = () => {
 
 const upsertIndexEntry = async (store, entryUpdater) => {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const { etag, threads } = await readIndexWithMeta(store);
+    let etag;
+    let threads;
+    try {
+      ({ etag, threads } = await readIndexWithMeta(store));
+    } catch {
+      // Read failure: bail rather than retrying with an empty list and
+      // accidentally overwriting the existing index on the next write.
+      return false;
+    }
     const next = entryUpdater(threads);
     try {
       const wrote = await writeIndex(store, next, etag);
@@ -194,8 +200,14 @@ export const handler = async (event) => {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
         }
-        const { threads } = await readIndexWithMeta(store);
-        return json(200, { threads });
+        try {
+          const { threads } = await readIndexWithMeta(store);
+          return json(200, { threads });
+        } catch {
+          // Surface as empty list rather than a 500; UI just shows
+          // "no threads yet" instead of breaking.
+          return json(200, { threads: [] });
+        }
       }
 
       return json(400, { error: "Unknown action" });
@@ -422,7 +434,10 @@ export const handler = async (event) => {
     }
 
     return json(400, { error: "Unknown action" });
-  } catch (err) {
-    return json(500, { error: err.message || "Server error" });
+  } catch {
+    // Don't leak err.message — internal stack/driver text could expose
+    // implementation details to unauthenticated callers. Match the pattern
+    // used in admin-auth.js / orders.js.
+    return json(500, { error: "Internal error" });
   }
 };
