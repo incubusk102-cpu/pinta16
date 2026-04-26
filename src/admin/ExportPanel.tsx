@@ -161,7 +161,11 @@ export default function ExportPanel({ token }: Props) {
       if (format === "csv") {
         downloadBlob(toCsv(rows), filename, "text/csv");
       } else {
-        downloadBlob(JSON.stringify(raw, null, 2), filename, "application/json");
+        downloadBlob(
+          JSON.stringify(raw, null, 2),
+          filename,
+          "application/json",
+        );
       }
       toast.success(`Exported ${rows.length} ${dataset}`);
     } catch (err) {
@@ -205,8 +209,8 @@ export default function ExportPanel({ token }: Props) {
         <h3 className="font-display text-base">Exports</h3>
       </div>
       <p className="text-xs text-muted-foreground">
-        Download the full set of orders, customers, or newsletter
-        subscribers. CSV is spreadsheet-friendly (cells starting with{" "}
+        Download the full set of orders, customers, or newsletter subscribers.
+        CSV is spreadsheet-friendly (cells starting with{" "}
         <code className="font-mono">=</code> /{" "}
         <code className="font-mono">+</code> /{" "}
         <code className="font-mono">-</code> /{" "}
