@@ -8,9 +8,11 @@ import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
+import { PoliciesProvider } from "@/contexts/PoliciesContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import ChatWidget from "@/components/ChatWidget";
 import PwaPrompts from "@/components/PwaPrompts";
+import SiteFooter from "@/components/SiteFooter";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -61,6 +63,14 @@ function ConditionalAnnouncementBar() {
   return <AnnouncementBar />;
 }
 
+function ConditionalSiteFooter() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return <SiteFooter />;
+}
+
 function RootComponent() {
   return (
     <ThemeProvider>
@@ -69,15 +79,18 @@ function RootComponent() {
           <UserAuthProvider>
             <WishlistProvider>
               <StorefrontConfigProvider>
-                <ProductProvider>
-                  <CartProvider>
-                    <HeartbeatBridge />
-                    <ConditionalAnnouncementBar />
-                    <Outlet />
-                    <ChatWidget />
-                    <PwaPrompts />
-                  </CartProvider>
-                </ProductProvider>
+                <PoliciesProvider>
+                  <ProductProvider>
+                    <CartProvider>
+                      <HeartbeatBridge />
+                      <ConditionalAnnouncementBar />
+                      <Outlet />
+                      <ConditionalSiteFooter />
+                      <ChatWidget />
+                      <PwaPrompts />
+                    </CartProvider>
+                  </ProductProvider>
+                </PoliciesProvider>
               </StorefrontConfigProvider>
             </WishlistProvider>
           </UserAuthProvider>

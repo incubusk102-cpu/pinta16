@@ -40,6 +40,7 @@ import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
+import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import ExportPanel from "@/admin/ExportPanel";
 import {
   ArrowLeft,
@@ -47,6 +48,7 @@ import {
   Bell,
   CheckCircle2,
   Download,
+  FileText,
   KeyRound,
   LayoutDashboard,
   Loader2,
@@ -88,6 +90,7 @@ type AdminSection =
   | "visitors"
   | "users"
   | "storefront"
+  | "policies"
   | "exports"
   | "security"
   | "settings";
@@ -100,6 +103,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   visitors: "Visitors",
   users: "Users",
   storefront: "Storefront",
+  policies: "Policies",
   exports: "Exports",
   security: "Security",
   settings: "Settings",
@@ -331,6 +335,13 @@ function AdminDashboard() {
               hint="Announcement, shipping, promo codes"
             />
             <NavLink
+              icon={<FileText className="w-4 h-4" />}
+              label="Policies"
+              active={section === "policies"}
+              onClick={() => navigate("policies")}
+              hint="Terms, refund, shipping, privacy"
+            />
+            <NavLink
               icon={<Download className="w-4 h-4" />}
               label="Exports"
               active={section === "exports"}
@@ -373,6 +384,7 @@ function AdminDashboard() {
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "storefront" && <StorefrontSection />}
+        {section === "policies" && <PoliciesSection />}
         {section === "exports" && <ExportsSection />}
         {section === "security" && <SecuritySection />}
         {section === "settings" && <SettingsSection />}
