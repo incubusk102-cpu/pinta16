@@ -23,6 +23,7 @@ import {
   type Availability,
   type DisplayArtwork,
 } from "@/lib/artworks";
+import { useUserAuth } from "@/contexts/UserAuthContext";
 
 type SortOption =
   | "featured"
@@ -109,6 +110,8 @@ const GallerySection = () => {
   const [filterAvailability, setFilterAvailability] = useState<string>("all");
   const [filterPrice, setFilterPrice] = useState<string>("all");
   const { products } = useProducts();
+  const { user } = useUserAuth();
+  const isLoggedIn = Boolean(user);
 
   const allArtworks = useMemo(
     () => getStorefrontArtworks(products),
@@ -126,6 +129,7 @@ const GallerySection = () => {
   }, [allArtworks]);
 
   const filteredArtworks = useMemo(() => {
+    if (!isLoggedIn) return allArtworks;
     return allArtworks.filter((art) =>
       matchesArtwork(
         art,
@@ -135,10 +139,18 @@ const GallerySection = () => {
         filterPrice,
       ),
     );
-  }, [allArtworks, query, filterCategory, filterAvailability, filterPrice]);
+  }, [
+    allArtworks,
+    isLoggedIn,
+    query,
+    filterCategory,
+    filterAvailability,
+    filterPrice,
+  ]);
 
   const sortedArtworks = useMemo(() => {
     const copy = [...filteredArtworks];
+    if (!isLoggedIn) return copy;
     switch (sortBy) {
       case "name-asc":
         return copy.sort((a, b) =>
@@ -155,7 +167,7 @@ const GallerySection = () => {
       default:
         return copy;
     }
-  }, [filteredArtworks, sortBy]);
+  }, [filteredArtworks, sortBy, isLoggedIn]);
 
   const hasFilters =
     query.trim().length > 0 ||
@@ -190,151 +202,155 @@ const GallerySection = () => {
         </h2>
       </motion.div>
 
-      <div className="space-y-3 mb-8">
-        <div className="relative max-w-md mx-auto">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search paintings, mediums, or styles…"
-            aria-label="Search paintings"
-            className="pl-9 pr-9 h-10 font-body text-sm"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+      {isLoggedIn && (
+        <div className="space-y-3 mb-8">
+          <div className="relative max-w-md mx-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search paintings, mediums, or styles…"
+              aria-label="Search paintings"
+              className="pl-9 pr-9 h-10 font-body text-sm"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-end justify-center gap-3">
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="filter-category"
+                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+              >
+                Category
+              </label>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger
+                  id="filter-category"
+                  className="w-[170px] font-body text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  <SelectItem value="__uncategorized__">
+                    Uncategorized
+                  </SelectItem>
+                  {availableCategories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="filter-price"
+                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+              >
+                Price
+              </label>
+              <Select value={filterPrice} onValueChange={setFilterPrice}>
+                <SelectTrigger
+                  id="filter-price"
+                  className="w-[170px] font-body text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRICE_BUCKETS.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>
+                      {b.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="filter-availability"
+                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+              >
+                Availability
+              </label>
+              <Select
+                value={filterAvailability}
+                onValueChange={setFilterAvailability}
+              >
+                <SelectTrigger
+                  id="filter-availability"
+                  className="w-[170px] font-body text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {STOREFRONT_AVAILABILITIES.map((a) => (
+                    <SelectItem key={a} value={a}>
+                      {AVAILABILITY_LABEL[a]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="gallery-sort"
+                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+              >
+                Sort
+              </label>
+              <Select
+                value={sortBy}
+                onValueChange={(value) => setSortBy(value as SortOption)}
+              >
+                <SelectTrigger
+                  id="gallery-sort"
+                  className="w-[170px] font-body text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline pb-2"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
+            {sortedArtworks.length}{" "}
+            {sortedArtworks.length === 1 ? "piece" : "pieces"}
+          </p>
         </div>
-
-        <div className="flex flex-wrap items-end justify-center gap-3">
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="filter-category"
-              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-            >
-              Category
-            </label>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger
-                id="filter-category"
-                className="w-[170px] font-body text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                <SelectItem value="__uncategorized__">Uncategorized</SelectItem>
-                {availableCategories.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="filter-price"
-              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-            >
-              Price
-            </label>
-            <Select value={filterPrice} onValueChange={setFilterPrice}>
-              <SelectTrigger
-                id="filter-price"
-                className="w-[170px] font-body text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRICE_BUCKETS.map((b) => (
-                  <SelectItem key={b.value} value={b.value}>
-                    {b.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="filter-availability"
-              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-            >
-              Availability
-            </label>
-            <Select
-              value={filterAvailability}
-              onValueChange={setFilterAvailability}
-            >
-              <SelectTrigger
-                id="filter-availability"
-                className="w-[170px] font-body text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {STOREFRONT_AVAILABILITIES.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {AVAILABILITY_LABEL[a]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="gallery-sort"
-              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-            >
-              Sort
-            </label>
-            <Select
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as SortOption)}
-            >
-              <SelectTrigger
-                id="gallery-sort"
-                className="w-[170px] font-body text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {hasFilters && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline pb-2"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-
-        <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
-          {sortedArtworks.length}{" "}
-          {sortedArtworks.length === 1 ? "piece" : "pieces"}
-        </p>
-      </div>
+      )}
 
       {sortedArtworks.length === 0 ? (
         <div className="py-20 text-center">
