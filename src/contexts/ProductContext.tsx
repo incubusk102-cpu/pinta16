@@ -38,7 +38,39 @@ export interface Product {
   mockupFileName?: string;
   mockupBytes?: number;
   availability?: ProductAvailability;
+  /** Remaining inventory. Omitted (undefined) means stock is not tracked
+   *  for this product — used as a back-compat fallback for legacy entries
+   *  that predate the inventory feature. 0 means out of stock. */
+  stockCount?: number;
+  /** When stockCount drops to this value or below, surface a low-stock
+   *  alert in admin and a "Only N left" badge on the storefront. Defaults
+   *  to DEFAULT_LOW_STOCK_THRESHOLD if omitted. */
+  lowStockThreshold?: number;
 }
+
+export const DEFAULT_LOW_STOCK_THRESHOLD = 2;
+
+export const isStockTracked = (
+  p: Pick<Product, "stockCount">,
+): p is Pick<Product, "stockCount"> & { stockCount: number } =>
+  typeof p.stockCount === "number" && Number.isFinite(p.stockCount);
+
+export const getEffectiveLowStockThreshold = (
+  p: Pick<Product, "lowStockThreshold">,
+): number =>
+  typeof p.lowStockThreshold === "number" && p.lowStockThreshold >= 0
+    ? p.lowStockThreshold
+    : DEFAULT_LOW_STOCK_THRESHOLD;
+
+export const isLowStock = (
+  p: Pick<Product, "stockCount" | "lowStockThreshold">,
+): boolean =>
+  isStockTracked(p) &&
+  p.stockCount > 0 &&
+  p.stockCount <= getEffectiveLowStockThreshold(p);
+
+export const isOutOfStock = (p: Pick<Product, "stockCount">): boolean =>
+  isStockTracked(p) && p.stockCount <= 0;
 
 export const PRODUCT_CATEGORIES = [
   "Abstract",

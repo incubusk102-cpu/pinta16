@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import {
   buildImageFields,
+  DEFAULT_LOW_STOCK_THRESHOLD,
   getProductImages,
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
@@ -51,6 +52,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [description, setDescription] = useState("");
   const [availability, setAvailability] =
     useState<ProductAvailability>("available");
+  const [stockCount, setStockCount] = useState("");
+  const [lowStockThreshold, setLowStockThreshold] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -76,6 +79,14 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     );
     setDescription(product.description ?? "");
     setAvailability(getAvailability(product));
+    setStockCount(
+      typeof product.stockCount === "number" ? String(product.stockCount) : "",
+    );
+    setLowStockThreshold(
+      typeof product.lowStockThreshold === "number"
+        ? String(product.lowStockThreshold)
+        : "",
+    );
   }, [product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,11 +98,32 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
 
+    const stockTrim = stockCount.trim();
+    const stockNum = stockTrim === "" ? undefined : Number(stockTrim);
+    if (
+      stockNum !== undefined &&
+      (!Number.isFinite(stockNum) || stockNum < 0)
+    ) {
+      return toast.error("Stock count must be 0 or higher");
+    }
+    const thresholdTrim = lowStockThreshold.trim();
+    const thresholdNum =
+      thresholdTrim === "" ? undefined : Number(thresholdTrim);
+    if (
+      thresholdNum !== undefined &&
+      (!Number.isFinite(thresholdNum) || thresholdNum < 0)
+    ) {
+      return toast.error("Low-stock threshold must be 0 or higher");
+    }
+
     setSaving(true);
     try {
       const salePriceNum = Number(salePrice);
       const effectiveSalePrice =
         salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
+
+      const nextAvailability: ProductAvailability =
+        stockNum === 0 ? "sold" : availability;
 
       await onSave(product.id, {
         ...buildImageFields(images),
@@ -103,7 +135,9 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
-        availability,
+        availability: nextAvailability,
+        stockCount: stockNum,
+        lowStockThreshold: thresholdNum,
       });
       toast.success("Product updated");
       onClose();
@@ -291,6 +325,45 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
             <p className="mt-1 text-[11px] text-muted-foreground">
               Draft hides the painting from the public storefront.
             </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="edit-stockCount">
+                Stock count{" "}
+                <span className="text-muted-foreground font-normal">
+                  (blank = not tracked)
+                </span>
+              </Label>
+              <Input
+                id="edit-stockCount"
+                type="number"
+                min="0"
+                step="1"
+                value={stockCount}
+                onChange={(e) => setStockCount(e.target.value)}
+                placeholder="e.g. 1"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Auto-decrements on each order. Marks the painting as sold when
+                it hits 0.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="edit-lowStockThreshold">Low-stock alert ≤</Label>
+              <Input
+                id="edit-lowStockThreshold"
+                type="number"
+                min="0"
+                step="1"
+                value={lowStockThreshold}
+                onChange={(e) => setLowStockThreshold(e.target.value)}
+                placeholder={String(DEFAULT_LOW_STOCK_THRESHOLD)}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Default is {DEFAULT_LOW_STOCK_THRESHOLD}.
+              </p>
+            </div>
           </div>
 
           <div>

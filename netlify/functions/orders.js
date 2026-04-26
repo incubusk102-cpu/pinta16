@@ -84,6 +84,64 @@ const computeExpectedDiscount = (promo, subtotal) => {
   return Math.min(promo.value, subtotal);
 };
 
+// CAS-style decrement of product stockCount for each ordered item. Items
+// without an id, or products that don't track stock (stockCount undefined),
+// are skipped. When stockCount hits 0 we also flip availability to "sold"
+// so the storefront immediately reflects sold-out state. We swallow all
+// errors — the customer's order is already persisted; failing to decrement
+// here would only affect the displayed availability, which the admin can
+// reconcile manually.
+const PRODUCTS_STORE_NAME = "products";
+const PRODUCTS_BLOB_KEY = "all-products";
+
+const decrementProductStock = async (event, items) => {
+  if (!Array.isArray(items) || items.length === 0) return;
+  const want = new Map();
+  for (const it of items) {
+    const id = String(it?.id || "").trim();
+    if (!id) continue;
+    const qty = Math.max(1, Math.floor(Number(it?.quantity) || 1));
+    want.set(id, (want.get(id) || 0) + qty);
+  }
+  if (want.size === 0) return;
+
+  try {
+    connectLambda(event);
+    const productsStore = getStore(PRODUCTS_STORE_NAME);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = await productsStore.getWithMetadata(PRODUCTS_BLOB_KEY, {
+        type: "json",
+      });
+      const list = Array.isArray(result?.data) ? result.data : [];
+      if (list.length === 0) return;
+      let mutated = false;
+      const next = list.map((p) => {
+        if (!p || typeof p.id !== "string") return p;
+        const dec = want.get(p.id);
+        if (!dec) return p;
+        if (typeof p.stockCount !== "number") return p; // not tracked
+        mutated = true;
+        const remaining = Math.max(0, p.stockCount - dec);
+        const updated = { ...p, stockCount: remaining };
+        if (remaining === 0) updated.availability = "sold";
+        return updated;
+      });
+      if (!mutated) return;
+      const writeOpts = result?.etag ? { onlyIfMatch: result.etag } : {};
+      const write = await productsStore.setJSON(
+        PRODUCTS_BLOB_KEY,
+        next,
+        writeOpts,
+      );
+      if (write.modified) return;
+      // CAS conflict — retry with a fresh read.
+    }
+    console.warn("decrementProductStock: gave up after 5 CAS attempts");
+  } catch (err) {
+    console.error("decrementProductStock failed:", err);
+  }
+};
+
 // Compare-and-swap increment of usageCount. Validates the promo is still
 // eligible (enabled, not expired, under limit) on every attempt so a malicious
 // client can't deplete a usage cap by replaying the place action.
@@ -553,6 +611,7 @@ export const handler = async (event) => {
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
         }
+        await decrementProductStock(event, safeItems);
         await appendAuditEvent(event, {
           type: "order.placed",
           outcome: "success",
