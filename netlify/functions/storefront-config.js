@@ -46,7 +46,22 @@ const DEFAULT_CONFIG = {
     shippingFee: 500,
   },
   promoCodes: [],
+  hero: {
+    enabled: true,
+    eyebrow: "Affordable Art, Authentic Stories",
+    headline: "Pintaterra",
+    subhead:
+      "Discover hand-crafted paintings that transform spaces. Each piece tells a story, crafted with passion and precision.",
+    ctaLabel: "View Collection",
+    ctaHref: "#gallery",
+    backgroundImages: [],
+  },
+  collections: [],
 };
+
+const HERO_BG_LIMIT = 3;
+const COLLECTION_LIMIT = 8;
+const COLLECTION_PRODUCT_LIMIT = 24;
 
 const sanitizeConfig = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
@@ -59,6 +74,8 @@ const sanitizeConfig = (raw) => {
       ? data.freeShipping
       : {};
   const promoCodes = Array.isArray(data.promoCodes) ? data.promoCodes : [];
+  const hero = data.hero && typeof data.hero === "object" ? data.hero : {};
+  const collections = Array.isArray(data.collections) ? data.collections : [];
 
   return {
     announcement: {
@@ -123,6 +140,65 @@ const sanitizeConfig = (raw) => {
         };
       })
       .filter(Boolean),
+    hero: {
+      enabled: hero.enabled !== false,
+      eyebrow: String(hero.eyebrow ?? DEFAULT_CONFIG.hero.eyebrow).slice(
+        0,
+        120,
+      ),
+      headline: String(hero.headline ?? DEFAULT_CONFIG.hero.headline).slice(
+        0,
+        80,
+      ),
+      subhead: String(hero.subhead ?? DEFAULT_CONFIG.hero.subhead).slice(
+        0,
+        320,
+      ),
+      ctaLabel: String(hero.ctaLabel ?? DEFAULT_CONFIG.hero.ctaLabel).slice(
+        0,
+        40,
+      ),
+      ctaHref: String(hero.ctaHref ?? DEFAULT_CONFIG.hero.ctaHref).slice(
+        0,
+        500,
+      ),
+      backgroundImages: (Array.isArray(hero.backgroundImages)
+        ? hero.backgroundImages
+        : []
+      )
+        .map((url) =>
+          String(url ?? "")
+            .trim()
+            .slice(0, 2000),
+        )
+        .filter(Boolean)
+        .slice(0, HERO_BG_LIMIT),
+    },
+    collections: collections
+      .map((c) => {
+        if (!c || typeof c !== "object") return null;
+        const id = String(c.id ?? "")
+          .trim()
+          .slice(0, 60);
+        if (!id) return null;
+        const productIds = (Array.isArray(c.productIds) ? c.productIds : [])
+          .map((pid) =>
+            String(pid ?? "")
+              .trim()
+              .slice(0, 100),
+          )
+          .filter(Boolean)
+          .slice(0, COLLECTION_PRODUCT_LIMIT);
+        return {
+          id,
+          title: String(c.title ?? "").slice(0, 80),
+          description: String(c.description ?? "").slice(0, 240),
+          productIds,
+          enabled: c.enabled !== false,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, COLLECTION_LIMIT),
   };
 };
 
@@ -148,6 +224,8 @@ const publicView = (config) => ({
       expiresAt: p.expiresAt,
       description: p.description,
     })),
+  hero: config.hero,
+  collections: config.collections.filter((c) => c.enabled),
 });
 
 export const handler = async (event) => {
@@ -259,6 +337,24 @@ export const handler = async (event) => {
         };
         await store.setJSON(CONFIG_KEY, existing);
         return json(200, { config: existing });
+      }
+
+      if (action === "update-hero") {
+        const next = sanitizeConfig({
+          ...existing,
+          hero: { ...existing.hero, ...body.hero },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "set-collections") {
+        const incoming = Array.isArray(body.collections)
+          ? body.collections
+          : [];
+        const next = sanitizeConfig({ ...existing, collections: incoming });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
       }
 
       return json(400, { error: "Unknown action" });

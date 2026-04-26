@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import HeroSection from "@/components/HeroSection";
 import GallerySection from "@/components/GallerySection";
+import CollectionsShowcase from "@/components/CollectionsShowcase";
 import AboutSection from "@/components/AboutSection";
 import ReviewsSection from "@/components/ReviewsSection";
 import ContactSection from "@/components/ContactSection";
@@ -35,6 +36,7 @@ function Index() {
     <div className="smooth-scroll">
       <GalleryNav />
       <HeroSection />
+      <CollectionsShowcase />
       <GallerySection />
       <section className="px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />

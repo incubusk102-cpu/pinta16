@@ -38,10 +38,33 @@ export interface PromoCodePublic {
   description: string;
 }
 
+export interface HeroConfig {
+  enabled: boolean;
+  eyebrow: string;
+  headline: string;
+  subhead: string;
+  ctaLabel: string;
+  ctaHref: string;
+  /** Up to 3 image URLs layered as the parallax background. Empty array
+   *  falls back to the bundled default treatment in HeroSection. */
+  backgroundImages: string[];
+}
+
+export interface CollectionConfig {
+  id: string;
+  title: string;
+  description: string;
+  /** Ordered product ids that belong to the collection. */
+  productIds: string[];
+  enabled: boolean;
+}
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
   promoCodes: PromoCodePublic[];
+  hero: HeroConfig;
+  collections: CollectionConfig[];
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -64,6 +87,17 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     shippingFee: 500,
   },
   promoCodes: [],
+  hero: {
+    enabled: true,
+    eyebrow: "Affordable Art, Authentic Stories",
+    headline: "Pintaterra",
+    subhead:
+      "Discover hand-crafted paintings that transform spaces. Each piece tells a story, crafted with passion and precision.",
+    ctaLabel: "View Collection",
+    ctaHref: "#gallery",
+    backgroundImages: [],
+  },
+  collections: [],
 };
 
 interface ContextType {
@@ -101,6 +135,16 @@ export const StorefrontConfigProvider = ({
           },
           promoCodes: Array.isArray(data.config.promoCodes)
             ? data.config.promoCodes
+            : [],
+          hero: {
+            ...DEFAULT_CONFIG.hero,
+            ...(data.config.hero ?? {}),
+            backgroundImages: Array.isArray(data.config.hero?.backgroundImages)
+              ? data.config.hero.backgroundImages
+              : [],
+          },
+          collections: Array.isArray(data.config.collections)
+            ? data.config.collections
             : [],
         });
       }
