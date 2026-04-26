@@ -54,6 +54,21 @@ export interface OrderReview {
   publishedToHomepage?: boolean;
 }
 
+export interface RequestMeta {
+  ip?: string;
+  userAgent?: string;
+  browser?: string;
+  os?: string;
+  device?: string;
+  capturedAt?: string;
+}
+
+export interface OrderActivityEntry extends RequestMeta {
+  at: string;
+  type: string;
+  actor: "customer" | "admin" | "system" | string;
+}
+
 export interface CompletedOrder {
   id: string;
   items: CartItem[];
@@ -71,6 +86,8 @@ export interface CompletedOrder {
   notifications?: OrderNotification[];
   review?: OrderReview;
   refund?: OrderRefund;
+  requestMeta?: RequestMeta;
+  activityLog?: OrderActivityEntry[];
 }
 
 export const REVIEW_MIN_CHARS = 500;

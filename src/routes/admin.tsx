@@ -51,6 +51,7 @@ import {
   QrCode,
   RefreshCw,
   Settings,
+  Shield,
   Eye,
   EyeOff,
   Star,
@@ -86,6 +87,7 @@ type AdminSection =
   | "visitors"
   | "users"
   | "storefront"
+  | "security"
   | "settings";
 
 const SECTION_LABELS: Record<AdminSection, string> = {
@@ -95,6 +97,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   visitors: "Visitors",
   users: "Users",
   storefront: "Storefront",
+  security: "Security",
   settings: "Settings",
 };
 
@@ -317,6 +320,13 @@ function AdminDashboard() {
               hint="Announcement, shipping, promo codes"
             />
             <NavLink
+              icon={<Shield className="w-4 h-4" />}
+              label="Security"
+              active={section === "security"}
+              onClick={() => navigate("security")}
+              hint="Login + activity audit log"
+            />
+            <NavLink
               icon={<Settings className="w-4 h-4" />}
               label="Settings"
               active={section === "settings"}
@@ -344,6 +354,7 @@ function AdminDashboard() {
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "storefront" && <StorefrontSection />}
+        {section === "security" && <SecuritySection />}
         {section === "settings" && <SettingsSection />}
       </main>
     </div>
@@ -1316,6 +1327,52 @@ function OrdersSection() {
               </div>
             )}
 
+            {/* Visitor / device info */}
+            {order.requestMeta &&
+              (order.requestMeta.ip || order.requestMeta.userAgent) && (
+                <div className="text-xs space-y-1 p-3 bg-muted/30 border border-border/40 rounded-md">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Customer device
+                  </div>
+                  <p className="text-foreground/80">
+                    {order.requestMeta.browser || "Unknown browser"} ·{" "}
+                    {order.requestMeta.os || "Unknown OS"} ·{" "}
+                    {order.requestMeta.device || "device"}
+                  </p>
+                  {order.requestMeta.ip && (
+                    <p className="text-muted-foreground font-mono">
+                      IP: {order.requestMeta.ip}
+                    </p>
+                  )}
+                </div>
+              )}
+
+            {/* Activity log (admin / customer touchpoints) */}
+            {order.activityLog && order.activityLog.length > 0 && (
+              <div className="text-xs space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Activity log
+                </div>
+                <ul className="space-y-1 pl-5 list-disc text-muted-foreground">
+                  {order.activityLog.map((entry, idx) => (
+                    <li key={`${entry.at}-${idx}`}>
+                      <span className="text-foreground">{entry.type}</span> (
+                      {entry.actor}) — {new Date(entry.at).toLocaleString()}
+                      {entry.ip && (
+                        <span className="font-mono"> · {entry.ip}</span>
+                      )}
+                      {entry.browser && (
+                        <span>
+                          {" "}
+                          · {entry.browser} on {entry.os}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Notifications log */}
             {order.notifications && order.notifications.length > 0 && (
               <div className="text-xs space-y-1.5">
@@ -1667,6 +1724,182 @@ function SettingsSection() {
           <LogOut className="w-4 h-4 mr-2" /> Sign out
         </Button>
       </section>
+    </div>
+  );
+}
+
+interface AuditEvent {
+  at: string;
+  type: string;
+  outcome: string;
+  ip?: string;
+  browser?: string;
+  os?: string;
+  device?: string;
+  userAgent?: string;
+  subject?: string;
+  detail?: string;
+}
+
+function SecuritySection() {
+  const [events, setEvents] = useState<AuditEvent[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<string>("");
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/admin-auth?action=audit&limit=300", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEvents(Array.isArray(data.events) ? data.events : []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load audit log");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const filtered = (events ?? []).filter((e) => {
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      e.type.toLowerCase().includes(q) ||
+      e.outcome.toLowerCase().includes(q) ||
+      (e.ip || "").toLowerCase().includes(q) ||
+      (e.subject || "").toLowerCase().includes(q) ||
+      (e.detail || "").toLowerCase().includes(q) ||
+      (e.browser || "").toLowerCase().includes(q) ||
+      (e.os || "").toLowerCase().includes(q)
+    );
+  });
+
+  const failedLogins = (events ?? []).filter(
+    (e) =>
+      (e.type === "admin.login" || e.type === "user.login") &&
+      e.outcome === "failure",
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-display text-2xl">Security</h1>
+          <p className="text-xs text-muted-foreground">
+            Authentication events, order activity, refunds. IP + device captured
+            on every sensitive action.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Filter (type / IP / email / browser…)"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-72"
+          />
+          <Button onClick={refresh} variant="outline" disabled={loading}>
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <SummaryCard label="Recorded events" value={events?.length ?? 0} />
+        <SummaryCard
+          label="Failed logins (recent)"
+          value={failedLogins.length}
+        />
+        <SummaryCard
+          label="Unique IPs"
+          value={
+            new Set(
+              (events ?? [])
+                .map((e) => e.ip)
+                .filter((ip): ip is string => Boolean(ip)),
+            ).size
+          }
+        />
+      </div>
+
+      <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
+        <div className="p-3 border-b border-border/60 bg-muted/20 text-xs uppercase tracking-wider text-muted-foreground">
+          Audit log ({filtered.length})
+        </div>
+        {events === null ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">
+            {events.length === 0
+              ? "No audit events yet."
+              : "No events match the filter."}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/40 text-xs">
+            {filtered.map((e, idx) => (
+              <li key={`${e.at}-${idx}`} className="p-3 space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-foreground">{e.type}</span>
+                  <span
+                    className={
+                      e.outcome === "failure"
+                        ? "text-rose-500"
+                        : e.outcome === "success"
+                          ? "text-emerald-500"
+                          : "text-muted-foreground"
+                    }
+                  >
+                    {e.outcome}
+                  </span>
+                  <span className="text-muted-foreground ml-auto">
+                    {new Date(e.at).toLocaleString()}
+                  </span>
+                </div>
+                {(e.subject || e.detail) && (
+                  <p className="text-muted-foreground">
+                    {e.subject && (
+                      <span className="text-foreground/80">{e.subject}</span>
+                    )}
+                    {e.subject && e.detail && " — "}
+                    {e.detail}
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  {e.ip && <span className="font-mono">{e.ip}</span>}
+                  {e.ip && (e.browser || e.os) && " · "}
+                  {e.browser && e.os && (
+                    <span>
+                      {e.browser} on {e.os} ({e.device || "device"})
+                    </span>
+                  )}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-card p-4">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="text-2xl font-semibold mt-1">{value.toLocaleString()}</p>
     </div>
   );
 }
