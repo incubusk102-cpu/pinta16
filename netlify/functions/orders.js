@@ -1252,10 +1252,12 @@ export const handler = async (event) => {
         }
         if (
           existing.refundRequest &&
-          existing.refundRequest.status === "pending"
+          (existing.refundRequest.status === "pending" ||
+            existing.refundRequest.status === "approved" ||
+            existing.refundRequest.status === "processed")
         ) {
           return json(409, {
-            error: "A refund request is already pending review",
+            error: "A refund request is already in progress on this order",
           });
         }
         const requestRecord = {

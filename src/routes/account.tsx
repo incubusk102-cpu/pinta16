@@ -248,7 +248,7 @@ function OrderTracker() {
             const showForm =
               order.status === "received" &&
               !order.refund &&
-              !order.refundRequest;
+              (!order.refundRequest || order.refundRequest.status === "denied");
             return (
               <>
                 {showForm && (
