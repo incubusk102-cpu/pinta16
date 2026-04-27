@@ -257,8 +257,12 @@ export default function ChatWidget() {
   }, [thread, soundOn]);
 
   // Refresh relative timestamps every 30 seconds while the widget is open.
+  // Prime `nowTick` immediately on open so a widget that's been closed for
+  // hours doesn't render timestamps against a stale mount-time value while
+  // waiting for the first interval tick.
   useEffect(() => {
     if (!open) return;
+    setNowTick(Date.now());
     const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, [open]);

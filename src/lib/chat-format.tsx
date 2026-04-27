@@ -79,16 +79,18 @@ export const formatRelativeTime = (iso: string, now = Date.now()): string => {
   if (diff < 0) return "just now";
   if (diff < 45 * 1000) return "just now";
   if (diff < MIN) return "a few seconds ago";
+  // Floor so that e.g. 59m 30s stays "59m ago" instead of rounding up to
+  // "60m ago" and escaping the strict `< HR` guard on the next branch.
   if (diff < HR) {
-    const m = Math.round(diff / MIN);
+    const m = Math.floor(diff / MIN);
     return `${m}m ago`;
   }
   if (diff < DAY) {
-    const h = Math.round(diff / HR);
+    const h = Math.floor(diff / HR);
     return `${h}h ago`;
   }
   if (diff < 7 * DAY) {
-    const d = Math.round(diff / DAY);
+    const d = Math.floor(diff / DAY);
     return `${d}d ago`;
   }
   try {
