@@ -233,6 +233,7 @@ export const handler = async (event) => {
               productId: r.productId || "",
               productTitle: r.productTitle || "",
               productImage: r.productImage || "",
+              adminReply: r.adminReply || null,
             });
           }
         }
@@ -279,6 +280,7 @@ export const handler = async (event) => {
               productId: r.productId || undefined,
               productTitle: r.productTitle || undefined,
               productImage: r.productImage || undefined,
+              adminReply: r.adminReply || null,
             });
           }
         }
@@ -402,6 +404,71 @@ export const handler = async (event) => {
             statusCounts,
           },
         });
+      }
+
+      if (params.metrics === "promos") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const orders = await readOrders(store);
+        const config = await readStorefrontConfigDirect(event);
+        const knownCodes = Array.isArray(config?.promoCodes)
+          ? config.promoCodes
+          : [];
+        const stats = new Map();
+        // Seed every configured code so admins see them even with zero uses.
+        for (const p of knownCodes) {
+          stats.set(p.code, {
+            code: p.code,
+            type: p.type,
+            value: p.value,
+            enabled: p.enabled,
+            usageLimit: p.usageLimit,
+            expiresAt: p.expiresAt,
+            description: p.description || "",
+            uses: 0,
+            totalDiscount: 0,
+            grossRevenue: 0,
+            lastUsedAt: "",
+          });
+        }
+        for (const o of orders) {
+          const code = String(o.voucherCode || "")
+            .trim()
+            .toUpperCase();
+          if (!code) continue;
+          const discount = Number(o.discount) || 0;
+          if (discount <= 0) continue;
+          if (!stats.has(code)) {
+            stats.set(code, {
+              code,
+              type: "unknown",
+              value: 0,
+              enabled: false,
+              usageLimit: null,
+              expiresAt: null,
+              description: "(deleted)",
+              uses: 0,
+              totalDiscount: 0,
+              grossRevenue: 0,
+              lastUsedAt: "",
+            });
+          }
+          const s = stats.get(code);
+          s.uses += 1;
+          s.totalDiscount += discount;
+          s.grossRevenue += Number(o.total) || 0;
+          const ts = o.createdAt || "";
+          if (!s.lastUsedAt || ts > s.lastUsedAt) s.lastUsedAt = ts;
+        }
+        const promos = Array.from(stats.values())
+          .map((p) => ({
+            ...p,
+            totalDiscount: Math.round(p.totalDiscount * 100) / 100,
+            grossRevenue: Math.round(p.grossRevenue * 100) / 100,
+          }))
+          .sort((a, b) => b.uses - a.uses);
+        return json(200, { promos });
       }
 
       if (params.metrics === "summary") {
@@ -1140,6 +1207,134 @@ export const handler = async (event) => {
           detail: `Deleted review for product ${targetProductId || "(legacy)"}`,
         });
         return json(200, { order: orders[idx] });
+      }
+
+      if (action === "set-review-reply") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, productId, reply } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const targetProductId =
+          typeof productId === "string" ? productId.trim() : "";
+        if (typeof reply !== "string") {
+          return json(400, { error: "Invalid reply" });
+        }
+        const trimmed = reply.trim().slice(0, 2000);
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const reviewsList = Array.isArray(existing.reviews)
+          ? existing.reviews
+          : existing.review
+            ? [existing.review]
+            : [];
+        if (reviewsList.length === 0) {
+          return json(400, { error: "Order has no review" });
+        }
+        let matched = false;
+        const now = new Date().toISOString();
+        const adminReply = trimmed ? { text: trimmed, repliedAt: now } : null;
+        const updatedReviews = reviewsList.map((r) => {
+          if ((r.productId || "") === targetProductId) {
+            matched = true;
+            return { ...r, adminReply };
+          }
+          return r;
+        });
+        if (!matched) {
+          return json(404, { error: "Review for that product not found" });
+        }
+        const legacyReview =
+          existing.review &&
+          (existing.review.productId || "") === targetProductId
+            ? { ...existing.review, adminReply }
+            : existing.review;
+        orders[idx] = {
+          ...existing,
+          reviews: updatedReviews,
+          review: legacyReview,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+        await appendAuditEvent(event, {
+          type: "order.review",
+          outcome: adminReply ? "replied" : "reply-cleared",
+          subject: orderId,
+          detail: `Admin reply on review for ${targetProductId || "(legacy)"}`,
+        });
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "bulk-set-review-published") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { items, publishedToHomepage } = body;
+        if (typeof publishedToHomepage !== "boolean") {
+          return json(400, { error: "publishedToHomepage must be a boolean" });
+        }
+        if (!Array.isArray(items) || items.length === 0) {
+          return json(400, { error: "items array required" });
+        }
+        const targets = new Map();
+        for (const it of items) {
+          if (!it || typeof it !== "object") continue;
+          const oid = String(it.orderId || "");
+          const pid = String(it.productId || "");
+          if (!oid) continue;
+          if (!targets.has(oid)) targets.set(oid, new Set());
+          targets.get(oid).add(pid);
+        }
+        if (targets.size === 0) {
+          return json(400, { error: "No valid items" });
+        }
+        const orders = await readOrders(store);
+        let updated = 0;
+        for (let i = 0; i < orders.length; i++) {
+          const o = orders[i];
+          const productSet = targets.get(o.id);
+          if (!productSet) continue;
+          const reviewsList = Array.isArray(o.reviews)
+            ? o.reviews
+            : o.review
+              ? [o.review]
+              : [];
+          if (reviewsList.length === 0) continue;
+          let changed = false;
+          const updatedReviews = reviewsList.map((r) => {
+            if (productSet.has(r.productId || "")) {
+              changed = true;
+              return { ...r, publishedToHomepage };
+            }
+            return r;
+          });
+          if (!changed) continue;
+          const legacyReview =
+            o.review && productSet.has(o.review.productId || "")
+              ? { ...o.review, publishedToHomepage }
+              : o.review;
+          orders[i] = {
+            ...o,
+            reviews: updatedReviews,
+            review: legacyReview,
+          };
+          updated += 1;
+        }
+        if (updated > 0) {
+          await store.setJSON(ORDERS_KEY, orders);
+          await appendAuditEvent(event, {
+            type: "order.review",
+            outcome: publishedToHomepage
+              ? "bulk-published"
+              : "bulk-unpublished",
+            subject: `${updated} review(s)`,
+            detail: `Bulk ${publishedToHomepage ? "published" : "unpublished"} ${updated} review(s)`,
+          });
+        }
+        return json(200, { ok: true, updated });
       }
 
       if (action === "request-refund") {

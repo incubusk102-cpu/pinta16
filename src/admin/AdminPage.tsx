@@ -41,6 +41,8 @@ import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
+import { CustomersSection } from "@/components/admin/CustomersSection";
+import { MarketingSection } from "@/components/admin/MarketingSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
@@ -94,6 +96,8 @@ type AdminSection =
   | "reviews"
   | "visitors"
   | "users"
+  | "customers"
+  | "marketing"
   | "storefront"
   | "hero"
   | "policies"
@@ -109,6 +113,8 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   reviews: "Reviews",
   visitors: "Visitors",
   users: "Users",
+  customers: "Customers",
+  marketing: "Marketing",
   storefront: "Storefront",
   hero: "Hero slider",
   policies: "Policies",
@@ -343,6 +349,20 @@ function AdminDashboard() {
               hint="Sign-ups + 30-day cleanup"
             />
             <NavLink
+              icon={<Wallet className="w-4 h-4" />}
+              label="Customers"
+              active={section === "customers"}
+              onClick={() => navigate("customers")}
+              hint="LTV, segments, notes & tags"
+            />
+            <NavLink
+              icon={<TrendingUp className="w-4 h-4" />}
+              label="Marketing"
+              active={section === "marketing"}
+              onClick={() => navigate("marketing")}
+              hint="Promo code performance"
+            />
+            <NavLink
               icon={<Activity className="w-4 h-4" />}
               label="Storefront"
               active={section === "storefront"}
@@ -406,6 +426,8 @@ function AdminDashboard() {
         {section === "reviews" && <ReviewsSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
+        {section === "customers" && <CustomersSection />}
+        {section === "marketing" && <MarketingSection />}
         {section === "storefront" && <StorefrontSection />}
         {section === "hero" && <HeroSlidesSection />}
         {section === "policies" && <PoliciesSection />}

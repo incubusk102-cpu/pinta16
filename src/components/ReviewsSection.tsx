@@ -10,6 +10,7 @@ interface PublishedReview {
   submittedAt: string;
   customerName: string;
   customerCity?: string;
+  adminReply?: { text: string; repliedAt: string } | null;
 }
 
 const formatRelativeDate = (iso: string): string => {
@@ -134,10 +135,20 @@ const ReviewsSection = () => {
                 ))}
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-auto">
+            <p className="text-xs text-muted-foreground">
               — {r.customerName}
               {r.customerCity ? `, ${r.customerCity}` : ""}
             </p>
+            {r.adminReply?.text ? (
+              <div className="mt-auto rounded-md border border-border/40 bg-card/60 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                  Reply from Pintaterra
+                </p>
+                <p className="text-xs text-foreground/85 whitespace-pre-wrap leading-relaxed">
+                  {r.adminReply.text}
+                </p>
+              </div>
+            ) : null}
           </motion.article>
         ))}
       </div>
