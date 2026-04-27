@@ -1,30 +1,66 @@
 import { useEffect } from "react";
 
 const VISITORS_API = "/api/visitors";
-const SESSION_KEY = "pintaterra_visitor_session";
+const VISITOR_KEY = "pintaterra_visitor_id";
 const HEARTBEAT_INTERVAL_MS = 60 * 1000; // 1 min
 
-const ensureSessionId = (): string => {
+/**
+ * Returns a stable visitor id that survives tab close, refreshes, and
+ * cross-tab usage within the same browser. Falls back to sessionStorage
+ * (and finally a per-load id) when localStorage is blocked, e.g. in
+ * Safari private mode.
+ */
+const ensureVisitorId = (): string => {
   if (typeof window === "undefined") return "";
-  let sessionId = window.sessionStorage.getItem(SESSION_KEY);
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-    window.sessionStorage.setItem(SESSION_KEY, sessionId);
+  const stores: (Storage | null)[] = [];
+  try {
+    stores.push(window.localStorage);
+  } catch {
+    stores.push(null);
   }
-  return sessionId;
+  try {
+    stores.push(window.sessionStorage);
+  } catch {
+    stores.push(null);
+  }
+
+  for (const store of stores) {
+    if (!store) continue;
+    try {
+      const existing = store.getItem(VISITOR_KEY);
+      if (existing) return existing;
+      const id = crypto.randomUUID();
+      store.setItem(VISITOR_KEY, id);
+      return id;
+    } catch {
+      continue;
+    }
+  }
+
+  return crypto.randomUUID();
 };
 
 /**
  * Pings /api/visitors periodically so the admin live-visitor counter
  * has something to count. Best-effort: failures are swallowed silently.
+ *
+ * Heartbeats are only sent while the tab is visible so backgrounded
+ * tabs do not inflate the live count. The visitor id is persisted in
+ * localStorage so the same user across tabs/refreshes counts once.
  */
 export const useVisitorHeartbeat = () => {
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const sessionId = ensureSessionId();
+    const sessionId = ensureVisitorId();
     if (!sessionId) return;
 
     const ping = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
+        return;
+      }
       void fetch(VISITORS_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
