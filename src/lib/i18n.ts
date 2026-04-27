@@ -90,6 +90,8 @@ const en = {
   "footer.shipping": "Shipping",
   "footer.privacy": "Privacy",
   "footer.lastUpdated": "Last updated {date}",
+  "footer.weAccept": "We accept",
+  "footer.tagline": "Hand-crafted in the Philippines.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -163,6 +165,8 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "footer.shipping": "Shipping",
   "footer.privacy": "Privacy",
   "footer.lastUpdated": "Huling na-update {date}",
+  "footer.weAccept": "Tinatanggap namin",
+  "footer.tagline": "Gawang-kamay sa Pilipinas.",
 };
 
 export const dictionaries: Record<Locale, Record<TranslationKey, string>> = {
