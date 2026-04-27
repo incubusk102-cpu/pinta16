@@ -279,7 +279,11 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     }
 
     return () => {
-      if (timer) window.clearInterval(timer);
+      // Abort any in-flight load so it can't write stale data into
+      // localStorage / productsRef after unmount.
+      loadAbortRef.current?.abort();
+      loadAbortRef.current = null;
+      window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("online", onOnline);
       if (channel) channel.close();
