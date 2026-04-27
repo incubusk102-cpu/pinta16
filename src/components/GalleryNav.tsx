@@ -151,12 +151,41 @@ const GalleryNav = () => {
       transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3">
+        {/* Logo (mark + wordmark) — always on the left */}
         <button
           onClick={() => scrollTo("hero")}
-          className="font-display text-base sm:text-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase text-gradient-elegant truncate"
+          className="flex items-center gap-2 sm:gap-3 group shrink-0"
+          aria-label="Pintaterra — home"
         >
-          Pintaterra
+          <span
+            aria-hidden
+            className="relative inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-md bg-foreground text-background shadow-sm group-hover:shadow-md transition-shadow duration-500"
+          >
+            <svg
+              viewBox="0 0 40 40"
+              className="w-5 h-5 sm:w-6 sm:h-6"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <text
+                x="20"
+                y="26"
+                textAnchor="middle"
+                fontFamily="Georgia, 'Playfair Display', serif"
+                fontSize="26"
+                fontStyle="italic"
+                fill="currentColor"
+              >
+                P
+              </text>
+              <rect x="6" y="30" width="28" height="1.5" fill="currentColor" />
+            </svg>
+          </span>
+          <span className="font-display text-base sm:text-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase text-gradient-elegant truncate">
+            Pintaterra
+          </span>
         </button>
+
+        {/* Desktop quick links */}
         <div className="hidden md:flex items-center gap-10">
           {[
             { id: "gallery", label: t("nav.gallery") },
@@ -180,20 +209,10 @@ const GalleryNav = () => {
             </Link>
           )}
           <ThemeLocaleToggle />
-          <button
-            onClick={openCart}
-            className="relative p-2"
-            aria-label={t("nav.cart")}
-          >
-            <ShoppingCart className="w-5 h-5 text-foreground" />
-            {itemCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center">
-                {itemCount}
-              </span>
-            )}
-          </button>
         </div>
-        <div className="flex md:hidden items-center gap-2">
+
+        {/* Right cluster: cart + hamburger (always visible) */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             onClick={openCart}
             className="relative p-2"
@@ -208,7 +227,7 @@ const GalleryNav = () => {
           </button>
           <button
             onClick={() => setMenuOpen(true)}
-            className="p-2"
+            className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
             aria-label="Open menu"
             aria-expanded={menuOpen}
             aria-controls="mobile-nav-drawer"
@@ -230,7 +249,7 @@ const GalleryNav = () => {
               transition={{ duration: 0.2 }}
               onClick={closeMenu}
               aria-label="Close menu"
-              className="fixed inset-0 z-[60] bg-background/70 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-[60] bg-background/70 backdrop-blur-sm"
             />
 
             {/* Drawer */}
@@ -248,7 +267,7 @@ const GalleryNav = () => {
                 duration: 0.3,
                 ease: [0.4, 0, 0.2, 1],
               }}
-              className="fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card border-l border-border/40 shadow-2xl flex flex-col md:hidden"
+              className="fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card border-l border-border/40 shadow-2xl flex flex-col"
             >
               {/* Drawer header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
