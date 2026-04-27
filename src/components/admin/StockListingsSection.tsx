@@ -135,9 +135,12 @@ export function StockListingsSection() {
   const listings = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const filtered = allRows.filter((row) => {
-      // Status filter
+      // Status filter. "On storefront" is defined as anything visible to
+      // shoppers — so available, reserved, and sold all pass. Only "draft"
+      // (explicitly hidden) is excluded, which mirrors the chip count and
+      // matches how `getStorefrontArtworks` filters.
       if (statusFilter === "available") {
-        if (row.display.availability !== "available") return false;
+        if (row.display.availability === "draft") return false;
       } else if (statusFilter === "hidden") {
         if (row.display.availability !== "draft") return false;
       } else if (statusFilter === "customized") {

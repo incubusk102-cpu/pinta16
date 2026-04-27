@@ -36,8 +36,15 @@ export default function RelatedProducts({
 
   const related = useMemo(() => {
     if (!current) return [];
+    // Exclude stock-catalog overrides: their UUID doesn't resolve through
+    // `findArtworkById` (which returns the merged default's id), so linking
+    // to them would 404. Their customizations are already reflected in the
+    // default they replace.
     const others = products.filter(
-      (p) => p.id !== currentId && p.availability !== "draft",
+      (p) =>
+        p.id !== currentId &&
+        p.availability !== "draft" &&
+        !p.replacesDefaultId,
     );
     const scored = others
       .map((p) => ({ p, s: score(current, p) }))
