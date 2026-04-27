@@ -1,0 +1,86 @@
+export interface ChatFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export const CHAT_FAQ_MAX = 12;
+export const CHAT_FAQ_QUESTION_MAX = 80;
+export const CHAT_FAQ_ANSWER_MAX = 1200;
+
+export const DEFAULT_CHAT_WELCOME =
+  "Hi! Pick a topic below, or talk to a live agent for anything else.";
+
+export const DEFAULT_CHAT_FAQS: ChatFaqItem[] = [
+  {
+    id: "shipping",
+    question: "Shipping & delivery",
+    answer:
+      "We ship nationwide via LBC or J&T Express. Orders are packed within 2–3 business days and usually arrive within 5–7 business days. You'll get a tracking number by email as soon as it ships.",
+  },
+  {
+    id: "returns",
+    question: "Returns & refunds",
+    answer:
+      "Because each piece is an original hand-painted artwork, we only accept returns if the painting arrives damaged. Email us within 48 hours of delivery with a clear photo and we'll arrange a refund or replacement right away.",
+  },
+  {
+    id: "payment",
+    question: "Payment methods",
+    answer:
+      "We accept GCash, Maya, bank transfer, and major credit / debit cards via our secure checkout. Full payment is required before the artwork ships.",
+  },
+  {
+    id: "sizing",
+    question: "Sizing & dimensions",
+    answer:
+      "Each artwork's detail page lists the exact width × height in inches and centimeters. Need a custom size? Tap 'Custom orders' below or talk to a live agent.",
+  },
+  {
+    id: "custom",
+    question: "Custom orders",
+    answer:
+      "Yes, we take commissioned pieces! Tap 'Talk to a live agent' and share the subject, preferred size, color palette, and deadline. We'll reply with a quote and timeline.",
+  },
+  {
+    id: "authenticity",
+    question: "Authenticity",
+    answer:
+      "Every painting ships with a signed certificate of authenticity from the artist. All works are original — no prints, no reproductions.",
+  },
+];
+
+export const slugifyFaqId = (value: string): string => {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return slug || `faq-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+export const sanitizeChatFaqs = (raw: unknown): ChatFaqItem[] => {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: ChatFaqItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const question = String(e.question ?? "")
+      .trim()
+      .slice(0, CHAT_FAQ_QUESTION_MAX);
+    const answer = String(e.answer ?? "")
+      .trim()
+      .slice(0, CHAT_FAQ_ANSWER_MAX);
+    if (!question || !answer) continue;
+    let id = String(e.id ?? "")
+      .trim()
+      .slice(0, 40);
+    if (!id) id = slugifyFaqId(question);
+    if (seen.has(id)) id = `${id}-${out.length}`;
+    seen.add(id);
+    out.push({ id, question, answer });
+    if (out.length >= CHAT_FAQ_MAX) break;
+  }
+  return out;
+};

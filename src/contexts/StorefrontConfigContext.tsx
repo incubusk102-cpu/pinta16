@@ -6,6 +6,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  DEFAULT_CHAT_FAQS,
+  DEFAULT_CHAT_WELCOME,
+  sanitizeChatFaqs,
+  type ChatFaqItem,
+} from "@/lib/chat-faqs";
 
 export type AnnouncementSize = "compact" | "normal" | "large";
 export type AnnouncementAnimation =
@@ -53,10 +59,18 @@ export interface PromoCodePublic {
   description: string;
 }
 
+export interface ChatConfig {
+  enabled: boolean;
+  welcome: string;
+  agentHandoff: boolean;
+  faqs: ChatFaqItem[];
+}
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
   promoCodes: PromoCodePublic[];
+  chat: ChatConfig;
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -87,6 +101,12 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     shippingFee: 500,
   },
   promoCodes: [],
+  chat: {
+    enabled: true,
+    welcome: DEFAULT_CHAT_WELCOME,
+    agentHandoff: true,
+    faqs: DEFAULT_CHAT_FAQS,
+  },
 };
 
 interface ContextType {
@@ -113,6 +133,11 @@ export const StorefrontConfigProvider = ({
       if (!res.ok) return;
       const data = await res.json();
       if (data?.config) {
+        const rawChat =
+          data.config.chat && typeof data.config.chat === "object"
+            ? data.config.chat
+            : {};
+        const sanitizedFaqs = sanitizeChatFaqs(rawChat.faqs);
         setConfig({
           announcement: {
             ...DEFAULT_CONFIG.announcement,
@@ -125,6 +150,15 @@ export const StorefrontConfigProvider = ({
           promoCodes: Array.isArray(data.config.promoCodes)
             ? data.config.promoCodes
             : [],
+          chat: {
+            enabled: rawChat.enabled !== false,
+            welcome:
+              typeof rawChat.welcome === "string" && rawChat.welcome.trim()
+                ? rawChat.welcome
+                : DEFAULT_CHAT_WELCOME,
+            agentHandoff: rawChat.agentHandoff !== false,
+            faqs: sanitizedFaqs.length > 0 ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
+          },
         });
       }
     } catch {
