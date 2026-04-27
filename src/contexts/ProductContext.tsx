@@ -198,34 +198,79 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     [persistProducts],
   );
 
+  // Live-sync the customer-facing gallery with admin edits made from
+  // another tab or another device. Strategy:
+  //   1. Initial fetch on mount.
+  //   2. Refetch on tab refocus (`visibilitychange` -> "visible").
+  //   3. Background poll every 30s while the tab is visible.
+  //   4. Cross-tab `BroadcastChannel` so an admin POST in *this* browser
+  //      immediately tells the customer tab to refetch (no 30s wait).
+  const channelRef = useRef<BroadcastChannel | null>(null);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      const response = await fetch(PRODUCTS_API);
+      if (!response.ok) throw new Error("Failed to load products");
+      const data = await response.json();
+      if (!Array.isArray(data.products)) return;
+      const next = sortProducts(data.products);
+      setProducts(next);
+      productsRef.current = next;
+      persistProducts(next);
+    } catch {
+      // Local development falls back to browser storage.
+    }
+  }, [persistProducts]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    let isCancelled = false;
-
-    const loadProducts = async () => {
-      try {
-        const response = await fetch(PRODUCTS_API);
-        if (!response.ok) throw new Error("Failed to load products");
-
-        const data = await response.json();
-        if (!Array.isArray(data.products) || isCancelled) return;
-
-        const next = sortProducts(data.products);
-        setProducts(next);
-        productsRef.current = next;
-        persistProducts(next);
-      } catch {
-        // Local development falls back to browser storage.
-      }
-    };
-
     void loadProducts();
 
-    return () => {
-      isCancelled = true;
+    const POLL_MS = 30_000;
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadProducts();
     };
-  }, [persistProducts]);
+    const timer = window.setInterval(poll, POLL_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadProducts();
+    };
+    const onOnline = () => {
+      void loadProducts();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", onOnline);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel("pintaterra_products");
+      channelRef.current = channel;
+      channel.addEventListener("message", (event: MessageEvent) => {
+        if (event?.data?.type === "changed") void loadProducts();
+      });
+    }
+
+    return () => {
+      if (timer) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", onOnline);
+      if (channel) channel.close();
+      channelRef.current = null;
+    };
+  }, [loadProducts]);
+
+  // Tell other tabs (and our own next render cycle) that the products
+  // list changed. Called by add/update/delete after the server confirms.
+  const broadcastChange = useCallback(() => {
+    try {
+      channelRef.current?.postMessage({ type: "changed", at: Date.now() });
+    } catch {
+      /* channel may already be closed; safe to ignore */
+    }
+  }, []);
 
   const addProduct = useCallback(
     async (product: Omit<Product, "id" | "createdAt">) => {
@@ -271,8 +316,9 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
             : "Could not save product",
         );
       }
+      broadcastChange();
     },
-    [setAndPersistProducts],
+    [setAndPersistProducts, broadcastChange],
   );
 
   const updateProduct = useCallback(
@@ -325,8 +371,9 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
             : "Could not update product",
         );
       }
+      broadcastChange();
     },
-    [setAndPersistProducts],
+    [setAndPersistProducts, broadcastChange],
   );
 
   const deleteProduct = useCallback(
@@ -374,8 +421,9 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
             : "Could not delete product",
         );
       }
+      broadcastChange();
     },
-    [setAndPersistProducts],
+    [setAndPersistProducts, broadcastChange],
   );
 
   return (
