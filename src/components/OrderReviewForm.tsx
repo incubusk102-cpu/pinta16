@@ -8,6 +8,7 @@ import {
   type OrderReview,
   useCart,
 } from "@/contexts/CartContext";
+import { compressImage } from "@/lib/imageCompress";
 
 interface OrderReviewFormProps {
   orderId: string;
@@ -17,15 +18,10 @@ interface OrderReviewFormProps {
   onSubmitted?: (review: OrderReview) => void;
 }
 
-const MAX_IMAGE_BYTES = 600 * 1024;
-
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+// Pre-compression cap. Original photos can be up to 30 MB; compressImage
+// downscales + JPEG-encodes them to ~600 KB before they go in the review.
+const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
+const REVIEW_TARGET_BYTES = 600 * 1024;
 
 const OrderReviewForm = ({
   orderId,
@@ -81,12 +77,16 @@ const OrderReviewForm = ({
         toast.error(`${file.name}: not an image`);
         continue;
       }
-      if (file.size > MAX_IMAGE_BYTES) {
-        toast.error(`${file.name}: must be under 600KB`);
+      if (file.size > MAX_RAW_IMAGE_BYTES) {
+        toast.error(`${file.name}: must be under 30 MB`);
         continue;
       }
       try {
-        newImages.push(await fileToDataUrl(file));
+        const compressed = await compressImage(file, {
+          maxBytes: REVIEW_TARGET_BYTES,
+          maxDim: 1600,
+        });
+        newImages.push(compressed.url);
       } catch {
         toast.error(`${file.name}: could not read`);
       }
@@ -305,7 +305,7 @@ const OrderReviewForm = ({
           )}
         </div>
         <p className="font-body text-[10px] text-muted-foreground mt-1">
-          Max 600KB each, JPG/PNG/WEBP/GIF
+          Up to 30 MB each, JPG/PNG/WEBP/GIF — auto-compressed
         </p>
       </div>
 

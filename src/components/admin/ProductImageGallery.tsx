@@ -6,14 +6,13 @@ import {
   PRODUCT_MAX_IMAGES,
   type ProductImage,
 } from "@/contexts/ProductContext";
+import { compressImage } from "@/lib/imageCompress";
 
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+// Original file size cap before compression. The Netlify Functions request
+// body is capped at 6 MB, so even though we accept up to 30 MB phone photos
+// here, every upload is resized + JPEG-encoded down to under ~800 KB before
+// being added to the product.
+const MAX_RAW_UPLOAD_BYTES = 30 * 1024 * 1024;
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes < 0) return "";
@@ -46,13 +45,17 @@ export function ProductImageGallery({ images, onChange }: Props) {
         toast.error(`${file.name}: please select an image file`);
         continue;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error(`${file.name}: must be under 5MB`);
+      if (file.size > MAX_RAW_UPLOAD_BYTES) {
+        toast.error(`${file.name}: must be under 30 MB`);
         continue;
       }
       try {
-        const url = await fileToDataUrl(file);
-        next.push({ url, fileName: file.name, bytes: file.size });
+        const compressed = await compressImage(file);
+        next.push({
+          url: compressed.url,
+          fileName: compressed.fileName,
+          bytes: compressed.bytes,
+        });
       } catch {
         toast.error(`Could not read ${file.name}`);
       }
@@ -138,7 +141,7 @@ export function ProductImageGallery({ images, onChange }: Props) {
             {images.length === 0 ? (
               <>
                 <Upload className="w-6 h-6 mb-1" />
-                <span className="text-xs">Upload photo (max 5MB)</span>
+                <span className="text-xs">Upload photo (max 30 MB)</span>
               </>
             ) : (
               <>
