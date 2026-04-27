@@ -76,20 +76,24 @@ const AnnouncementBar = () => {
   // Rotation only applies when animation is fade/slide/typewriter (per-message
   // styles). Marquee shows everything in one continuous scrolling track and
   // pulse highlights the joined string, so neither rotates.
-  const rotates =
+  const supportsRotation =
     announcement.animation === "fade" ||
     announcement.animation === "slide" ||
     announcement.animation === "typewriter";
+  // Whether rotation is actually happening right now — needed so per-message
+  // styles can fall back to joined text when rotation is disabled
+  // (rotateSeconds = 0) instead of silently dropping every message after the
+  // first.
+  const actuallyRotating =
+    supportsRotation && announcement.rotateSeconds > 0 && messages.length > 1;
 
   useEffect(() => {
-    if (!rotates) return;
-    if (announcement.rotateSeconds <= 0) return;
-    if (messages.length <= 1) return;
+    if (!actuallyRotating) return;
     const id = window.setInterval(() => {
       setIndex((i) => (i + 1) % messages.length);
     }, announcement.rotateSeconds * 1000);
     return () => window.clearInterval(id);
-  }, [announcement.rotateSeconds, messages.length, rotates]);
+  }, [actuallyRotating, announcement.rotateSeconds, messages.length]);
 
   // Dismissable banner state — keyed to the current content so a new
   // promo wakes the bar back up.
@@ -167,7 +171,9 @@ const AnnouncementBar = () => {
       </span>
     );
   } else if (announcement.animation === "typewriter") {
-    const text = decorate(messages[index] ?? "");
+    const text = actuallyRotating
+      ? decorate(messages[index] ?? "")
+      : messages.map(decorate).join(" · ");
     const dur = Math.max(
       1.2,
       Math.min(8, (announcement.rotateSeconds || 4) * 0.6),
@@ -177,7 +183,7 @@ const AnnouncementBar = () => {
     };
     content = (
       <span
-        key={`tw-${index}-${text}`}
+        key={actuallyRotating ? `tw-${index}-${text}` : "tw-all"}
         className={`announcement-typewriter ${weightCls} tracking-wide`}
         style={typeStyle}
       >
@@ -185,10 +191,12 @@ const AnnouncementBar = () => {
       </span>
     );
   } else if (announcement.animation === "slide") {
-    const text = decorate(messages[index] ?? "");
+    const text = actuallyRotating
+      ? decorate(messages[index] ?? "")
+      : messages.map(decorate).join(" · ");
     content = (
       <span
-        key={`sl-${index}`}
+        key={actuallyRotating ? `sl-${index}` : "sl-all"}
         className={`announcement-slide ${weightCls} tracking-wide`}
       >
         {text}
@@ -196,12 +204,12 @@ const AnnouncementBar = () => {
     );
   } else {
     // fade (default / legacy behaviour)
-    const text = rotates
+    const text = actuallyRotating
       ? decorate(messages[index] ?? "")
       : messages.map(decorate).join(" · ");
     content = (
       <span
-        key={rotates ? `fd-${index}` : "all"}
+        key={actuallyRotating ? `fd-${index}` : "fd-all"}
         className={`${weightCls} tracking-wide announcement-fade`}
       >
         {text}

@@ -1064,22 +1064,24 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
   }
 
   const animation = cfg.announcement.animation;
-  const rotates =
+  const supportsRotation =
     animation === "fade" || animation === "slide" || animation === "typewriter";
+  const actuallyRotating =
+    supportsRotation &&
+    cfg.announcement.rotateSeconds > 0 &&
+    messages.length > 1;
 
   const [previewIdx, setPreviewIdx] = useState(0);
   useEffect(() => {
     setPreviewIdx(0);
   }, [messages.length, animation]);
   useEffect(() => {
-    if (!rotates) return;
-    if (cfg.announcement.rotateSeconds <= 0) return;
-    if (messages.length <= 1) return;
+    if (!actuallyRotating) return;
     const id = window.setInterval(() => {
       setPreviewIdx((i) => (i + 1) % messages.length);
     }, cfg.announcement.rotateSeconds * 1000);
     return () => window.clearInterval(id);
-  }, [cfg.announcement.rotateSeconds, messages.length, rotates]);
+  }, [actuallyRotating, cfg.announcement.rotateSeconds, messages.length]);
 
   const sizeCls = sizeClassMap[cfg.announcement.size] || sizeClassMap.normal;
   const weightCls = cfg.announcement.bold ? "font-semibold" : "font-medium";
@@ -1127,7 +1129,9 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
       </span>
     );
   } else if (animation === "typewriter") {
-    const text = decorate(messages[previewIdx] ?? "");
+    const text = actuallyRotating
+      ? decorate(messages[previewIdx] ?? "")
+      : messages.map(decorate).join(" · ");
     const dur = Math.max(
       1.2,
       Math.min(8, (cfg.announcement.rotateSeconds || 4) * 0.6),
@@ -1137,7 +1141,7 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
     };
     body = (
       <span
-        key={`tw-${previewIdx}-${text}`}
+        key={actuallyRotating ? `tw-${previewIdx}-${text}` : "tw-all"}
         className={`announcement-typewriter ${weightCls} tracking-wide`}
         style={typeStyle}
       >
@@ -1145,21 +1149,24 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
       </span>
     );
   } else if (animation === "slide") {
-    body = (
-      <span
-        key={`sl-${previewIdx}`}
-        className={`announcement-slide ${weightCls} tracking-wide`}
-      >
-        {decorate(messages[previewIdx] ?? "")}
-      </span>
-    );
-  } else {
-    const text = rotates
+    const text = actuallyRotating
       ? decorate(messages[previewIdx] ?? "")
       : messages.map(decorate).join(" · ");
     body = (
       <span
-        key={rotates ? `fd-${previewIdx}` : "all"}
+        key={actuallyRotating ? `sl-${previewIdx}` : "sl-all"}
+        className={`announcement-slide ${weightCls} tracking-wide`}
+      >
+        {text}
+      </span>
+    );
+  } else {
+    const text = actuallyRotating
+      ? decorate(messages[previewIdx] ?? "")
+      : messages.map(decorate).join(" · ");
+    body = (
+      <span
+        key={actuallyRotating ? `fd-${previewIdx}` : "fd-all"}
         className={`announcement-fade ${weightCls} tracking-wide`}
       >
         {text}
@@ -1186,9 +1193,9 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
             ? `Marquee · ${messages.length} message${messages.length === 1 ? "" : "s"} scrolling continuously (hover to pause).`
             : animation === "pulse"
               ? `Pulse · ${messages.length} message${messages.length === 1 ? "" : "s"} joined and pulsing.`
-              : rotates && messages.length > 1
+              : actuallyRotating
                 ? `Rotating ${messages.length} messages every ${cfg.announcement.rotateSeconds}s.`
-                : `Showing ${messages.length} message${messages.length === 1 ? "" : "s"}.`}
+                : `Showing ${messages.length} message${messages.length === 1 ? "" : "s"} joined together. Set rotate seconds > 0 to cycle them.`}
       </p>
     </div>
   );
