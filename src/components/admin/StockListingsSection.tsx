@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
+  Camera,
   Eye,
   EyeOff,
   Pencil,
@@ -26,6 +27,7 @@ import {
   type Product,
   type ProductAvailability,
   type ProductCategory,
+  type ProductImage,
 } from "@/contexts/ProductContext";
 import {
   AVAILABILITY_LABEL,
@@ -68,6 +70,16 @@ const effectivePriceFor = (d: DisplayArtwork): number =>
     ? d.salePrice
     : d.price;
 
+const MAX_THUMB_BYTES = 5 * 1024 * 1024;
+
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 export function StockListingsSection() {
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
   const [edit, setEdit] = useState<EditMode | null>(null);
@@ -78,6 +90,13 @@ export function StockListingsSection() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+  // Inline thumbnail uploads route through a single hidden file input. We
+  // stash the row that triggered the picker so the change handler knows
+  // which override to write.
+  const thumbTargetRef = useRef<{ defaultId: string; title: string } | null>(
+    null,
+  );
 
   const overridesByDefaultId = useMemo(() => {
     const m = new Map<string, Product>();
@@ -308,6 +327,70 @@ export function StockListingsSection() {
     }
   };
 
+  const handleInlineThumbClick = (def: DisplayArtwork) => {
+    if (!thumbInputRef.current) return;
+    thumbTargetRef.current = { defaultId: def.id, title: def.title };
+    // Reset value so picking the same file twice still fires onChange.
+    thumbInputRef.current.value = "";
+    thumbInputRef.current.click();
+  };
+
+  const handleInlineThumbFile = async (file: File | null) => {
+    const target = thumbTargetRef.current;
+    thumbTargetRef.current = null;
+    if (!file || !target) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > MAX_THUMB_BYTES) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    const def = defaultArtworks.find((d) => d.id === target.defaultId);
+    if (!def) return;
+    setBusyId(def.id);
+    try {
+      const url = await fileToDataUrl(file);
+      const newPrimary: ProductImage = {
+        url,
+        fileName: file.name,
+        bytes: file.size,
+      };
+      const override = overridesByDefaultId.get(def.id);
+      const display = toDisplay(def);
+      const existingImages =
+        override?.images && override.images.length > 0
+          ? override.images
+          : display.images || [];
+      // New thumbnail becomes the primary; preserve any other images that were
+      // attached to the override / default after the first slot.
+      const nextImages: ProductImage[] = [
+        newPrimary,
+        ...existingImages.slice(1),
+      ];
+      const imageFields = buildImageFields(nextImages);
+      if (override) {
+        await updateProduct(override.id, imageFields);
+      } else {
+        const draft = buildDraftFromDefault(def);
+        const { id: _id, createdAt: _createdAt, ...rest } = draft;
+        void _id;
+        void _createdAt;
+        // Spread `imageFields` last so the new thumbnail wins over the
+        // default image fields baked into the draft.
+        await addProduct({ ...rest, ...imageFields });
+      }
+      toast.success(`Updated thumbnail for "${target.title}"`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update thumbnail",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleRestoreDefault = async (def: DisplayArtwork) => {
     const override = overridesByDefaultId.get(def.id);
     if (!override) return;
@@ -384,6 +467,36 @@ export function StockListingsSection() {
     }
   };
 
+  const restoreOverrides = async (snapshot: Product[]) => {
+    if (snapshot.length === 0) return;
+    setBulkBusy(true);
+    let restored = 0;
+    let fail = 0;
+    try {
+      for (const p of snapshot) {
+        try {
+          const { id: _id, createdAt: _createdAt, ...rest } = p;
+          void _id;
+          void _createdAt;
+          await addProduct(rest);
+          restored++;
+        } catch {
+          fail++;
+        }
+      }
+      if (restored > 0) {
+        toast.success(
+          `Restored ${restored} customization${restored === 1 ? "" : "s"}`,
+        );
+      }
+      if (fail > 0) {
+        toast.error(`${fail} could not be restored`);
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const handleResetAll = async () => {
     const overrides = products.filter((p) => p.replacesDefaultId);
     if (overrides.length === 0) {
@@ -394,24 +507,35 @@ export function StockListingsSection() {
       !window.confirm(
         `Reset ALL ${overrides.length} stock customization${
           overrides.length === 1 ? "" : "s"
-        }? Every painting in the stock catalog will revert to its original details. This cannot be undone.`,
+        }? Every painting in the stock catalog will revert to its original details.`,
       )
     )
       return;
     setBulkBusy(true);
-    let ok = 0;
+    // Track which overrides were *actually* deleted so the undo toast can
+    // recreate exactly that set. Re-adding the full pre-delete list would
+    // duplicate any overrides whose deleteProduct rejected (addProduct mints
+    // a fresh id without checking for an existing replacesDefaultId).
+    const deleted: Product[] = [];
     let fail = 0;
     try {
       for (const p of overrides) {
         try {
           await deleteProduct(p.id);
-          ok++;
+          deleted.push({ ...p });
         } catch {
           fail++;
         }
       }
+      const ok = deleted.length;
       if (ok > 0) {
-        toast.success(`Reverted ${ok} customization${ok === 1 ? "" : "s"}`);
+        toast.success(`Reverted ${ok} customization${ok === 1 ? "" : "s"}`, {
+          duration: 10_000,
+          action: {
+            label: "Undo",
+            onClick: () => void restoreOverrides(deleted),
+          },
+        });
       }
       if (fail > 0) {
         toast.error(`${fail} could not be reverted`);
@@ -617,7 +741,7 @@ export function StockListingsSection() {
                     aria-label={`Select ${display.title}`}
                   />
                 </div>
-                <div className="flex-shrink-0">
+                <div className="flex-shrink-0 relative group/thumb">
                   <img
                     src={display.image}
                     alt={display.title}
@@ -625,6 +749,16 @@ export function StockListingsSection() {
                     loading="lazy"
                     decoding="async"
                   />
+                  <button
+                    type="button"
+                    onClick={() => handleInlineThumbClick(display)}
+                    disabled={busy}
+                    className="absolute inset-0 flex items-center justify-center rounded-md bg-black/0 group-hover/thumb:bg-black/40 focus-visible:bg-black/40 transition opacity-0 group-hover/thumb:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed text-white"
+                    aria-label={`Replace thumbnail for ${display.title}`}
+                    title="Replace thumbnail"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -727,6 +861,17 @@ export function StockListingsSection() {
           })}
         </ul>
       )}
+
+      <input
+        ref={thumbInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null;
+          void handleInlineThumbFile(file);
+        }}
+      />
 
       <EditProductDialog
         product={editProduct}
