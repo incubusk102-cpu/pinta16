@@ -100,6 +100,7 @@ export const compressImage = async (
   let quality = initialQuality;
   let url = "";
   let bytes = 0;
+  const minDim = 320;
 
   for (let pass = 0; pass < 8; pass++) {
     canvas.width = targetW;
@@ -115,9 +116,27 @@ export const compressImage = async (
       quality = Math.max(minQuality, quality - 0.1);
       continue;
     }
-    // Already at min quality and still over budget — shrink dimensions 15 %.
-    targetW = Math.max(320, Math.round(targetW * 0.85));
-    targetH = Math.max(320, Math.round(targetH * 0.85));
+    // Already at min quality and still over budget — shrink BOTH dimensions
+    // by the same factor so we preserve the aspect ratio (independent
+    // per-axis floors would stretch panoramas / very tall images).
+    if (Math.min(targetW, targetH) <= minDim) {
+      // Shorter edge already at the floor; no further proportional shrink
+      // possible. Bail with whatever we have rather than distorting.
+      break;
+    }
+    const shrink = 0.85;
+    let nextW = targetW * shrink;
+    let nextH = targetH * shrink;
+    // If the proportional shrink would push the shorter edge below the floor,
+    // scale just enough to land that edge exactly on the floor.
+    const shorter = Math.min(nextW, nextH);
+    if (shorter < minDim) {
+      const adjust = minDim / shorter;
+      nextW *= adjust;
+      nextH *= adjust;
+    }
+    targetW = Math.max(1, Math.round(nextW));
+    targetH = Math.max(1, Math.round(nextH));
   }
 
   return {
