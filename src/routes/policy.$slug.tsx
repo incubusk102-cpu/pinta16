@@ -18,6 +18,18 @@ const isPolicySlug = (s: string): s is PolicySlug =>
 // Lightweight markdown renderer — supports headings, paragraphs, lists,
 // inline links, **bold**, *italic*, and `code`. Avoids pulling in a full
 // markdown library for what is essentially long-form static text.
+
+// Allow only safe link protocols. An admin XSS attempt typing
+// `[click me](javascript:alert(1))` would otherwise fire on click; React
+// itself will warn but not block, so we filter explicitly. Anything that
+// fails this check renders as a non-link span.
+const SAFE_LINK_RE = /^(https?:|mailto:|tel:|\/[^/]|\/$|#)/i;
+const sanitizeHref = (href: string): string | null => {
+  const trimmed = href.trim();
+  if (!trimmed) return null;
+  return SAFE_LINK_RE.test(trimmed) ? trimmed : null;
+};
+
 const renderInline = (text: string) => {
   const parts: (string | { type: "link"; href: string; label: string })[] = [];
   const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -32,12 +44,17 @@ const renderInline = (text: string) => {
 
   return parts.map((p, i) => {
     if (typeof p !== "string") {
+      const safe = sanitizeHref(p.href);
+      if (!safe) {
+        return <span key={i}>{p.label}</span>;
+      }
+      const isExternal = /^https?:/i.test(safe);
       return (
         <a
           key={i}
-          href={p.href}
-          target="_blank"
-          rel="noreferrer"
+          href={safe}
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noreferrer noopener" : undefined}
           className="underline underline-offset-2 hover:text-foreground"
         >
           {p.label}
