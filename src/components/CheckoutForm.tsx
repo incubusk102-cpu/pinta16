@@ -13,7 +13,11 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useCart, type OrderInfo } from "@/contexts/CartContext";
-import { useUserAuth } from "@/contexts/UserAuthContext";
+import {
+  useUserAuth,
+  type PublicUser,
+  type SavedAddress,
+} from "@/contexts/UserAuthContext";
 import {
   sanitizeText,
   isValidEmail,
@@ -22,6 +26,40 @@ import {
 } from "@/lib/sanitize";
 import PaymentModal from "./PaymentModal";
 import { createPayment } from "@/utils/payment.functions";
+
+const RESUME_CHECKOUT_FLAG = "pintaterra_resume_checkout";
+
+const pickDefaultAddress = (
+  user: PublicUser | null,
+): SavedAddress | undefined => {
+  if (!user?.addresses?.length) return undefined;
+  if (user.defaultAddressId) {
+    const found = user.addresses.find((a) => a.id === user.defaultAddressId);
+    if (found) return found;
+  }
+  return user.addresses[0];
+};
+
+const buildSignedInForm = (
+  user: PublicUser | null,
+  prev: OrderInfo,
+): OrderInfo => {
+  const addr = pickDefaultAddress(user);
+  const addressLine = addr
+    ? [addr.line1, addr.line2].filter(Boolean).join(", ")
+    : "";
+  const cityLine = addr
+    ? [addr.city, addr.province].filter(Boolean).join(", ")
+    : "";
+  return {
+    fullName: prev.fullName || addr?.fullName || user?.name || "",
+    email: prev.email || user?.email || "",
+    phone: prev.phone || addr?.phone || "",
+    address: prev.address || addressLine,
+    city: prev.city || cityLine,
+    notes: prev.notes,
+  };
+};
 
 const CheckoutForm = () => {
   const {
@@ -40,17 +78,30 @@ const CheckoutForm = () => {
   } = useCart();
   const { user, token } = useUserAuth();
   const isSignedIn = Boolean(token && user);
+  // Initialize from auth state so signed-in users land on the form
+  // immediately — no flash of the "Continue as Guest / Sign in" choice.
   const [checkoutMode, setCheckoutMode] = useState<
     "choose" | "guest" | "signed_in"
-  >("choose");
-  const [form, setForm] = useState<OrderInfo>({
-    fullName: "",
-    email: "",
-    phone: "",
-    address: "",
-    city: "",
-    notes: "",
-  });
+  >(() => (isSignedIn ? "signed_in" : "choose"));
+  const [form, setForm] = useState<OrderInfo>(() =>
+    isSignedIn
+      ? buildSignedInForm(user, {
+          fullName: "",
+          email: "",
+          phone: "",
+          address: "",
+          city: "",
+          notes: "",
+        })
+      : {
+          fullName: "",
+          email: "",
+          phone: "",
+          address: "",
+          city: "",
+          notes: "",
+        },
+  );
   const [errors, setErrors] = useState<
     Partial<Record<keyof OrderInfo, string>>
   >({});
@@ -63,16 +114,31 @@ const CheckoutForm = () => {
     if (showCheckout) {
       if (isSignedIn) {
         setCheckoutMode("signed_in");
-        setForm((prev) => ({
-          ...prev,
-          fullName: prev.fullName || user?.name || "",
-          email: prev.email || user?.email || "",
-        }));
+        setForm((prev) => buildSignedInForm(user, prev));
       } else {
         setCheckoutMode("choose");
       }
     }
-  }, [showCheckout, isSignedIn, user?.name, user?.email]);
+  }, [showCheckout, isSignedIn, user]);
+
+  // If the user clicked "Sign in with Google" from the choose screen, the
+  // page navigated away to /login. After they return signed-in, we want to
+  // re-open the checkout panel automatically so they don't have to click
+  // back through the cart again.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isSignedIn) return;
+    let flagged = false;
+    try {
+      flagged = sessionStorage.getItem(RESUME_CHECKOUT_FLAG) === "1";
+      if (flagged) sessionStorage.removeItem(RESUME_CHECKOUT_FLAG);
+    } catch {
+      /* ignore */
+    }
+    if (flagged && items.length > 0 && !showCheckout) {
+      setShowCheckout(true);
+    }
+  }, [isSignedIn, items.length, showCheckout, setShowCheckout]);
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof OrderInfo, string>> = {};
@@ -260,6 +326,11 @@ const CheckoutForm = () => {
                     </button>
                     <button
                       onClick={() => {
+                        try {
+                          sessionStorage.setItem(RESUME_CHECKOUT_FLAG, "1");
+                        } catch {
+                          /* ignore */
+                        }
                         setShowCheckout(false);
                         window.location.href = "/login";
                       }}
