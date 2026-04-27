@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+  type CSSProperties,
+} from "react";
 import { X } from "lucide-react";
 import {
   useStorefrontConfig,
@@ -101,27 +107,31 @@ const AnnouncementBar = () => {
     () => DISMISS_KEY_PREFIX + fingerprint(announcement, messages),
     [announcement, messages],
   );
-  const [dismissed, setDismissed] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!announcement.dismissable) {
-      setDismissed(false);
-      return;
-    }
-    try {
-      setDismissed(localStorage.getItem(dismissKey) === "1");
-    } catch {
-      setDismissed(false);
-    }
-  }, [announcement.dismissable, dismissKey]);
+  // Read the dismissed flag synchronously during render — derived state, not
+  // useState — so a previously-dismissed bar never paints even on the very
+  // first frame after the storefront config loads. (A useEffect-driven read
+  // would cause a one-frame flash since effects run after paint.) A small
+  // tick bumped on click is the only mutable bit of state we need.
+  const [dismissTick, bumpDismissTick] = useReducer((x: number) => x + 1, 0);
+  const dismissed =
+    announcement.dismissable &&
+    typeof window !== "undefined" &&
+    (() => {
+      void dismissTick; // re-read after a click
+      try {
+        return window.localStorage.getItem(dismissKey) === "1";
+      } catch {
+        return false;
+      }
+    })();
 
   const dismiss = () => {
-    setDismissed(true);
     try {
-      localStorage.setItem(dismissKey, "1");
+      window.localStorage.setItem(dismissKey, "1");
     } catch {
       /* ignore */
     }
+    bumpDismissTick();
   };
 
   if (!announcement.enabled || messages.length === 0) return null;
