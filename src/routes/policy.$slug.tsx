@@ -110,22 +110,37 @@ const renderMarkdown = (md: string) => {
   const lines = md.split("\n");
   const out: React.ReactNode[] = [];
   let listBuf: string[] = [];
+  let listKind: "ul" | "ol" = "ul";
   let paraBuf: string[] = [];
   let key = 0;
 
   const flushList = () => {
     if (listBuf.length) {
-      out.push(
-        <ul
-          key={key++}
-          className="list-disc list-outside pl-6 space-y-1.5 text-foreground/80 leading-relaxed"
-        >
-          {listBuf.map((item, i) => (
-            <li key={i}>{renderInline(item)}</li>
-          ))}
-        </ul>,
-      );
+      if (listKind === "ol") {
+        out.push(
+          <ol
+            key={key++}
+            className="list-decimal list-outside pl-6 space-y-1.5 text-foreground/80 leading-relaxed"
+          >
+            {listBuf.map((item, i) => (
+              <li key={i}>{renderInline(item)}</li>
+            ))}
+          </ol>,
+        );
+      } else {
+        out.push(
+          <ul
+            key={key++}
+            className="list-disc list-outside pl-6 space-y-1.5 text-foreground/80 leading-relaxed"
+          >
+            {listBuf.map((item, i) => (
+              <li key={i}>{renderInline(item)}</li>
+            ))}
+          </ul>,
+        );
+      }
       listBuf = [];
+      listKind = "ul";
     }
   };
   const flushPara = () => {
@@ -183,8 +198,20 @@ const renderMarkdown = (md: string) => {
       continue;
     }
     if (line.startsWith("- ") || line.startsWith("* ")) {
+      // Switching from an ordered list to a bullet list (or vice versa)
+      // closes the previous list before starting the new one.
+      if (listBuf.length && listKind !== "ul") flushList();
       flushPara();
+      listKind = "ul";
       listBuf.push(line.slice(2));
+      continue;
+    }
+    const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+    if (olMatch) {
+      if (listBuf.length && listKind !== "ol") flushList();
+      flushPara();
+      listKind = "ol";
+      listBuf.push(olMatch[2]);
       continue;
     }
     // Indented continuation of the previous bullet (e.g. "  more text").
