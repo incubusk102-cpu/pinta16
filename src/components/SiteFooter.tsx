@@ -8,6 +8,12 @@ import {
   usePolicies,
 } from "@/contexts/PoliciesContext";
 
+// Set these to your actual Pintaterra profile URLs to render the social
+// links. Left empty so we don't ship misleading aria-labels that point at
+// generic facebook.com / instagram.com homepages.
+const FACEBOOK_URL = "";
+const INSTAGRAM_URL = "";
+
 const SLUG_LABEL_KEYS: Record<
   PolicySlug,
   "footer.terms" | "footer.refund" | "footer.shipping" | "footer.privacy"
@@ -175,27 +181,33 @@ const SiteFooter = () => {
             shipped with a Certificate of Authenticity.
           </p>
 
-          {/* Socials */}
-          <div className="mt-5 flex items-center gap-3">
-            <a
-              href="https://www.facebook.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Pintaterra on Facebook"
-              className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
-            >
-              <Facebook className="w-4 h-4" />
-            </a>
-            <a
-              href="https://www.instagram.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Pintaterra on Instagram"
-              className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
-            >
-              <Instagram className="w-4 h-4" />
-            </a>
-          </div>
+          {/* Socials — only render when a real profile URL is configured */}
+          {(FACEBOOK_URL || INSTAGRAM_URL) && (
+            <div className="mt-5 flex items-center gap-3">
+              {FACEBOOK_URL && (
+                <a
+                  href={FACEBOOK_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Pintaterra on Facebook"
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
+                >
+                  <Facebook className="w-4 h-4" />
+                </a>
+              )}
+              {INSTAGRAM_URL && (
+                <a
+                  href={INSTAGRAM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Pintaterra on Instagram"
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
+                >
+                  <Instagram className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Policies */}
