@@ -184,10 +184,24 @@ const upsertIndexEntry = async (store, entryUpdater) => {
   return false;
 };
 
-const appendMessage = async (store, id, message) => {
+// Append a message under the per-thread CAS lock. Returns:
+//   * the updated thread on success,
+//   * `null` if the thread doesn't exist,
+//   * the string `"closed"` if `rejectIfClosed` is true and `closedAt` is set
+//     on the snapshot we read inside the CAS loop. Folding the closed-check
+//     into the same read that drives the CAS write closes the TOCTOU window
+//     where an admin's `admin-close` could land between a separate
+//     pre-flight check and this function.
+const appendMessage = async (
+  store,
+  id,
+  message,
+  { rejectIfClosed = false } = {},
+) => {
   for (let attempt = 0; attempt < 4; attempt++) {
     const { etag, data } = await readThreadWithMeta(store, id);
     if (!data) return null;
+    if (rejectIfClosed && data.closedAt) return "closed";
     const next = {
       ...data,
       messages: [...data.messages, message].slice(-MAX_MESSAGES_PER_THREAD),
@@ -349,22 +363,20 @@ export const handler = async (event) => {
       const message = trimString(body.message, MAX_BODY_CHARS);
       if (message.length < 1) return json(400, { error: "Message required" });
 
-      // Reject sends on closed threads. The widget hides the composer when
-      // closedAt is set, but a stale tab could still POST after the admin
-      // closed the thread \u2014 fail loudly so the customer is forced to refresh
-      // and see the "Conversation closed" banner.
-      const existing = await readThread(store, id);
-      if (!existing) return json(404, { error: "Thread not found" });
-      if (existing.closedAt) {
+      // Reject sends on closed threads. The check has to happen inside the
+      // same CAS loop that does the write so a concurrent admin-close
+      // between a pre-flight check and the write can't slip a customer
+      // message in after the closed system message.
+      const at = nowISO();
+      const updated = await appendMessage(
+        store,
+        id,
+        { at, from: "customer", body: message },
+        { rejectIfClosed: true },
+      );
+      if (updated === "closed") {
         return json(409, { error: "Conversation closed" });
       }
-
-      const at = nowISO();
-      const updated = await appendMessage(store, id, {
-        at,
-        from: "customer",
-        body: message,
-      });
       if (!updated) return json(404, { error: "Thread not found" });
 
       await upsertIndexEntry(store, (threads) => {
@@ -418,20 +430,21 @@ export const handler = async (event) => {
       const message = trimString(body.message, MAX_BODY_CHARS);
       if (message.length < 1) return json(400, { error: "Message required" });
 
-      const existing = await readThread(store, id);
-      if (!existing) return json(404, { error: "Thread not found" });
-      if (existing.closedAt) {
+      const at = nowISO();
+      // Same TOCTOU rationale as `send`: the closed-check has to happen
+      // inside the CAS loop so it sees the same snapshot we're writing
+      // against.
+      const updated = await appendMessage(
+        store,
+        id,
+        { at, from: "admin", body: message },
+        { rejectIfClosed: true },
+      );
+      if (updated === "closed") {
         return json(409, {
           error: "Conversation closed \u2014 reopen to reply",
         });
       }
-
-      const at = nowISO();
-      const updated = await appendMessage(store, id, {
-        at,
-        from: "admin",
-        body: message,
-      });
       if (!updated) return json(404, { error: "Thread not found" });
 
       await upsertIndexEntry(store, (threads) => {
