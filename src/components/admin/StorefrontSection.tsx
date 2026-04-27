@@ -1,11 +1,29 @@
 import { useEffect, useState } from "react";
-import { Megaphone, Truck, Tag, Plus, Trash2, Loader2 } from "lucide-react";
+import {
+  Megaphone,
+  MessageSquare,
+  Truck,
+  Tag,
+  Plus,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import {
+  CHAT_FAQ_ANSWER_MAX,
+  CHAT_FAQ_MAX,
+  CHAT_FAQ_QUESTION_MAX,
+  DEFAULT_CHAT_FAQS,
+  DEFAULT_CHAT_WELCOME,
+  slugifyFaqId,
+  type ChatFaqItem,
+} from "@/lib/chat-faqs";
 import { toast } from "sonner";
 
 interface AdminPromo {
@@ -74,6 +92,12 @@ interface AdminConfig {
     shippingFee: number;
   };
   promoCodes: AdminPromo[];
+  chat: {
+    enabled: boolean;
+    welcome: string;
+    agentHandoff: boolean;
+    faqs: ChatFaqItem[];
+  };
 }
 
 const DEFAULTS: AdminConfig = {
@@ -104,6 +128,12 @@ const DEFAULTS: AdminConfig = {
     shippingFee: 500,
   },
   promoCodes: [],
+  chat: {
+    enabled: true,
+    welcome: DEFAULT_CHAT_WELCOME,
+    agentHandoff: true,
+    faqs: DEFAULT_CHAT_FAQS,
+  },
 };
 
 export function StorefrontSection() {
@@ -112,7 +142,7 @@ export function StorefrontSection() {
   const [cfg, setCfg] = useState<AdminConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<
-    null | "announcement" | "shipping" | "promo"
+    null | "announcement" | "shipping" | "promo" | "chat"
   >(null);
 
   // Promo form state
@@ -146,6 +176,15 @@ export function StorefrontSection() {
           promoCodes: Array.isArray(data.config.promoCodes)
             ? data.config.promoCodes
             : [],
+          chat: {
+            ...DEFAULTS.chat,
+            ...(data.config.chat && typeof data.config.chat === "object"
+              ? data.config.chat
+              : {}),
+            faqs: Array.isArray(data.config.chat?.faqs)
+              ? data.config.chat.faqs
+              : DEFAULTS.chat.faqs,
+          },
         });
       }
     } catch (e) {
@@ -259,6 +298,86 @@ export function StorefrontSection() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not toggle promo");
     }
+  };
+
+  const handleSaveChat = async () => {
+    setSaving("chat");
+    try {
+      const cleanedFaqs = cfg.chat.faqs
+        .map((f) => {
+          const question = f.question.trim().slice(0, CHAT_FAQ_QUESTION_MAX);
+          const answer = f.answer.trim().slice(0, CHAT_FAQ_ANSWER_MAX);
+          if (!question || !answer) return null;
+          const id = (f.id || "").trim().slice(0, 40) || slugifyFaqId(question);
+          return { id, question, answer };
+        })
+        .filter((f): f is ChatFaqItem => f !== null)
+        .slice(0, CHAT_FAQ_MAX);
+      await post({
+        action: "update-chat",
+        chat: {
+          enabled: cfg.chat.enabled,
+          welcome: cfg.chat.welcome.trim(),
+          agentHandoff: cfg.chat.agentHandoff,
+          faqs: cleanedFaqs,
+        },
+      });
+      toast.success("Chat settings saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const updateFaq = (idx: number, patch: Partial<ChatFaqItem>) => {
+    setCfg((prev) => ({
+      ...prev,
+      chat: {
+        ...prev.chat,
+        faqs: prev.chat.faqs.map((f, i) =>
+          i === idx ? { ...f, ...patch } : f,
+        ),
+      },
+    }));
+  };
+
+  const addFaq = () => {
+    setCfg((prev) => {
+      if (prev.chat.faqs.length >= CHAT_FAQ_MAX) return prev;
+      return {
+        ...prev,
+        chat: {
+          ...prev.chat,
+          faqs: [
+            ...prev.chat.faqs,
+            {
+              id: `faq-${Date.now().toString(36)}`,
+              question: "",
+              answer: "",
+            },
+          ],
+        },
+      };
+    });
+  };
+
+  const removeFaq = (idx: number) => {
+    setCfg((prev) => ({
+      ...prev,
+      chat: {
+        ...prev.chat,
+        faqs: prev.chat.faqs.filter((_, i) => i !== idx),
+      },
+    }));
+  };
+
+  const resetFaqsToDefaults = () => {
+    if (!window.confirm("Replace current FAQs with the defaults?")) return;
+    setCfg((prev) => ({
+      ...prev,
+      chat: { ...prev.chat, faqs: DEFAULT_CHAT_FAQS },
+    }));
   };
 
   const handleDeletePromo = async (code: string) => {
@@ -1029,6 +1148,164 @@ export function StorefrontSection() {
             })}
           </ul>
         )}
+      </section>
+
+      {/* Chat widget FAQs */}
+      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <MessageSquare className="w-4 h-4 text-primary" />
+          <h2 className="text-base font-semibold">Chat widget & FAQs</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Customers see these quick topics the moment they open the chat bubble.
+          Each topic shows an instant answer, plus an option to reach a live
+          agent.
+        </p>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-background/40 border border-border/40">
+            <div>
+              <Label className="text-sm">Chat bubble enabled</Label>
+              <p className="text-xs text-muted-foreground">
+                Turn the customer-facing chat widget on or off.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.chat.enabled}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({ ...c, chat: { ...c.chat, enabled: v } }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-background/40 border border-border/40">
+            <div>
+              <Label className="text-sm">Allow live-agent handoff</Label>
+              <p className="text-xs text-muted-foreground">
+                Shows a &ldquo;Talk to a live agent&rdquo; button below the FAQ
+                list.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.chat.agentHandoff}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({
+                  ...c,
+                  chat: { ...c.chat, agentHandoff: v },
+                }))
+              }
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">Welcome message</Label>
+            <Input
+              value={cfg.chat.welcome}
+              maxLength={200}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  chat: { ...c.chat, welcome: e.target.value },
+                }))
+              }
+              placeholder={DEFAULT_CHAT_WELCOME}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">
+                Quick topics ({cfg.chat.faqs.length}/{CHAT_FAQ_MAX})
+              </Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={resetFaqsToDefaults}
+                  className="text-xs"
+                >
+                  Reset to defaults
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addFaq}
+                  disabled={cfg.chat.faqs.length >= CHAT_FAQ_MAX}
+                  className="gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add topic
+                </Button>
+              </div>
+            </div>
+
+            {cfg.chat.faqs.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic px-1">
+                No topics yet. Add a few common questions so shoppers can
+                self-serve before pinging you.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {cfg.chat.faqs.map((faq, idx) => (
+                  <div
+                    key={`${faq.id}-${idx}`}
+                    className="space-y-2 p-3 rounded-md bg-background/40 border border-border/40"
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 space-y-2">
+                        <Input
+                          value={faq.question}
+                          onChange={(e) =>
+                            updateFaq(idx, { question: e.target.value })
+                          }
+                          maxLength={CHAT_FAQ_QUESTION_MAX}
+                          placeholder="e.g. Shipping & delivery"
+                        />
+                        <Textarea
+                          value={faq.answer}
+                          onChange={(e) =>
+                            updateFaq(idx, { answer: e.target.value })
+                          }
+                          maxLength={CHAT_FAQ_ANSWER_MAX}
+                          placeholder="The auto-reply shown when someone taps this topic."
+                          className="min-h-[88px] text-sm"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive shrink-0"
+                        onClick={() => removeFaq(idx)}
+                        aria-label="Remove topic"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => void handleSaveChat()}
+              disabled={saving === "chat"}
+            >
+              {saving === "chat" ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save chat settings"
+              )}
+            </Button>
+          </div>
+        </div>
       </section>
     </div>
   );
