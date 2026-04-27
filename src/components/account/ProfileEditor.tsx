@@ -1,5 +1,15 @@
 import { ChangeEvent, useRef, useState } from "react";
-import { Camera, KeyRound, Loader2, Save, UserCircle } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  Camera,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Save,
+  ShieldOff,
+  UserCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +47,9 @@ const downscaleImage = async (file: File): Promise<string> => {
 };
 
 export default function ProfileEditor() {
-  const { user, updateProfile, changePassword } = useUserAuth();
+  const { user, updateProfile, changePassword, logout, disconnectGoogle } =
+    useUserAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState(user?.name || "");
   const [savingName, setSavingName] = useState(false);
   const [savingPic, setSavingPic] = useState(false);
@@ -45,6 +57,9 @@ export default function ProfileEditor() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const [showDisconnect, setShowDisconnect] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [disconnecting, setDisconnecting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
@@ -103,6 +118,30 @@ export default function ProfileEditor() {
       toast.error(err instanceof Error ? err.message : "Could not save name");
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const onSignOut = () => {
+    logout();
+    toast.success("Signed out");
+    void navigate({ to: "/" });
+  };
+
+  const onDisconnect = async () => {
+    if (confirmText !== "CONFIRM") return;
+    setDisconnecting(true);
+    try {
+      await disconnectGoogle(confirmText);
+      toast.success("Google disconnected — your account has been removed");
+      void navigate({ to: "/" });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not disconnect Google",
+      );
+    } finally {
+      setDisconnecting(false);
+      setShowDisconnect(false);
+      setConfirmText("");
     }
   };
 
@@ -270,6 +309,81 @@ export default function ProfileEditor() {
           </Button>
         </div>
       )}
+
+      <div className="space-y-3 pt-4 border-t border-border/30">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+          <AlertTriangle className="w-3.5 h-3.5" /> Account
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onSignOut}
+          className="w-full sm:w-auto"
+        >
+          <LogOut className="w-4 h-4 mr-1.5" />
+          Sign out
+        </Button>
+
+        {isSocial &&
+          (showDisconnect ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-3">
+              <p className="text-xs text-foreground/85 leading-relaxed">
+                Disconnecting Google removes your account from Pintaterra. Your
+                saved addresses, wishlist, and order history attached to this
+                profile will be deleted. To continue, type{" "}
+                <span className="font-mono font-semibold">CONFIRM</span> below.
+              </p>
+              <Input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="Type CONFIRM"
+                autoComplete="off"
+                spellCheck={false}
+                className="text-sm font-mono"
+                aria-label="Type CONFIRM to disconnect Google"
+                autoFocus
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => void onDisconnect()}
+                  disabled={confirmText !== "CONFIRM" || disconnecting}
+                >
+                  {disconnecting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                  ) : (
+                    <ShieldOff className="w-4 h-4 mr-1.5" />
+                  )}
+                  Disconnect Google
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowDisconnect(false);
+                    setConfirmText("");
+                  }}
+                  disabled={disconnecting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowDisconnect(true)}
+              className="w-full sm:w-auto text-destructive hover:text-destructive"
+            >
+              <ShieldOff className="w-4 h-4 mr-1.5" />
+              Disconnect Google
+            </Button>
+          ))}
+      </div>
     </section>
   );
 }
