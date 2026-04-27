@@ -118,7 +118,7 @@ export default function ChatWidget() {
 
   // Load existing thread when handle is present
   useEffect(() => {
-    if (!handle) {
+    if (!handle || !chatConfig.enabled) {
       setThread(null);
       return;
     }
@@ -145,11 +145,11 @@ export default function ChatWidget() {
     return () => {
       cancelled = true;
     };
-  }, [handle]);
+  }, [handle, chatConfig.enabled]);
 
   // Poll for new messages while widget is mounted
   useEffect(() => {
-    if (!handle) return;
+    if (!handle || !chatConfig.enabled) return;
     const tick = async () => {
       try {
         const res = await fetch(
@@ -164,7 +164,7 @@ export default function ChatWidget() {
     };
     const id = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [handle]);
+  }, [handle, chatConfig.enabled]);
 
   // Track unread (admin) messages while widget is closed
   useEffect(() => {
