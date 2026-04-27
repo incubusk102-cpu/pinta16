@@ -132,21 +132,21 @@ const Lightbox = ({
               e.stopPropagation();
               handlePrev();
             }}
-            className="absolute left-4 md:left-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            className="absolute left-2 md:left-8 p-2 md:p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleNext();
             }}
-            className="absolute right-4 md:right-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            className="absolute right-2 md:right-8 p-2 md:p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
           >
-            <ChevronRight className="w-6 h-6" />
+            <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
           </button>
           <div
-            className="max-w-5xl w-full px-16 flex flex-col md:flex-row items-center gap-8"
+            className="max-w-5xl w-full px-12 sm:px-16 md:px-16 max-h-[90vh] overflow-y-auto flex flex-col md:flex-row items-center gap-6 md:gap-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative">
@@ -159,7 +159,7 @@ const Lightbox = ({
                   transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
                   src={displayImage}
                   alt={art.title}
-                  className="max-h-[70vh] max-w-full md:max-w-[60%] object-contain gallery-frame cursor-zoom-in select-none"
+                  className="max-h-[55vh] md:max-h-[70vh] max-w-full md:max-w-[60%] object-contain gallery-frame cursor-zoom-in select-none"
                   draggable={false}
                   onClick={() => setZoomed(true)}
                 />

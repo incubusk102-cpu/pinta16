@@ -164,9 +164,9 @@ function OrderTracker() {
                   In transit
                 </span>
               </div>
-              <p className="text-sm text-foreground">
+              <p className="text-sm text-foreground break-words">
                 {order.shipment.courier} ·{" "}
-                <span className="font-mono text-xs">
+                <span className="font-mono text-xs break-all">
                   {order.shipment.trackingNumber}
                 </span>
               </p>

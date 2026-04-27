@@ -51,7 +51,7 @@ const isExternalHref = (href: string) => /^(https?:|mailto:|tel:)/i.test(href);
 
 const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const cls =
-    "inline-flex items-center font-body text-xs tracking-[0.3em] uppercase px-10 py-4 bg-foreground text-background hover:bg-foreground/90 transition-colors duration-300 rounded-none";
+    "inline-flex items-center font-body text-[11px] sm:text-xs tracking-[0.25em] sm:tracking-[0.3em] uppercase px-7 sm:px-10 py-3 sm:py-4 bg-foreground text-background hover:bg-foreground/90 transition-colors duration-300 rounded-none";
   const external = isExternalHref(href);
   const target = external ? "_blank" : undefined;
   const rel = external ? "noreferrer" : undefined;
@@ -70,15 +70,15 @@ const CtaLink = ({ label, href }: { label: string; href: string }) => {
 
 const SlideContent = ({ slide, active }: SlideContentProps) => (
   <div
-    className={`absolute inset-0 z-10 flex flex-col justify-center px-6 md:px-12 ${ALIGN_CLASSES[slide.align]}`}
+    className={`absolute inset-0 z-10 flex flex-col justify-center px-5 sm:px-6 md:px-12 ${ALIGN_CLASSES[slide.align]}`}
   >
-    <div className="max-w-3xl flex flex-col gap-5">
+    <div className="max-w-3xl flex flex-col gap-4 sm:gap-5">
       {slide.eyebrow && (
         <motion.p
           initial={{ opacity: 0, y: 18 }}
           animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           transition={{ duration: 0.7, delay: 0.15 }}
-          className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground/90"
+          className="font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground/90"
         >
           {slide.eyebrow}
         </motion.p>
@@ -88,7 +88,7 @@ const SlideContent = ({ slide, active }: SlideContentProps) => (
           initial={{ opacity: 0, y: 28 }}
           animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 28 }}
           transition={{ duration: 0.9, delay: 0.25 }}
-          className="font-display text-4xl md:text-6xl lg:text-7xl text-foreground leading-[1.05]"
+          className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-foreground leading-[1.05]"
         >
           {slide.headline}
         </motion.h2>
@@ -269,17 +269,17 @@ const HeroSlider = () => {
             type="button"
             onClick={prev}
             aria-label="Previous slide"
-            className="absolute left-3 md:left-6 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-full bg-background/40 hover:bg-background/70 backdrop-blur text-foreground transition-all"
+            className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 rounded-full bg-background/40 hover:bg-background/70 backdrop-blur text-foreground transition-all"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           <button
             type="button"
             onClick={next}
             aria-label="Next slide"
-            className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-full bg-background/40 hover:bg-background/70 backdrop-blur text-foreground transition-all"
+            className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 rounded-full bg-background/40 hover:bg-background/70 backdrop-blur text-foreground transition-all"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           <div

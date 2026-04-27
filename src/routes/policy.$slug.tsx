@@ -190,7 +190,7 @@ function PolicyPage() {
 
   if (!isPolicySlug(slug)) {
     return (
-      <div className="min-h-screen bg-background pt-32 px-6 md:px-12">
+      <div className="min-h-screen bg-background pt-32 px-4 sm:px-6 md:px-12">
         <div className="max-w-2xl mx-auto text-center">
           <h1 className="font-display text-3xl text-foreground mb-3">
             Policy not found
@@ -218,7 +218,7 @@ function PolicyPage() {
   return (
     <div className="min-h-screen bg-background pt-24 pb-16">
       <GalleryNav />
-      <article className="max-w-3xl mx-auto px-6 md:px-12 mt-8">
+      <article className="max-w-3xl mx-auto px-4 sm:px-6 md:px-12 mt-8">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground hover:text-foreground transition-colors mb-8"

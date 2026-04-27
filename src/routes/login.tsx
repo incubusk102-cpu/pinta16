@@ -152,10 +152,14 @@ function LoginPage() {
         use_fedcm_for_button: true,
         use_fedcm_for_prompt: true,
       });
+      const btnWidth = Math.max(
+        240,
+        Math.min(360, btnRef.current.clientWidth || 360),
+      );
       g.accounts.id.renderButton(btnRef.current, {
         theme: "outline",
         size: "large",
-        width: 360,
+        width: btnWidth,
         text: "signin_with",
         shape: "rectangular",
       });
@@ -185,9 +189,9 @@ function LoginPage() {
   }, [token, navigate, handleCredential]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 sm:px-6 py-10">
       <Toaster richColors position="top-right" />
-      <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-8 space-y-6">
+      <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-6 sm:p-8 space-y-6">
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl">Sign in</h1>
           <p className="text-sm text-muted-foreground">
@@ -198,7 +202,7 @@ function LoginPage() {
         <div className="flex flex-col items-center gap-2">
           <div
             ref={btnRef}
-            className={loading ? "opacity-50 pointer-events-none" : ""}
+            className={`w-full flex justify-center ${loading ? "opacity-50 pointer-events-none" : ""}`}
           />
           {loading && (
             <p className="text-sm text-muted-foreground">Signing in…</p>
