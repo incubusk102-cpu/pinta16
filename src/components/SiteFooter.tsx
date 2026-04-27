@@ -22,8 +22,8 @@ const SiteFooter = () => {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-border/30 mt-24 px-6 md:px-12 py-12">
-      <div className="max-w-5xl mx-auto grid gap-10 md:grid-cols-3 text-sm">
+    <footer className="border-t border-border/30 mt-16 sm:mt-24 px-4 sm:px-6 md:px-12 py-10 sm:py-12">
+      <div className="max-w-5xl mx-auto grid gap-8 sm:gap-10 sm:grid-cols-2 md:grid-cols-3 text-sm">
         <div>
           <p className="font-display text-lg text-foreground mb-3">
             Pintaterra

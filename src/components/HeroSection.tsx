@@ -35,7 +35,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
-          className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-6"
+          className="font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground mb-6"
         >
           Affordable Art, Authentic Stories
         </motion.p>
@@ -43,7 +43,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2, delay: 0.5 }}
-          className="font-display text-5xl md:text-7xl lg:text-8xl text-gradient-elegant mb-8"
+          className="font-display text-4xl sm:text-5xl md:text-7xl lg:text-8xl text-gradient-elegant mb-6 md:mb-8"
         >
           Pintaterra
         </motion.h1>
@@ -65,7 +65,7 @@ const HeroSection = () => {
               .getElementById("gallery")
               ?.scrollIntoView({ behavior: "smooth" })
           }
-          className="font-body text-xs tracking-[0.3em] uppercase px-14 py-5 bg-foreground text-background hover:bg-foreground/90 transition-all duration-700 rounded-none"
+          className="font-body text-[11px] sm:text-xs tracking-[0.25em] sm:tracking-[0.3em] uppercase px-10 sm:px-14 py-4 sm:py-5 bg-foreground text-background hover:bg-foreground/90 transition-all duration-700 rounded-none"
         >
           View Collection
         </motion.button>

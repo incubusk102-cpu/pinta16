@@ -45,7 +45,7 @@ function Index() {
       <GalleryNav />
       <HeroOrFallback />
       <GallerySection />
-      <section className="px-6 md:px-12 max-w-7xl mx-auto">
+      <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />
       </section>
       <AboutSection />

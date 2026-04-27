@@ -320,7 +320,7 @@ function ProductPage() {
         dangerouslySetInnerHTML={{ __html: jsonLd }}
       />
       <GalleryNav />
-      <main className="flex-1 pt-28 md:pt-32 pb-20 px-6 md:px-12 max-w-7xl mx-auto w-full">
+      <main className="flex-1 pt-24 md:pt-32 pb-20 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full">
         <div className="mb-6">
           <Link
             to="/"
@@ -335,7 +335,7 @@ function ProductPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="grid lg:grid-cols-[1.2fr_1fr] gap-10 lg:gap-16"
+          className="grid lg:grid-cols-[1.2fr_1fr] gap-8 md:gap-10 lg:gap-16"
         >
           <section className="space-y-4">
             <div className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame">

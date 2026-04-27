@@ -185,14 +185,14 @@ const GallerySection = () => {
   return (
     <section
       id="gallery"
-      className="py-24 md:py-32 px-6 md:px-12 max-w-7xl mx-auto gallery-spotlight"
+      className="py-16 sm:py-24 md:py-32 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto gallery-spotlight"
     >
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
-        className="text-center mb-16"
+        className="text-center mb-10 sm:mb-16"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
           The Collection
@@ -226,8 +226,8 @@ const GallerySection = () => {
             )}
           </div>
 
-          <div className="flex flex-wrap items-end justify-center gap-3">
-            <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end sm:justify-center gap-3">
+            <div className="flex flex-col gap-1 min-w-0">
               <label
                 htmlFor="filter-category"
                 className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
@@ -237,7 +237,7 @@ const GallerySection = () => {
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger
                   id="filter-category"
-                  className="w-[170px] font-body text-xs"
+                  className="w-full sm:w-[170px] font-body text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -255,7 +255,7 @@ const GallerySection = () => {
               </Select>
             </div>
 
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 min-w-0">
               <label
                 htmlFor="filter-price"
                 className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
@@ -265,7 +265,7 @@ const GallerySection = () => {
               <Select value={filterPrice} onValueChange={setFilterPrice}>
                 <SelectTrigger
                   id="filter-price"
-                  className="w-[170px] font-body text-xs"
+                  className="w-full sm:w-[170px] font-body text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -279,7 +279,7 @@ const GallerySection = () => {
               </Select>
             </div>
 
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 min-w-0">
               <label
                 htmlFor="filter-availability"
                 className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
@@ -292,7 +292,7 @@ const GallerySection = () => {
               >
                 <SelectTrigger
                   id="filter-availability"
-                  className="w-[170px] font-body text-xs"
+                  className="w-full sm:w-[170px] font-body text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -307,7 +307,7 @@ const GallerySection = () => {
               </Select>
             </div>
 
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 min-w-0">
               <label
                 htmlFor="gallery-sort"
                 className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
@@ -320,7 +320,7 @@ const GallerySection = () => {
               >
                 <SelectTrigger
                   id="gallery-sort"
-                  className="w-[170px] font-body text-xs"
+                  className="w-full sm:w-[170px] font-body text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -338,7 +338,7 @@ const GallerySection = () => {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline pb-2"
+                className="col-span-2 sm:col-auto justify-self-center sm:justify-self-auto font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline pb-2"
               >
                 Clear filters
               </button>
@@ -368,7 +368,7 @@ const GallerySection = () => {
           )}
         </div>
       ) : (
-        <div className="columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8">
+        <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 sm:gap-6 md:gap-8 space-y-4 sm:space-y-6 md:space-y-8">
           {sortedArtworks.map((art, index) => (
             <ArtworkCard
               key={art.id}

@@ -8,7 +8,7 @@ const ContactSection = () => {
   return (
     <section
       id="contact"
-      className="py-24 md:py-32 px-6 md:px-12 max-w-4xl mx-auto"
+      className="py-16 sm:py-24 md:py-32 px-4 sm:px-6 md:px-12 max-w-4xl mx-auto"
     >
       <motion.div
         initial={{ opacity: 0, y: 40 }}
@@ -29,7 +29,7 @@ const ContactSection = () => {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.6, delay: 0.2 }}
-        className="grid md:grid-cols-3 gap-8"
+        className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8"
       >
         {[
           { icon: Mail, label: "Email", value: "pintaterra@gmail.com" },
@@ -38,7 +38,7 @@ const ContactSection = () => {
         ].map(({ icon: Icon, label, value }) => (
           <div
             key={label}
-            className="text-center p-6 bg-card border border-border/10 rounded-sm"
+            className="text-center p-5 sm:p-6 bg-card border border-border/10 rounded-sm"
           >
             <Icon className="w-6 h-6 mx-auto mb-3 text-muted-foreground" />
             <p className="font-body text-xs tracking-wider uppercase text-muted-foreground mb-1">

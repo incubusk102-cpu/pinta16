@@ -45,10 +45,10 @@ const GalleryNav = () => {
       animate={{ y: 0 }}
       transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <div className="max-w-7xl mx-auto px-6 md:px-12 py-5 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3">
         <button
           onClick={() => scrollTo("hero")}
-          className="font-display text-xl tracking-[0.3em] uppercase text-gradient-elegant"
+          className="font-display text-base sm:text-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase text-gradient-elegant truncate"
         >
           Pintaterra
         </button>
