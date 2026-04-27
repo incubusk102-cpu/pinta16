@@ -213,6 +213,60 @@
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
   }
 
+  /* Slow drifting gradient on the hero wordmark for a subtle premium feel.
+     Keeps the same start/mid/end stops as `.text-gradient-elegant` but
+     animates background-position so the highlight slides across letters. */
+  .text-gradient-elegant {
+    background-size: 200% 200%;
+    animation: gradient-drift 14s ease-in-out infinite;
+  }
+  @keyframes gradient-drift {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* Focus ring: replaces the default browser outline with a soft halo that
+     respects the theme. Applied via :focus-visible so mouse clicks don't
+     show it but keyboard nav does. */
+  *:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--background, #000),
+      0 0 0 4px var(--foreground, #fff);
+    border-radius: 2px;
+  }
+
+  /* Scrollbar styling — narrow, monochrome, theme-aware. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(from var(--foreground) l c h / 0.18);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(from var(--foreground) l c h / 0.32);
+  }
+
+  /* Reduced motion: kill the gradient drift + tilt, since framer-motion's
+     `motion-reduce` selector already handles its in-component animations. */
+  @media (prefers-reduced-motion: reduce) {
+    .text-gradient-elegant {
+      animation: none;
+    }
+  }
+
   .announcement-fade {
     display: inline-block;
     animation: announcement-fade-in 400ms ease-out;

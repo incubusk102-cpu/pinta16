@@ -423,7 +423,7 @@ function ProductPage() {
             )}
           </section>
 
-          <section className="space-y-6">
+          <section className="space-y-6 lg:sticky lg:top-28 lg:self-start">
             <div>
               <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
                 {artwork.medium} · {artwork.year}
@@ -455,7 +455,7 @@ function ProductPage() {
               )}
             </div>
 
-            <p className="font-body text-sm md:text-base text-muted-foreground leading-relaxed">
+            <p className="font-body text-sm md:text-base text-muted-foreground leading-relaxed first-letter:font-display first-letter:text-3xl first-letter:md:text-4xl first-letter:text-foreground first-letter:float-left first-letter:mr-1.5 first-letter:mt-1 first-letter:leading-none">
               {artwork.description}
             </p>
 
