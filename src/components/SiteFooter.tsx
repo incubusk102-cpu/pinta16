@@ -265,7 +265,7 @@ const SiteFooter = () => {
       {/* Payment methods */}
       <div className="max-w-6xl mx-auto mt-10 pt-6 border-t border-border/20">
         <p className="font-body text-[11px] tracking-[0.3em] uppercase text-muted-foreground mb-3 text-center sm:text-left">
-          We accept
+          {t("footer.weAccept")}
         </p>
         <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
           {PAYMENT_METHODS.map((m) => (
@@ -278,9 +278,7 @@ const SiteFooter = () => {
 
       <div className="max-w-6xl mx-auto mt-8 pt-5 border-t border-border/20 text-xs text-muted-foreground flex flex-col sm:flex-row items-center justify-between gap-2">
         <span>{t("footer.copyright").replace("{year}", String(year))}</span>
-        <span className="text-muted-foreground/80">
-          Hand-crafted in the Philippines.
-        </span>
+        <span className="text-muted-foreground/80">{t("footer.tagline")}</span>
       </div>
     </footer>
   );
