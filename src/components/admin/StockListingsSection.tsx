@@ -511,28 +511,29 @@ export function StockListingsSection() {
       )
     )
       return;
-    // Snapshot the overrides BEFORE deleting so the undo toast can recreate
-    // them. We freeze plain object copies to avoid any stale-reference quirks
-    // if the products list mutates while the toast is up.
-    const snapshot = overrides.map((p) => ({ ...p }));
     setBulkBusy(true);
-    let ok = 0;
+    // Track which overrides were *actually* deleted so the undo toast can
+    // recreate exactly that set. Re-adding the full pre-delete list would
+    // duplicate any overrides whose deleteProduct rejected (addProduct mints
+    // a fresh id without checking for an existing replacesDefaultId).
+    const deleted: Product[] = [];
     let fail = 0;
     try {
       for (const p of overrides) {
         try {
           await deleteProduct(p.id);
-          ok++;
+          deleted.push({ ...p });
         } catch {
           fail++;
         }
       }
+      const ok = deleted.length;
       if (ok > 0) {
         toast.success(`Reverted ${ok} customization${ok === 1 ? "" : "s"}`, {
           duration: 10_000,
           action: {
             label: "Undo",
-            onClick: () => void restoreOverrides(snapshot),
+            onClick: () => void restoreOverrides(deleted),
           },
         });
       }
