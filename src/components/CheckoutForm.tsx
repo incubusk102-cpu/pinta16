@@ -304,8 +304,8 @@ const CheckoutForm = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-6">
-                {/* Guest vs Sign-in choice */}
-                {checkoutMode === "choose" && (
+                {/* Guest vs Sign-in choice — only for signed-out visitors. */}
+                {!isSignedIn && checkoutMode === "choose" && (
                   <div className="mb-6 space-y-3">
                     <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
                       How would you like to checkout?
@@ -349,8 +349,9 @@ const CheckoutForm = () => {
                   </div>
                 )}
 
-                {/* Order Summary + Form (hidden during choose mode) */}
-                {checkoutMode !== "choose" && (
+                {/* Order Summary + Form. Always shown to signed-in users —
+                    never the "Continue as Guest / Sign in with Google" prompt. */}
+                {(isSignedIn || checkoutMode !== "choose") && (
                   <>
                     <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
                       <p className="font-body text-xs tracking-wider uppercase text-muted-foreground mb-3">
