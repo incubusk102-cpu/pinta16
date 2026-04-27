@@ -2666,7 +2666,7 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 
 interface ChatMessage {
   at: string;
-  from: "customer" | "admin";
+  from: "customer" | "admin" | "system";
   body: string;
 }
 
@@ -2684,6 +2684,7 @@ interface ChatThreadIndexEntry {
   browser?: string;
   os?: string;
   device?: string;
+  closedAt?: string;
 }
 
 interface ChatThreadDetail {
@@ -2692,6 +2693,8 @@ interface ChatThreadDetail {
   email: string;
   createdAt: string;
   messages: ChatMessage[];
+  closedAt?: string;
+  closedBy?: string;
 }
 
 const isThreadUnread = (t: ChatThreadIndexEntry) => {
@@ -2827,6 +2830,65 @@ function MessagesSection() {
     }
   };
 
+  // Throttled typing ping. While the admin's draft has any content we POST
+  // admin-typing at most once every 3s; the customer's poll picks the
+  // indicator up within ~5s of the first keystroke.
+  const lastTypingPingRef = useRef<number>(0);
+  const sendTypingPing = (next: string) => {
+    if (!activeId) return;
+    if (!next.trim()) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current < 3000) return;
+    lastTypingPingRef.current = now;
+    const token = getAdminToken();
+    void fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ action: "admin-typing", id: activeId }),
+    }).catch(() => {
+      /* best-effort */
+    });
+  };
+
+  const setThreadClosed = async (close: boolean) => {
+    if (!activeId) return;
+    if (
+      close &&
+      !window.confirm(
+        "Close this conversation? The customer will see a 'Conversation closed' notice and can't reply unless they start a new chat.",
+      )
+    ) {
+      return;
+    }
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: close ? "admin-close" : "admin-reopen",
+          id: activeId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(
+          data.error || (close ? "Could not close" : "Could not reopen"),
+        );
+      if (data.thread) setActiveThread(data.thread);
+      void refreshThreads();
+      toast.success(close ? "Conversation closed" : "Conversation reopened");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Action failed");
+    }
+  };
+
   const unreadCount = threads.filter(isThreadUnread).length;
 
   return (
@@ -2890,6 +2952,7 @@ function MessagesSection() {
                         {t.messageCount ?? 0} msg
                         {(t.messageCount ?? 0) === 1 ? "" : "s"}
                         {t.lastFromAdmin ? " · last: you" : ""}
+                        {t.closedAt ? " · closed" : ""}
                       </span>
                     </button>
                   </li>
@@ -2906,65 +2969,115 @@ function MessagesSection() {
             </div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b border-border/60 bg-muted/20">
-                <p className="text-sm font-medium">{activeThread.name}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {activeThread.email} · started{" "}
-                  {new Date(activeThread.createdAt).toLocaleString()}
-                </p>
+              <div className="px-4 py-3 border-b border-border/60 bg-muted/20 flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {activeThread.name}
+                    {activeThread.closedAt && (
+                      <span className="ml-2 inline-flex items-center text-[10px] uppercase tracking-wide bg-muted text-muted-foreground rounded-full px-2 py-0.5">
+                        Closed
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {activeThread.email} · started{" "}
+                    {new Date(activeThread.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={activeThread.closedAt ? "default" : "outline"}
+                  onClick={() => void setThreadClosed(!activeThread.closedAt)}
+                  title={
+                    activeThread.closedAt
+                      ? "Reopen this conversation so the customer can reply"
+                      : "Close & archive this conversation"
+                  }
+                >
+                  {activeThread.closedAt ? "Reopen" : "Close"}
+                </Button>
               </div>
               <div
                 ref={scrollRef}
                 className="flex-1 overflow-y-auto px-4 py-3 space-y-2 max-h-[480px]"
               >
-                {activeThread.messages.map((m, idx) => (
-                  <div
-                    key={`${m.at}-${idx}`}
-                    className={`flex flex-col ${
-                      m.from === "admin" ? "items-end" : "items-start"
-                    }`}
-                  >
+                {activeThread.messages.map((m, idx) => {
+                  if (m.from === "system") {
+                    return (
+                      <div
+                        key={`${m.at}-${idx}`}
+                        className="flex justify-center my-1"
+                      >
+                        <p
+                          className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1"
+                          title={new Date(m.at).toLocaleString()}
+                        >
+                          {m.body}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
-                        m.from === "admin"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-foreground"
+                      key={`${m.at}-${idx}`}
+                      className={`flex flex-col ${
+                        m.from === "admin" ? "items-end" : "items-start"
                       }`}
                     >
-                      {linkifyMessage(m.body)}
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                          m.from === "admin"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-foreground"
+                        }`}
+                      >
+                        {linkifyMessage(m.body)}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
+                        {m.from === "admin" ? "You" : activeThread.name} ·{" "}
+                        {new Date(m.at).toLocaleString()}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
-                      {m.from === "admin" ? "You" : activeThread.name} ·{" "}
-                      {new Date(m.at).toLocaleString()}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              <div className="border-t border-border/60 px-3 py-2 flex items-end gap-2">
-                <Textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      if (!sending && draft.trim()) void sendReply();
-                    }
-                  }}
-                  placeholder="Reply to the customer (Ctrl+Enter to send)"
-                  className="resize-none min-h-[44px] max-h-[120px] text-sm"
-                  maxLength={2000}
-                />
-                <Button
-                  onClick={() => void sendReply()}
-                  disabled={sending || !draft.trim()}
-                >
-                  {sending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    "Send"
-                  )}
-                </Button>
-              </div>
+              {activeThread.closedAt ? (
+                <div className="border-t border-border/60 px-4 py-3 bg-muted/20 text-xs text-muted-foreground text-center">
+                  Conversation closed{" "}
+                  {new Date(activeThread.closedAt).toLocaleString()}. Reopen to
+                  reply.
+                </div>
+              ) : (
+                <div className="border-t border-border/60 px-3 py-2 flex items-end gap-2">
+                  <Textarea
+                    value={draft}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDraft(next);
+                      sendTypingPing(next);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        if (!sending && draft.trim()) void sendReply();
+                      }
+                    }}
+                    placeholder="Reply to the customer (Ctrl+Enter to send)"
+                    className="resize-none min-h-[44px] max-h-[120px] text-sm"
+                    maxLength={2000}
+                  />
+                  <Button
+                    onClick={() => void sendReply()}
+                    disabled={sending || !draft.trim()}
+                  >
+                    {sending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Send"
+                    )}
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </div>

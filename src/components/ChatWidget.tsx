@@ -21,7 +21,7 @@ import { formatRelativeTime, linkifyMessage } from "@/lib/chat-format";
 
 interface ChatMessage {
   at: string;
-  from: "customer" | "admin";
+  from: "customer" | "admin" | "system";
   body: string;
 }
 
@@ -31,6 +31,9 @@ interface ChatThread {
   email: string;
   createdAt: string;
   messages: ChatMessage[];
+  closedAt?: string;
+  closedBy?: string;
+  adminTypingAt?: string;
 }
 
 const STORAGE_KEY = "pintaterra_chat_thread_v1";
@@ -293,10 +296,39 @@ export default function ChatWidget() {
   };
 
   const messages = thread?.messages ?? [];
+  const isClosed = Boolean(thread?.closedAt);
   const canSend = useMemo(
-    () => draft.trim().length > 0 && !busy,
-    [draft, busy],
+    () => draft.trim().length > 0 && !busy && !isClosed,
+    [draft, busy, isClosed],
   );
+
+  // Inline email validation on the live-agent form. We only show the error
+  // once the user has typed something and stopped — nagging on every
+  // keystroke before they've finished typing the address would be annoying.
+  const trimmedEmail = email.trim().toLowerCase();
+  const trimmedName = name.trim();
+  const emailValid = EMAIL_RE.test(trimmedEmail);
+  const showEmailError = trimmedEmail.length > 0 && !emailValid;
+  const canSubmitAgentForm =
+    !busy && trimmedName.length > 0 && emailValid && draft.trim().length > 0;
+
+  // Admin "typing…" indicator: show whenever the server-reported
+  // adminTypingAt is fresher than 6s and we don't yet have a newer admin
+  // message in the transcript. The widget polls every 5s so the indicator
+  // appears within a tick of the admin starting to type.
+  const showAdminTyping = useMemo(() => {
+    if (!thread || isClosed) return false;
+    if (!thread.adminTypingAt) return false;
+    const t = Date.parse(thread.adminTypingAt);
+    if (Number.isNaN(t)) return false;
+    if (nowTick - t > 6000) return false;
+    // If there's already an admin message at-or-after the typing ping, the
+    // admin already sent — don't keep showing the indicator.
+    for (const m of thread.messages) {
+      if (m.from === "admin" && Date.parse(m.at) >= t) return false;
+    }
+    return true;
+  }, [thread, isClosed, nowTick]);
 
   const faqs: ChatFaqItem[] = chatConfig.faqs;
   const activeFaq = useMemo(
@@ -323,14 +355,12 @@ export default function ChatWidget() {
   };
 
   const startThread = async () => {
-    const trimmedName = name.trim();
-    const trimmedEmail = email.trim().toLowerCase();
     const trimmedMessage = draft.trim();
     if (!trimmedName) {
       toast.error("Please enter your name");
       return;
     }
-    if (!EMAIL_RE.test(trimmedEmail)) {
+    if (!emailValid) {
       toast.error("Please enter a valid email");
       return;
     }
@@ -350,8 +380,11 @@ export default function ChatWidget() {
           message: trimmedMessage,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not start chat");
+      const data: { thread?: ChatThread; error?: string } = await res
+        .json()
+        .catch(() => ({}));
+      if (!res.ok || !data.thread)
+        throw new Error(data.error || "Could not start chat");
       const persisted: PersistedHandle = {
         id: data.thread.id,
         name: data.thread.name,
@@ -506,14 +539,34 @@ export default function ChatWidget() {
         />
       </div>
       <div className="space-y-1">
-        <label className="text-[11px] text-muted-foreground">Email</label>
+        <label
+          className="text-[11px] text-muted-foreground"
+          htmlFor="chat-email"
+        >
+          Email
+        </label>
         <Input
+          id="chat-email"
           type="email"
+          inputMode="email"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           maxLength={200}
+          aria-invalid={showEmailError || undefined}
+          aria-describedby={showEmailError ? "chat-email-error" : undefined}
+          className={
+            showEmailError
+              ? "border-destructive focus-visible:ring-destructive"
+              : ""
+          }
         />
+        {showEmailError && (
+          <p id="chat-email-error" className="text-[11px] text-destructive">
+            Please enter a valid email so we can reply.
+          </p>
+        )}
       </div>
       <div className="space-y-1 flex-1 flex flex-col">
         <label className="text-[11px] text-muted-foreground">Message</label>
@@ -525,7 +578,7 @@ export default function ChatWidget() {
           maxLength={2000}
         />
       </div>
-      <Button onClick={startThread} disabled={busy}>
+      <Button onClick={startThread} disabled={!canSubmitAgentForm}>
         {busy ? "Starting…" : "Start chat"}
       </Button>
     </div>
@@ -632,78 +685,126 @@ export default function ChatWidget() {
                     Loading…
                   </p>
                 ) : (
-                  messages.map((m, idx) => (
-                    <div
-                      key={`${m.at}-${idx}`}
-                      className={`flex flex-col ${
-                        m.from === "customer" ? "items-end" : "items-start"
-                      }`}
-                    >
+                  messages.map((m, idx) => {
+                    if (m.from === "system") {
+                      return (
+                        <div
+                          key={`${m.at}-${idx}`}
+                          className="flex flex-col items-center my-1"
+                          role="status"
+                        >
+                          <p
+                            className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1"
+                            title={new Date(m.at).toLocaleString()}
+                          >
+                            {m.body}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return (
                       <div
-                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
-                          m.from === "customer"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-foreground"
+                        key={`${m.at}-${idx}`}
+                        className={`flex flex-col ${
+                          m.from === "customer" ? "items-end" : "items-start"
                         }`}
                       >
-                        {linkifyMessage(m.body)}
+                        <div
+                          className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                            m.from === "customer"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-foreground"
+                          }`}
+                        >
+                          {linkifyMessage(m.body)}
+                        </div>
+                        <p
+                          className="text-[10px] text-muted-foreground mt-0.5 px-1"
+                          title={new Date(m.at).toLocaleString()}
+                        >
+                          {formatRelativeTime(m.at, nowTick)}
+                        </p>
                       </div>
-                      <p
-                        className="text-[10px] text-muted-foreground mt-0.5 px-1"
-                        title={new Date(m.at).toLocaleString()}
-                      >
-                        {formatRelativeTime(m.at, nowTick)}
-                      </p>
+                    );
+                  })
+                )}
+                {showAdminTyping && (
+                  <div
+                    className="flex items-start"
+                    aria-live="polite"
+                    aria-label="Support is typing"
+                  >
+                    <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
+                      <span className="sr-only">Support is typing</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />
                     </div>
-                  ))
+                  </div>
                 )}
               </div>
-              <div className="border-t border-border/60 px-3 py-2 space-y-1.5">
-                <div className="flex items-end gap-2">
-                  <Textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (canSend) void sendMessage();
-                      }
-                    }}
-                    placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
-                    className="resize-none min-h-[40px] max-h-[120px] text-sm"
-                    maxLength={MSG_MAX}
-                  />
+              {isClosed ? (
+                <div className="border-t border-border/60 px-4 py-3 space-y-2 bg-muted/20">
+                  <p className="text-xs text-muted-foreground text-center">
+                    This conversation has been closed by support.
+                  </p>
                   <Button
-                    size="icon"
-                    onClick={() => void sendMessage()}
-                    disabled={!canSend}
-                    aria-label="Send"
+                    onClick={endConversation}
+                    className="w-full"
+                    variant="default"
+                    size="sm"
                   >
-                    <Send className="h-4 w-4" />
+                    Start a new conversation
                   </Button>
                 </div>
-                <div className="flex items-center justify-between px-1">
-                  <button
-                    type="button"
-                    onClick={endConversation}
-                    className="text-[10px] text-muted-foreground hover:text-destructive hover:underline"
-                    title="End this conversation and start a fresh one"
-                  >
-                    End conversation
-                  </button>
-                  {draft.length > MSG_MAX - 200 && (
-                    <span
-                      className={`text-[10px] tabular-nums ${
-                        draft.length >= MSG_MAX
-                          ? "text-destructive"
-                          : "text-muted-foreground"
-                      }`}
+              ) : (
+                <div className="border-t border-border/60 px-3 py-2 space-y-1.5">
+                  <div className="flex items-end gap-2">
+                    <Textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (canSend) void sendMessage();
+                        }
+                      }}
+                      placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+                      className="resize-none min-h-[40px] max-h-[120px] text-sm"
+                      maxLength={MSG_MAX}
+                    />
+                    <Button
+                      size="icon"
+                      onClick={() => void sendMessage()}
+                      disabled={!canSend}
+                      aria-label="Send"
                     >
-                      {draft.length} / {MSG_MAX}
-                    </span>
-                  )}
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between px-1">
+                    <button
+                      type="button"
+                      onClick={endConversation}
+                      className="text-[10px] text-muted-foreground hover:text-destructive hover:underline"
+                      title="End this conversation and start a fresh one"
+                    >
+                      End conversation
+                    </button>
+                    {draft.length > MSG_MAX - 200 && (
+                      <span
+                        className={`text-[10px] tabular-nums ${
+                          draft.length >= MSG_MAX
+                            ? "text-destructive"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {draft.length} / {MSG_MAX}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
         </div>
