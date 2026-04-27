@@ -198,34 +198,108 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     [persistProducts],
   );
 
+  // Live-sync the customer-facing gallery with admin edits made from
+  // another tab or another device. Strategy:
+  //   1. Initial fetch on mount.
+  //   2. Refetch on tab refocus (`visibilitychange` -> "visible").
+  //   3. Background poll every 30s while the tab is visible.
+  //   4. Cross-tab `BroadcastChannel` so an admin POST in *this* browser
+  //      immediately tells the customer tab to refetch (no 30s wait).
+  const channelRef = useRef<BroadcastChannel | null>(null);
+  // AbortController tied to the most recent in-flight loadProducts call.
+  // Mutations (add/update/delete) abort it just before applying their
+  // optimistic update so that a poll/visibility/broadcast-triggered fetch
+  // started moments earlier can't overwrite the optimistic state with
+  // stale server data once it resolves.
+  const loadAbortRef = useRef<AbortController | null>(null);
+
+  const loadProducts = useCallback(async () => {
+    // Replace any earlier in-flight controller so we never have two
+    // concurrent loads racing each other.
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    try {
+      const response = await fetch(PRODUCTS_API, {
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Failed to load products");
+      const data = await response.json();
+      if (!Array.isArray(data.products) || controller.signal.aborted) return;
+      const next = sortProducts(data.products);
+      setProducts(next);
+      productsRef.current = next;
+      persistProducts(next);
+    } catch (err) {
+      if ((err as { name?: string }).name === "AbortError") return;
+      // Local development falls back to browser storage.
+    } finally {
+      if (loadAbortRef.current === controller) loadAbortRef.current = null;
+    }
+  }, [persistProducts]);
+
+  // Mutations call this immediately before their optimistic update so any
+  // already-in-flight load can't race them. After abort, loadAbortRef is
+  // null and the next scheduled load (poll / visibility / broadcast) will
+  // create a fresh controller.
+  const cancelInFlightLoad = useCallback(() => {
+    loadAbortRef.current?.abort();
+    loadAbortRef.current = null;
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    let isCancelled = false;
-
-    const loadProducts = async () => {
-      try {
-        const response = await fetch(PRODUCTS_API);
-        if (!response.ok) throw new Error("Failed to load products");
-
-        const data = await response.json();
-        if (!Array.isArray(data.products) || isCancelled) return;
-
-        const next = sortProducts(data.products);
-        setProducts(next);
-        productsRef.current = next;
-        persistProducts(next);
-      } catch {
-        // Local development falls back to browser storage.
-      }
-    };
-
     void loadProducts();
 
-    return () => {
-      isCancelled = true;
+    const POLL_MS = 30_000;
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadProducts();
     };
-  }, [persistProducts]);
+    const timer = window.setInterval(poll, POLL_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadProducts();
+    };
+    const onOnline = () => {
+      void loadProducts();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", onOnline);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel("pintaterra_products");
+      channelRef.current = channel;
+      channel.addEventListener("message", (event: MessageEvent) => {
+        if (event?.data?.type === "changed") void loadProducts();
+      });
+    }
+
+    return () => {
+      // Abort any in-flight load so it can't write stale data into
+      // localStorage / productsRef after unmount.
+      loadAbortRef.current?.abort();
+      loadAbortRef.current = null;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", onOnline);
+      if (channel) channel.close();
+      channelRef.current = null;
+    };
+  }, [loadProducts]);
+
+  // Tell other tabs (and our own next render cycle) that the products
+  // list changed. Called by add/update/delete after the server confirms.
+  const broadcastChange = useCallback(() => {
+    try {
+      channelRef.current?.postMessage({ type: "changed", at: Date.now() });
+    } catch {
+      /* channel may already be closed; safe to ignore */
+    }
+  }, []);
 
   const addProduct = useCallback(
     async (product: Omit<Product, "id" | "createdAt">) => {
@@ -235,6 +309,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date().toISOString(),
       };
 
+      cancelInFlightLoad();
       setAndPersistProducts((previous) => [nextProduct, ...previous]);
 
       const rollback = () =>
@@ -271,8 +346,9 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
             : "Could not save product",
         );
       }
+      broadcastChange();
     },
-    [setAndPersistProducts],
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
   const updateProduct = useCallback(
@@ -287,6 +363,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         createdAt: existing.createdAt,
       };
 
+      cancelInFlightLoad();
       setAndPersistProducts((previous) =>
         previous.map((product) => (product.id === id ? nextProduct : product)),
       );
@@ -325,8 +402,9 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
             : "Could not update product",
         );
       }
+      broadcastChange();
     },
-    [setAndPersistProducts],
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
   const deleteProduct = useCallback(
@@ -334,6 +412,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
       const removed = productsRef.current.find((product) => product.id === id);
       if (!removed) return;
 
+      cancelInFlightLoad();
       setAndPersistProducts((previous) =>
         previous.filter((product) => product.id !== id),
       );
@@ -374,8 +453,9 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
             : "Could not delete product",
         );
       }
+      broadcastChange();
     },
-    [setAndPersistProducts],
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
   return (
