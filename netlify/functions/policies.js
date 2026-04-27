@@ -414,8 +414,12 @@ export const handler = async (event) => {
         // NB: must match the casing used by SECURITY_HEADERS' "Cache-Control"
         // (which sets `no-store`) so the override actually replaces it
         // instead of leaving both keys in the response.
+        // max-age=0 keeps the browser from caching (so the admin's
+        // post-save refresh / "Refresh" button always hits the network),
+        // while s-maxage=300 lets the CDN serve cached copies to public
+        // visitors. stale-while-revalidate keeps it snappy under traffic.
         "Cache-Control":
-          "public, max-age=60, s-maxage=300, stale-while-revalidate=3600",
+          "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
       });
     }
 
