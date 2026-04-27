@@ -383,6 +383,45 @@ export const handler = async (event) => {
       return json(200, { ok: true });
     }
 
+    if (event.httpMethod === "POST" && action === "disconnect-google") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const limit = await consumeRateLimit(event, {
+        bucket: `user-disconnect-google:${user.id}`,
+        windowMs: 60 * 60_000,
+        max: 5,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+      const body = parseBody(event.body);
+      // Confirmation gate: client must send the literal string "CONFIRM" so a
+      // careless tap on the button alone can't nuke the account. The string
+      // is shown in the UI verbatim so the user retypes it consciously.
+      if (String(body.confirm || "") !== "CONFIRM") {
+        return json(400, { error: "Type CONFIRM to disconnect" });
+      }
+      if (user.provider !== "google") {
+        return json(400, { error: "Account is not linked to Google" });
+      }
+      const users = await readUsers(store);
+      const key = normalizeEmail(user.email);
+      const stored = users[key];
+      if (!stored) return json(404, { error: "User not found" });
+      // Google is the only sign-in method this app supports for OAuth users
+      // (no separate password to fall back on), so disconnecting Google
+      // removes the entire account record. The browser will be logged out
+      // immediately by the client.
+      delete users[key];
+      await writeUsers(store, users);
+      await appendAuditEvent(event, {
+        type: "user.disconnect-google",
+        outcome: "success",
+        subject: user.email,
+        detail: "Google account disconnected and user record deleted",
+        ...captureRequestMeta(event),
+      });
+      return json(200, { ok: true });
+    }
+
     if (event.httpMethod === "POST" && action === "addresses-add") {
       const user = await getCurrentUser(event, store);
       if (!user) return json(401, { error: "Not authenticated" });

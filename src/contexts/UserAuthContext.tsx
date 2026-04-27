@@ -56,6 +56,7 @@ interface UserAuthContextValue {
   updateAddress: (id: string, address: AddressInput) => Promise<void>;
   removeAddress: (id: string) => Promise<void>;
   setDefaultAddress: (id: string) => Promise<void>;
+  disconnectGoogle: (confirm: string) => Promise<void>;
 }
 
 const UserAuthContext = createContext<UserAuthContextValue | undefined>(
@@ -275,6 +276,21 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     [callAction, apply, token],
   );
 
+  const disconnectGoogle = useCallback(
+    async (confirm: string) => {
+      // Server enforces confirm === "CONFIRM". Once it succeeds the user
+      // record is deleted, so log out locally so any stale token stops
+      // bouncing 401s.
+      await callAction(
+        "disconnect-google",
+        { confirm },
+        "Could not disconnect Google",
+      );
+      apply(null, null);
+    },
+    [callAction, apply],
+  );
+
   const value = useMemo<UserAuthContextValue>(
     () => ({
       token,
@@ -290,6 +306,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       updateAddress,
       removeAddress,
       setDefaultAddress,
+      disconnectGoogle,
     }),
     [
       token,
@@ -305,6 +322,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       updateAddress,
       removeAddress,
       setDefaultAddress,
+      disconnectGoogle,
     ],
   );
 
