@@ -2,7 +2,8 @@ import { connectLambda, getStore } from "@netlify/blobs";
 import { isAuthenticated } from "../lib/admin-auth.js";
 
 const STORE_NAME = "newsletter";
-const LIST_KEY = "subscribers";
+const LIST_KEY = "subscribers"; // legacy: read-only fallback for old data
+const SUB_PREFIX = "sub:";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -23,9 +24,48 @@ const getNewsletterStore = (event) => {
   return getStore(STORE_NAME);
 };
 
-const readSubscribers = async (store) => {
+// Per-subscriber key. Email is already lowercased+trimmed before this is called,
+// and isValidEmail() guarantees a single "@" plus no whitespace, so the value is
+// safe to use as a Blobs key.
+const subKey = (email) => `${SUB_PREFIX}${email}`;
+
+const readSubscriberByEmail = async (store, email) => {
+  const direct = await store.get(subKey(email), { type: "json" });
+  if (direct && typeof direct === "object") return direct;
+  // Legacy: maybe it's still in the array-shaped blob.
   const list = await store.get(LIST_KEY, { type: "json" });
-  return Array.isArray(list) ? list : [];
+  if (Array.isArray(list)) {
+    return list.find((s) => s && s.email === email) || null;
+  }
+  return null;
+};
+
+const readAllSubscribers = async (store) => {
+  // Per-subscriber keys (new shape, atomic writes).
+  const seen = new Map();
+  let cursor;
+  do {
+    const page = await store.list({ prefix: SUB_PREFIX, cursor });
+    for (const item of page.blobs || []) {
+      const value = await store.get(item.key, { type: "json" });
+      if (value && typeof value === "object" && value.email) {
+        seen.set(value.email, value);
+      }
+    }
+    cursor = page.cursor;
+  } while (cursor);
+  // Legacy: merge in the array-shaped blob (older subscribers).
+  const list = await store.get(LIST_KEY, { type: "json" });
+  if (Array.isArray(list)) {
+    for (const value of list) {
+      if (value && value.email && !seen.has(value.email)) {
+        seen.set(value.email, value);
+      }
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) =>
+    String(b.subscribedAt || "").localeCompare(String(a.subscribedAt || "")),
+  );
 };
 
 const forwardToProvider = async (entry) => {
@@ -98,7 +138,7 @@ export const handler = async (event) => {
           body: JSON.stringify({ error: "Not authenticated" }),
         };
       }
-      const subs = await readSubscribers(store);
+      const subs = await readAllSubscribers(store);
       const provider =
         process.env.RESEND_API_KEY && process.env.RESEND_AUDIENCE_ID
           ? "resend"
@@ -132,8 +172,7 @@ export const handler = async (event) => {
         };
       }
 
-      const subs = await readSubscribers(store);
-      const existing = subs.find((s) => s.email === email);
+      const existing = await readSubscriberByEmail(store, email);
       if (existing) {
         // Don't leak PII (ip, userAgent, subscribedAt) to unauthenticated callers.
         return {
@@ -162,8 +201,9 @@ export const handler = async (event) => {
         forwardSkipped: forward.skipped || undefined,
       };
 
-      const next = [stored, ...subs];
-      await store.setJSON(LIST_KEY, next);
+      // Atomic per-subscriber write — concurrent signups can't overwrite
+      // each other because each touches a different blob key.
+      await store.setJSON(subKey(email), stored);
 
       return {
         statusCode: 200,
@@ -192,13 +232,21 @@ export const handler = async (event) => {
           body: JSON.stringify({ error: "email_required" }),
         };
       }
-      const subs = await readSubscribers(store);
-      const next = subs.filter((s) => s.email !== email);
-      await store.setJSON(LIST_KEY, next);
+      // Delete the per-subscriber blob (no-op if it doesn't exist).
+      await store.delete(subKey(email));
+      // Also scrub any legacy array-shaped blob so the entry doesn't reappear.
+      const legacy = await store.get(LIST_KEY, { type: "json" });
+      if (Array.isArray(legacy)) {
+        const next = legacy.filter((s) => s && s.email !== email);
+        if (next.length !== legacy.length) {
+          await store.setJSON(LIST_KEY, next);
+        }
+      }
+      const remaining = await readAllSubscribers(store);
       return {
         statusCode: 200,
         headers: jsonHeaders,
-        body: JSON.stringify({ ok: true, count: next.length }),
+        body: JSON.stringify({ ok: true, count: remaining.length }),
       };
     }
 

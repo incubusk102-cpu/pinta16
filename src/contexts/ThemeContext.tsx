@@ -32,6 +32,9 @@ const readSystem = (): "dark" | "light" => {
 const apply = (resolved: "dark" | "light") => {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.theme = resolved;
+  // Tailwind's `dark:` variant is configured as `&:is(.dark *)` in
+  // src/styles.css, which requires a `.dark` class on an ancestor.
+  document.documentElement.classList.toggle("dark", resolved === "dark");
   // Update theme-color meta so the browser chrome matches.
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
