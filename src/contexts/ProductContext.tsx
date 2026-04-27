@@ -206,21 +206,46 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
   //   4. Cross-tab `BroadcastChannel` so an admin POST in *this* browser
   //      immediately tells the customer tab to refetch (no 30s wait).
   const channelRef = useRef<BroadcastChannel | null>(null);
+  // AbortController tied to the most recent in-flight loadProducts call.
+  // Mutations (add/update/delete) abort it just before applying their
+  // optimistic update so that a poll/visibility/broadcast-triggered fetch
+  // started moments earlier can't overwrite the optimistic state with
+  // stale server data once it resolves.
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   const loadProducts = useCallback(async () => {
+    // Replace any earlier in-flight controller so we never have two
+    // concurrent loads racing each other.
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     try {
-      const response = await fetch(PRODUCTS_API);
+      const response = await fetch(PRODUCTS_API, {
+        signal: controller.signal,
+      });
       if (!response.ok) throw new Error("Failed to load products");
       const data = await response.json();
-      if (!Array.isArray(data.products)) return;
+      if (!Array.isArray(data.products) || controller.signal.aborted) return;
       const next = sortProducts(data.products);
       setProducts(next);
       productsRef.current = next;
       persistProducts(next);
-    } catch {
+    } catch (err) {
+      if ((err as { name?: string }).name === "AbortError") return;
       // Local development falls back to browser storage.
+    } finally {
+      if (loadAbortRef.current === controller) loadAbortRef.current = null;
     }
   }, [persistProducts]);
+
+  // Mutations call this immediately before their optimistic update so any
+  // already-in-flight load can't race them. After abort, loadAbortRef is
+  // null and the next scheduled load (poll / visibility / broadcast) will
+  // create a fresh controller.
+  const cancelInFlightLoad = useCallback(() => {
+    loadAbortRef.current?.abort();
+    loadAbortRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -280,6 +305,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date().toISOString(),
       };
 
+      cancelInFlightLoad();
       setAndPersistProducts((previous) => [nextProduct, ...previous]);
 
       const rollback = () =>
@@ -318,7 +344,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
       }
       broadcastChange();
     },
-    [setAndPersistProducts, broadcastChange],
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
   const updateProduct = useCallback(
@@ -333,6 +359,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         createdAt: existing.createdAt,
       };
 
+      cancelInFlightLoad();
       setAndPersistProducts((previous) =>
         previous.map((product) => (product.id === id ? nextProduct : product)),
       );
@@ -373,7 +400,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
       }
       broadcastChange();
     },
-    [setAndPersistProducts, broadcastChange],
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
   const deleteProduct = useCallback(
@@ -381,6 +408,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
       const removed = productsRef.current.find((product) => product.id === id);
       if (!removed) return;
 
+      cancelInFlightLoad();
       setAndPersistProducts((previous) =>
         previous.filter((product) => product.id !== id),
       );
@@ -423,7 +451,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
       }
       broadcastChange();
     },
-    [setAndPersistProducts, broadcastChange],
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
   return (
