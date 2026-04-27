@@ -71,7 +71,7 @@ export function StockListingsSection() {
       year: override.year || def.year,
       price: override.price ?? def.price,
       salePrice: override.salePrice ?? def.salePrice,
-      description: override.description || def.description,
+      description: override.description ?? def.description,
       category: override.category ?? def.category,
       dimensions: override.dimensions ?? def.dimensions,
       images,
