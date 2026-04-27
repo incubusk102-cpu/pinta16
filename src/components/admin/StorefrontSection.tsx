@@ -39,6 +39,13 @@ const formatPromoLine = (template: string, p: AdminPromo): string => {
     .trim();
 };
 
+type AdminAnnouncementAnimation =
+  | "fade"
+  | "marquee"
+  | "slide"
+  | "typewriter"
+  | "pulse";
+
 interface AdminConfig {
   announcement: {
     enabled: boolean;
@@ -52,6 +59,14 @@ interface AdminConfig {
     rotateSeconds: number;
     size: "compact" | "normal" | "large";
     bold: boolean;
+    animation: AdminAnnouncementAnimation;
+    marqueeSpeedSeconds: number;
+    marqueeDirection: "left" | "right";
+    gradientEnabled: boolean;
+    gradientFrom: string;
+    gradientTo: string;
+    iconPrefix: string;
+    dismissable: boolean;
   };
   freeShipping: {
     enabled: boolean;
@@ -74,6 +89,14 @@ const DEFAULTS: AdminConfig = {
     rotateSeconds: 5,
     size: "normal",
     bold: true,
+    animation: "fade",
+    marqueeSpeedSeconds: 18,
+    marqueeDirection: "left",
+    gradientEnabled: false,
+    gradientFrom: "#1f2937",
+    gradientTo: "#0ea5e9",
+    iconPrefix: "",
+    dismissable: false,
   },
   freeShipping: {
     enabled: true,
@@ -490,6 +513,205 @@ export function StorefrontSection() {
               />
             </div>
           )}
+
+          {/* Dynamic animation controls */}
+          <div className="pt-2 border-t border-border/40 space-y-3">
+            <div>
+              <Label htmlFor="ann-animation">Animation style</Label>
+              <select
+                id="ann-animation"
+                value={cfg.announcement.animation}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: {
+                      ...c.announcement,
+                      animation: e.target.value as AdminAnnouncementAnimation,
+                    },
+                  }))
+                }
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="fade">
+                  Fade (rotate messages with a soft fade)
+                </option>
+                <option value="marquee">
+                  Marquee (continuous horizontal scroll)
+                </option>
+                <option value="slide">
+                  Slide-in (each message slides in from the side)
+                </option>
+                <option value="typewriter">
+                  Typewriter (types each message letter-by-letter)
+                </option>
+                <option value="pulse">
+                  Pulse (gently breathes — emphasises a single message)
+                </option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Marquee &amp; pulse show every line at once. Fade, slide and
+                typewriter rotate using the seconds above.
+              </p>
+            </div>
+
+            {cfg.announcement.animation === "marquee" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="ann-marquee-speed">
+                    Scroll duration (seconds per loop)
+                  </Label>
+                  <Input
+                    id="ann-marquee-speed"
+                    type="number"
+                    min={3}
+                    max={120}
+                    value={cfg.announcement.marqueeSpeedSeconds}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        announcement: {
+                          ...c.announcement,
+                          marqueeSpeedSeconds: Math.min(
+                            120,
+                            Math.max(3, Number(e.target.value) || 18),
+                          ),
+                        },
+                      }))
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Lower = faster. 12–24s reads naturally.
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="ann-marquee-dir">Scroll direction</Label>
+                  <select
+                    id="ann-marquee-dir"
+                    value={cfg.announcement.marqueeDirection}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        announcement: {
+                          ...c.announcement,
+                          marqueeDirection:
+                            e.target.value === "right" ? "right" : "left",
+                        },
+                      }))
+                    }
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="left">Right → Left (most common)</option>
+                    <option value="right">Left → Right</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+              <div>
+                <p className="text-sm font-medium">Gradient background</p>
+                <p className="text-xs text-muted-foreground">
+                  Replaces the solid colour with a horizontal gradient.
+                </p>
+              </div>
+              <Switch
+                checked={cfg.announcement.gradientEnabled}
+                onCheckedChange={(v) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: { ...c.announcement, gradientEnabled: v },
+                  }))
+                }
+              />
+            </label>
+            {cfg.announcement.gradientEnabled && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="ann-grad-from">Gradient · from</Label>
+                  <Input
+                    id="ann-grad-from"
+                    type="color"
+                    value={cfg.announcement.gradientFrom}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        announcement: {
+                          ...c.announcement,
+                          gradientFrom: e.target.value,
+                        },
+                      }))
+                    }
+                    className="h-10 p-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ann-grad-to">Gradient · to</Label>
+                  <Input
+                    id="ann-grad-to"
+                    type="color"
+                    value={cfg.announcement.gradientTo}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        announcement: {
+                          ...c.announcement,
+                          gradientTo: e.target.value,
+                        },
+                      }))
+                    }
+                    className="h-10 p-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="ann-icon">
+                Emoji / icon prefix{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="ann-icon"
+                maxLength={8}
+                value={cfg.announcement.iconPrefix}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: {
+                      ...c.announcement,
+                      iconPrefix: e.target.value,
+                    },
+                  }))
+                }
+                placeholder="🎨   ✨   🚚"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Prepended to each message — great for drawing attention.
+              </p>
+            </div>
+
+            <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+              <div>
+                <p className="text-sm font-medium">Customer-dismissable</p>
+                <p className="text-xs text-muted-foreground">
+                  Adds a small × — the bar reappears automatically when you edit
+                  the message.
+                </p>
+              </div>
+              <Switch
+                checked={cfg.announcement.dismissable}
+                onCheckedChange={(v) =>
+                  setCfg((c) => ({
+                    ...c,
+                    announcement: { ...c.announcement, dismissable: v },
+                  }))
+                }
+              />
+            </label>
+          </div>
+
           <AnnouncementPreview cfg={cfg} />
           <div className="flex justify-end">
             <Button
@@ -841,47 +1063,140 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
       });
   }
 
+  const animation = cfg.announcement.animation;
+  const supportsRotation =
+    animation === "fade" || animation === "slide" || animation === "typewriter";
+  const actuallyRotating =
+    supportsRotation &&
+    cfg.announcement.rotateSeconds > 0 &&
+    messages.length > 1;
+
   const [previewIdx, setPreviewIdx] = useState(0);
   useEffect(() => {
     setPreviewIdx(0);
-  }, [messages.length]);
+  }, [messages.length, animation]);
   useEffect(() => {
-    if (cfg.announcement.rotateSeconds <= 0) return;
-    if (messages.length <= 1) return;
+    if (!actuallyRotating) return;
     const id = window.setInterval(() => {
       setPreviewIdx((i) => (i + 1) % messages.length);
     }, cfg.announcement.rotateSeconds * 1000);
     return () => window.clearInterval(id);
-  }, [cfg.announcement.rotateSeconds, messages.length]);
+  }, [actuallyRotating, cfg.announcement.rotateSeconds, messages.length]);
 
-  const rotate = cfg.announcement.rotateSeconds > 0 && messages.length > 1;
-  const text =
-    messages.length === 0
-      ? "Live preview — write a message above"
-      : rotate
-        ? messages[previewIdx]
-        : messages.join(" · ");
   const sizeCls = sizeClassMap[cfg.announcement.size] || sizeClassMap.normal;
   const weightCls = cfg.announcement.bold ? "font-semibold" : "font-medium";
+  const prefix = cfg.announcement.iconPrefix.trim();
+  const decorate = (t: string) => (prefix ? `${prefix} ${t}` : t);
+
+  const wrapperStyle: React.CSSProperties = {
+    color: cfg.announcement.textColor,
+    ...(cfg.announcement.gradientEnabled
+      ? {
+          backgroundImage: `linear-gradient(90deg, ${cfg.announcement.gradientFrom}, ${cfg.announcement.gradientTo})`,
+          backgroundColor: cfg.announcement.gradientFrom,
+        }
+      : { backgroundColor: cfg.announcement.backgroundColor }),
+  };
+
+  let body: React.ReactNode;
+  if (messages.length === 0) {
+    body = (
+      <span className={`${weightCls} tracking-wide`}>
+        Live preview — write a message above
+      </span>
+    );
+  } else if (animation === "marquee") {
+    const joined = messages.map(decorate).join("    ·    ");
+    const trackStyle: React.CSSProperties = {
+      ["--ann-duration" as string]: `${cfg.announcement.marqueeSpeedSeconds}s`,
+    };
+    body = (
+      <div className="announcement-marquee w-full">
+        <div
+          className={`announcement-marquee-track ${weightCls} tracking-wide`}
+          data-direction={cfg.announcement.marqueeDirection}
+          style={trackStyle}
+        >
+          <span>{joined}</span>
+          <span aria-hidden="true">{joined}</span>
+        </div>
+      </div>
+    );
+  } else if (animation === "pulse") {
+    body = (
+      <span className={`announcement-pulse ${weightCls} tracking-wide`}>
+        {messages.map(decorate).join(" · ")}
+      </span>
+    );
+  } else if (animation === "typewriter") {
+    const text = actuallyRotating
+      ? decorate(messages[previewIdx] ?? "")
+      : messages.map(decorate).join(" · ");
+    const dur = Math.max(
+      1.2,
+      Math.min(8, (cfg.announcement.rotateSeconds || 4) * 0.6),
+    );
+    const typeStyle: React.CSSProperties = {
+      ["--ann-type-duration" as string]: `${dur}s`,
+    };
+    body = (
+      <span
+        key={actuallyRotating ? `tw-${previewIdx}-${text}` : "tw-all"}
+        className={`announcement-typewriter ${weightCls} tracking-wide`}
+        style={typeStyle}
+      >
+        {text}
+      </span>
+    );
+  } else if (animation === "slide") {
+    const text = actuallyRotating
+      ? decorate(messages[previewIdx] ?? "")
+      : messages.map(decorate).join(" · ");
+    body = (
+      <span
+        key={actuallyRotating ? `sl-${previewIdx}` : "sl-all"}
+        className={`announcement-slide ${weightCls} tracking-wide`}
+      >
+        {text}
+      </span>
+    );
+  } else {
+    const text = actuallyRotating
+      ? decorate(messages[previewIdx] ?? "")
+      : messages.map(decorate).join(" · ");
+    body = (
+      <span
+        key={actuallyRotating ? `fd-${previewIdx}` : "fd-all"}
+        className={`announcement-fade ${weightCls} tracking-wide`}
+      >
+        {text}
+      </span>
+    );
+  }
+
+  const isMarquee = animation === "marquee";
 
   return (
     <div className="space-y-2">
       <div
-        className={`text-center px-4 rounded-md tracking-wide ${sizeCls} ${weightCls}`}
-        style={{
-          backgroundColor: cfg.announcement.backgroundColor,
-          color: cfg.announcement.textColor,
-        }}
+        className={`relative rounded-md tracking-wide ${
+          isMarquee ? "px-0" : "text-center px-4"
+        } ${sizeCls}`}
+        style={wrapperStyle}
       >
-        {text}
+        {isMarquee ? <div className="px-4">{body}</div> : body}
       </div>
-      {messages.length > 1 && (
-        <p className="text-xs text-muted-foreground">
-          {rotate
-            ? `Rotating ${messages.length} messages every ${cfg.announcement.rotateSeconds}s.`
-            : `Showing ${messages.length} messages joined together. Set rotate seconds > 0 to cycle them.`}
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        {messages.length === 0
+          ? "Live preview updates as you edit."
+          : isMarquee
+            ? `Marquee · ${messages.length} message${messages.length === 1 ? "" : "s"} scrolling continuously (hover to pause).`
+            : animation === "pulse"
+              ? `Pulse · ${messages.length} message${messages.length === 1 ? "" : "s"} joined and pulsing.`
+              : actuallyRotating
+                ? `Rotating ${messages.length} messages every ${cfg.announcement.rotateSeconds}s.`
+                : `Showing ${messages.length} message${messages.length === 1 ? "" : "s"} joined together. Set rotate seconds > 0 to cycle them.`}
+      </p>
     </div>
   );
 }
