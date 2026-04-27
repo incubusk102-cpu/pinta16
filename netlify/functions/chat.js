@@ -510,16 +510,20 @@ export const handler = async (event) => {
       const at = nowISO();
 
       let final = null;
+      // Distinguish a real state change from an idempotent no-op so that a
+      // double-clicked Close/Reopen button doesn't drift messageCount /
+      // lastFromAdmin / lastReadByAdminAt every press.
+      let didChange = false;
       for (let attempt = 0; attempt < 4; attempt++) {
         const { etag, data } = await readThreadWithMeta(store, id);
         if (!data) return json(404, { error: "Thread not found" });
         if (closing && data.closedAt) {
-          // Already closed \u2014 idempotent success.
+          // Already closed \u2014 idempotent success, no side effects.
           final = data;
           break;
         }
         if (!closing && !data.closedAt) {
-          // Already open \u2014 idempotent success.
+          // Already open \u2014 idempotent success, no side effects.
           final = data;
           break;
         }
@@ -542,6 +546,7 @@ export const handler = async (event) => {
           const wrote = await writeThread(store, id, next, etag);
           if (wrote && wrote.modified === false) continue;
           final = next;
+          didChange = true;
           break;
         } catch {
           return json(500, {
@@ -557,42 +562,44 @@ export const handler = async (event) => {
         });
       }
 
-      await upsertIndexEntry(store, (threads) => {
-        const idx = threads.findIndex((t) => t.id === id);
-        if (idx === -1) return threads;
-        const prior = threads[idx];
-        return [
-          ...threads.slice(0, idx),
-          sanitizeIndexEntry({
-            ...prior,
-            updatedAt: at,
-            closedAt: closing ? at : "",
-            messageCount: (prior.messageCount || 0) + 1,
-            lastFromAdmin: true,
-            lastReadByAdminAt: at,
-          }),
-          ...threads.slice(idx + 1),
-        ];
-      });
-
-      // Closing nukes the typing indicator so a stale "typing\u2026" hint can't
-      // hover under the closed banner.
-      try {
-        await store.delete(typingKey(id));
-      } catch {
-        // ignore
-      }
-
-      try {
-        await appendAuditEvent(event, {
-          type: "chat.message",
-          outcome: "success",
-          subject: final.email,
-          detail: `${closing ? "closed" : "reopened"} thread ${id}`,
-          ...captureRequestMeta(event),
+      if (didChange) {
+        await upsertIndexEntry(store, (threads) => {
+          const idx = threads.findIndex((t) => t.id === id);
+          if (idx === -1) return threads;
+          const prior = threads[idx];
+          return [
+            ...threads.slice(0, idx),
+            sanitizeIndexEntry({
+              ...prior,
+              updatedAt: at,
+              closedAt: closing ? at : "",
+              messageCount: (prior.messageCount || 0) + 1,
+              lastFromAdmin: true,
+              lastReadByAdminAt: at,
+            }),
+            ...threads.slice(idx + 1),
+          ];
         });
-      } catch {
-        // ignore
+
+        // Closing nukes the typing indicator so a stale "typing\u2026" hint
+        // can't hover under the closed banner.
+        try {
+          await store.delete(typingKey(id));
+        } catch {
+          // ignore
+        }
+
+        try {
+          await appendAuditEvent(event, {
+            type: "chat.message",
+            outcome: "success",
+            subject: final.email,
+            detail: `${closing ? "closed" : "reopened"} thread ${id}`,
+            ...captureRequestMeta(event),
+          });
+        } catch {
+          // ignore
+        }
       }
 
       return json(200, {
