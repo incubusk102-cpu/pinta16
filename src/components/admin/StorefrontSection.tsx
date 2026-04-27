@@ -1173,7 +1173,7 @@ export function StorefrontSection() {
             <Switch
               checked={cfg.chat.enabled}
               onCheckedChange={(v) =>
-                setCfg({ ...cfg, chat: { ...cfg.chat, enabled: v } })
+                setCfg((c) => ({ ...c, chat: { ...c.chat, enabled: v } }))
               }
             />
           </div>
@@ -1189,7 +1189,10 @@ export function StorefrontSection() {
             <Switch
               checked={cfg.chat.agentHandoff}
               onCheckedChange={(v) =>
-                setCfg({ ...cfg, chat: { ...cfg.chat, agentHandoff: v } })
+                setCfg((c) => ({
+                  ...c,
+                  chat: { ...c.chat, agentHandoff: v },
+                }))
               }
             />
           </div>
@@ -1200,10 +1203,10 @@ export function StorefrontSection() {
               value={cfg.chat.welcome}
               maxLength={200}
               onChange={(e) =>
-                setCfg({
-                  ...cfg,
-                  chat: { ...cfg.chat, welcome: e.target.value },
-                })
+                setCfg((c) => ({
+                  ...c,
+                  chat: { ...c.chat, welcome: e.target.value },
+                }))
               }
               placeholder={DEFAULT_CHAT_WELCOME}
             />
