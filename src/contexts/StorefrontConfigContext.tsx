@@ -8,6 +8,13 @@ import {
 } from "react";
 
 export type AnnouncementSize = "compact" | "normal" | "large";
+export type AnnouncementAnimation =
+  | "fade"
+  | "marquee"
+  | "slide"
+  | "typewriter"
+  | "pulse";
+export type AnnouncementMarqueeDirection = "left" | "right";
 
 export interface AnnouncementConfig {
   enabled: boolean;
@@ -21,6 +28,14 @@ export interface AnnouncementConfig {
   rotateSeconds: number;
   size: AnnouncementSize;
   bold: boolean;
+  animation: AnnouncementAnimation;
+  marqueeSpeedSeconds: number;
+  marqueeDirection: AnnouncementMarqueeDirection;
+  gradientEnabled: boolean;
+  gradientFrom: string;
+  gradientTo: string;
+  iconPrefix: string;
+  dismissable: boolean;
 }
 
 export interface FreeShippingConfig {
@@ -57,6 +72,14 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     rotateSeconds: 5,
     size: "normal",
     bold: true,
+    animation: "fade",
+    marqueeSpeedSeconds: 18,
+    marqueeDirection: "left",
+    gradientEnabled: false,
+    gradientFrom: "#1f2937",
+    gradientTo: "#0ea5e9",
+    iconPrefix: "",
+    dismissable: false,
   },
   freeShipping: {
     enabled: true,

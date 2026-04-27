@@ -39,6 +39,14 @@ const DEFAULT_CONFIG = {
     rotateSeconds: 5,
     size: "normal",
     bold: true,
+    animation: "fade",
+    marqueeSpeedSeconds: 18,
+    marqueeDirection: "left",
+    gradientEnabled: false,
+    gradientFrom: "#1f2937",
+    gradientTo: "#0ea5e9",
+    iconPrefix: "",
+    dismissable: false,
   },
   freeShipping: {
     enabled: true,
@@ -85,6 +93,26 @@ const sanitizeConfig = (raw) => {
         ? announcement.size
         : "normal",
       bold: announcement.bold !== false,
+      animation: ["fade", "marquee", "slide", "typewriter", "pulse"].includes(
+        announcement.animation,
+      )
+        ? announcement.animation
+        : "fade",
+      marqueeSpeedSeconds: Math.min(
+        120,
+        Math.max(3, Math.floor(Number(announcement.marqueeSpeedSeconds) || 18)),
+      ),
+      marqueeDirection:
+        announcement.marqueeDirection === "right" ? "right" : "left",
+      gradientEnabled: Boolean(announcement.gradientEnabled),
+      gradientFrom: String(
+        announcement.gradientFrom ?? DEFAULT_CONFIG.announcement.gradientFrom,
+      ).slice(0, 30),
+      gradientTo: String(
+        announcement.gradientTo ?? DEFAULT_CONFIG.announcement.gradientTo,
+      ).slice(0, 30),
+      iconPrefix: String(announcement.iconPrefix ?? "").slice(0, 8),
+      dismissable: Boolean(announcement.dismissable),
     },
     freeShipping: {
       enabled: freeShipping.enabled !== false,
