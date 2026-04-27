@@ -203,6 +203,47 @@ export const handler = async (event) => {
     const store = getOrdersStore(event);
 
     if (method === "GET") {
+      if (params.reviews === "all") {
+        // Admin-only: list every review across orders, including unpublished
+        // ones, with extra fields needed by the admin Reviews section.
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const orders = await readOrders(store);
+        const reviews = [];
+        for (const o of orders) {
+          const reviewsList = Array.isArray(o.reviews)
+            ? o.reviews
+            : o.review
+              ? [o.review]
+              : [];
+          if (reviewsList.length === 0) continue;
+          const fullName = (o.orderInfo?.fullName || "").trim();
+          for (const r of reviewsList) {
+            reviews.push({
+              orderId: o.id,
+              rating: r.rating,
+              text: r.text,
+              images: Array.isArray(r.images) ? r.images : [],
+              submittedAt: r.submittedAt,
+              publishedToHomepage: Boolean(r.publishedToHomepage),
+              customerName: fullName || "Customer",
+              customerEmail: o.orderInfo?.email || "",
+              customerCity: o.orderInfo?.city || "",
+              productId: r.productId || "",
+              productTitle: r.productTitle || "",
+              productImage: r.productImage || "",
+            });
+          }
+        }
+        reviews.sort(
+          (a, b) =>
+            new Date(b.submittedAt).getTime() -
+            new Date(a.submittedAt).getTime(),
+        );
+        return json(200, { reviews });
+      }
+
       if (params.reviews === "published") {
         const filterProductId =
           typeof params.productId === "string" && params.productId.trim()
@@ -970,6 +1011,134 @@ export const handler = async (event) => {
           review: legacyReview,
         };
         await store.setJSON(ORDERS_KEY, orders);
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "update-review") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, productId, rating, text } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const targetProductId =
+          typeof productId === "string" ? productId.trim() : "";
+        const patch = {};
+        if (rating !== undefined) {
+          const r = Math.floor(Number(rating));
+          if (!Number.isFinite(r) || r < 1 || r > 5) {
+            return json(400, { error: "Rating must be between 1 and 5" });
+          }
+          patch.rating = r;
+        }
+        if (text !== undefined) {
+          if (typeof text !== "string") {
+            return json(400, { error: "Invalid review text" });
+          }
+          if (text.trim().length === 0) {
+            return json(400, { error: "Review text cannot be empty" });
+          }
+          if (text.length > 5000) {
+            return json(400, { error: "Review text too long" });
+          }
+          patch.text = text.slice(0, 5000);
+        }
+        if (Object.keys(patch).length === 0) {
+          return json(400, { error: "Nothing to update" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const reviewsList = Array.isArray(existing.reviews)
+          ? existing.reviews
+          : existing.review
+            ? [existing.review]
+            : [];
+        if (reviewsList.length === 0) {
+          return json(400, { error: "Order has no review" });
+        }
+        let matched = false;
+        const updatedReviews = reviewsList.map((r) => {
+          if ((r.productId || "") === targetProductId) {
+            matched = true;
+            return { ...r, ...patch, editedAt: new Date().toISOString() };
+          }
+          return r;
+        });
+        if (!matched) {
+          return json(404, { error: "Review for that product not found" });
+        }
+        const legacyReview =
+          existing.review &&
+          (existing.review.productId || "") === targetProductId
+            ? {
+                ...existing.review,
+                ...patch,
+                editedAt: new Date().toISOString(),
+              }
+            : existing.review;
+        orders[idx] = {
+          ...existing,
+          reviews: updatedReviews,
+          review: legacyReview,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+        await appendAuditEvent(event, {
+          type: "order.review",
+          outcome: "edited",
+          subject: orderId,
+          detail: `Edited review for product ${targetProductId || "(legacy)"}`,
+        });
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "delete-review") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, productId } = body;
+        if (!orderId || typeof orderId !== "string") {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const targetProductId =
+          typeof productId === "string" ? productId.trim() : "";
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const reviewsList = Array.isArray(existing.reviews)
+          ? existing.reviews
+          : existing.review
+            ? [existing.review]
+            : [];
+        if (reviewsList.length === 0) {
+          return json(400, { error: "Order has no review" });
+        }
+        const remaining = reviewsList.filter(
+          (r) => (r.productId || "") !== targetProductId,
+        );
+        if (remaining.length === reviewsList.length) {
+          return json(404, { error: "Review for that product not found" });
+        }
+        const legacyReview =
+          existing.review &&
+          (existing.review.productId || "") === targetProductId
+            ? null
+            : existing.review;
+        orders[idx] = {
+          ...existing,
+          reviews: remaining,
+          review: legacyReview,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+        await appendAuditEvent(event, {
+          type: "order.review",
+          outcome: "deleted",
+          subject: orderId,
+          detail: `Deleted review for product ${targetProductId || "(legacy)"}`,
+        });
         return json(200, { order: orders[idx] });
       }
 

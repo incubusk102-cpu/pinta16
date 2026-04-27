@@ -39,6 +39,7 @@ import {
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
+import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
@@ -90,6 +91,7 @@ type AdminSection =
   | "products"
   | "orders"
   | "messages"
+  | "reviews"
   | "visitors"
   | "users"
   | "storefront"
@@ -104,6 +106,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   products: "Products",
   orders: "Orders",
   messages: "Messages",
+  reviews: "Reviews",
   visitors: "Visitors",
   users: "Users",
   storefront: "Storefront",
@@ -319,6 +322,13 @@ function AdminDashboard() {
               hint="Customer chat threads"
             />
             <NavLink
+              icon={<Star className="w-4 h-4" />}
+              label="Reviews"
+              active={section === "reviews"}
+              onClick={() => navigate("reviews")}
+              hint="Edit, delete, publish customer reviews"
+            />
+            <NavLink
               icon={<Activity className="w-4 h-4" />}
               label="Visitors"
               active={section === "visitors"}
@@ -393,6 +403,7 @@ function AdminDashboard() {
         {section === "products" && <ProductsSection />}
         {section === "orders" && <OrdersSection />}
         {section === "messages" && <MessagesSection />}
+        {section === "reviews" && <ReviewsSection />}
         {section === "visitors" && <VisitorsSection />}
         {section === "users" && <UsersSection />}
         {section === "storefront" && <StorefrontSection />}
