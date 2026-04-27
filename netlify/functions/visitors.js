@@ -1,4 +1,5 @@
 import { connectLambda, getStore } from "@netlify/blobs";
+import { getUserAgent } from "../lib/request-info.js";
 
 const STORE_NAME = "visitors";
 const HEARTBEATS_KEY = "heartbeats";
@@ -8,6 +9,13 @@ const LIVE_WINDOW_MS = 5 * 60 * 1000; // 5 min
 const HOUR_MS = 60 * 60 * 1000;
 const HISTORY_BUCKETS = 24;
 const MAX_HEARTBEATS = 5000;
+const MAX_SESSIONS_PER_BUCKET = 5000;
+
+// Conservative bot allow-list of substrings. Heartbeats from these
+// agents are accepted (so we don't break the request) but skipped
+// from counts so live / 24h numbers reflect real customers.
+const BOT_UA_PATTERN =
+  /bot|crawl|spider|slurp|facebookexternalhit|embedly|pinterest|whatsapp|telegrambot|discordbot|headlesschrome|phantomjs|puppeteer|playwright|lighthouse|axios|curl\/|wget\/|python-requests/i;
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -25,6 +33,8 @@ const parseBody = (body) => {
     return {};
   }
 };
+
+const isBotUserAgent = (ua) => Boolean(ua) && BOT_UA_PATTERN.test(ua);
 
 const getVisitorsStore = (event) => {
   connectLambda(event);
@@ -56,17 +66,23 @@ const recordHistoryHit = async (store, sessionId) => {
     entry = { bucket, sessions: [] };
     history.push(entry);
   }
-  if (!entry.sessions.includes(sessionId)) {
-    entry.sessions.push(sessionId);
-    await store.setJSON(HISTORY_KEY, history);
-  }
+  if (entry.sessions.includes(sessionId)) return;
+  // Cap per-bucket sessions so a flood of unique ids cannot grow the
+  // blob unboundedly. Once the cap is hit we stop adding new ids; the
+  // count for that hour saturates rather than rejecting the heartbeat.
+  if (entry.sessions.length >= MAX_SESSIONS_PER_BUCKET) return;
+  entry.sessions.push(sessionId);
+  await store.setJSON(HISTORY_KEY, history);
 };
 
 const buildHistoryResponse = (history) => {
   const trimmed = trimHistory(history);
   const byBucket = new Map();
-  for (const entry of trimmed)
+  const uniqueIds = new Set();
+  for (const entry of trimmed) {
     byBucket.set(entry.bucket, entry.sessions.length);
+    for (const id of entry.sessions) uniqueIds.add(id);
+  }
   const now = currentBucket();
   const buckets = [];
   for (let i = HISTORY_BUCKETS - 1; i >= 0; i -= 1) {
@@ -77,7 +93,7 @@ const buildHistoryResponse = (history) => {
       visitors: byBucket.get(bucket) ?? 0,
     });
   }
-  return buckets;
+  return { buckets, unique24h: uniqueIds.size };
 };
 
 export const handler = async (event) => {
@@ -92,6 +108,12 @@ export const handler = async (event) => {
         sessionId.length > 64
       ) {
         return json(400, { error: "sessionId required" });
+      }
+
+      // Drop bot heartbeats so live / 24h counts reflect real users.
+      // Return 200 so the client doesn't retry or surface an error.
+      if (isBotUserAgent(getUserAgent(event))) {
+        return json(200, { live: 0, skipped: "bot" });
       }
 
       const now = Date.now();
@@ -129,8 +151,10 @@ export const handler = async (event) => {
       const live = Object.values(heartbeats).filter(
         (ts) => now - ts <= LIVE_WINDOW_MS,
       ).length;
-      const history = buildHistoryResponse(await readHistory(store));
-      return json(200, { live, history });
+      const { buckets, unique24h } = buildHistoryResponse(
+        await readHistory(store),
+      );
+      return json(200, { live, history: buckets, unique24h });
     }
 
     return json(405, { error: "Method not allowed" });

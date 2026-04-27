@@ -13,6 +13,7 @@ interface HistoryBucket {
 interface VisitorsResponse {
   live: number;
   history: HistoryBucket[];
+  unique24h?: number;
 }
 
 export function VisitorsSection() {
@@ -48,8 +49,13 @@ export function VisitorsSection() {
     };
   }, []);
 
-  const totalLast24h = data
-    ? data.history.reduce((sum, bucket) => sum + bucket.visitors, 0)
+  // Prefer the server-side de-duplicated unique24h count when available
+  // so a single visitor that lingers across multiple hours is counted
+  // once. Fall back to the older summed-buckets approximation for
+  // compatibility with deployments that haven't shipped the new field.
+  const uniqueLast24h = data
+    ? (data.unique24h ??
+      data.history.reduce((sum, bucket) => sum + bucket.visitors, 0))
     : 0;
   const peak = data
     ? Math.max(0, ...data.history.map((bucket) => bucket.visitors))
@@ -67,8 +73,8 @@ export function VisitorsSection() {
         />
         <StatCard
           label="Last 24 hours"
-          value={totalLast24h}
-          hint="Unique visitors per hour, summed"
+          value={uniqueLast24h}
+          hint="Unique visitors in the last 24 hours"
           icon={<Users className="w-4 h-4" />}
         />
         <StatCard
