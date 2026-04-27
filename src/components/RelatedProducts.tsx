@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import {
+  getDiscountPercent,
   getEffectivePrice,
   type Product,
   useProducts,
@@ -69,32 +70,51 @@ export default function RelatedProducts({
     <section className="mt-16 border-t border-border/40 pt-10">
       <h2 className="font-display text-2xl text-foreground mb-6">{title}</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        {related.map((p) => (
-          <Link
-            key={p.id}
-            to="/product/$id"
-            params={{ id: p.id }}
-            className="group block"
-          >
-            <div className="aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
-              <img
-                src={p.image}
-                alt={p.title}
-                loading="lazy"
-                decoding="async"
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-            </div>
-            <p className="mt-2 font-display text-sm text-foreground line-clamp-1">
-              {p.title}
-            </p>
-            <p className="font-body text-xs tracking-[0.15em] uppercase text-muted-foreground">
-              ₱{getEffectivePrice(p).toLocaleString()}
-              {p.availability === "sold" && " · sold"}
-              {p.availability === "reserved" && " · reserved"}
-            </p>
-          </Link>
-        ))}
+        {related.map((p) => {
+          const discount = getDiscountPercent(p);
+          return (
+            <Link
+              key={p.id}
+              to="/product/$id"
+              params={{ id: p.id }}
+              className="group block"
+            >
+              <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
+                <img
+                  src={p.image}
+                  alt={p.title}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                {discount > 0 && p.availability === "available" && (
+                  <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
+                    {discount}% OFF
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 font-display text-sm text-foreground line-clamp-1">
+                {p.title}
+              </p>
+              <p className="font-body text-xs tracking-[0.15em] uppercase text-muted-foreground">
+                {discount > 0 ? (
+                  <>
+                    <span className="line-through mr-1 opacity-60">
+                      ₱{p.price.toLocaleString()}
+                    </span>
+                    <span className="text-foreground">
+                      ₱{getEffectivePrice(p).toLocaleString()}
+                    </span>
+                  </>
+                ) : (
+                  <>₱{getEffectivePrice(p).toLocaleString()}</>
+                )}
+                {p.availability === "sold" && " · sold"}
+                {p.availability === "reserved" && " · reserved"}
+              </p>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );

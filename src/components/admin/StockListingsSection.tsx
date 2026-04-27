@@ -662,6 +662,14 @@ export function StockListingsSection() {
                           ₱{display.price.toLocaleString()}
                         </span>
                         <span>₱{effectivePrice.toLocaleString()}</span>
+                        <span className="ml-1 text-xs text-red-500 font-semibold">
+                          {Math.round(
+                            ((display.price - display.salePrice) /
+                              display.price) *
+                              100,
+                          )}
+                          % OFF
+                        </span>
                       </>
                     ) : (
                       <>₱{display.price.toLocaleString()}</>

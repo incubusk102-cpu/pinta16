@@ -164,6 +164,12 @@ const Lightbox = ({
                   onClick={() => setZoomed(true)}
                 />
               </AnimatePresence>
+              {getDiscountPercent(art) > 0 &&
+                (art.availability ?? "available") === "available" && (
+                  <span className="absolute top-3 left-3 px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
+                    {getDiscountPercent(art)}% OFF
+                  </span>
+                )}
             </div>
             <div className="text-center md:text-left max-w-sm">
               <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
