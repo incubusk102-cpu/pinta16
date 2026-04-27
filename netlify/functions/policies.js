@@ -411,7 +411,10 @@ export const handler = async (event) => {
       // pile up function invocations against the daily quota. Stale-while-
       // revalidate keeps the page snappy while we refresh in the background.
       return json(200, data, {
-        "cache-control":
+        // NB: must match the casing used by SECURITY_HEADERS' "Cache-Control"
+        // (which sets `no-store`) so the override actually replaces it
+        // instead of leaving both keys in the response.
+        "Cache-Control":
           "public, max-age=60, s-maxage=300, stale-while-revalidate=3600",
       });
     }
