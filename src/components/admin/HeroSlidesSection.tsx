@@ -23,13 +23,16 @@ import {
   useHeroSlides,
 } from "@/contexts/HeroSlidesContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import { compressImage } from "@/lib/imageCompress";
 
 const MAX_SLIDES = 8;
-// Server caps the base64 data URL at 3.5 MB. Base64 expands raw bytes by ~33 %,
-// so we cap raw uploads at 2.5 MB (~3.3 MB base64) to leave headroom and keep
-// the client + server limits in sync.
-const MAX_IMAGE_RAW_BYTES = 2_500_000;
+// Original file ceiling before compression. Server still caps the encoded
+// data URL at 3.5 MB; we compress every upload to <= 1 MB so even a 30 MB
+// phone photo lands well under that.
+const MAX_IMAGE_RAW_BYTES = 30 * 1024 * 1024;
 const MAX_IMAGE_DATA_URL_BYTES = 3_500_000;
+const HERO_COMPRESS_BYTES = 1_000_000;
+const HERO_COMPRESS_DIM = 2400;
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -56,14 +59,6 @@ const blankSlide = (): AdminSlide => ({
   align: "center",
   enabled: true,
 });
-
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -156,20 +151,23 @@ export function HeroSlidesSection() {
     }
     if (file.size > MAX_IMAGE_RAW_BYTES) {
       toast.error(
-        `${file.name}: ${formatBytes(file.size)} — must be under 2.5 MB`,
+        `${file.name}: ${formatBytes(file.size)} — must be under 30 MB`,
       );
       return;
     }
     try {
-      const url = await fileToDataUrl(file);
+      const compressed = await compressImage(file, {
+        maxDim: HERO_COMPRESS_DIM,
+        maxBytes: HERO_COMPRESS_BYTES,
+      });
       // Defence in depth: data URL must also fit under the server's raw cap.
-      if (url.length > MAX_IMAGE_DATA_URL_BYTES) {
+      if (compressed.url.length > MAX_IMAGE_DATA_URL_BYTES) {
         toast.error(
-          `${file.name}: encoded size ${formatBytes(url.length)} too large`,
+          `${file.name}: encoded size ${formatBytes(compressed.url.length)} too large`,
         );
         return;
       }
-      updateSlide(id, { image: url });
+      updateSlide(id, { image: compressed.url });
     } catch {
       toast.error("Could not read image");
     }
