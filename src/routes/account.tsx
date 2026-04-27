@@ -4,7 +4,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import {
   useCart,
@@ -388,12 +388,14 @@ function WishlistSection() {
 function AccountPage() {
   const { user, token } = useUserAuth();
   const navigate = useNavigate();
-  const loggingOutRef = useRef(false);
   const hash = useRouterState({ select: (s) => s.location.hash });
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
-    if (loggingOutRef.current) return;
     if (token) return;
+    // If the user is no longer on /account (e.g. they just signed out from
+    // the nav drawer, which navigates to "/"), don't bounce them to /login.
+    if (pathname !== "/account") return;
     const storedToken =
       typeof window !== "undefined"
         ? localStorage.getItem("pintaterra_user_token")
@@ -401,7 +403,7 @@ function AccountPage() {
     if (!storedToken) {
       void navigate({ to: "/login" });
     }
-  }, [token, navigate]);
+  }, [token, navigate, pathname]);
 
   // Scroll to anchored section when arriving via /account#account-...
   useEffect(() => {
