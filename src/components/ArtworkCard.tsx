@@ -146,7 +146,9 @@ const ArtworkCard = ({
           rotateY,
           transformStyle: "preserve-3d",
         }}
-        className="relative overflow-hidden gallery-frame hover-lift will-change-transform motion-reduce:!transform-none"
+        whileHover={{ y: -4 }}
+        transition={{ y: { type: "spring", stiffness: 220, damping: 22 } }}
+        className="relative overflow-hidden gallery-frame hover-lift-shadow will-change-transform motion-reduce:!transform-none"
       >
         {/* Painterly glare overlay following pointer */}
         <motion.div

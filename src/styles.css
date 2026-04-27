@@ -213,6 +213,16 @@
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
   }
 
+  /* Box-shadow-only lift used on elements that already manage their own
+     transform (e.g. framer-motion 3D-tilt cards). Keeping `transform` out
+     of this class avoids fighting the inline transform set by motion. */
+  .hover-lift-shadow {
+    transition: box-shadow 0.6s var(--transition-smooth);
+  }
+  .hover-lift-shadow:hover {
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  }
+
   /* Slow drifting gradient on the hero wordmark for a subtle premium feel.
      Keeps the same start/mid/end stops as `.text-gradient-elegant` but
      animates background-position so the highlight slides across letters. */
