@@ -11,6 +11,8 @@ import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import OrderConfirmation from "@/components/OrderConfirmation";
 import RecentlyViewed from "@/components/RecentlyViewed";
+import SplashScreen from "@/components/SplashScreen";
+import Ornament from "@/components/decor/Ornament";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -42,14 +44,24 @@ function HeroOrFallback() {
 function Index() {
   return (
     <div className="smooth-scroll">
+      <SplashScreen />
       <GalleryNav />
       <HeroOrFallback />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />
       </section>
+      <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+        <Ornament label="The studio" />
+      </div>
       <AboutSection />
+      <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+        <Ornament label="Voices" />
+      </div>
       <ReviewsSection />
+      <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+        <Ornament label="Stay in touch" />
+      </div>
       <ContactSection />
       <CartDrawer />
       <CheckoutForm />

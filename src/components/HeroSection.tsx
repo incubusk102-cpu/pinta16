@@ -1,5 +1,6 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
+import BrushDivider from "@/components/decor/BrushDivider";
 
 const HeroSection = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -43,10 +44,11 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2, delay: 0.5 }}
-          className="font-display text-4xl sm:text-5xl md:text-7xl lg:text-8xl text-gradient-elegant mb-6 md:mb-8"
+          className="font-display text-4xl sm:text-5xl md:text-7xl lg:text-8xl text-gradient-elegant mb-2 md:mb-3"
         >
           Pintaterra
         </motion.h1>
+        <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
         <motion.p
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}

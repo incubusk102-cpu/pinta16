@@ -1,5 +1,11 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useRef, useState } from "react";
+import {
+  motion,
+  AnimatePresence,
+  useMotionValue,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import { ShoppingCart, Eye, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
@@ -53,6 +59,35 @@ const ArtworkCard = ({
   const { addToCart } = useCart();
   const wishlist = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  // Mouse-tracked 3D tilt: pointer x/y get mapped onto a small rotation
+  // around the X/Y axes, springed for a smooth follow. Disabled on touch
+  // / reduced-motion via the CSS media query on `motion-safe:` below.
+  const tiltX = useMotionValue(0);
+  const tiltY = useMotionValue(0);
+  const springConfig = { stiffness: 220, damping: 22, mass: 0.4 };
+  const rotateX = useSpring(
+    useTransform(tiltY, [-0.5, 0.5], [8, -8]),
+    springConfig,
+  );
+  const rotateY = useSpring(
+    useTransform(tiltX, [-0.5, 0.5], [-8, 8]),
+    springConfig,
+  );
+  const glareX = useTransform(tiltX, [-0.5, 0.5], ["0%", "100%"]);
+  const glareY = useTransform(tiltY, [-0.5, 0.5], ["0%", "100%"]);
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    tiltX.set((e.clientX - rect.left) / rect.width - 0.5);
+    tiltY.set((e.clientY - rect.top) / rect.height - 0.5);
+  };
+  const resetTilt = () => {
+    tiltX.set(0);
+    tiltY.set(0);
+  };
   const effectivePrice = getEffectivePrice({ price, salePrice });
   const discount = getDiscountPercent({ price, salePrice });
   const purchasable = isPurchasable(availability);
@@ -91,16 +126,38 @@ const ArtworkCard = ({
 
   return (
     <motion.div
+      ref={cardRef}
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.6, delay: index * 0.1 }}
-      className="break-inside-avoid group cursor-pointer"
+      className="break-inside-avoid group cursor-pointer [perspective:1200px]"
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        resetTilt();
+      }}
+      onPointerMove={handlePointerMove}
     >
-      <div className="relative overflow-hidden gallery-frame hover-lift">
+      <motion.div
+        style={{
+          rotateX,
+          rotateY,
+          transformStyle: "preserve-3d",
+        }}
+        className="relative overflow-hidden gallery-frame hover-lift will-change-transform motion-reduce:!transform-none"
+      >
+        {/* Painterly glare overlay following pointer */}
+        <motion.div
+          aria-hidden
+          style={{
+            background: `radial-gradient(380px circle at var(--gx) var(--gy), rgba(255,255,255,0.18), transparent 60%)`,
+            ["--gx" as string]: glareX,
+            ["--gy" as string]: glareY,
+          }}
+          className="pointer-events-none absolute inset-0 z-[4] mix-blend-overlay opacity-0 group-hover:opacity-100 transition-opacity duration-500 motion-reduce:hidden"
+        />
         <AnimatePresence mode="wait">
           <motion.img
             key={displayImage}
@@ -207,7 +264,7 @@ const ArtworkCard = ({
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 };
