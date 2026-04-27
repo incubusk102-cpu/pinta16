@@ -159,11 +159,11 @@ const GalleryNav = () => {
         >
           <span
             aria-hidden
-            className="relative inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-md bg-foreground text-background shadow-sm group-hover:shadow-md transition-shadow duration-500"
+            className="relative inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-md bg-foreground text-background shadow-sm group-hover:shadow-md transition-shadow duration-500"
           >
             <svg
               viewBox="0 0 40 40"
-              className="w-5 h-5 sm:w-6 sm:h-6"
+              className="w-6 h-6 sm:w-7 sm:h-7"
               xmlns="http://www.w3.org/2000/svg"
             >
               <text
@@ -179,9 +179,6 @@ const GalleryNav = () => {
               </text>
               <rect x="6" y="30" width="28" height="1.5" fill="currentColor" />
             </svg>
-          </span>
-          <span className="font-display text-base sm:text-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase text-gradient-elegant truncate">
-            Pintaterra
           </span>
         </button>
 
