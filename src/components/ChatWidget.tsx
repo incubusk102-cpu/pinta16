@@ -443,7 +443,9 @@ export default function ChatWidget() {
               <p className="text-[10px] text-muted-foreground">
                 {handle
                   ? "We usually reply within a few hours."
-                  : "Pick a topic or talk to a live agent."}
+                  : showAgentHandoff
+                    ? "Pick a topic or talk to a live agent."
+                    : "Pick a topic below."}
               </p>
             </div>
             <div className="flex items-center gap-1">

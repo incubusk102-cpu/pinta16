@@ -99,7 +99,7 @@ const sanitizeChatFaqs = (raw) => {
       .trim()
       .slice(0, 40);
     if (!id) id = slugifyFaqId(question);
-    if (seen.has(id)) id = `${id}-${out.length}`;
+    while (seen.has(id)) id = `${id}-${out.length}`;
     seen.add(id);
     out.push({ id, question, answer });
     if (out.length >= CHAT_FAQ_MAX) break;
@@ -155,6 +155,10 @@ const sanitizeConfig = (raw) => {
       : {};
   const promoCodes = Array.isArray(data.promoCodes) ? data.promoCodes : [];
   const chatRaw = data.chat && typeof data.chat === "object" ? data.chat : {};
+  // When the admin explicitly sets an empty `faqs` array, respect it rather
+  // than re-seeding defaults. Only fall back to defaults when the field was
+  // never provided at all (first-time setup).
+  const faqsExplicit = Array.isArray(chatRaw.faqs);
   const sanitizedFaqs = sanitizeChatFaqs(chatRaw.faqs);
 
   return {
@@ -218,7 +222,7 @@ const sanitizeConfig = (raw) => {
         : DEFAULT_CHAT_WELCOME
       ).slice(0, CHAT_WELCOME_MAX),
       agentHandoff: chatRaw.agentHandoff !== false,
-      faqs: sanitizedFaqs.length > 0 ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
+      faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
     },
     promoCodes: promoCodes
       .map((p) => {

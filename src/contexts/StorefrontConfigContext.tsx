@@ -137,6 +137,9 @@ export const StorefrontConfigProvider = ({
           data.config.chat && typeof data.config.chat === "object"
             ? data.config.chat
             : {};
+        // Respect an explicitly-empty FAQ array; only re-seed defaults when
+        // the server didn't return a `faqs` field at all.
+        const faqsExplicit = Array.isArray(rawChat.faqs);
         const sanitizedFaqs = sanitizeChatFaqs(rawChat.faqs);
         setConfig({
           announcement: {
@@ -157,7 +160,7 @@ export const StorefrontConfigProvider = ({
                 ? rawChat.welcome
                 : DEFAULT_CHAT_WELCOME,
             agentHandoff: rawChat.agentHandoff !== false,
-            faqs: sanitizedFaqs.length > 0 ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
+            faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
           },
         });
       }

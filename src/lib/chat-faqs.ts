@@ -77,7 +77,7 @@ export const sanitizeChatFaqs = (raw: unknown): ChatFaqItem[] => {
       .trim()
       .slice(0, 40);
     if (!id) id = slugifyFaqId(question);
-    if (seen.has(id)) id = `${id}-${out.length}`;
+    while (seen.has(id)) id = `${id}-${out.length}`;
     seen.add(id);
     out.push({ id, question, answer });
     if (out.length >= CHAT_FAQ_MAX) break;
