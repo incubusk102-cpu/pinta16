@@ -88,6 +88,7 @@ import {
 } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 import { COURIERS, buildTrackingUrl } from "@/lib/shipment";
+import { linkifyMessage } from "@/lib/chat-format";
 type AdminSection =
   | "dashboard"
   | "products"
@@ -2919,7 +2920,7 @@ function MessagesSection() {
                           : "bg-muted text-foreground"
                       }`}
                     >
-                      {m.body}
+                      {linkifyMessage(m.body)}
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
                       {m.from === "admin" ? "You" : activeThread.name} ·{" "}

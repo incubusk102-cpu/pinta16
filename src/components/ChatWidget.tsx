@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   HelpCircle,
   MessageSquare,
   Send,
@@ -15,6 +17,7 @@ import { toast } from "sonner";
 import { useRouterState } from "@tanstack/react-router";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import type { ChatFaqItem } from "@/lib/chat-faqs";
+import { formatRelativeTime, linkifyMessage } from "@/lib/chat-format";
 
 interface ChatMessage {
   at: string;
@@ -31,8 +34,10 @@ interface ChatThread {
 }
 
 const STORAGE_KEY = "pintaterra_chat_thread_v1";
+const SOUND_PREF_KEY = "pintaterra_chat_sound_v1";
 const POLL_INTERVAL_MS = 5000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MSG_MAX = 2000;
 
 interface PersistedHandle {
   id: string;
@@ -73,16 +78,49 @@ const writePersistedHandle = (handle: PersistedHandle | null) => {
   }
 };
 
-const formatTime = (iso: string) => {
+const readSoundPref = (): boolean => {
+  if (typeof window === "undefined") return false;
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      month: "short",
-      day: "numeric",
-    });
+    return window.localStorage.getItem(SOUND_PREF_KEY) === "1";
   } catch {
-    return "";
+    return false;
+  }
+};
+
+const writeSoundPref = (on: boolean) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SOUND_PREF_KEY, on ? "1" : "0");
+  } catch {
+    // ignore
+  }
+};
+
+// Short, polite "ding" encoded as a WebAudio oscillator so we don't need to
+// ship a binary asset just for a 200ms sound.
+const playNotificationDing = () => {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.18);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.24);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+    osc.onended = () => void ctx.close().catch(() => {});
+  } catch {
+    // ignore
   }
 };
 
@@ -109,7 +147,10 @@ export default function ChatWidget() {
   const [view, setView] = useState<UnstartedView>("faq-list");
   const [activeFaqId, setActiveFaqId] = useState<string | null>(null);
   const [faqPanelOpen, setFaqPanelOpen] = useState(false);
+  const [soundOn, setSoundOn] = useState<boolean>(() => readSoundPref());
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
   const lastSeenIndexRef = useRef<number>(-1);
+  const lastAdminAtRef = useRef<string>("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -193,6 +234,59 @@ export default function ChatWidget() {
     if (!open || !scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [open, thread?.messages.length]);
+
+  // Ding on a brand-new admin reply. We track the timestamp of the latest
+  // admin message in a ref; if it advances and sound is on, play a chime.
+  // We also skip the first render's sound so a returning visitor doesn't get
+  // startled by a ding for a reply they already saw.
+  useEffect(() => {
+    if (!thread) {
+      lastAdminAtRef.current = "";
+      return;
+    }
+    let latestAdminAt = "";
+    for (const m of thread.messages) {
+      if (m.from === "admin" && m.at > latestAdminAt) latestAdminAt = m.at;
+    }
+    const prior = lastAdminAtRef.current;
+    lastAdminAtRef.current = latestAdminAt;
+    if (!prior) return; // first load — don't ding for history
+    if (latestAdminAt && latestAdminAt > prior && soundOn) {
+      playNotificationDing();
+    }
+  }, [thread, soundOn]);
+
+  // Refresh relative timestamps every 30 seconds while the widget is open.
+  useEffect(() => {
+    if (!open) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, [open]);
+
+  const toggleSound = () => {
+    setSoundOn((prev) => {
+      const next = !prev;
+      writeSoundPref(next);
+      if (next) {
+        // Briefly play so the user can hear what they just enabled.
+        playNotificationDing();
+      }
+      return next;
+    });
+  };
+
+  const endConversation = () => {
+    writePersistedHandle(null);
+    setHandle(null);
+    setThread(null);
+    setView("faq-list");
+    setActiveFaqId(null);
+    setDraft("");
+    setName("");
+    setEmail("");
+    lastAdminAtRef.current = "";
+    toast.success("Conversation ended. Start a new one anytime.");
+  };
 
   const messages = thread?.messages ?? [];
   const canSend = useMemo(
@@ -449,6 +543,28 @@ export default function ChatWidget() {
               </p>
             </div>
             <div className="flex items-center gap-1">
+              {handle && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleSound}
+                  aria-label={
+                    soundOn ? "Mute reply sound" : "Unmute reply sound"
+                  }
+                  title={
+                    soundOn
+                      ? "Reply sound is on — click to mute"
+                      : "Reply sound is off — click to enable"
+                  }
+                  className={soundOn ? "" : "text-muted-foreground"}
+                >
+                  {soundOn ? (
+                    <Bell className="h-4 w-4" />
+                  ) : (
+                    <BellOff className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
               {handle && faqs.length > 0 && (
                 <Button
                   variant="ghost"
@@ -526,37 +642,63 @@ export default function ChatWidget() {
                             : "bg-muted text-foreground"
                         }`}
                       >
-                        {m.body}
+                        {linkifyMessage(m.body)}
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
-                        {formatTime(m.at)}
+                      <p
+                        className="text-[10px] text-muted-foreground mt-0.5 px-1"
+                        title={new Date(m.at).toLocaleString()}
+                      >
+                        {formatRelativeTime(m.at, nowTick)}
                       </p>
                     </div>
                   ))
                 )}
               </div>
-              <div className="border-t border-border/60 px-3 py-2 flex items-end gap-2">
-                <Textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (canSend) void sendMessage();
-                    }
-                  }}
-                  placeholder="Type a message…"
-                  className="resize-none min-h-[40px] max-h-[120px] text-sm"
-                  maxLength={2000}
-                />
-                <Button
-                  size="icon"
-                  onClick={() => void sendMessage()}
-                  disabled={!canSend}
-                  aria-label="Send"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+              <div className="border-t border-border/60 px-3 py-2 space-y-1.5">
+                <div className="flex items-end gap-2">
+                  <Textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (canSend) void sendMessage();
+                      }
+                    }}
+                    placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+                    className="resize-none min-h-[40px] max-h-[120px] text-sm"
+                    maxLength={MSG_MAX}
+                  />
+                  <Button
+                    size="icon"
+                    onClick={() => void sendMessage()}
+                    disabled={!canSend}
+                    aria-label="Send"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <button
+                    type="button"
+                    onClick={endConversation}
+                    className="text-[10px] text-muted-foreground hover:text-destructive hover:underline"
+                    title="End this conversation and start a fresh one"
+                  >
+                    End conversation
+                  </button>
+                  {draft.length > MSG_MAX - 200 && (
+                    <span
+                      className={`text-[10px] tabular-nums ${
+                        draft.length >= MSG_MAX
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {draft.length} / {MSG_MAX}
+                    </span>
+                  )}
+                </div>
               </div>
             </>
           )}
