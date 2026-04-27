@@ -1,12 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
-import { useUserAuth } from "@/contexts/UserAuthContext";
+import { useUserAuth, type PublicUser } from "@/contexts/UserAuthContext";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ArrowLeft } from "lucide-react";
 
 const GOOGLE_CLIENT_ID =
   "899774942474-ogttcvtsmd4ffhnn6avadqhjs8m3i2qj.apps.googleusercontent.com";
+
+const GOOGLE_CALLBACK_PATH = "/api/google-callback";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -27,11 +29,24 @@ declare global {
   }
 }
 
+const decodeBase64Url = (value: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padding =
+      padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
+    return atob(padded + padding);
+  } catch {
+    return null;
+  }
+};
+
 function LoginPage() {
-  const { googleLogin, loading, token } = useUserAuth();
+  const { googleLogin, applySession, loading, token } = useUserAuth();
   const navigate = useNavigate();
   const btnRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const consumedRedirect = useRef(false);
 
   const handleCredential = useCallback(
     async (response: { credential: string }) => {
@@ -47,6 +62,56 @@ function LoginPage() {
     },
     [googleLogin, navigate],
   );
+
+  // Handle server-side redirect flow (ux_mode: "redirect"):
+  // google-callback.js sends us back with #auth=<base64url JSON> on success,
+  // or ?error=<message> on failure.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (consumedRedirect.current) return;
+
+    const search = new URLSearchParams(window.location.search);
+    const err = search.get("error");
+    if (err) {
+      consumedRedirect.current = true;
+      toast.error(err);
+      const clean = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", clean);
+      return;
+    }
+
+    const hash = window.location.hash.startsWith("#")
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    if (!hash) return;
+    const hashParams = new URLSearchParams(hash);
+    const authValue = hashParams.get("auth");
+    if (!authValue) return;
+
+    consumedRedirect.current = true;
+    const decoded = decodeBase64Url(authValue);
+    window.history.replaceState(null, "", window.location.pathname);
+
+    if (!decoded) {
+      toast.error("Could not read Google sign-in response");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(decoded) as {
+        token?: string;
+        user?: PublicUser;
+      };
+      if (!parsed.token || !parsed.user) {
+        toast.error("Incomplete sign-in response");
+        return;
+      }
+      applySession(parsed.token, parsed.user);
+      toast.success("Welcome to Pintaterra");
+      void navigate({ to: "/", hash: "gallery" });
+    } catch {
+      toast.error("Could not read Google sign-in response");
+    }
+  }, [applySession, navigate]);
 
   useEffect(() => {
     if (token) {
@@ -78,7 +143,11 @@ function LoginPage() {
       g.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: window.handleGoogleCredential,
-        ux_mode: "popup",
+        // Use the server-side redirect flow so the sign-in works in browsers
+        // that block the popup's postMessage (Brave, Safari ITP, Chrome with
+        // 3rd-party cookies disabled, etc.).
+        ux_mode: "redirect",
+        login_uri: `${window.location.origin}${GOOGLE_CALLBACK_PATH}`,
         itp_support: true,
         use_fedcm_for_button: true,
         use_fedcm_for_prompt: true,
