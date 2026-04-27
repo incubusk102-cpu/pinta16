@@ -1,4 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import {
@@ -10,11 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import GalleryNav from "@/components/GalleryNav";
 import {
-  ArrowLeft,
   Bell,
   Heart,
-  LogOut,
   Mail,
   Package,
   Search,
@@ -382,9 +386,10 @@ function WishlistSection() {
 }
 
 function AccountPage() {
-  const { user, token, logout } = useUserAuth();
+  const { user, token } = useUserAuth();
   const navigate = useNavigate();
   const loggingOutRef = useRef(false);
+  const hash = useRouterState({ select: (s) => s.location.hash });
 
   useEffect(() => {
     if (loggingOutRef.current) return;
@@ -398,33 +403,26 @@ function AccountPage() {
     }
   }, [token, navigate]);
 
-  if (!user || !token) return null;
+  // Scroll to anchored section when arriving via /account#account-...
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.replace(/^#/, "");
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (el) {
+      window.requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [hash]);
 
-  const handleLogout = () => {
-    loggingOutRef.current = true;
-    logout();
-    toast.success("Signed out");
-    void navigate({ to: "/" });
-  };
+  if (!user || !token) return null;
 
   return (
     <div className="min-h-screen bg-background">
       <Toaster richColors position="top-right" />
-      <header className="border-b border-border/50 bg-card/30 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to site
-          </Link>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="w-3 h-3 mr-1" />
-            Sign out
-          </Button>
-        </div>
-      </header>
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12 space-y-8">
+      <GalleryNav />
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-28 md:pt-32 pb-16 space-y-8 scroll-pt-28">
         <div>
           <h1 className="font-display text-3xl">My account</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -432,15 +430,23 @@ function AccountPage() {
           </p>
         </div>
 
-        <ProfileEditor />
+        <div id="account-profile" className="scroll-mt-28">
+          <ProfileEditor />
+        </div>
 
-        <MyOrders />
+        <div id="account-orders" className="scroll-mt-28">
+          <MyOrders />
+        </div>
 
         <OrderTracker />
 
-        <AddressBook />
+        <div id="account-addresses" className="scroll-mt-28">
+          <AddressBook />
+        </div>
 
-        <WishlistSection />
+        <div id="account-wishlist" className="scroll-mt-28">
+          <WishlistSection />
+        </div>
 
         <div className="bg-card/40 border border-border/60 rounded-xl p-5">
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
