@@ -47,6 +47,7 @@ interface UserAuthContextValue {
   user: PublicUser | null;
   loading: boolean;
   googleLogin: (credential: string) => Promise<void>;
+  applySession: (token: string, user: PublicUser) => void;
   logout: () => void;
   refresh: () => Promise<void>;
   updateProfile: (patch: { name?: string; picture?: string }) => Promise<void>;
@@ -169,6 +170,13 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     apply(null, null);
   }, [apply]);
 
+  const applySession = useCallback(
+    (nextToken: string, nextUser: PublicUser) => {
+      apply(nextToken, nextUser);
+    },
+    [apply],
+  );
+
   const callAction = useCallback(
     async (
       action: string,
@@ -273,6 +281,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       user,
       loading,
       googleLogin,
+      applySession,
       logout,
       refresh,
       updateProfile,
@@ -287,6 +296,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       user,
       loading,
       googleLogin,
+      applySession,
       logout,
       refresh,
       updateProfile,
