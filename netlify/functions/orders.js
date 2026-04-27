@@ -1325,6 +1325,14 @@ export const handler = async (event) => {
         }
         if (updated > 0) {
           await store.setJSON(ORDERS_KEY, orders);
+          await appendAuditEvent(event, {
+            type: "order.review",
+            outcome: publishedToHomepage
+              ? "bulk-published"
+              : "bulk-unpublished",
+            subject: `${updated} review(s)`,
+            detail: `Bulk ${publishedToHomepage ? "published" : "unpublished"} ${updated} review(s)`,
+          });
         }
         return json(200, { ok: true, updated });
       }
