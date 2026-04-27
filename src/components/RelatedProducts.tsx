@@ -13,7 +13,9 @@ interface Props {
   title?: string;
 }
 
-const score = (a: Product, b: Product): number => {
+type ScoreInput = Pick<Product, "category" | "medium" | "year">;
+
+const score = (a: ScoreInput, b: ScoreInput): number => {
   let s = 0;
   if (a.category && b.category && a.category === b.category) s += 4;
   if (a.medium && b.medium && a.medium === b.medium) s += 2;
