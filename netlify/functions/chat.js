@@ -5,10 +5,12 @@
 // Storage shape (Netlify Blobs `chat-threads/index`):
 //   { threads: [{ id, name, email, createdAt, updatedAt, lastFromAdmin,
 //                 lastReadByAdminAt, customerLastMessageAt, ip, browser,
-//                 os, device, messageCount }] }
+//                 os, device, messageCount, closedAt }] }
 // Per-thread blob (`chat-threads/<id>`):
-//   { id, name, email, createdAt, messages: [{ at, from: 'customer'|'admin',
-//                                              body }] }
+//   { id, name, email, createdAt, closedAt?, closedBy?,
+//     messages: [{ at, from: 'customer'|'admin'|'system', body }] }
+// Per-thread typing-indicator blob (`chat-threads/typing__<id>`):
+//   { at, by: 'admin' }   // small, no CAS — latest write wins
 //
 // Public POSTs are rate-limited per IP. Admin reads/writes require a session
 // token. Audit log gets `chat.message` events.
@@ -73,6 +75,7 @@ const sanitizeIndexEntry = (entry) => ({
   browser: trimString(entry.browser, 60),
   os: trimString(entry.os, 40),
   device: trimString(entry.device, 30),
+  closedAt: entry.closedAt ? String(entry.closedAt) : "",
 });
 
 const readIndexWithMeta = async (store) => {
@@ -126,6 +129,36 @@ const generateThreadId = () => {
   const bytes = new Uint8Array(18);
   globalThis.crypto.getRandomValues(bytes);
   return Buffer.from(bytes).toString("base64url");
+};
+
+// Typing-indicator blob is intentionally tiny and writes are not CAS-guarded:
+// "latest write wins" is fine for a UI hint, and CAS retries on every keypress
+// would be wasteful. The blob is read whenever the customer fetches the thread.
+const TYPING_TTL_MS = 6000;
+const typingKey = (id) => `typing__${id}`;
+
+const readAdminTyping = async (store, id) => {
+  if (!TOKEN_PATTERN.test(id)) return "";
+  try {
+    const data = await store.get(typingKey(id), { type: "json" });
+    if (!data || typeof data !== "object" || data.by !== "admin") return "";
+    const at = String(data.at || "");
+    if (!at) return "";
+    const t = Date.parse(at);
+    if (Number.isNaN(t)) return "";
+    if (Date.now() - t > TYPING_TTL_MS) return "";
+    return at;
+  } catch {
+    return "";
+  }
+};
+
+const writeAdminTyping = async (store, id) => {
+  try {
+    await store.setJSON(typingKey(id), { at: nowISO(), by: "admin" });
+  } catch {
+    // ignore
+  }
 };
 
 const upsertIndexEntry = async (store, entryUpdater) => {
@@ -184,6 +217,7 @@ export const handler = async (event) => {
           return json(400, { error: "Bad thread id" });
         const thread = await readThread(store, id);
         if (!thread) return json(404, { error: "Thread not found" });
+        const adminTypingAt = await readAdminTyping(store, id);
         return json(200, {
           thread: {
             id: thread.id,
@@ -191,6 +225,9 @@ export const handler = async (event) => {
             email: thread.email,
             createdAt: thread.createdAt,
             messages: thread.messages,
+            closedAt: thread.closedAt || "",
+            closedBy: thread.closedBy || "",
+            adminTypingAt,
           },
         });
       }
@@ -312,6 +349,16 @@ export const handler = async (event) => {
       const message = trimString(body.message, MAX_BODY_CHARS);
       if (message.length < 1) return json(400, { error: "Message required" });
 
+      // Reject sends on closed threads. The widget hides the composer when
+      // closedAt is set, but a stale tab could still POST after the admin
+      // closed the thread \u2014 fail loudly so the customer is forced to refresh
+      // and see the "Conversation closed" banner.
+      const existing = await readThread(store, id);
+      if (!existing) return json(404, { error: "Thread not found" });
+      if (existing.closedAt) {
+        return json(409, { error: "Conversation closed" });
+      }
+
       const at = nowISO();
       const updated = await appendMessage(store, id, {
         at,
@@ -347,6 +394,7 @@ export const handler = async (event) => {
       } catch {
         // ignore
       }
+      const adminTypingAt = await readAdminTyping(store, id);
       return json(200, {
         thread: {
           id,
@@ -354,6 +402,9 @@ export const handler = async (event) => {
           email: updated.email,
           createdAt: updated.createdAt,
           messages: updated.messages,
+          closedAt: updated.closedAt || "",
+          closedBy: updated.closedBy || "",
+          adminTypingAt,
         },
       });
     }
@@ -366,6 +417,14 @@ export const handler = async (event) => {
       if (!TOKEN_PATTERN.test(id)) return json(400, { error: "Bad thread id" });
       const message = trimString(body.message, MAX_BODY_CHARS);
       if (message.length < 1) return json(400, { error: "Message required" });
+
+      const existing = await readThread(store, id);
+      if (!existing) return json(404, { error: "Thread not found" });
+      if (existing.closedAt) {
+        return json(409, {
+          error: "Conversation closed \u2014 reopen to reply",
+        });
+      }
 
       const at = nowISO();
       const updated = await appendMessage(store, id, {
@@ -391,6 +450,13 @@ export const handler = async (event) => {
           ...threads.slice(idx + 1),
         ];
       });
+      // Sending clears the typing indicator so the customer doesn't see a
+      // ghost "Support is typing\u2026" right after the reply lands.
+      try {
+        await store.delete(typingKey(id));
+      } catch {
+        // ignore
+      }
       try {
         await appendAuditEvent(event, {
           type: "chat.message",
@@ -409,6 +475,135 @@ export const handler = async (event) => {
           email: updated.email,
           createdAt: updated.createdAt,
           messages: updated.messages,
+          closedAt: updated.closedAt || "",
+          closedBy: updated.closedBy || "",
+        },
+      });
+    }
+
+    if (action === "admin-typing") {
+      if (!(await isAuthenticated(event))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      const id = String(body.id || "");
+      if (!TOKEN_PATTERN.test(id)) return json(400, { error: "Bad thread id" });
+      // Confirm the thread exists so we don't sprinkle typing blobs for
+      // arbitrary ids.
+      const existing = await readThread(store, id);
+      if (!existing) return json(404, { error: "Thread not found" });
+      if (existing.closedAt) {
+        // Don't leak a typing indicator on a closed thread.
+        return json(200, { ok: true, suppressed: true });
+      }
+      await writeAdminTyping(store, id);
+      return json(200, { ok: true });
+    }
+
+    if (action === "admin-close" || action === "admin-reopen") {
+      if (!(await isAuthenticated(event))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      const id = String(body.id || "");
+      if (!TOKEN_PATTERN.test(id)) return json(400, { error: "Bad thread id" });
+
+      const closing = action === "admin-close";
+      const at = nowISO();
+
+      let final = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const { etag, data } = await readThreadWithMeta(store, id);
+        if (!data) return json(404, { error: "Thread not found" });
+        if (closing && data.closedAt) {
+          // Already closed \u2014 idempotent success.
+          final = data;
+          break;
+        }
+        if (!closing && !data.closedAt) {
+          // Already open \u2014 idempotent success.
+          final = data;
+          break;
+        }
+        const sysMessage = closing
+          ? {
+              at,
+              from: "system",
+              body: "Conversation closed by support. Start a new chat anytime.",
+            }
+          : { at, from: "system", body: "Conversation reopened by support." };
+        const next = {
+          ...data,
+          closedAt: closing ? at : "",
+          closedBy: closing ? "admin" : "",
+          messages: [...data.messages, sysMessage].slice(
+            -MAX_MESSAGES_PER_THREAD,
+          ),
+        };
+        try {
+          const wrote = await writeThread(store, id, next, etag);
+          if (wrote && wrote.modified === false) continue;
+          final = next;
+          break;
+        } catch {
+          return json(500, {
+            error: closing ? "Could not close" : "Could not reopen",
+          });
+        }
+      }
+      if (!final) {
+        return json(409, {
+          error: closing
+            ? "Could not close \u2014 try again"
+            : "Could not reopen \u2014 try again",
+        });
+      }
+
+      await upsertIndexEntry(store, (threads) => {
+        const idx = threads.findIndex((t) => t.id === id);
+        if (idx === -1) return threads;
+        const prior = threads[idx];
+        return [
+          ...threads.slice(0, idx),
+          sanitizeIndexEntry({
+            ...prior,
+            updatedAt: at,
+            closedAt: closing ? at : "",
+            messageCount: (prior.messageCount || 0) + 1,
+            lastFromAdmin: true,
+            lastReadByAdminAt: at,
+          }),
+          ...threads.slice(idx + 1),
+        ];
+      });
+
+      // Closing nukes the typing indicator so a stale "typing\u2026" hint can't
+      // hover under the closed banner.
+      try {
+        await store.delete(typingKey(id));
+      } catch {
+        // ignore
+      }
+
+      try {
+        await appendAuditEvent(event, {
+          type: "chat.message",
+          outcome: "success",
+          subject: final.email,
+          detail: `${closing ? "closed" : "reopened"} thread ${id}`,
+          ...captureRequestMeta(event),
+        });
+      } catch {
+        // ignore
+      }
+
+      return json(200, {
+        thread: {
+          id,
+          name: final.name,
+          email: final.email,
+          createdAt: final.createdAt,
+          messages: final.messages,
+          closedAt: final.closedAt || "",
+          closedBy: final.closedBy || "",
         },
       });
     }
