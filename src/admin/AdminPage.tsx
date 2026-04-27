@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/sheet";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
+import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
@@ -579,7 +580,12 @@ function ProductsSection() {
     }
   };
 
-  const filteredProducts = products.filter((p) => {
+  // "Your uploads" only shows products that are brand-new additions, not
+  // customizations of stock artworks (those are managed in the Stock catalog
+  // panel below to avoid a confusing duplicate listing).
+  const pureCustomProducts = products.filter((p) => !p.replacesDefaultId);
+
+  const filteredProducts = pureCustomProducts.filter((p) => {
     if (filterCategory === "__uncategorized__") {
       if (p.category && p.category.trim()) return false;
     } else if (filterCategory !== "all") {
@@ -856,9 +862,10 @@ function ProductsSection() {
               </Select>
             </div>
           </div>
-          {products.length === 0 ? (
+          {pureCustomProducts.length === 0 ? (
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
-              No uploaded products yet. Add your first painting on the left.
+              No uploaded products yet. Add your first painting on the left, or
+              customize a stock listing below.
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
@@ -985,6 +992,10 @@ function ProductsSection() {
             </ul>
           )}
         </section>
+      </div>
+
+      <div className="mt-10 pt-8 border-t border-border/50">
+        <StockListingsSection />
       </div>
 
       <EditProductDialog

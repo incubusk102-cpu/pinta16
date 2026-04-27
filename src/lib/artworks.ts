@@ -248,8 +248,32 @@ export const productToDisplay = (product: Product): DisplayArtwork => {
 };
 
 export const getAllArtworks = (products: Product[]): DisplayArtwork[] => {
-  return [...defaultArtworks, ...products.map(productToDisplay)];
+  const overrideMap = new Map<string, Product>();
+  for (const p of products) {
+    if (p.replacesDefaultId) {
+      overrideMap.set(p.replacesDefaultId, p);
+    }
+  }
+  const mergedDefaults: DisplayArtwork[] = defaultArtworks.map((def) => {
+    const override = overrideMap.get(def.id);
+    if (!override) return def;
+    // Present the override's fields as the stock artwork, preserving the
+    // default id so deep links continue to resolve.
+    return {
+      ...productToDisplay(override),
+      id: def.id,
+      isCustom: false,
+    };
+  });
+  const extras = products.filter((p) => !p.replacesDefaultId);
+  return [...mergedDefaults, ...extras.map(productToDisplay)];
 };
+
+export const getDefaultArtworkIds = (): string[] =>
+  defaultArtworks.map((a) => a.id);
+
+export const findDefaultArtwork = (id: string): DisplayArtwork | undefined =>
+  defaultArtworks.find((a) => a.id === id);
 
 export const getStorefrontArtworks = (
   products: Product[],
