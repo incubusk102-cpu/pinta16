@@ -13,7 +13,9 @@ interface Props {
   title?: string;
 }
 
-const score = (a: Product, b: Product): number => {
+type ScoreInput = Pick<Product, "category" | "medium" | "year">;
+
+const score = (a: ScoreInput, b: ScoreInput): number => {
   let s = 0;
   if (a.category && b.category && a.category === b.category) s += 4;
   if (a.medium && b.medium && a.medium === b.medium) s += 2;
@@ -34,8 +36,15 @@ export default function RelatedProducts({
 
   const related = useMemo(() => {
     if (!current) return [];
+    // Exclude stock-catalog overrides: their UUID doesn't resolve through
+    // `findArtworkById` (which returns the merged default's id), so linking
+    // to them would 404. Their customizations are already reflected in the
+    // default they replace.
     const others = products.filter(
-      (p) => p.id !== currentId && p.availability !== "draft",
+      (p) =>
+        p.id !== currentId &&
+        p.availability !== "draft" &&
+        !p.replacesDefaultId,
     );
     const scored = others
       .map((p) => ({ p, s: score(current, p) }))

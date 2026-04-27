@@ -38,6 +38,13 @@ export interface Product {
   mockupFileName?: string;
   mockupBytes?: number;
   availability?: ProductAvailability;
+  /**
+   * When set, this custom product overrides a default (built-in) artwork with
+   * the matching `defaultArtworks` id. The storefront replaces the default
+   * with this product; in admin, the default shows as "Overridden" and can be
+   * reverted by deleting this product.
+   */
+  replacesDefaultId?: string;
 }
 
 export const PRODUCT_CATEGORIES = [
