@@ -223,7 +223,7 @@ function PolicyPage() {
           to="/"
           className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground hover:text-foreground transition-colors mb-8"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Pintaterra
+          <ArrowLeft className="w-3.5 h-3.5" /> Canvas Hub
         </Link>
         {loading && !policy?.body ? (
           <p className="text-sm text-muted-foreground">Loading…</p>

@@ -51,14 +51,14 @@ export const Route = createFileRoute("/product/$id")({
   head: ({ params }) => ({
     meta: [
       {
-        title: `Painting — Pintaterra`,
+        title: `Painting — Canvas Hub`,
       },
       {
         name: "description",
-        content: "View painting details, photos, and pricing on Pintaterra.",
+        content: "View painting details, photos, and pricing on Canvas Hub.",
       },
       { name: "robots", content: "index, follow" },
-      { property: "og:title", content: `Painting — Pintaterra` },
+      { property: "og:title", content: `Painting — Canvas Hub` },
       {
         property: "og:url",
         content: `/product/${params.id}`,
@@ -155,7 +155,7 @@ function ProductPage() {
       ? artwork.image
       : `${origin}${artwork.image}`;
 
-    document.title = `${artwork.title} — Pintaterra`;
+    document.title = `${artwork.title} — Canvas Hub`;
 
     const setMeta = (selector: string, attr: string, value: string) => {
       let tag = document.querySelector<HTMLMetaElement>(selector);
@@ -177,7 +177,7 @@ function ProductPage() {
     setMeta('meta[property="og:type"]', "content", "product");
     setMeta('meta[property="og:url"]', "content", url);
     setMeta('meta[property="og:image"]', "content", imageUrl);
-    setMeta('meta[property="og:site_name"]', "content", "Pintaterra");
+    setMeta('meta[property="og:site_name"]', "content", "Canvas Hub");
     setMeta('meta[name="twitter:card"]', "content", "summary_large_image");
     setMeta('meta[name="twitter:title"]', "content", artwork.title);
     setMeta('meta[name="twitter:description"]', "content", desc);
@@ -209,7 +209,7 @@ function ProductPage() {
         `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`,
       image: imageUrls,
       sku: artwork.id,
-      brand: { "@type": "Brand", name: "Pintaterra" },
+      brand: { "@type": "Brand", name: "Canvas Hub" },
       offers: {
         "@type": "Offer",
         url,
@@ -511,8 +511,8 @@ function ProductPage() {
                       ? `${window.location.origin}/product/${artwork.id}`
                       : "";
                   const data = {
-                    title: `${artwork.title} — Pintaterra`,
-                    text: `Check out "${artwork.title}" on Pintaterra.`,
+                    title: `${artwork.title} — Canvas Hub`,
+                    text: `Check out "${artwork.title}" on Canvas Hub.`,
                     url,
                   };
                   const nav = navigator as Navigator & {

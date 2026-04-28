@@ -39,7 +39,7 @@ const en = {
   "gallery.reserved": "Reserved",
   "gallery.draft": "Coming soon",
   // About
-  "about.eyebrow": "About Pintaterra",
+  "about.eyebrow": "About Canvas Hub",
   "about.title": "Original art, made to live with",
   // Contact
   "contact.title": "Get in touch",
@@ -83,7 +83,7 @@ const en = {
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Checkout",
   // Footer
-  "footer.copyright": "© {year} Pintaterra. All rights reserved.",
+  "footer.copyright": "© {year} Canvas Hub. All rights reserved.",
   "footer.policies": "Policies",
   "footer.terms": "Terms & Conditions",
   "footer.refund": "Refund & Returns",
@@ -121,7 +121,7 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "gallery.sold": "Nabili na",
   "gallery.reserved": "Naka-reserve",
   "gallery.draft": "Malapit nang lumabas",
-  "about.eyebrow": "Tungkol sa Pintaterra",
+  "about.eyebrow": "Tungkol sa Canvas Hub",
   "about.title": "Orihinal na sining, ginawa para samahan ka",
   "contact.title": "Kausapin kami",
   "contact.heading": "Kontakin kami",
@@ -158,7 +158,7 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "cart.empty": "Walang laman ang iyong cart.",
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Mag-checkout",
-  "footer.copyright": "© {year} Pintaterra. Lahat ng karapatan ay nakalaan.",
+  "footer.copyright": "© {year} Canvas Hub. Lahat ng karapatan ay nakalaan.",
   "footer.policies": "Mga patakaran",
   "footer.terms": "Mga Tuntunin at Kondisyon",
   "footer.refund": "Refund at Returns",

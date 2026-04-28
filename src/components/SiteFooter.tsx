@@ -8,7 +8,7 @@ import {
   usePolicies,
 } from "@/contexts/PoliciesContext";
 
-// Set these to your actual Pintaterra profile URLs to render the social
+// Set these to your actual Canvas Hub profile URLs to render the social
 // links. Left empty so we don't ship misleading aria-labels that point at
 // generic facebook.com / instagram.com homepages.
 const FACEBOOK_URL = "";
@@ -160,7 +160,7 @@ const SiteFooter = () => {
                   fontStyle="italic"
                   fill="currentColor"
                 >
-                  P
+                  C
                 </text>
                 <rect
                   x="6"
@@ -172,7 +172,7 @@ const SiteFooter = () => {
               </svg>
             </span>
             <p className="font-display text-lg tracking-[0.25em] uppercase text-gradient-elegant">
-              Pintaterra
+              Canvas Hub
             </p>
           </div>
           <p className="text-muted-foreground leading-relaxed max-w-md">
@@ -189,7 +189,7 @@ const SiteFooter = () => {
                   href={FACEBOOK_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Pintaterra on Facebook"
+                  aria-label="Canvas Hub on Facebook"
                   className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
                 >
                   <Facebook className="w-4 h-4" />
@@ -200,7 +200,7 @@ const SiteFooter = () => {
                   href={INSTAGRAM_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Pintaterra on Instagram"
+                  aria-label="Canvas Hub on Instagram"
                   className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
                 >
                   <Instagram className="w-4 h-4" />

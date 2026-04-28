@@ -157,7 +157,7 @@ export default function ExportPanel({ token }: Props) {
         return;
       }
 
-      const filename = `pintaterra-${dataset}-${stamp()}.${format}`;
+      const filename = `canvas-hub-${dataset}-${stamp()}.${format}`;
       if (format === "csv") {
         downloadBlob(toCsv(rows), filename, "text/csv");
       } else {

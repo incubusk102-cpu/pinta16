@@ -39,7 +39,7 @@ export const Route = createFileRoute("/account")({
   component: AccountPage,
   head: () => ({
     meta: [
-      { title: "My account — Pintaterra" },
+      { title: "My account — Canvas Hub" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -455,7 +455,7 @@ function AccountPage() {
             <Mail className="w-4 h-4" /> Inactivity
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            Pintaterra removes accounts that have been inactive for{" "}
+            Canvas Hub removes accounts that have been inactive for{" "}
             <strong className="text-foreground">30 days</strong> and emails you
             when this happens. Just visit your account any time to keep it
             active.

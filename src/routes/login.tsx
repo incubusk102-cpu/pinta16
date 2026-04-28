@@ -14,10 +14,10 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
   head: () => ({
     meta: [
-      { title: "Sign in — Pintaterra" },
+      { title: "Sign in — Canvas Hub" },
       {
         name: "description",
-        content: "Sign in to your Pintaterra account with Google.",
+        content: "Sign in to your Canvas Hub account with Google.",
       },
     ],
   }),
@@ -52,7 +52,7 @@ function LoginPage() {
     async (response: { credential: string }) => {
       try {
         await googleLogin(response.credential);
-        toast.success("Welcome to Pintaterra");
+        toast.success("Welcome to Canvas Hub");
         void navigate({ to: "/", hash: "gallery" });
       } catch (error) {
         toast.error(
@@ -106,7 +106,7 @@ function LoginPage() {
         return;
       }
       applySession(parsed.token, parsed.user);
-      toast.success("Welcome to Pintaterra");
+      toast.success("Welcome to Canvas Hub");
       void navigate({ to: "/", hash: "gallery" });
     } catch {
       toast.error("Could not read Google sign-in response");
@@ -195,7 +195,7 @@ function LoginPage() {
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl">Sign in</h1>
           <p className="text-sm text-muted-foreground">
-            Welcome to Pintaterra. Sign in with your Google account.
+            Welcome to Canvas Hub. Sign in with your Google account.
           </p>
         </div>
 
