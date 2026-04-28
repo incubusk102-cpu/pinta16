@@ -56,8 +56,7 @@ const mergeFromResponse = (raw: unknown): PoliciesMap | null => {
             ? entry.title
             : DEFAULT_TITLES[slug],
         body: typeof entry.body === "string" ? entry.body : "",
-        updatedAt:
-          typeof entry.updatedAt === "string" ? entry.updatedAt : null,
+        updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null,
       };
     }
   }
