@@ -28,8 +28,8 @@ interface WishlistContextType {
   count: number;
 }
 
-const GUEST_KEY = "pintaterra_wishlist_guest";
-const userKey = (userId: string) => `pintaterra_wishlist_user_${userId}`;
+const GUEST_KEY = "canvhub_wishlist_guest";
+const userKey = (userId: string) => `canvhub_wishlist_user_${userId}`;
 
 const readStorage = (key: string): WishlistEntry[] => {
   if (typeof window === "undefined") return [];

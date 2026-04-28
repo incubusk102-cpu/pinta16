@@ -9,7 +9,7 @@ import {
 } from "react";
 import { dictionaries, type Locale, type TranslationKey } from "@/lib/i18n";
 
-const STORAGE_KEY = "pintaterra_locale";
+const STORAGE_KEY = "canvhub_locale";
 
 interface LocaleContextType {
   locale: Locale;

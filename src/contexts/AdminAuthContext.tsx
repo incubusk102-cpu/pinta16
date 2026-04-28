@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-const STORAGE_KEY = "pintaterra_admin_token";
+const STORAGE_KEY = "canvhub_admin_token";
 const AUTH_API = "/api/admin-auth";
 
 interface AdminAuthContextValue {

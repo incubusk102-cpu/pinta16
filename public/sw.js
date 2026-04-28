@@ -10,9 +10,9 @@
  */
 
 const VERSION = "v1";
-const APP_SHELL = `pintaterra-shell-${VERSION}`;
-const ASSETS = `pintaterra-assets-${VERSION}`;
-const RUNTIME = `pintaterra-runtime-${VERSION}`;
+const APP_SHELL = `canvhub-shell-${VERSION}`;
+const ASSETS = `canvhub-assets-${VERSION}`;
+const RUNTIME = `canvhub-runtime-${VERSION}`;
 
 const PRECACHE = [
   "/",
@@ -82,7 +82,7 @@ self.addEventListener("activate", (event) => {
           .filter(
             (k) =>
               ![APP_SHELL, ASSETS, RUNTIME].includes(k) &&
-              k.startsWith("pintaterra-"),
+              k.startsWith("canvhub-"),
           )
           .map((k) => caches.delete(k)),
       );

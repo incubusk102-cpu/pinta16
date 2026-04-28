@@ -12,7 +12,7 @@ import {
   type PromoCodePublic,
 } from "@/contexts/StorefrontConfigContext";
 
-const DISMISS_KEY_PREFIX = "pintaterra_announcement_dismissed_";
+const DISMISS_KEY_PREFIX = "canvhub_announcement_dismissed_";
 
 const formatPromo = (template: string, p: PromoCodePublic): string => {
   const discount =

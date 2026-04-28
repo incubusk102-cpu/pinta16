@@ -36,8 +36,8 @@ interface ChatThread {
   adminTypingAt?: string;
 }
 
-const STORAGE_KEY = "pintaterra_chat_thread_v1";
-const SOUND_PREF_KEY = "pintaterra_chat_sound_v1";
+const STORAGE_KEY = "canvhub_chat_thread_v1";
+const SOUND_PREF_KEY = "canvhub_chat_sound_v1";
 const POLL_INTERVAL_MS = 5000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MSG_MAX = 2000;

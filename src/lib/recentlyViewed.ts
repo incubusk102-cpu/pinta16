@@ -4,7 +4,7 @@
  * availability stay current.
  */
 
-const KEY = "pintaterra_recently_viewed";
+const KEY = "canvhub_recently_viewed";
 const MAX = 16;
 
 const safeRead = (): string[] => {

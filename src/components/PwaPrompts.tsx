@@ -7,7 +7,7 @@ import {
   triggerInstallPrompt,
 } from "@/lib/pwa";
 
-const INSTALL_DISMISSED_KEY = "pintaterra:pwa:install-dismissed-at";
+const INSTALL_DISMISSED_KEY = "canvhub:pwa:install-dismissed-at";
 const INSTALL_DISMISS_DAYS = 14;
 
 const wasRecentlyDismissed = () => {

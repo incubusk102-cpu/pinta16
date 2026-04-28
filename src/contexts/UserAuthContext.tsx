@@ -8,8 +8,8 @@ import {
   type ReactNode,
 } from "react";
 
-const STORAGE_KEY = "pintaterra_user_token";
-const USER_KEY = "pintaterra_user";
+const STORAGE_KEY = "canvhub_user_token";
+const USER_KEY = "canvhub_user";
 const API = "/api/users";
 
 export interface SavedAddress {

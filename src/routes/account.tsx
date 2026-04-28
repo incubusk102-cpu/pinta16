@@ -398,7 +398,7 @@ function AccountPage() {
     if (pathname !== "/account") return;
     const storedToken =
       typeof window !== "undefined"
-        ? localStorage.getItem("pintaterra_user_token")
+        ? localStorage.getItem("canvhub_user_token")
         : null;
     if (!storedToken) {
       void navigate({ to: "/login" });
