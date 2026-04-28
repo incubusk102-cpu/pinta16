@@ -1,12 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#1c1c1c"/>
-  <g transform="translate(96 116)">
-    <text x="160" y="160" font-family="Georgia, 'Playfair Display', serif"
-          font-size="240" fill="#f5f3ee" text-anchor="middle"
-          font-style="italic">C</text>
-    <rect x="20" y="220" width="280" height="6" fill="#f5f3ee"/>
-    <text x="160" y="270" font-family="Inter, Arial, sans-serif"
-          font-size="32" letter-spacing="5" fill="#f5f3ee"
-          text-anchor="middle">CANVAS HUB</text>
+  <rect width="512" height="512" rx="80" fill="#1c1c1c"/>
+  <g transform="translate(43 425) scale(0.52 -0.52)" fill="#f5f3ee">
+    <path d="M384 -14C435 -14 452 11 472 11C492 11 502 -11 512 -9C523 -7 576 115 576 138C576 149 575 157 569 157C564 157 558 149 552 139C513 76 465 23 402 23C294 23 180 110 180 228C180 432 326 628 519 628C558 628 596 616 613 593C634 565 628 523 622 493C620 481 625 467 637 467C644 467 653 477 655 487C664 532 700 599 722 629C726 634 727 645 715 645C700 645 684 629 672 629C662 629 610 663 529 663C293 663 96 494 96 240C96 90 234 -14 384 -14Z"/>
   </g>
 </svg>
