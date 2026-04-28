@@ -25,7 +25,7 @@ const DEFAULT_POLICIES = {
     title: "Terms & Conditions",
     body: `# Terms & Conditions
 
-These terms govern your use of Pintaterra. By placing an order or browsing the
+These terms govern your use of Canvas Hub. By placing an order or browsing the
 storefront you agree to the terms below.
 
 ## Orders
@@ -37,7 +37,7 @@ Prices are listed in PHP and include applicable taxes. Shipping fees are
 calculated at checkout based on destination and order total.
 
 ## Intellectual property
-All artwork, photography, and copy on this site are the property of Pintaterra
+All artwork, photography, and copy on this site are the property of Canvas Hub
 and may not be reproduced without written permission.
 
 ## Contact

@@ -3,10 +3,10 @@
   <g transform="translate(96 116)">
     <text x="160" y="160" font-family="Georgia, 'Playfair Display', serif"
           font-size="240" fill="#f5f3ee" text-anchor="middle"
-          font-style="italic">P</text>
+          font-style="italic">C</text>
     <rect x="20" y="220" width="280" height="6" fill="#f5f3ee"/>
     <text x="160" y="270" font-family="Inter, Arial, sans-serif"
-          font-size="34" letter-spacing="6" fill="#f5f3ee"
-          text-anchor="middle">PINTATERRA</text>
+          font-size="32" letter-spacing="5" fill="#f5f3ee"
+          text-anchor="middle">CANVAS HUB</text>
   </g>
 </svg>

@@ -46,7 +46,7 @@ const HeroSection = () => {
           transition={{ duration: 1.2, delay: 0.5 }}
           className="font-display text-4xl sm:text-5xl md:text-7xl lg:text-8xl text-gradient-elegant mb-2 md:mb-3"
         >
-          Pintaterra
+          Canvas Hub
         </motion.h1>
         <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
         <motion.p

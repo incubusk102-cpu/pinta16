@@ -1,4 +1,4 @@
-/* Pintaterra PWA service worker.
+/* Canvas Hub PWA service worker.
  *
  * Strategy:
  *  - App shell (precached): "/", "/manifest.webmanifest", icons, /offline
@@ -29,7 +29,7 @@ const OFFLINE_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Offline · Pintaterra</title>
+<title>Offline · Canvas Hub</title>
 <style>
   body{margin:0;min-height:100vh;display:grid;place-items:center;
        background:#f5f3ee;color:#1c1c1c;

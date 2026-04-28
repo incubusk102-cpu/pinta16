@@ -75,7 +75,7 @@ const SplashScreen = () => {
             transition={{ delay: 1.0, duration: 0.5 }}
             className="font-display text-base sm:text-lg tracking-[0.4em] uppercase text-gradient-elegant mt-6"
           >
-            Pintaterra
+            Canvas Hub
           </motion.p>
         </motion.div>
       )}

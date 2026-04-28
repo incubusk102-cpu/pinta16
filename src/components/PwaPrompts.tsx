@@ -122,7 +122,7 @@ export default function PwaPrompts() {
           <Download className="w-4 h-4 text-foreground mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">
-              Install Pintaterra
+              Install Canvas Hub
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Add to your home screen for one-tap access and offline browsing of

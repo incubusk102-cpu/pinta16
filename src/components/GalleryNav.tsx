@@ -155,7 +155,7 @@ const GalleryNav = () => {
         <button
           onClick={() => scrollTo("hero")}
           className="flex items-center gap-2 sm:gap-3 group shrink-0"
-          aria-label="Pintaterra — home"
+          aria-label="Canvas Hub — home"
         >
           <span
             aria-hidden
@@ -181,7 +181,7 @@ const GalleryNav = () => {
             </svg>
           </span>
           <span className="font-display text-base sm:text-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase text-gradient-elegant truncate">
-            Pintaterra
+            Canvas Hub
           </span>
         </button>
 
@@ -272,7 +272,7 @@ const GalleryNav = () => {
               {/* Drawer header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
                 <p className="font-display text-base tracking-[0.25em] uppercase text-gradient-elegant">
-                  Pintaterra
+                  Canvas Hub
                 </p>
                 <button
                   onClick={closeMenu}
@@ -421,7 +421,7 @@ const GalleryNav = () => {
 
               {/* Footer note */}
               <div className="px-5 py-3 border-t border-border/30 text-[10px] tracking-[0.25em] uppercase text-muted-foreground/80 text-center">
-                Pintaterra · {new Date().getFullYear()}
+                Canvas Hub · {new Date().getFullYear()}
               </div>
             </motion.aside>
           </>

@@ -192,7 +192,7 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
       <Toaster richColors position="top-right" />
       <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-8 space-y-6">
         <div className="space-y-2 text-center">
-          <h1 className="font-display text-2xl">Admin · Pintaterra</h1>
+          <h1 className="font-display text-2xl">Admin · Canvas Hub</h1>
           <p className="text-sm text-muted-foreground">
             {isInitMode
               ? "First time setup — choose a password to protect this admin."
@@ -298,7 +298,7 @@ function AdminDashboard() {
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
         <SheetContent side="left" className="w-72">
           <SheetHeader>
-            <SheetTitle className="font-display">Admin · Pintaterra</SheetTitle>
+            <SheetTitle className="font-display">Admin · Canvas Hub</SheetTitle>
           </SheetHeader>
           <nav className="mt-6 flex flex-col gap-1">
             <NavLink
