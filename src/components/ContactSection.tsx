@@ -32,7 +32,7 @@ const ContactSection = () => {
         className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8"
       >
         {[
-          { icon: Mail, label: "Email", value: "pintaterra@gmail.com" },
+          { icon: Mail, label: "Email", value: "hello@canvhub.com" },
           { icon: Phone, label: "Phone", value: "+63 956 468 5351" },
           { icon: MapPin, label: "Studio", value: "Bagong Silang, Caloocan" },
         ].map(({ icon: Icon, label, value }) => (

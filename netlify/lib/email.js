@@ -5,7 +5,7 @@
  *   - RESEND_API_KEY  -> Resend (https://resend.com)
  *   - BREVO_API_KEY   -> Brevo  (https://developers.brevo.com)
  *
- * EMAIL_FROM (e.g. "Canvas Hub <orders@pintaterra.com>") is required when a
+ * EMAIL_FROM (e.g. "Canvas Hub <orders@canvhub.com>") is required when a
  * provider is configured. EMAIL_REPLY_TO is optional. EMAIL_BCC is optional.
  *
  * If no key is configured, sendEmail() resolves to
