@@ -156,7 +156,7 @@ interface ProductContextType {
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
-const STORAGE_KEY = "pintaterra_products";
+const STORAGE_KEY = "canvhub_products";
 const PRODUCTS_API = "/api/products";
 
 const readStoredProducts = (): Product[] => {
@@ -271,7 +271,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
     let channel: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== "undefined") {
-      channel = new BroadcastChannel("pintaterra_products");
+      channel = new BroadcastChannel("canvhub_products");
       channelRef.current = channel;
       channel.addEventListener("message", (event: MessageEvent) => {
         if (event?.data?.type === "changed") void loadProducts();

@@ -27,7 +27,7 @@ import {
 import PaymentModal from "./PaymentModal";
 import { createPayment } from "@/utils/payment.functions";
 
-const RESUME_CHECKOUT_FLAG = "pintaterra_resume_checkout";
+const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
 
 const pickDefaultAddress = (
   user: PublicUser | null,

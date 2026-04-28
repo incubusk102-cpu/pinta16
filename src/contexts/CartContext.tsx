@@ -199,8 +199,8 @@ interface CartContextType {
 const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
 const DEFAULT_SHIPPING_FEE = 500;
 
-const ORDERS_STORAGE_KEY = "pintaterra_orders";
-const CART_STORAGE_KEY = "pintaterra_cart";
+const ORDERS_STORAGE_KEY = "canvhub_orders";
+const CART_STORAGE_KEY = "canvhub_cart";
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 

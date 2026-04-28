@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "pintaterra_splash_seen_v1";
+const STORAGE_KEY = "canvhub_splash_seen_v1";
 
 /**
  * Brand splash on first paint of a session. The "C" mark strokes draw

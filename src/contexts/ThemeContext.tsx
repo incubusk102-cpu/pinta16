@@ -10,7 +10,7 @@ import {
 
 export type Theme = "dark" | "light" | "system";
 
-const STORAGE_KEY = "pintaterra_theme";
+const STORAGE_KEY = "canvhub_theme";
 
 interface ThemeContextType {
   theme: Theme;

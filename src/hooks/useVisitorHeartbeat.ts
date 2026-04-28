@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 const VISITORS_API = "/api/visitors";
-const VISITOR_KEY = "pintaterra_visitor_id";
+const VISITOR_KEY = "canvhub_visitor_id";
 const HEARTBEAT_INTERVAL_MS = 60 * 1000; // 1 min
 
 /**
