@@ -1,4 +1,5 @@
 // /api/hero-slides — homepage slider config & slides.
+import { setCloudflareContext } from "./_lib/context.js";
 // KV namespace: HERO_SLIDES (single key "slides" → JSON object).
 //
 // Cloudflare Pages Function port of netlify/functions/hero-slides.js. The
@@ -173,6 +174,7 @@ const publicView = (data) => ({
 });
 
 const handle = async ({ request, env }) => {
+  setCloudflareContext(env);
   if (!env.HERO_SLIDES) {
     return json(500, { error: "HERO_SLIDES KV binding missing" });
   }
@@ -184,7 +186,7 @@ const handle = async ({ request, env }) => {
       const params = event.queryStringParameters || {};
       const data = await read(store);
       if (params.admin === "1") {
-        if (!(await isAuthenticated(event, env))) {
+        if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
         }
         return json(200, data);
@@ -193,7 +195,7 @@ const handle = async ({ request, env }) => {
     }
 
     if (event.httpMethod === "POST") {
-      if (!(await isAuthenticated(event, env))) {
+      if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
       const body = parseBody(event.body);

@@ -1,6 +1,6 @@
 // Common security headers applied to every JSON API response. Static asset
-// CSP / HSTS / framing rules are configured in `public/_headers` so the CDN
-// can stamp them on HTML/JS too.
+// CSP / HSTS / framing rules live in `public/_headers` so the CDN can stamp
+// them on HTML/JS too.
 
 export const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",

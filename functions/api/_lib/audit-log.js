@@ -1,16 +1,17 @@
 // Append-only audit log for sensitive admin/customer events. Stored as a
-// single JSON array in Netlify Blobs, capped to MAX_ENTRIES so it can't grow
-// unbounded. Surface via /api/admin-auth?action=audit (admin-only).
+// single JSON array in the AUDIT_LOG KV namespace, capped to MAX_ENTRIES so
+// it can't grow unbounded. Surface via /api/admin-auth?action=audit (admin).
 
-import { connectLambda, getStore } from "@netlify/blobs";
+import { makeStore } from "./kv-store.js";
+import { getCloudflareEnv } from "./context.js";
 
-const STORE_NAME = "audit-log";
 const KEY = "events";
 const MAX_ENTRIES = 500;
 
-const getAuditStore = (event) => {
-  connectLambda(event);
-  return getStore(STORE_NAME);
+const getAuditStore = () => {
+  const env = getCloudflareEnv();
+  if (!env?.AUDIT_LOG) return null;
+  return makeStore(env.AUDIT_LOG);
 };
 
 const safeReadEntries = async (store) => {
@@ -24,12 +25,8 @@ const safeReadEntries = async (store) => {
 
 export const appendAuditEvent = async (event, entry) => {
   if (!entry || typeof entry !== "object") return;
-  let store;
-  try {
-    store = getAuditStore(event);
-  } catch {
-    return;
-  }
+  const store = getAuditStore();
+  if (!store) return;
   for (let attempt = 0; attempt < 3; attempt++) {
     let result;
     try {
@@ -64,12 +61,8 @@ export const appendAuditEvent = async (event, entry) => {
 };
 
 export const readAuditEvents = async (event, { limit = 200 } = {}) => {
-  let store;
-  try {
-    store = getAuditStore(event);
-  } catch {
-    return [];
-  }
+  const store = getAuditStore();
+  if (!store) return [];
   const list = await safeReadEntries(store);
   return list.slice(0, Math.max(1, Math.min(MAX_ENTRIES, limit)));
 };

@@ -1,4 +1,5 @@
 // /api/sitemap — XML sitemap, public (also reachable at /sitemap.xml via
+import { setCloudflareContext } from "./_lib/context.js";
 // the rewrite in public/_redirects). Reads the same products store as
 // /api/products so URLs stay in sync.
 
@@ -22,6 +23,7 @@ const STATIC_PATHS = [
 ];
 
 export const onRequestGet = async ({ request, env }) => {
+  setCloudflareContext(env);
   const reqUrl = new URL(request.url);
   const safeProto = reqUrl.protocol === "http:" ? "http" : "https";
   const headerHost =

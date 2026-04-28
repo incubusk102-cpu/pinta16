@@ -1,4 +1,5 @@
 // /api/visitors — live visitor count and 24h hourly history.
+import { setCloudflareContext } from "./_lib/context.js";
 // KV namespace: VISITORS (keys "heartbeats", "history-24h").
 
 import { makeStore } from "./_lib/kv-store.js";
@@ -87,6 +88,7 @@ const buildHistoryResponse = (history) => {
 };
 
 const handle = async ({ request, env }) => {
+  setCloudflareContext(env);
   if (!env.VISITORS) {
     return json(500, { error: "VISITORS KV binding missing" });
   }

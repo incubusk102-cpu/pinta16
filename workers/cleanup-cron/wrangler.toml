@@ -1,0 +1,20 @@
+name = "canvas-hub-cleanup-cron"
+main = "index.js"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Deployed separately from the Pages site:
+#   wrangler deploy --config workers/cleanup-cron/wrangler.toml
+#
+# Required env vars (set with `wrangler secret put` after deploy):
+#   RESEND_API_KEY
+#   RESEND_FROM     (optional)
+#   URL             (optional, defaults to https://canvhub.com)
+#   CLEANUP_SECRET  (optional, gates the manual /run endpoint)
+
+[triggers]
+crons = ["0 2 * * *"]
+
+[[kv_namespaces]]
+binding = "USERS"
+id = "REPLACE_WITH_USERS_KV_ID"

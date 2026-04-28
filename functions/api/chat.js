@@ -15,12 +15,12 @@
 // Public POSTs are rate-limited per IP. Admin reads/writes require a session
 // token. Audit log gets `chat.message` events.
 
-import { connectLambda, getStore } from "@netlify/blobs";
-import { withSecurityHeaders } from "../lib/security-headers.js";
-import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
-import { appendAuditEvent } from "../lib/audit-log.js";
-import { isAuthenticated } from "../lib/admin-auth.js";
-import { captureRequestMeta } from "../lib/request-info.js";
+import { connectLambda, getStore } from "./_lib/kv-stores.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { appendAuditEvent } from "./_lib/audit-log.js";
+import { isAuthenticated } from "./_lib/admin-auth.js";
+import { captureRequestMeta } from "./_lib/request-info.js";
 
 const STORE_NAME = "chat-threads";
 const INDEX_KEY = "index";
@@ -656,3 +656,5 @@ export const handler = async (event) => {
     return json(500, { error: "Internal error" });
   }
 };
+
+export const onRequest = wrapHandler(handler);

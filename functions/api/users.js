@@ -1,5 +1,6 @@
+import { wrapHandler } from "./_lib/handler-wrapper.js";
 import crypto from "node:crypto";
-import { isAuthenticated as isAdmin } from "../lib/admin-auth.js";
+import { isAuthenticated as isAdmin } from "./_lib/admin-auth.js";
 import {
   ensureSessionSecret,
   extractToken,
@@ -17,11 +18,11 @@ import {
   verifyPassword,
   verifyTokenWithSecret,
   writeUsers,
-} from "../lib/user-auth.js";
-import { captureRequestMeta } from "../lib/request-info.js";
-import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
-import { appendAuditEvent } from "../lib/audit-log.js";
-import { withSecurityHeaders } from "../lib/security-headers.js";
+} from "./_lib/user-auth.js";
+import { captureRequestMeta } from "./_lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { appendAuditEvent } from "./_lib/audit-log.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -568,3 +569,5 @@ export const handler = async (event) => {
     return json(500, { error: "Internal error" });
   }
 };
+
+export const onRequest = wrapHandler(handler);

@@ -9,10 +9,10 @@
 // Public actions: GET (returns published policies)
 // Admin actions: POST { action: "update", slug, title, body } — auth required.
 
-import { connectLambda, getStore } from "@netlify/blobs";
-import { purgeCache } from "@netlify/functions";
-import { withSecurityHeaders } from "../lib/security-headers.js";
-import { isAuthenticated } from "../lib/admin-auth.js";
+import { connectLambda, getStore } from "./_lib/kv-stores.js";
+import { purgeCacheByTags } from "./_lib/cache-purge.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { isAuthenticated } from "./_lib/admin-auth.js";
 
 // Cache tag attached to public policy GETs so admin POSTs can purge the
 // edge cache after a successful write.
@@ -388,7 +388,7 @@ const readPolicies = async (store) => {
 // cache will refresh on its own within s-maxage.
 const purgePoliciesCache = async () => {
   try {
-    await purgeCache({ tags: [CACHE_TAG] });
+    await purgeCacheByTags([CACHE_TAG]);
   } catch (err) {
     console.warn("policies: failed to purge CDN cache", err);
   }
@@ -439,9 +439,9 @@ export const handler = async (event) => {
       // successful write so manual `Refresh` and public visitors see the
       // new data immediately, not after the 5-minute s-maxage expires.
       return json(200, data, {
-        "Netlify-CDN-Cache-Control":
+        "Cloudflare-CDN-Cache-Control":
           "public, s-maxage=300, stale-while-revalidate=3600",
-        "Netlify-Cache-Tag": CACHE_TAG,
+        "Cache-Tag": CACHE_TAG,
       });
     }
 
@@ -490,3 +490,5 @@ export const handler = async (event) => {
     return json(500, { error: "Internal error" });
   }
 };
+
+export const onRequest = wrapHandler(handler);

@@ -1,10 +1,11 @@
+import { wrapHandler } from "./_lib/handler-wrapper.js";
+
 const jsonHeaders = {
   "Content-Type": "application/json",
 };
 
 const parseBody = (body) => {
   if (!body) return {};
-
   try {
     return JSON.parse(body);
   } catch {
@@ -17,7 +18,6 @@ const buildAuthHeader = (secretKey) =>
 
 const readPayMongoError = async (response) => {
   const text = await response.text();
-
   try {
     const payload = JSON.parse(text);
     const message = payload?.errors
@@ -30,7 +30,7 @@ const readPayMongoError = async (response) => {
   }
 };
 
-export const handler = async (event) => {
+const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
@@ -95,3 +95,5 @@ export const handler = async (event) => {
     };
   }
 };
+
+export const onRequest = wrapHandler(handler);
