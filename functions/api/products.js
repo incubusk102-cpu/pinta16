@@ -1,4 +1,5 @@
 // /api/products — public list, admin-gated create/delete.
+import { setCloudflareContext } from "./_lib/context.js";
 // KV namespace: PRODUCTS (single key "all-products" → JSON array).
 //
 // Cloudflare Pages Function port of netlify/functions/products.js. Same wire
@@ -36,6 +37,7 @@ const parseBody = (body) => {
 };
 
 const handle = async ({ request, env }) => {
+  setCloudflareContext(env);
   if (!env.PRODUCTS) {
     return json(500, { error: "PRODUCTS KV binding missing" });
   }
@@ -50,7 +52,7 @@ const handle = async ({ request, env }) => {
     }
 
     if (method === "POST") {
-      if (!(await isAuthenticated(event, env))) {
+      if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
       const product = parseBody(event.body);
@@ -67,7 +69,7 @@ const handle = async ({ request, env }) => {
     }
 
     if (method === "DELETE") {
-      if (!(await isAuthenticated(event, env))) {
+      if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
       const { id } = parseBody(event.body);

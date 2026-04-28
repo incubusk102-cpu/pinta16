@@ -1,85 +1,100 @@
-// Slim admin-auth helpers used by every Pages Function that needs to gate
-// admin-only routes. Token verification is the only piece needed for the
-// read-only / cache-friendly endpoints in the first migration PR; full
-// admin login + credential management lives in the dedicated /api/admin-auth
-// endpoint converted in the next PR.
+// Admin authentication helpers ported from netlify/lib/admin-auth.js.
 //
-// IMPORTANT: the session secret lives in the `ADMIN_SESSION_SECRET` env var
-// on Cloudflare Pages, NOT in KV. This is more secure (KV browsing can't
-// leak it) and removes the CAS race that the old Netlify implementation
-// needed when generating the secret on first request. Set the env var to a
-// long random hex string in the Pages dashboard before going live.
+// Storage: ADMIN_AUTH KV namespace, keyed by:
+//   "credentials"     → { salt, hash, updatedAt }
+//   "session-secret"  → string (rotated on password change)
+//
+// Crypto runs on Node's `crypto` (Cloudflare Pages exposes it under the
+// `nodejs_compat` flag). Token format mirrors the original implementation
+// so existing client tokens stay valid.
 
+import crypto from "node:crypto";
 import { makeStore } from "./kv-store.js";
+import { requireKvBinding } from "./context.js";
 
+export const STORE_NAME = "admin-auth";
+export const CREDENTIALS_KEY = "credentials";
+export const SECRET_KEY = "session-secret";
 export const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+export const PBKDF2_ITERATIONS = 120_000;
+export const PBKDF2_KEYLEN = 32;
+export const PBKDF2_DIGEST = "sha256";
+export const MIN_PASSWORD_LENGTH = 8;
 
-const base64UrlEncode = (input) => {
-  const bytes =
-    typeof input === "string" ? new TextEncoder().encode(input) : input;
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary)
+export const getAuthStore = () => makeStore(requireKvBinding("ADMIN_AUTH"));
+
+export const hashPassword = (password) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto
+    .pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST)
+    .toString("hex");
+  return { salt, hash };
+};
+
+export const verifyPassword = (password, salt, expectedHash) => {
+  const hash = crypto
+    .pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST)
+    .toString("hex");
+
+  const expected = Buffer.from(expectedHash, "hex");
+  const actual = Buffer.from(hash, "hex");
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(expected, actual);
+};
+
+export const constantTimeEquals = (a, b) => {
+  const hash = (v) =>
+    crypto.createHmac("sha256", "constant-time-cmp").update(String(v)).digest();
+  return crypto.timingSafeEqual(hash(a), hash(b));
+};
+
+const base64UrlEncode = (input) =>
+  Buffer.from(input)
+    .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
-};
 
 const base64UrlDecode = (input) => {
   const padded = input.replace(/-/g, "+").replace(/_/g, "/");
   const padding =
     padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
-  const binary = atob(padded + padding);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return Buffer.from(padded + padding, "base64").toString("utf8");
 };
 
-const importHmacKey = (secret) =>
-  crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
+const sign = (payload, secret) =>
+  crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 
-const sign = async (payload, secret) => {
-  const key = await importHmacKey(secret);
-  const sig = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payload),
-  );
-  return base64UrlEncode(new Uint8Array(sig));
-};
-
-const constantTimeStringEquals = (a, b) => {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
-};
-
-export const issueToken = async (secret) => {
+export const issueToken = (secret) => {
   const payload = JSON.stringify({
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
   });
   const encoded = base64UrlEncode(payload);
-  const signature = await sign(encoded, secret);
+  const signature = sign(encoded, secret);
   return `${encoded}.${signature}`;
 };
 
-export const verifyTokenWithSecret = async (token, secret) => {
+export const verifyTokenWithSecret = (token, secret) => {
   if (typeof token !== "string" || !token.includes(".")) return false;
   const [encoded, signature] = token.split(".");
   if (!encoded || !signature) return false;
 
-  const expected = await sign(encoded, secret);
-  if (!constantTimeStringEquals(expected, signature)) return false;
+  const expected = sign(encoded, secret);
+  const expectedBuf = Buffer.from(expected);
+  const signatureBuf = Buffer.from(signature);
+  if (
+    expectedBuf.length !== signatureBuf.length ||
+    !crypto.timingSafeEqual(expectedBuf, signatureBuf)
+  ) {
+    return false;
+  }
 
   try {
     const payload = JSON.parse(base64UrlDecode(encoded));
@@ -95,6 +110,37 @@ export const verifyTokenWithSecret = async (token, secret) => {
   }
 };
 
+export const ensureSessionSecret = async (store) => {
+  const existing = await store.get(SECRET_KEY, { type: "text" });
+  if (existing) return existing;
+  const candidate = crypto.randomBytes(48).toString("hex");
+  try {
+    await store.set(SECRET_KEY, candidate, { onlyIfNew: true });
+  } catch {
+    /* another invocation won the race; fall through to re-read */
+  }
+  return (await store.get(SECRET_KEY, { type: "text" })) || candidate;
+};
+
+export const readCredentials = async (store) =>
+  await store.get(CREDENTIALS_KEY, { type: "json" });
+
+export const writeCredentials = async (store, credentials) =>
+  await store.setJSON(CREDENTIALS_KEY, credentials);
+
+export const writeCredentialsIfNew = async (store, credentials) => {
+  const result = await store.setJSON(CREDENTIALS_KEY, credentials, {
+    onlyIfNew: true,
+  });
+  return result?.modified !== false;
+};
+
+export const rotateSessionSecret = async (store) => {
+  const secret = crypto.randomBytes(48).toString("hex");
+  await store.set(SECRET_KEY, secret);
+  return secret;
+};
+
 export const extractToken = (event) => {
   const auth =
     event.headers?.authorization || event.headers?.Authorization || "";
@@ -103,26 +149,15 @@ export const extractToken = (event) => {
   return auth.slice(7).trim() || null;
 };
 
-// Pages-Functions-shaped: takes the synthesized event AND the env so we can
-// read ADMIN_SESSION_SECRET. The returned boolean follows the same contract
-// as the old Netlify isAuthenticated helper.
-export const isAuthenticated = async (event, env) => {
+export const isAuthenticated = async (event) => {
   const token = extractToken(event);
   if (!token) return false;
-  const secret = env?.ADMIN_SESSION_SECRET;
-  if (!secret || typeof secret !== "string" || secret.length < 32) {
-    // Fail closed if the env var is missing — never accept tokens against
-    // an empty / short / unset secret, which would be trivially forgeable.
+  let store;
+  try {
+    store = getAuthStore();
+  } catch {
     return false;
   }
+  const secret = await ensureSessionSecret(store);
   return verifyTokenWithSecret(token, secret);
-};
-
-// Convenience used by the future admin-auth endpoint. Pulls the credentials
-// blob out of the ADMIN_AUTH KV namespace, mirroring the Netlify shape.
-export const getAuthStoreFromEnv = (env) => {
-  if (!env?.ADMIN_AUTH) {
-    throw new Error("ADMIN_AUTH KV namespace binding is missing");
-  }
-  return makeStore(env.ADMIN_AUTH);
 };

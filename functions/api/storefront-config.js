@@ -1,4 +1,5 @@
 // /api/storefront-config — public read of announcement / free shipping /
+import { setCloudflareContext } from "./_lib/context.js";
 // promo codes / chat config; admin write of all of the above.
 // KV namespace: STOREFRONT_CONFIG (single key "config" → JSON object).
 //
@@ -276,6 +277,7 @@ const publicView = (config) => ({
 });
 
 const handle = async ({ request, env }) => {
+  setCloudflareContext(env);
   if (!env.STOREFRONT_CONFIG) {
     return json(500, { error: "STOREFRONT_CONFIG KV binding missing" });
   }
@@ -288,7 +290,7 @@ const handle = async ({ request, env }) => {
       const params = event.queryStringParameters || {};
       const config = await readConfig(store);
       if (params.admin === "1") {
-        if (!(await isAuthenticated(event, env))) {
+        if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
         }
         return json(200, { config });
@@ -297,7 +299,7 @@ const handle = async ({ request, env }) => {
     }
 
     if (method === "POST") {
-      if (!(await isAuthenticated(event, env))) {
+      if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
       const body = parseBody(event.body);

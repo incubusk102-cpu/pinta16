@@ -1,16 +1,16 @@
-// Sliding-window rate limiter backed by Netlify Blobs. Best-effort: the limiter
-// is per-function-instance plus a shared blob, so we use a CAS read/write loop
-// to keep concurrent invocations honest. Failures (e.g. blob unavailable) fall
-// open — we never hard-fail a legitimate user because the limiter blob is down.
+// Sliding-window rate limiter backed by the RATE_LIMITS KV namespace.
+// Best-effort: KV is eventually consistent and lacks real CAS, so we use a
+// read-then-write loop and fall open on any failure rather than block real
+// users behind a flaky limiter.
 
-import { connectLambda, getStore } from "@netlify/blobs";
+import { makeStore } from "./kv-store.js";
+import { getCloudflareEnv } from "./context.js";
 import { getClientIp } from "./request-info.js";
 
-const STORE_NAME = "rate-limits";
-
-const getLimitStore = (event) => {
-  connectLambda(event);
-  return getStore(STORE_NAME);
+const getLimitStore = () => {
+  const env = getCloudflareEnv();
+  if (!env?.RATE_LIMITS) return null;
+  return makeStore(env.RATE_LIMITS);
 };
 
 const buildKey = (bucket, key) => {
@@ -25,9 +25,6 @@ const buildKey = (bucket, key) => {
   return `${safeBucket}__${safeKey}`;
 };
 
-// Records a hit and returns { allowed, retryAfter, remaining, count }.
-// `bucket` is the action name (e.g. "admin-login"), `windowMs` and `max` shape
-// the policy. `key` defaults to the client IP.
 export const consumeRateLimit = async (
   event,
   { bucket, windowMs, max, key },
@@ -36,12 +33,8 @@ export const consumeRateLimit = async (
     return { allowed: true, retryAfter: 0, remaining: max ?? 0, count: 0 };
   }
   const limitKey = buildKey(bucket, key || getClientIp(event) || "anon");
-  let store;
-  try {
-    store = getLimitStore(event);
-  } catch {
-    return { allowed: true, retryAfter: 0, remaining: max, count: 0 };
-  }
+  const store = getLimitStore();
+  if (!store) return { allowed: true, retryAfter: 0, remaining: max, count: 0 };
   const now = Date.now();
   const windowStart = now - windowMs;
 
@@ -72,7 +65,7 @@ export const consumeRateLimit = async (
       const wrote = await store.setJSON(limitKey, recent, {
         onlyIfMatch: result?.etag,
       });
-      if (wrote && wrote.modified === false) continue; // raced; retry
+      if (wrote && wrote.modified === false) continue;
       return {
         allowed: true,
         retryAfter: 0,
@@ -83,7 +76,6 @@ export const consumeRateLimit = async (
       return { allowed: true, retryAfter: 0, remaining: max, count: 0 };
     }
   }
-  // Three CAS retries failed — fall open rather than block legit traffic.
   return { allowed: true, retryAfter: 0, remaining: max, count: 0 };
 };
 

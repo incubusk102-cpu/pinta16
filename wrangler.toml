@@ -60,10 +60,6 @@ binding = "VISITORS"
 id = "REPLACE_WITH_VISITORS_KV_ID"
 preview_id = "REPLACE_WITH_VISITORS_KV_PREVIEW_ID"
 
-# Bindings below are created now so PR2 can land without dashboard changes.
-# Until PR2 ships the corresponding endpoints, these namespaces are unused
-# — creating them is harmless.
-
 [[kv_namespaces]]
 binding = "ORDERS"
 id = "REPLACE_WITH_ORDERS_KV_ID"
@@ -93,3 +89,8 @@ preview_id = "REPLACE_WITH_AUDIT_LOG_KV_PREVIEW_ID"
 binding = "ADMIN_AUTH"
 id = "REPLACE_WITH_ADMIN_AUTH_KV_ID"
 preview_id = "REPLACE_WITH_ADMIN_AUTH_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "CUSTOMER_META"
+id = "REPLACE_WITH_CUSTOMER_META_KV_ID"
+preview_id = "REPLACE_WITH_CUSTOMER_META_KV_PREVIEW_ID"

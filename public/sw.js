@@ -4,7 +4,7 @@
  *  - App shell (precached): "/", "/manifest.webmanifest", icons, /offline
  *  - Static assets (Vite-hashed under /assets/): cache-first, fall back to network.
  *  - Same-origin GET HTML / navigation: network-first, fall back to /offline.
- *  - Same-origin GET API (/api/*, /.netlify/functions/*): network-first with
+ *  - Same-origin GET API (/api/*): network-first with
  *    a short timeout; never cached so we don't show stale order data.
  *  - All other requests: pass through.
  */
@@ -97,9 +97,7 @@ self.addEventListener("message", (event) => {
   }
 });
 
-const isApiRequest = (url) =>
-  url.pathname.startsWith("/api/") ||
-  url.pathname.startsWith("/.netlify/functions/");
+const isApiRequest = (url) => url.pathname.startsWith("/api/");
 
 const isAssetRequest = (url) =>
   url.pathname.startsWith("/assets/") ||

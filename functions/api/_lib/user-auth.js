@@ -1,5 +1,12 @@
-import { connectLambda, getStore } from "@netlify/blobs";
+// User authentication helpers ported from netlify/lib/user-auth.js.
+//
+// Storage: USERS KV namespace, keyed by:
+//   "users-by-email"      → { [email]: user }
+//   "user-session-secret" → string
+
 import crypto from "node:crypto";
+import { makeStore } from "./kv-store.js";
+import { requireKvBinding, getCloudflareEnv } from "./context.js";
 
 export const STORE_NAME = "users";
 export const USERS_KEY = "users-by-email";
@@ -12,10 +19,7 @@ export const MIN_PASSWORD_LENGTH = 8;
 export const INACTIVE_DAYS = 30;
 export const INACTIVE_MS = INACTIVE_DAYS * 24 * 60 * 60 * 1000;
 
-export const getUsersStore = (event) => {
-  if (event) connectLambda(event);
-  return getStore(STORE_NAME);
-};
+export const getUsersStore = () => makeStore(requireKvBinding("USERS"));
 
 export const hashPassword = (password) => {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -167,9 +171,10 @@ const escapeHtml = (input) =>
     .replace(/'/g, "&#39;");
 
 export const sendInactiveDeletionEmail = async (user) => {
-  const apiKey = process.env.RESEND_API_KEY || "";
-  const from = process.env.RESEND_FROM || "Canvas Hub <onboarding@resend.dev>";
-  const siteUrl = process.env.URL || "https://canvhub.com";
+  const env = getCloudflareEnv();
+  const apiKey = env.RESEND_API_KEY || "";
+  const from = env.RESEND_FROM || "Canvas Hub <onboarding@resend.dev>";
+  const siteUrl = env.URL || "https://canvhub.com";
   if (!apiKey) {
     return { skipped: true, reason: "no-api-key" };
   }

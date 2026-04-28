@@ -13,6 +13,10 @@
  * so callers can still record their notification entry without crashing.
  */
 
+import { getCloudflareEnv } from "./context.js";
+
+const envOf = (name) => getCloudflareEnv()[name] || "";
+
 const PROVIDERS = {
   resend: {
     envKey: "RESEND_API_KEY",
@@ -33,19 +37,19 @@ const escapeHtml = (s) =>
     .replace(/'/g, "&#39;");
 
 export const getEmailProvider = () => {
-  if (process.env.RESEND_API_KEY) return "resend";
-  if (process.env.BREVO_API_KEY) return "brevo";
+  if (envOf("RESEND_API_KEY")) return "resend";
+  if (envOf("BREVO_API_KEY")) return "brevo";
   return null;
 };
 
 export const isEmailConfigured = () =>
-  Boolean(getEmailProvider()) && Boolean(process.env.EMAIL_FROM);
+  Boolean(getEmailProvider()) && Boolean(envOf("EMAIL_FROM"));
 
 async function sendViaResend({ from, to, subject, html, text, replyTo, bcc }) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      Authorization: `Bearer ${envOf("RESEND_API_KEY")}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -79,7 +83,7 @@ async function sendViaBrevo({ from, to, subject, html, text, replyTo, bcc }) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
-      "api-key": process.env.BREVO_API_KEY,
+      "api-key": envOf("BREVO_API_KEY"),
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -127,7 +131,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
   if (!providerKey) {
     return { delivered: false, skipped: true, reason: "not configured" };
   }
-  const from = process.env.EMAIL_FROM;
+  const from = envOf("EMAIL_FROM");
   if (!from) {
     return {
       delivered: false,
@@ -143,8 +147,8 @@ export const sendEmail = async ({ to, subject, html, text }) => {
       subject,
       html,
       text: text || stripTags(html),
-      replyTo: process.env.EMAIL_REPLY_TO || undefined,
-      bcc: process.env.EMAIL_BCC || undefined,
+      replyTo: envOf("EMAIL_REPLY_TO") || undefined,
+      bcc: envOf("EMAIL_BCC") || undefined,
     });
   } catch (err) {
     return {

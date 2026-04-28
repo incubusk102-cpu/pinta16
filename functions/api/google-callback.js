@@ -1,3 +1,4 @@
+import { wrapHandler } from "./_lib/handler-wrapper.js";
 import crypto from "node:crypto";
 import {
   ensureSessionSecret,
@@ -8,10 +9,10 @@ import {
   publicUser,
   readUsers,
   writeUsers,
-} from "../lib/user-auth.js";
-import { captureRequestMeta } from "../lib/request-info.js";
-import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
-import { appendAuditEvent } from "../lib/audit-log.js";
+} from "./_lib/user-auth.js";
+import { captureRequestMeta } from "./_lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { appendAuditEvent } from "./_lib/audit-log.js";
 
 // Google Identity Services in `ux_mode: "redirect"` form-POSTs the credential
 // to this endpoint. We verify it server-side, create/update the user, issue a
@@ -162,3 +163,5 @@ export const handler = async (event) => {
     return errorRedirect(event, "Internal error");
   }
 };
+
+export const onRequest = wrapHandler(handler);

@@ -1,6 +1,7 @@
-import { connectLambda, getStore } from "@netlify/blobs";
-import { isAuthenticated } from "../lib/admin-auth.js";
-import { withSecurityHeaders } from "../lib/security-headers.js";
+import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { connectLambda, getStore } from "./_lib/kv-stores.js";
+import { isAuthenticated } from "./_lib/admin-auth.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -256,3 +257,5 @@ export const handler = async (event) => {
     return json(500, { error: "Internal error" });
   }
 };
+
+export const onRequest = wrapHandler(handler);

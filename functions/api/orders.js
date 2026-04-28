@@ -1,11 +1,12 @@
-import { connectLambda, getStore } from "@netlify/blobs";
+import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { connectLambda, getStore } from "./_lib/kv-stores.js";
 import crypto from "node:crypto";
-import { isAuthenticated } from "../lib/admin-auth.js";
-import { captureRequestMeta } from "../lib/request-info.js";
-import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
-import { appendAuditEvent } from "../lib/audit-log.js";
-import { withSecurityHeaders } from "../lib/security-headers.js";
-import { sendOrderEmail, isEmailConfigured } from "../lib/email.js";
+import { isAuthenticated } from "./_lib/admin-auth.js";
+import { captureRequestMeta } from "./_lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { appendAuditEvent } from "./_lib/audit-log.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { sendOrderEmail, isEmailConfigured } from "./_lib/email.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -1598,3 +1599,5 @@ export const handler = async (event) => {
     return json(500, { error: "Internal error" });
   }
 };
+
+export const onRequest = wrapHandler(handler);

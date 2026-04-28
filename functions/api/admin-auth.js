@@ -1,3 +1,4 @@
+import { wrapHandler } from "./_lib/handler-wrapper.js";
 import {
   constantTimeEquals,
   ensureSessionSecret,
@@ -12,11 +13,11 @@ import {
   verifyTokenWithSecret,
   writeCredentials,
   writeCredentialsIfNew,
-} from "../lib/admin-auth.js";
-import { captureRequestMeta } from "../lib/request-info.js";
-import { consumeRateLimit, rateLimitResponse } from "../lib/rate-limit.js";
-import { appendAuditEvent, readAuditEvents } from "../lib/audit-log.js";
-import { withSecurityHeaders } from "../lib/security-headers.js";
+} from "./_lib/admin-auth.js";
+import { captureRequestMeta } from "./_lib/request-info.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { appendAuditEvent, readAuditEvents } from "./_lib/audit-log.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -180,3 +181,5 @@ export const handler = async (event) => {
     return json(500, { error: "Internal error" });
   }
 };
+
+export const onRequest = wrapHandler(handler);

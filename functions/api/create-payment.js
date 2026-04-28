@@ -1,10 +1,11 @@
+import { wrapHandler } from "./_lib/handler-wrapper.js";
+
 const jsonHeaders = {
   "Content-Type": "application/json",
 };
 
 const parseBody = (body) => {
   if (!body) return {};
-
   try {
     return JSON.parse(body);
   } catch {
@@ -17,7 +18,6 @@ const buildAuthHeader = (secretKey) =>
 
 const readPayMongoError = async (response) => {
   const text = await response.text();
-
   try {
     const payload = JSON.parse(text);
     const message = payload?.errors
@@ -47,7 +47,7 @@ const payMongoRequest = async (path, secretKey, body, method = "POST") => {
   return response.json();
 };
 
-export const handler = async (event) => {
+const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
@@ -72,7 +72,7 @@ export const handler = async (event) => {
       return {
         statusCode: 400,
         headers: jsonHeaders,
-        body: JSON.stringify({ error: "Minimum amount is ₱20" }),
+        body: JSON.stringify({ error: "Minimum amount is \u20b120" }),
       };
     }
 
@@ -169,3 +169,5 @@ export const handler = async (event) => {
     };
   }
 };
+
+export const onRequest = wrapHandler(handler);

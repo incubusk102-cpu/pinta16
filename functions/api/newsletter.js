@@ -1,4 +1,5 @@
 // /api/newsletter — public POST to subscribe; admin GET (list) / DELETE (unsubscribe).
+import { setCloudflareContext } from "./_lib/context.js";
 // KV namespace: NEWSLETTER (single key "subscribers" → JSON array).
 //
 // Subscribers are also forwarded to Resend or Brevo (whichever is configured
@@ -88,6 +89,7 @@ const forwardToProvider = async (entry, env) => {
 };
 
 const handle = async ({ request, env }) => {
+  setCloudflareContext(env);
   if (!env.NEWSLETTER) {
     return json(500, { error: "NEWSLETTER KV binding missing" });
   }
@@ -97,7 +99,7 @@ const handle = async ({ request, env }) => {
 
   try {
     if (method === "GET") {
-      if (!(await isAuthenticated(event, env))) {
+      if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
       const subs = await readSubscribers(store);
@@ -158,7 +160,7 @@ const handle = async ({ request, env }) => {
     }
 
     if (method === "DELETE") {
-      if (!(await isAuthenticated(event, env))) {
+      if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
       const body = parseBody(event.body);
