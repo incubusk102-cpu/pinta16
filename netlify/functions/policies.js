@@ -10,8 +10,13 @@
 // Admin actions: POST { action: "update", slug, title, body } — auth required.
 
 import { connectLambda, getStore } from "@netlify/blobs";
+import { purgeCache } from "@netlify/functions";
 import { withSecurityHeaders } from "../lib/security-headers.js";
 import { isAuthenticated } from "../lib/admin-auth.js";
+
+// Cache tag attached to public policy GETs so admin POSTs can purge the
+// edge cache after a successful write.
+const CACHE_TAG = "policies";
 
 const STORE_NAME = "policies";
 const KEY = "policies";
@@ -376,6 +381,19 @@ const readPolicies = async (store) => {
   }
 };
 
+// Invalidate the CDN cache for the public policies GET after a successful
+// write so admins (via the Refresh button) and public visitors see the new
+// data immediately rather than the 5-minute s-maxage cached copy. Failures
+// are logged but not surfaced — the write itself already succeeded and the
+// cache will refresh on its own within s-maxage.
+const purgePoliciesCache = async () => {
+  try {
+    await purgeCache({ tags: [CACHE_TAG] });
+  } catch (err) {
+    console.warn("policies: failed to purge CDN cache", err);
+  }
+};
+
 // Compare-and-swap upsert; retries up to 4 times on contention.
 const upsertPolicy = async (store, slug, nextEntry) => {
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -407,21 +425,23 @@ export const handler = async (event) => {
 
     if (event.httpMethod === "GET") {
       const data = await readPolicies(store);
-      // Cache the public policies briefly at the CDN so traffic spikes don't
-      // pile up function invocations against the daily quota.
+      // Cache the public policies at the CDN so traffic spikes don't pile
+      // up function invocations against the daily quota.
       //
-      // We split browser and CDN caching: SECURITY_HEADERS already sets
-      // `Cache-Control: no-store` which keeps browsers from caching at all
-      // (so the admin's post-save refresh always hits the network).
-      // `Netlify-CDN-Cache-Control` is CDN-only and is stripped before the
-      // response leaves the edge, so it can use stale-while-revalidate
-      // without leaking that policy to browsers (RFC 5861 stale-while-
-      // revalidate would otherwise let browsers serve a cached pre-save
-      // copy even with max-age=0). Admin POST writes bust the CDN cache
-      // via the existing version/etag flow.
+      // Browser vs CDN split: SECURITY_HEADERS already sets `Cache-Control:
+      // no-store` so browsers always hit the network (admin save-then-
+      // refresh sees fresh data). `Netlify-CDN-Cache-Control` is CDN-only
+      // and stripped before the response leaves the edge, so its stale-
+      // while-revalidate doesn't leak to browsers (RFC 5861 SWR would
+      // otherwise allow stale browser cache even with max-age=0).
+      //
+      // The cache tag is purged from the admin POST handler after every
+      // successful write so manual `Refresh` and public visitors see the
+      // new data immediately, not after the 5-minute s-maxage expires.
       return json(200, data, {
         "Netlify-CDN-Cache-Control":
           "public, s-maxage=300, stale-while-revalidate=3600",
+        "Netlify-Cache-Tag": CACHE_TAG,
       });
     }
 
@@ -446,6 +466,7 @@ export const handler = async (event) => {
           updatedAt: new Date().toISOString(),
         });
         if (!next) return json(409, { error: "Save conflicted, please retry" });
+        await purgePoliciesCache();
         return json(200, next);
       }
 
@@ -457,6 +478,7 @@ export const handler = async (event) => {
         });
         if (!next)
           return json(409, { error: "Reset conflicted, please retry" });
+        await purgePoliciesCache();
         return json(200, next);
       }
 
