@@ -16,7 +16,7 @@ const AboutSection = () => {
           Our Story
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant mb-8">
-          About Pintaterra
+          About Canvas Hub
         </h2>
         <p className="font-body text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto">
           Every painting has a soul — a story waiting to be told. We bring

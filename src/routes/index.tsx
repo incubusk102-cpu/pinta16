@@ -13,18 +13,21 @@ import OrderConfirmation from "@/components/OrderConfirmation";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import SplashScreen from "@/components/SplashScreen";
 import Ornament from "@/components/decor/Ornament";
+import TrustBar from "@/components/TrustBar";
+import StatsStrip from "@/components/StatsStrip";
+import AuthenticityCallout from "@/components/AuthenticityCallout";
 
 export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "Pintaterra — Affordable Art, Authentic Stories" },
+      { title: "Canvas Hub — Affordable Art, Authentic Stories" },
       {
         name: "description",
         content:
           "Discover hand-crafted paintings that transform spaces. Each piece tells a story, crafted with passion and precision.",
       },
-      { property: "og:title", content: "Pintaterra — Affordable Art Gallery" },
+      { property: "og:title", content: "Canvas Hub — Affordable Art Gallery" },
       {
         property: "og:description",
         content:
@@ -47,14 +50,17 @@ function Index() {
       <SplashScreen />
       <GalleryNav />
       <HeroOrFallback />
+      <TrustBar />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />
       </section>
+      <AuthenticityCallout />
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
         <Ornament label="The studio" />
       </div>
       <AboutSection />
+      <StatsStrip />
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
         <Ornament label="Voices" />
       </div>

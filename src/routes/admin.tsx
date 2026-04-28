@@ -22,7 +22,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPageWithSuspense,
   head: () => ({
     meta: [
-      { title: "Admin — Pintaterra" },
+      { title: "Admin — Canvas Hub" },
       {
         name: "description",
         content: "Upload and manage paintings in your gallery.",

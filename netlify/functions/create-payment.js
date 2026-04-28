@@ -105,7 +105,7 @@ export const handler = async (event) => {
             currency: "PHP",
             capture_type: "automatic",
             payment_method_allowed: ["qrph"],
-            description: description || "Pintaterra Art Purchase",
+            description: description || "Canvas Hub Art Purchase",
           },
         },
       },
@@ -119,8 +119,8 @@ export const handler = async (event) => {
           attributes: {
             type: "qrph",
             billing: {
-              name: customer?.fullName || "Pintaterra Customer",
-              email: customer?.email || "support@pintaterra.local",
+              name: customer?.fullName || "Canvas Hub Customer",
+              email: customer?.email || "support@canvhub.com",
               phone: customer?.phone || undefined,
               address: {
                 line1: customer?.address || undefined,

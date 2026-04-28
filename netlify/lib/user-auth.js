@@ -168,23 +168,23 @@ const escapeHtml = (input) =>
 
 export const sendInactiveDeletionEmail = async (user) => {
   const apiKey = process.env.RESEND_API_KEY || "";
-  const from = process.env.RESEND_FROM || "Pintaterra <onboarding@resend.dev>";
-  const siteUrl = process.env.URL || "https://pintaterra.netlify.app";
+  const from = process.env.RESEND_FROM || "Canvas Hub <onboarding@resend.dev>";
+  const siteUrl = process.env.URL || "https://canvhub.com";
   if (!apiKey) {
     return { skipped: true, reason: "no-api-key" };
   }
-  const subject = "Your Pintaterra account was removed for inactivity";
+  const subject = "Your Canvas Hub account was removed for inactivity";
   const safeName = escapeHtml(user.name || "there");
   const safeEmail = escapeHtml(user.email || "");
   const safeSignup = `${escapeHtml(siteUrl)}/signup`;
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:auto;padding:24px;color:#222">
       <h2 style="margin:0 0 16px">Hi ${safeName},</h2>
-      <p>Your Pintaterra account (<strong>${safeEmail}</strong>) was removed
+      <p>Your Canvas Hub account (<strong>${safeEmail}</strong>) was removed
       because it has been inactive for ${INACTIVE_DAYS} days.</p>
       <p>If this was a mistake, you're welcome to sign up again any time at
       <a href="${safeSignup}">${safeSignup}</a>.</p>
-      <p style="margin-top:24px;color:#666;font-size:12px">— Pintaterra</p>
+      <p style="margin-top:24px;color:#666;font-size:12px">— Canvas Hub</p>
     </div>
   `.trim();
   try {
