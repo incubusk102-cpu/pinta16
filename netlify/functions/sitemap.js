@@ -33,9 +33,9 @@ export const handler = async (event) => {
     const v =
       event.headers?.["x-forwarded-host"] ||
       event.headers?.host ||
-      "pintaterra.com";
+      "canvhub.com";
     // Allow only hostname-y characters: letters, digits, dots, hyphens, colons (port).
-    return /^[a-zA-Z0-9.\-:]+$/.test(String(v)) ? String(v) : "pintaterra.com";
+    return /^[a-zA-Z0-9.\-:]+$/.test(String(v)) ? String(v) : "canvhub.com";
   })();
   const origin = `${safeProto}://${safeHost}`;
 

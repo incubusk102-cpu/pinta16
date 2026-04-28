@@ -169,7 +169,7 @@ const escapeHtml = (input) =>
 export const sendInactiveDeletionEmail = async (user) => {
   const apiKey = process.env.RESEND_API_KEY || "";
   const from = process.env.RESEND_FROM || "Canvas Hub <onboarding@resend.dev>";
-  const siteUrl = process.env.URL || "https://pintaterra.netlify.app";
+  const siteUrl = process.env.URL || "https://canvhub.com";
   if (!apiKey) {
     return { skipped: true, reason: "no-api-key" };
   }

@@ -238,11 +238,11 @@ const SiteFooter = () => {
           <ul className="space-y-2 text-foreground/80">
             <li>
               <a
-                href="mailto:pintaterra@gmail.com"
+                href="mailto:support@canvhub.com"
                 className="inline-flex items-center gap-2 hover:text-foreground transition-colors"
               >
                 <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                pintaterra@gmail.com
+                support@canvhub.com
               </a>
             </li>
             <li>

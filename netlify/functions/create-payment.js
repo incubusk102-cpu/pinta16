@@ -120,7 +120,7 @@ export const handler = async (event) => {
             type: "qrph",
             billing: {
               name: customer?.fullName || "Canvas Hub Customer",
-              email: customer?.email || "support@pintaterra.local",
+              email: customer?.email || "support@canvhub.com",
               phone: customer?.phone || undefined,
               address: {
                 line1: customer?.address || undefined,
