@@ -31,7 +31,7 @@ agree, please do not use the Site.
 
 ## 1. About us
 Canvas Hub is an independent online art gallery operated from the Philippines.
-You can reach us at hello@canvhub.com or +63 956 468 5351.
+You can reach us at support@canvhub.com or +63 956 468 5351.
 
 ## 2. Eligibility
 You must be at least 18 years old, or have the consent of a parent or legal
@@ -98,7 +98,7 @@ changes are posted means you accept the updated terms.
 
 ## 13. Contact
 Questions or notices regarding these terms should be sent to
-hello@canvhub.com.`,
+support@canvhub.com.`,
     updatedAt: null,
   },
   refund: {
@@ -122,7 +122,7 @@ begun, except where any of the issues above apply.
 
 ## How to request
 1. Open your account at **/account → Orders** and click "Request Refund" on the
-   relevant order, **or** email **hello@canvhub.com** with photos of the
+   relevant order, **or** email **support@canvhub.com** with photos of the
    issue and your order number.
 2. We respond within **2 business days** with next steps.
 3. If a return is required, we'll provide return-shipping instructions.
@@ -152,7 +152,7 @@ right is in addition to, and does not replace, your statutory rights under
 RA 7394.
 
 ## Contact
-hello@canvhub.com · +63 956 468 5351`,
+support@canvhub.com · +63 956 468 5351`,
     updatedAt: null,
   },
   shipping: {
@@ -161,7 +161,7 @@ hello@canvhub.com · +63 956 468 5351`,
 
 ## Where we ship
 We currently ship throughout the **Philippines**. International shipping is
-available on request — please email hello@canvhub.com **before** ordering so
+available on request — please email support@canvhub.com **before** ordering so
 we can quote the carrier, lead time and any duties.
 
 ## Lead time
@@ -203,7 +203,7 @@ unattended, refused), we'll contact you. Reshipping costs may apply. After
 item price (less original shipping costs).
 
 ## Contact
-Questions about a specific order? hello@canvhub.com — please include your
+Questions about a specific order? support@canvhub.com — please include your
 order number.`,
     updatedAt: null,
   },
@@ -217,7 +217,7 @@ and the rights you have under **Republic Act No. 10173 (the Data Privacy Act of
 
 ## 1. Who we are (controller)
 Canvas Hub is the personal-information controller for the data described
-below. You can reach us at hello@canvhub.com.
+below. You can reach us at support@canvhub.com.
 
 ## 2. What we collect
 - **Account info:** name, email, hashed password (when you create an account
@@ -273,7 +273,7 @@ You have the right to be **informed**, to **object**, to **access**, to
 **rectify**, to **erase or block**, to **damages**, to **data portability**
 and to **file a complaint** with the **National Privacy Commission (NPC)**.
 
-To exercise any of these, email hello@canvhub.com from the address on your
+To exercise any of these, email support@canvhub.com from the address on your
 account. We respond within 30 days.
 
 You may also lodge a complaint with the NPC at
@@ -295,7 +295,7 @@ We may update this policy. The current version is always shown here, with the
 material.
 
 ## 12. Contact
-Privacy questions, requests or complaints: hello@canvhub.com.`,
+Privacy questions, requests or complaints: support@canvhub.com.`,
     updatedAt: null,
   },
 };
