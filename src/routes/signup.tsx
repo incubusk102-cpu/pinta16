@@ -4,7 +4,7 @@ import { useEffect } from "react";
 export const Route = createFileRoute("/signup")({
   component: SignupRedirect,
   head: () => ({
-    meta: [{ title: "Sign up — Pintaterra" }],
+    meta: [{ title: "Sign up — Canvas Hub" }],
   }),
 });
 

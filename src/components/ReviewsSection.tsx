@@ -142,7 +142,7 @@ const ReviewsSection = () => {
             {r.adminReply?.text ? (
               <div className="mt-auto rounded-md border border-border/40 bg-card/60 p-3">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                  Reply from Pintaterra
+                  Reply from Canvas Hub
                 </p>
                 <p className="text-xs text-foreground/85 whitespace-pre-wrap leading-relaxed">
                   {r.adminReply.text}

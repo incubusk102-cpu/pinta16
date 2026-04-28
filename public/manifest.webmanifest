@@ -1,7 +1,7 @@
 {
-  "name": "Pintaterra",
-  "short_name": "Pintaterra",
-  "description": "Original Filipino paintings — discover, save, and order from the Pintaterra gallery.",
+  "name": "Canvas Hub",
+  "short_name": "Canvas Hub",
+  "description": "Original Filipino paintings — discover, save, and order from the Canvas Hub gallery.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

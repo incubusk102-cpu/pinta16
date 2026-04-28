@@ -1,11 +1,11 @@
 /**
- * Outbound email helper for the Pintaterra storefront.
+ * Outbound email helper for the Canvas Hub storefront.
  *
  * Selects a provider based on env vars at call time:
  *   - RESEND_API_KEY  -> Resend (https://resend.com)
  *   - BREVO_API_KEY   -> Brevo  (https://developers.brevo.com)
  *
- * EMAIL_FROM (e.g. "Pintaterra <orders@pintaterra.com>") is required when a
+ * EMAIL_FROM (e.g. "Canvas Hub <orders@pintaterra.com>") is required when a
  * provider is configured. EMAIL_REPLY_TO is optional. EMAIL_BCC is optional.
  *
  * If no key is configured, sendEmail() resolves to
@@ -181,7 +181,7 @@ const wrapHtml = (heading, bodyHtml) =>
   <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;">
     <tr>
       <td style="padding:24px 28px;border-bottom:1px solid #efece4;">
-        <div style="font-family:'Playfair Display',Georgia,serif;font-size:22px;letter-spacing:0.02em;color:#1c1c1c;">Pintaterra</div>
+        <div style="font-family:'Playfair Display',Georgia,serif;font-size:22px;letter-spacing:0.02em;color:#1c1c1c;">Canvas Hub</div>
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:#7a7468;margin-top:4px;">${escapeHtml(heading)}</div>
       </td>
     </tr>
@@ -192,7 +192,7 @@ const wrapHtml = (heading, bodyHtml) =>
     </tr>
     <tr>
       <td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:#7a7468;">
-        Pintaterra &mdash; original Filipino paintings.
+        Canvas Hub &mdash; original Filipino paintings.
       </td>
     </tr>
   </table>
@@ -263,7 +263,7 @@ export const buildOrderEmail = (kind, order, extra = {}) => {
     case "confirmed":
       subject = `Order ${order.id} confirmed`;
       heading = "Order received";
-      intro = `Hi ${name}, thanks for your order at Pintaterra. We've recorded your payment and we're getting your painting${(order.items || []).length > 1 ? "s" : ""} ready.`;
+      intro = `Hi ${name}, thanks for your order at Canvas Hub. We've recorded your payment and we're getting your painting${(order.items || []).length > 1 ? "s" : ""} ready.`;
       break;
     case "in_progress":
       subject = `Order ${order.id}: in progress`;
