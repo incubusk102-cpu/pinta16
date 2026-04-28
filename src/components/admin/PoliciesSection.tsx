@@ -27,7 +27,7 @@ const SLUG_HINT: Record<PolicySlug, string> = {
 };
 
 export function PoliciesSection() {
-  const { policies, refresh } = usePolicies();
+  const { policies, refresh, applyPolicies } = usePolicies();
   const [active, setActive] = useState<PolicySlug>("terms");
   const [draft, setDraft] = useState<Policy>(policies.terms);
   const [saving, setSaving] = useState(false);
@@ -63,7 +63,11 @@ export function PoliciesSection() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Save failed (${res.status})`);
       }
-      await refresh();
+      // Use the POST response body directly instead of re-fetching via GET:
+      // the public GET is cached at the CDN with s-maxage=300, so a refresh()
+      // immediately after save can return stale data and silently revert
+      // the admin's edits when the resulting policies overwrite local draft.
+      applyPolicies(await res.json().catch(() => null));
       toast.success(`${SLUG_LABEL[active]} saved`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save");
@@ -95,7 +99,8 @@ export function PoliciesSection() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Reset failed (${res.status})`);
       }
-      await refresh();
+      // See save(): apply the POST response directly to dodge stale CDN reads.
+      applyPolicies(await res.json().catch(() => null));
       toast.success(`${SLUG_LABEL[active]} reset to default`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not reset");

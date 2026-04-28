@@ -18,6 +18,18 @@ const isPolicySlug = (s: string): s is PolicySlug =>
 // Lightweight markdown renderer — supports headings, paragraphs, lists,
 // inline links, **bold**, *italic*, and `code`. Avoids pulling in a full
 // markdown library for what is essentially long-form static text.
+
+// Allow only safe link protocols. An admin XSS attempt typing
+// `[click me](javascript:alert(1))` would otherwise fire on click; React
+// itself will warn but not block, so we filter explicitly. Anything that
+// fails this check renders as a non-link span.
+const SAFE_LINK_RE = /^(https?:|mailto:|tel:|\/[^/]|\/$|#)/i;
+const sanitizeHref = (href: string): string | null => {
+  const trimmed = href.trim();
+  if (!trimmed) return null;
+  return SAFE_LINK_RE.test(trimmed) ? trimmed : null;
+};
+
 const renderInline = (text: string) => {
   const parts: (string | { type: "link"; href: string; label: string })[] = [];
   const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -32,12 +44,17 @@ const renderInline = (text: string) => {
 
   return parts.map((p, i) => {
     if (typeof p !== "string") {
+      const safe = sanitizeHref(p.href);
+      if (!safe) {
+        return <span key={i}>{p.label}</span>;
+      }
+      const isExternal = /^https?:/i.test(safe);
       return (
         <a
           key={i}
-          href={p.href}
-          target="_blank"
-          rel="noreferrer"
+          href={safe}
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noreferrer noopener" : undefined}
           className="underline underline-offset-2 hover:text-foreground"
         >
           {p.label}
@@ -93,22 +110,37 @@ const renderMarkdown = (md: string) => {
   const lines = md.split("\n");
   const out: React.ReactNode[] = [];
   let listBuf: string[] = [];
+  let listKind: "ul" | "ol" = "ul";
   let paraBuf: string[] = [];
   let key = 0;
 
   const flushList = () => {
     if (listBuf.length) {
-      out.push(
-        <ul
-          key={key++}
-          className="list-disc list-outside pl-6 space-y-1.5 text-foreground/80 leading-relaxed"
-        >
-          {listBuf.map((item, i) => (
-            <li key={i}>{renderInline(item)}</li>
-          ))}
-        </ul>,
-      );
+      if (listKind === "ol") {
+        out.push(
+          <ol
+            key={key++}
+            className="list-decimal list-outside pl-6 space-y-1.5 text-foreground/80 leading-relaxed"
+          >
+            {listBuf.map((item, i) => (
+              <li key={i}>{renderInline(item)}</li>
+            ))}
+          </ol>,
+        );
+      } else {
+        out.push(
+          <ul
+            key={key++}
+            className="list-disc list-outside pl-6 space-y-1.5 text-foreground/80 leading-relaxed"
+          >
+            {listBuf.map((item, i) => (
+              <li key={i}>{renderInline(item)}</li>
+            ))}
+          </ul>,
+        );
+      }
       listBuf = [];
+      listKind = "ul";
     }
   };
   const flushPara = () => {
@@ -166,8 +198,20 @@ const renderMarkdown = (md: string) => {
       continue;
     }
     if (line.startsWith("- ") || line.startsWith("* ")) {
+      // Switching from an ordered list to a bullet list (or vice versa)
+      // closes the previous list before starting the new one.
+      if (listBuf.length && listKind !== "ul") flushList();
       flushPara();
+      listKind = "ul";
       listBuf.push(line.slice(2));
+      continue;
+    }
+    const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+    if (olMatch) {
+      if (listBuf.length && listKind !== "ol") flushList();
+      flushPara();
+      listKind = "ol";
+      listBuf.push(olMatch[2]);
       continue;
     }
     // Indented continuation of the previous bullet (e.g. "  more text").
