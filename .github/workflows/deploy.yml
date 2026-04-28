@@ -1,0 +1,64 @@
+name: Deploy to Cloudflare Pages
+
+# Builds the Vite frontend and publishes the `dist/` output to the
+# `canvhub` Cloudflare Pages project via direct upload. This bypasses
+# the Cloudflare Pages git integration so we have full control over
+# the build (correct Node version, npm install, vite build) and the
+# deployed site always serves the bundled assets in `dist/` rather
+# than the raw source tree.
+#
+# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
+#   - CLOUDFLARE_API_TOKEN
+#       Token must include the "Cloudflare Pages — Edit" permission for
+#       the account that owns the `canvhub` project.
+#       Create at: https://dash.cloudflare.com/profile/api-tokens
+#       (use the "Edit Cloudflare Pages" template).
+#   - CLOUDFLARE_ACCOUNT_ID
+#       Your Cloudflare account ID. Find it on the right sidebar of any
+#       page at https://dash.cloudflare.com/
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: pages-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build site
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >
+            pages deploy dist
+            --project-name=canvhub
+            --branch=${{ github.head_ref || github.ref_name }}
