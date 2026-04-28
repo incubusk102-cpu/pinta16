@@ -175,7 +175,7 @@ const GalleryNav = () => {
                 fontStyle="italic"
                 fill="currentColor"
               >
-                P
+                C
               </text>
               <rect x="6" y="30" width="28" height="1.5" fill="currentColor" />
             </svg>

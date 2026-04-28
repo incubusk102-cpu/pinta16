@@ -83,7 +83,7 @@ const AuthenticityCallout = () => {
               fontStyle="italic"
               fill="currentColor"
             >
-              P
+              C
             </text>
             <text
               x="60"

@@ -160,7 +160,7 @@ const SiteFooter = () => {
                   fontStyle="italic"
                   fill="currentColor"
                 >
-                  P
+                  C
                 </text>
                 <rect
                   x="6"

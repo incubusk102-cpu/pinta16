@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "pintaterra_splash_seen_v1";
 
 /**
- * Brand splash on first paint of a session. The "P" logo strokes draw
+ * Brand splash on first paint of a session. The "C" mark strokes draw
  * themselves on, the wordmark fades in, then the whole overlay fades out.
  * Only shown once per browser session — afterwards we set sessionStorage
  * so subsequent route changes don't re-trigger the splash.
@@ -53,7 +53,7 @@ const SplashScreen = () => {
             className="text-foreground"
           >
             <motion.path
-              d="M30 100 V20 H70 a25 25 0 0 1 0 50 H30"
+              d="M85 32 A32 32 0 1 0 85 88"
               fill="none"
               stroke="currentColor"
               strokeWidth={4}
