@@ -407,19 +407,21 @@ export const handler = async (event) => {
 
     if (event.httpMethod === "GET") {
       const data = await readPolicies(store);
-      // Cache the public policies briefly at the edge so traffic spikes don't
-      // pile up function invocations against the daily quota. Stale-while-
-      // revalidate keeps the page snappy while we refresh in the background.
+      // Cache the public policies briefly at the CDN so traffic spikes don't
+      // pile up function invocations against the daily quota.
+      //
+      // We split browser and CDN caching: SECURITY_HEADERS already sets
+      // `Cache-Control: no-store` which keeps browsers from caching at all
+      // (so the admin's post-save refresh always hits the network).
+      // `Netlify-CDN-Cache-Control` is CDN-only and is stripped before the
+      // response leaves the edge, so it can use stale-while-revalidate
+      // without leaking that policy to browsers (RFC 5861 stale-while-
+      // revalidate would otherwise let browsers serve a cached pre-save
+      // copy even with max-age=0). Admin POST writes bust the CDN cache
+      // via the existing version/etag flow.
       return json(200, data, {
-        // NB: must match the casing used by SECURITY_HEADERS' "Cache-Control"
-        // (which sets `no-store`) so the override actually replaces it
-        // instead of leaving both keys in the response.
-        // max-age=0 keeps the browser from caching (so the admin's
-        // post-save refresh / "Refresh" button always hits the network),
-        // while s-maxage=300 lets the CDN serve cached copies to public
-        // visitors. stale-while-revalidate keeps it snappy under traffic.
-        "Cache-Control":
-          "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+        "Netlify-CDN-Cache-Control":
+          "public, s-maxage=300, stale-while-revalidate=3600",
       });
     }
 
