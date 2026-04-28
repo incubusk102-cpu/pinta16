@@ -1,0 +1,95 @@
+# Cloudflare Pages configuration for canvhub.com.
+# Deploys via:
+#   - GitHub integration (Pages auto-builds on push to main), OR
+#   - `npx wrangler pages deploy dist` from CI/local
+#
+# This file controls per-environment runtime config, KV namespace bindings,
+# and compatibility flags. Build settings (command, output dir, root dir,
+# Node version) live in the Pages dashboard under Settings → Build &
+# deployments. They should match:
+#   Build command:       npm run build
+#   Build output:        dist
+#   Root directory:      (empty)
+#   NODE_VERSION env:    20
+
+name = "canvhub"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# KV namespace bindings (production)
+#
+# Create each namespace in the Cloudflare dashboard (Workers & Pages → KV →
+# Create namespace), then paste its id below. The `binding` name is what
+# Pages Functions will see as `env.<BINDING>`.
+#
+# `preview_id` is used for *preview* deploys (PR previews). For zero-config,
+# you can point it at the same namespace as production, but you may want a
+# separate "canvhub-products-preview" namespace etc. so previews can't dirty
+# real data.
+# ---------------------------------------------------------------------------
+
+[[kv_namespaces]]
+binding = "PRODUCTS"
+id = "REPLACE_WITH_PRODUCTS_KV_ID"
+preview_id = "REPLACE_WITH_PRODUCTS_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "HERO_SLIDES"
+id = "REPLACE_WITH_HERO_SLIDES_KV_ID"
+preview_id = "REPLACE_WITH_HERO_SLIDES_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "STOREFRONT_CONFIG"
+id = "REPLACE_WITH_STOREFRONT_CONFIG_KV_ID"
+preview_id = "REPLACE_WITH_STOREFRONT_CONFIG_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "POLICIES"
+id = "REPLACE_WITH_POLICIES_KV_ID"
+preview_id = "REPLACE_WITH_POLICIES_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "NEWSLETTER"
+id = "REPLACE_WITH_NEWSLETTER_KV_ID"
+preview_id = "REPLACE_WITH_NEWSLETTER_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "VISITORS"
+id = "REPLACE_WITH_VISITORS_KV_ID"
+preview_id = "REPLACE_WITH_VISITORS_KV_PREVIEW_ID"
+
+# Bindings below are created now so PR2 can land without dashboard changes.
+# Until PR2 ships the corresponding endpoints, these namespaces are unused
+# — creating them is harmless.
+
+[[kv_namespaces]]
+binding = "ORDERS"
+id = "REPLACE_WITH_ORDERS_KV_ID"
+preview_id = "REPLACE_WITH_ORDERS_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "USERS"
+id = "REPLACE_WITH_USERS_KV_ID"
+preview_id = "REPLACE_WITH_USERS_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "CHAT_THREADS"
+id = "REPLACE_WITH_CHAT_THREADS_KV_ID"
+preview_id = "REPLACE_WITH_CHAT_THREADS_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "REPLACE_WITH_RATE_LIMITS_KV_ID"
+preview_id = "REPLACE_WITH_RATE_LIMITS_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "AUDIT_LOG"
+id = "REPLACE_WITH_AUDIT_LOG_KV_ID"
+preview_id = "REPLACE_WITH_AUDIT_LOG_KV_PREVIEW_ID"
+
+[[kv_namespaces]]
+binding = "ADMIN_AUTH"
+id = "REPLACE_WITH_ADMIN_AUTH_KV_ID"
+preview_id = "REPLACE_WITH_ADMIN_AUTH_KV_PREVIEW_ID"

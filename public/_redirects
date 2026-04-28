@@ -1,3 +1,11 @@
-/api/*        /.netlify/functions/:splat  200!
-/sitemap.xml  /.netlify/functions/sitemap 200!
-/*            /index.html                 200
+# Cloudflare Pages routing.
+#
+# /api/*  is served by Cloudflare Pages Functions in /functions/api/, so
+# we MUST NOT rewrite it — leaving it unmatched lets the Functions router
+# claim it. The catch-all below sends everything else to the SPA shell.
+#
+# /sitemap.xml is exposed at its canonical URL by rewriting to the
+# Pages Function at /api/sitemap.
+
+/sitemap.xml  /api/sitemap  200
+/*            /index.html   200
