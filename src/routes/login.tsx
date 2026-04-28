@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ArrowLeft } from "lucide-react";
 
 const GOOGLE_CLIENT_ID =
-  "899774942474-ogttcvtsmd4ffhnn6avadqhjs8m3i2qj.apps.googleusercontent.com";
+  "899774942474-kbdt3c4tvpr6tltcggmtnr07aqvg4eb2.apps.googleusercontent.com";
 
 const GOOGLE_CALLBACK_PATH = "/api/google-callback";
 
