@@ -135,10 +135,8 @@ const GalleryNav = () => {
     label: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    { id: "gallery", label: t("nav.gallery"), icon: ImageIcon },
     { id: "about", label: t("nav.about"), icon: Info },
     { id: "reviews", label: t("nav.reviews"), icon: Star },
-    { id: "contact", label: t("nav.contact"), icon: MessageSquare },
   ];
 
   return (
@@ -345,7 +343,29 @@ const GalleryNav = () => {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto py-2">
-                {/* Browse */}
+                {/* Primary nav: Gallery + Contact — prominent on first open
+                    so the user sees them without expanding any section. */}
+                <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
+                  <button
+                    onClick={() => scrollTo("gallery")}
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    <span className="font-body text-xs tracking-[0.25em] uppercase">
+                      {t("nav.gallery")}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => scrollTo("contact")}
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="font-body text-xs tracking-[0.25em] uppercase">
+                      {t("nav.contact")}
+                    </span>
+                  </button>
+                </div>
+                {/* Browse (other sections) */}
                 <DrawerSection
                   label="Browse"
                   storageKey="browse"
