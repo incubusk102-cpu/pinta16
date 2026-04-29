@@ -16,6 +16,7 @@ interface PromoStat {
   code: string;
   type: string;
   value: number;
+  freeShipping?: boolean;
   enabled: boolean;
   usageLimit: number | null;
   expiresAt: string | null;
@@ -34,6 +35,8 @@ const peso = (n: number) =>
 
 const formatPromoValue = (p: PromoStat) => {
   if (p.type === "percent") return `${p.value}% off`;
+  if (p.type === "flat") return `flat ${peso(p.value)}`;
+  if (p.type === "free_shipping") return "free shipping";
   if (p.type === "amount" || p.type === "fixed") return `${peso(p.value)} off`;
   return `${p.value}`;
 };

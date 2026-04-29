@@ -5,7 +5,10 @@ import {
   useState,
   ReactNode,
 } from "react";
-import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import {
+  useStorefrontConfig,
+  type PromoCodeType,
+} from "@/contexts/StorefrontConfigContext";
 
 export interface CartItem {
   id: string;
@@ -148,8 +151,9 @@ export const ORDER_STEPS: {
 
 interface VoucherState {
   code: string;
-  type: "percent" | "fixed";
+  type: PromoCodeType;
   value: number;
+  freeShipping: boolean;
   applied: boolean;
   error: string;
 }
@@ -248,6 +252,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     code: "",
     type: "percent",
     value: 0,
+    freeShipping: false,
     applied: false,
     error: "",
   });
@@ -310,6 +315,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         code: upper,
         type: "percent",
         value: 0,
+        freeShipping: false,
         applied: false,
         error,
       });
@@ -326,6 +332,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       code: upper,
       type: promo.type,
       value: promo.value,
+      freeShipping:
+        promo.type === "free_shipping" || Boolean(promo.freeShipping),
       applied: true,
       error: "",
     });
@@ -336,17 +344,30 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       code: "",
       type: "percent",
       value: 0,
+      freeShipping: false,
       applied: false,
       error: "",
     });
 
+  const voucherFreeShipping = voucher.applied && voucher.freeShipping;
   const shippingFeeOriginal = SHIPPING_FEE;
-  const shippingFee = isFreeShipping ? 0 : SHIPPING_FEE;
-  const discount = !voucher.applied
-    ? 0
-    : voucher.type === "percent"
-      ? subtotal * (voucher.value / 100)
-      : Math.min(voucher.value, subtotal);
+  const shippingFee = isFreeShipping || voucherFreeShipping ? 0 : SHIPPING_FEE;
+  const computeVoucherDiscount = (): number => {
+    if (!voucher.applied) return 0;
+    if (voucher.type === "percent") {
+      return subtotal * (voucher.value / 100);
+    }
+    if (voucher.type === "flat") {
+      // "Any order becomes ₱<value>" — discount is the gap above the flat
+      // price, capped at subtotal so we never go negative.
+      return Math.max(0, Math.min(subtotal, subtotal - voucher.value));
+    }
+    if (voucher.type === "free_shipping") {
+      return 0;
+    }
+    return Math.min(voucher.value, subtotal);
+  };
+  const discount = computeVoucherDiscount();
   const total = subtotal - discount + shippingFee;
   const estimatedCreationDays = getEstimatedCreationDays(itemCount);
 

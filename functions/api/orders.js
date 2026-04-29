@@ -82,8 +82,23 @@ const computeExpectedDiscount = (promo, subtotal) => {
   if (promo.type === "percent") {
     return Math.round((subtotal * promo.value) / 100);
   }
+  if (promo.type === "flat") {
+    // "Any order becomes ₱<value>" — discount is everything above the flat
+    // price, capped to subtotal so we never go negative.
+    return Math.max(0, Math.min(subtotal, subtotal - promo.value));
+  }
+  if (promo.type === "free_shipping") {
+    // No subtotal discount — only shipping is subsidised, which is handled
+    // separately via promoGrantsFreeShipping().
+    return 0;
+  }
+  // "fixed" — fixed peso amount off, never below zero.
   return Math.min(promo.value, subtotal);
 };
+
+const promoGrantsFreeShipping = (promo) =>
+  Boolean(promo) &&
+  (promo.type === "free_shipping" || Boolean(promo.freeShipping));
 
 // Compare-and-swap increment of usageCount. Validates the promo is still
 // eligible (enabled, not expired, under limit) on every attempt so a malicious
@@ -423,6 +438,7 @@ export const handler = async (event) => {
             code: p.code,
             type: p.type,
             value: p.value,
+            freeShipping: Boolean(p.freeShipping),
             enabled: p.enabled,
             usageLimit: p.usageLimit,
             expiresAt: p.expiresAt,
@@ -595,7 +611,13 @@ export const handler = async (event) => {
           const promo = findEligiblePromo(config, clientVoucher);
           if (promo) {
             const expected = computeExpectedDiscount(promo, clientSubtotal);
-            if (expected > 0 && Math.abs(expected - clientDiscount) <= 1) {
+            const grantsFreeShip = promoGrantsFreeShipping(promo);
+            const discountMatches = Math.abs(expected - clientDiscount) <= 1;
+            // Accept the code if the discount math checks out AND the code
+            // grants at least one tangible benefit (a real discount or free
+            // shipping). free_shipping-only codes have expected === 0 and
+            // were previously dropped — they are now honored.
+            if (discountMatches && (expected > 0 || grantsFreeShip)) {
               validatedVoucherCode = clientVoucher;
               validatedDiscount = expected;
             }
