@@ -365,6 +365,10 @@ const handle = async ({ request, env }) => {
           code,
           type: incoming.type ?? previous?.type ?? "percent",
           value: incoming.value ?? previous?.value ?? 0,
+          freeShipping:
+            incoming.freeShipping === undefined
+              ? Boolean(previous?.freeShipping)
+              : Boolean(incoming.freeShipping),
           minSpend: incoming.minSpend ?? previous?.minSpend ?? 0,
           usageLimit:
             incoming.usageLimit === undefined
