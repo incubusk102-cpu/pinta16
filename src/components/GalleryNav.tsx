@@ -182,31 +182,9 @@ const GalleryNav = () => {
           </span>
         </button>
 
-        {/* Desktop quick links */}
-        <div className="hidden md:flex items-center gap-10">
-          {[
-            { id: "gallery", label: t("nav.gallery") },
-            { id: "contact", label: t("nav.contact") },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => scrollTo(item.id)}
-              className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors duration-500"
-            >
-              {item.label}
-            </button>
-          ))}
-          {user && (
-            <Link
-              to="/account"
-              className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors duration-500 inline-flex items-center gap-2"
-            >
-              <UserCircle className="w-4 h-4" />
-              {user.name?.split(" ")[0] || t("nav.account")}
-            </Link>
-          )}
-          <ThemeLocaleToggle />
-        </div>
+        {/* Desktop quick links removed — Gallery, Contact, account, and
+            theme/locale toggle now live inside the hamburger drawer, which
+            opens on hover (or click) on md+ screens. */}
 
         {/* Right cluster: cart + hamburger (always visible) */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -224,6 +202,8 @@ const GalleryNav = () => {
           </button>
           <button
             onClick={() => setMenuOpen(true)}
+            onMouseEnter={() => setMenuOpen(true)}
+            onFocus={() => setMenuOpen(true)}
             className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
             aria-label="Open menu"
             aria-expanded={menuOpen}
