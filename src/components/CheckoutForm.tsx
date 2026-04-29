@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -9,7 +9,6 @@ import {
   MapPin,
   FileText,
   Loader2,
-  LogIn,
   UserPlus,
 } from "lucide-react";
 import { useCart, type OrderInfo } from "@/contexts/CartContext";
@@ -24,6 +23,7 @@ import {
   isValidPhone,
   enforceMaxLength,
 } from "@/lib/sanitize";
+import { GOOGLE_CALLBACK_PATH, renderGoogleButton } from "@/lib/google-signin";
 import PaymentModal from "./PaymentModal";
 import { createPayment } from "@/utils/payment.functions";
 
@@ -109,6 +109,10 @@ const CheckoutForm = () => {
   const [isCreatingPayment, setIsCreatingPayment] = useState(false);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  // Container for Google's official branded sign-in button. Rendered by
+  // GSI directly into this div so a tap goes straight to Google's
+  // account chooser — no intermediate /login page visit needed.
+  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (showCheckout) {
@@ -121,10 +125,11 @@ const CheckoutForm = () => {
     }
   }, [showCheckout, isSignedIn, user]);
 
-  // If the user clicked "Sign in with Google" from the choose screen, the
-  // page navigated away to /login. After they return signed-in, we want to
-  // re-open the checkout panel automatically so they don't have to click
-  // back through the cart again.
+  // If the visitor tapped Google's sign-in button from the choose screen,
+  // the browser left for Google → /api/google-callback → /login (to
+  // finalize the session) → back to the homepage. After they return
+  // signed-in we re-open the checkout panel automatically so they don't
+  // have to click back through the cart again.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isSignedIn) return;
@@ -139,6 +144,40 @@ const CheckoutForm = () => {
       setShowCheckout(true);
     }
   }, [isSignedIn, items.length, showCheckout, setShowCheckout]);
+
+  // Render Google's official branded button into the choose screen every
+  // time the screen becomes visible. Tapping it redirects the top-level
+  // window to Google — we set the resume flag just before so the drawer
+  // reopens after sign-in completes.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isSignedIn) return;
+    if (!showCheckout) return;
+    if (checkoutMode !== "choose") return;
+    const target = googleBtnRef.current;
+    if (!target) return;
+    target.innerHTML = "";
+    const width = Math.max(240, Math.min(400, target.clientWidth || 320));
+    renderGoogleButton({
+      target,
+      width,
+      text: "continue_with",
+      theme: "outline",
+      shape: "rectangular",
+      loginUri: `${window.location.origin}${GOOGLE_CALLBACK_PATH}`,
+    }).catch(() => {
+      /* GSI script failed to load — leave the empty slot; visitors can
+         still use "Continue as Guest" above. */
+    });
+  }, [isSignedIn, showCheckout, checkoutMode]);
+
+  const markResumeCheckout = () => {
+    try {
+      sessionStorage.setItem(RESUME_CHECKOUT_FLAG, "1");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof OrderInfo, string>> = {};
@@ -324,28 +363,19 @@ const CheckoutForm = () => {
                         </p>
                       </div>
                     </button>
-                    <button
-                      onClick={() => {
-                        try {
-                          sessionStorage.setItem(RESUME_CHECKOUT_FLAG, "1");
-                        } catch {
-                          /* ignore */
-                        }
-                        setShowCheckout(false);
-                        window.location.href = "/login";
-                      }}
-                      className="w-full flex items-center gap-3 p-4 border border-border/30 rounded-sm hover:bg-accent/50 transition-colors text-left"
+                    <div
+                      onPointerDownCapture={markResumeCheckout}
+                      className="w-full flex flex-col items-center gap-2 p-4 border border-border/30 rounded-sm"
                     >
-                      <LogIn className="w-5 h-5 text-muted-foreground shrink-0" />
-                      <div>
-                        <p className="font-body text-sm font-medium text-foreground">
-                          Sign in with Google
-                        </p>
-                        <p className="font-body text-xs text-muted-foreground">
-                          Track your order &amp; save your info
-                        </p>
-                      </div>
-                    </button>
+                      <div
+                        ref={googleBtnRef}
+                        className="w-full flex justify-center"
+                        aria-label="Continue with Google"
+                      />
+                      <p className="font-body text-xs text-muted-foreground text-center">
+                        Track your order &amp; save your info
+                      </p>
+                    </div>
                   </div>
                 )}
 
