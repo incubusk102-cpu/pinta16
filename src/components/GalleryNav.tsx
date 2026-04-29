@@ -80,17 +80,16 @@ const GalleryNav = () => {
     setMenuOpen(false);
   }, [pathname]);
 
-  // Lock body scroll while drawer is open + ESC to close
+  // ESC to close while drawer is open. Body scroll is intentionally NOT
+  // locked — the drawer is transparent so visitors can keep scrolling the
+  // page underneath while the menu options stay visible on the right.
   useEffect(() => {
     if (!menuOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKey);
     };
   }, [menuOpen]);
@@ -188,8 +187,8 @@ const GalleryNav = () => {
 
         {/* Right cluster: cart + hamburger (always visible).
             On md+ screens, hovering the hamburger area shows a small
-            popover with Gallery / Contact (no scroll lock, no backdrop).
-            Click still opens the full modal drawer. */}
+            popover with Gallery / Contact. Click opens the full drawer
+            — transparent, non-modal, page underneath stays scrollable. */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <ThemeLocaleToggle />
           <button
@@ -210,13 +209,17 @@ const GalleryNav = () => {
             onMouseLeave={() => setHoverPopoverOpen(false)}
           >
             <button
-              onClick={() => setMenuOpen(true)}
+              onClick={() => setMenuOpen((open) => !open)}
               className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
-              aria-label="Open menu"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
               aria-expanded={menuOpen}
               aria-controls="mobile-nav-drawer"
             >
-              <Menu className="w-6 h-6" />
+              {menuOpen ? (
+                <X className="w-6 h-6" />
+              ) : (
+                <Menu className="w-6 h-6" />
+              )}
             </button>
             <AnimatePresence>
               {hoverPopoverOpen && (
@@ -258,24 +261,16 @@ const GalleryNav = () => {
       <AnimatePresence>
         {menuOpen && (
           <>
-            {/* Backdrop */}
-            <motion.button
-              key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={closeMenu}
-              aria-label="Close menu"
-              className="fixed inset-0 z-[60] bg-background/70 backdrop-blur-sm"
-            />
+            {/* No dim/blur backdrop — the page underneath stays fully
+                visible and scrollable while the drawer is open. */}
 
-            {/* Drawer */}
+            {/* Drawer — frosted-glass transparent so visitors can see the
+                page content behind it while still reading the menu. */}
             <motion.aside
               key="drawer"
               id="mobile-nav-drawer"
               role="dialog"
-              aria-modal="true"
+              aria-modal="false"
               aria-label="Site menu"
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
@@ -285,7 +280,7 @@ const GalleryNav = () => {
                 duration: 0.3,
                 ease: [0.4, 0, 0.2, 1],
               }}
-              className="fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card border-l border-border/40 shadow-2xl flex flex-col"
+              className="fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card/40 supports-[backdrop-filter]:bg-card/25 backdrop-blur-xl border-l border-border/40 shadow-2xl flex flex-col"
             >
               {/* Drawer header */}
               <div className="flex items-center justify-end px-5 py-4 border-b border-border/30">
@@ -306,7 +301,7 @@ const GalleryNav = () => {
                 <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
                   <button
                     onClick={() => scrollTo("gallery")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                   >
                     <ImageIcon className="w-4 h-4" />
                     <span className="font-body text-xs tracking-[0.25em] uppercase">
@@ -315,7 +310,7 @@ const GalleryNav = () => {
                   </button>
                   <button
                     onClick={() => scrollTo("contact")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                   >
                     <MessageSquare className="w-4 h-4" />
                     <span className="font-body text-xs tracking-[0.25em] uppercase">
@@ -328,7 +323,7 @@ const GalleryNav = () => {
                       <button
                         key={item.id}
                         onClick={() => scrollTo(item.id)}
-                        className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                        className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                       >
                         <Icon className="w-4 h-4" />
                         <span className="font-body text-xs tracking-[0.25em] uppercase">
@@ -342,7 +337,7 @@ const GalleryNav = () => {
                       closeMenu();
                       openCart();
                     }}
-                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                   >
                     <ShoppingCart className="w-4 h-4" />
                     <span className="font-body text-xs tracking-[0.25em] uppercase">
