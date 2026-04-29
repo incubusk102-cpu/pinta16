@@ -56,7 +56,6 @@ const SLUG_LABEL_KEYS: Record<
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hoverPopoverOpen, setHoverPopoverOpen] = useState(false);
   const { itemCount, openCart, orders } = useCart();
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
@@ -181,14 +180,11 @@ const GalleryNav = () => {
           </span>
         </button>
 
-        {/* Desktop quick links removed — Gallery and Contact now appear in
-            the lightweight hover popover next to the hamburger (md+ only).
-            The full hamburger drawer still opens on click for the rest. */}
-
-        {/* Right cluster: cart + hamburger (always visible).
-            On md+ screens, hovering the hamburger area shows a small
-            popover with Gallery / Contact. Click opens the full drawer
-            — transparent, non-modal, page underneath stays scrollable. */}
+        {/* Right cluster: cart + hamburger. The hamburger toggles open
+            the full drawer — transparent, non-modal, page underneath
+            stays scrollable. The drawer itself surfaces every primary
+            destination (Gallery, Contact, About, Reviews, Cart) at the
+            top, so no separate hover popover is needed on desktop. */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <ThemeLocaleToggle />
           <button
@@ -203,58 +199,19 @@ const GalleryNav = () => {
               </span>
             )}
           </button>
-          <div
-            className="relative"
-            onMouseEnter={() => setHoverPopoverOpen(true)}
-            onMouseLeave={() => setHoverPopoverOpen(false)}
+          <button
+            onClick={() => setMenuOpen((open) => !open)}
+            className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav-drawer"
           >
-            <button
-              onClick={() => setMenuOpen((open) => !open)}
-              className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
-              aria-label={menuOpen ? "Close menu" : "Open menu"}
-              aria-expanded={menuOpen}
-              aria-controls="mobile-nav-drawer"
-            >
-              {menuOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </button>
-            <AnimatePresence>
-              {hoverPopoverOpen && (
-                <motion.div
-                  key="hover-popover"
-                  role="menu"
-                  aria-label="Quick links"
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="hidden md:block absolute right-0 top-full pt-2 min-w-[180px]"
-                >
-                  <div className="flex flex-col bg-card border border-border/40 rounded-md shadow-lg overflow-hidden">
-                    {[
-                      { id: "gallery", label: t("nav.gallery") },
-                      { id: "contact", label: t("nav.contact") },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        role="menuitem"
-                        onClick={() => {
-                          setHoverPopoverOpen(false);
-                          scrollTo(item.id);
-                        }}
-                        className="px-4 py-3 text-left font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+            {menuOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -301,7 +258,7 @@ const GalleryNav = () => {
                 <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
                   <button
                     onClick={() => scrollTo("gallery")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                   >
                     <ImageIcon className="w-4 h-4" />
                     <span className="font-body text-xs tracking-[0.25em] uppercase">
@@ -310,7 +267,7 @@ const GalleryNav = () => {
                   </button>
                   <button
                     onClick={() => scrollTo("contact")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                   >
                     <MessageSquare className="w-4 h-4" />
                     <span className="font-body text-xs tracking-[0.25em] uppercase">
@@ -323,7 +280,7 @@ const GalleryNav = () => {
                       <button
                         key={item.id}
                         onClick={() => scrollTo(item.id)}
-                        className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                        className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                       >
                         <Icon className="w-4 h-4" />
                         <span className="font-body text-xs tracking-[0.25em] uppercase">
@@ -337,7 +294,7 @@ const GalleryNav = () => {
                       closeMenu();
                       openCart();
                     }}
-                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/70 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                   >
                     <ShoppingCart className="w-4 h-4" />
                     <span className="font-body text-xs tracking-[0.25em] uppercase">
