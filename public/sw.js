@@ -9,7 +9,7 @@
  *  - All other requests: pass through.
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
