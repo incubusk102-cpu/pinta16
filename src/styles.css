@@ -167,6 +167,10 @@
   .font-body {
     font-family: var(--font-body);
   }
+  .font-logo {
+    font-family: 'EB Garamond', Georgia, 'Playfair Display', serif;
+    font-style: italic;
+  }
 
   .gallery-frame {
     box-shadow:
