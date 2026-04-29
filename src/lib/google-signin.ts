@@ -98,6 +98,13 @@ export interface RenderRedirectButtonOptions {
   // not yet into our site can sign in with one tap, no redirect to
   // Google's full login page.
   showOneTap?: boolean;
+  // Abort the render if the caller no longer wants the button (e.g.
+  // the React effect cleanup runs before the GSI script finishes
+  // loading). When aborted, renderGoogleButton stops before calling
+  // `initialize`, `renderButton`, or `prompt`, which otherwise could
+  // fire a stale auto_select / One Tap redirect after the caller has
+  // already moved on.
+  signal?: AbortSignal;
 }
 
 // Render Google's official branded button. When `loginUri` is provided
@@ -111,7 +118,14 @@ export interface RenderRedirectButtonOptions {
 export const renderGoogleButton = async (
   opts: RenderRedirectButtonOptions,
 ): Promise<void> => {
+  if (opts.signal?.aborted) return;
   const g = await loadGsiScript();
+  // If the caller aborted while the GSI script was loading (e.g. the
+  // visitor closed the cart or switched to guest checkout), stop here
+  // instead of initializing and prompting — otherwise a stale
+  // auto_select config could trigger a full-page redirect to Google
+  // after the user has already moved on.
+  if (opts.signal?.aborted) return;
   const width = Math.max(240, Math.min(400, opts.width ?? 320));
   const config: GsiConfig = {
     client_id: GOOGLE_CLIENT_ID,
@@ -130,6 +144,7 @@ export const renderGoogleButton = async (
       opts.onCredential?.(resp.credential);
   }
   g.accounts.id.initialize(config);
+  if (opts.signal?.aborted) return;
   g.accounts.id.renderButton(opts.target, {
     theme: opts.theme ?? "outline",
     size: opts.size ?? "large",
@@ -137,7 +152,7 @@ export const renderGoogleButton = async (
     text: opts.text ?? "continue_with",
     width,
   });
-  if (opts.showOneTap) {
+  if (opts.showOneTap && !opts.signal?.aborted) {
     // One Tap is best-effort: browsers that block 3rd-party cookies,
     // users who've previously dismissed it, and private-browsing modes
     // will silently skip it. The rendered button above is always the

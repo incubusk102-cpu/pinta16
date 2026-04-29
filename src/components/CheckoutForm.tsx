@@ -178,6 +178,13 @@ const CheckoutForm = () => {
       /* ignore */
     }
     const width = Math.max(240, Math.min(400, target.clientWidth || 320));
+    // Abort controller lets the cleanup stop renderGoogleButton if the
+    // async GSI script is still loading when the visitor moves on (e.g.
+    // they tap "Continue as Guest" or close the drawer). Without this,
+    // the late promise could call `initialize({ auto_select: true })`
+    // + `prompt()` seconds later and force-redirect the visitor to
+    // Google in the middle of an unrelated screen.
+    const abortController = new AbortController();
     renderGoogleButton({
       target,
       width,
@@ -197,16 +204,18 @@ const CheckoutForm = () => {
       // button above, which opens Google's real email/password page.
       autoSelect: true,
       showOneTap: true,
+      signal: abortController.signal,
     }).catch(() => {
       /* GSI script failed to load — leave the empty slot; visitors can
          still use "Continue as Guest" above. */
     });
     return () => {
       // If the visitor closes the drawer or switches to the guest form
-      // without completing Google sign-in, don't leave the flag armed
-      // or leave Google's One Tap card floating over an unrelated page.
-      // The post-sign-in resume effect clears the flag on a successful
-      // use.
+      // without completing Google sign-in, abort the pending GSI render
+      // (so a late script load can't fire auto_select / One Tap after
+      // they've moved on), don't leave the resume flag armed, and hide
+      // any One Tap card that already materialized.
+      abortController.abort();
       try {
         sessionStorage.removeItem(RESUME_CHECKOUT_FLAG);
       } catch {
