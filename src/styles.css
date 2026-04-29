@@ -88,6 +88,10 @@
   --gallery-glow: oklch(1 0 0);
   --gallery-surface: oklch(0.18 0 0);
   --gallery-frame: oklch(0.32 0 0);
+  /* Brand gold used by .font-logo (hero + footer wordmarks, navbar C).
+     On dark backgrounds this reads with strong contrast (~7:1).
+     Light theme overrides this to a deeper bronze for readability. */
+  --logo-color: #c4a86a;
   --transition-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
   --transition-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -130,6 +134,9 @@
 
   --gradient-elegant-bright: oklch(0.18 0 0);
   --gradient-elegant-mid: oklch(0.42 0 0);
+  /* Deeper, more saturated bronze for the brand wordmark on light
+     backgrounds (~5.4:1 contrast vs the near-white surface, passes WCAG AA). */
+  --logo-color: oklch(0.42 0.09 70);
 }
 
 :root[data-theme="light"] ::selection {
@@ -170,7 +177,7 @@
   .font-logo {
     font-family: 'EB Garamond', Georgia, 'Playfair Display', serif;
     font-style: italic;
-    color: #c4a86a;
+    color: var(--logo-color);
   }
 
   .gallery-frame {

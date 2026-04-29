@@ -161,7 +161,7 @@ const GalleryNav = () => {
         >
           <span
             aria-hidden
-            className="relative inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 transition-opacity duration-500 group-hover:opacity-90"
+            className="font-logo relative inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 transition-opacity duration-500 group-hover:opacity-90"
           >
             <svg
               viewBox="0 0 40 40"
@@ -176,7 +176,7 @@ const GalleryNav = () => {
                 fontSize="34"
                 fontStyle="italic"
                 fontWeight={500}
-                fill="#c4a86a"
+                fill="currentColor"
               >
                 C
               </text>
