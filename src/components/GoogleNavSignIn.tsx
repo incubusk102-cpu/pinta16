@@ -10,19 +10,28 @@ import {
 // sign-in the cart uses). Same semantics as CheckoutForm's Google
 // slot: autoSelect for returning visitors, One Tap for first-time
 // visitors, top-level redirect to Google's real page otherwise.
-export default function GoogleNavSignIn() {
+//
+// `active` MUST be wired to the drawer's open state. The nav drawer
+// is pre-mounted (hidden via CSS transform) for instant-open perf, so
+// without this gate the button's effect would fire on every page
+// load and `auto_select: true` + `ux_mode: redirect` would silently
+// form-POST to /api/google-callback — including after a logout,
+// creating a logout loop where the visitor is re-signed-in before
+// the logout toast can even dismiss.
+export default function GoogleNavSignIn({ active }: { active: boolean }) {
   const btnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!active) return;
     if (typeof window === "undefined") return;
     const target = btnRef.current;
     if (!target) return;
     target.innerHTML = "";
 
     const width = Math.max(240, Math.min(400, target.clientWidth || 320));
-    // Abort lets the cleanup stop renderGoogleButton if the async GSI
-    // script is still loading when the drawer closes — otherwise a
-    // late auto_select / One Tap could force-redirect the visitor
+    // Abort lets the cleanup stop renderGoogleButton if the drawer
+    // closes while the async GSI script is still loading — otherwise
+    // a late auto_select / One Tap could force-redirect the visitor
     // after they've moved on (same protection as the cart slot).
     const abortController = new AbortController();
     renderGoogleButton({
@@ -43,7 +52,7 @@ export default function GoogleNavSignIn() {
       abortController.abort();
       cancelGoogleOneTap();
     };
-  }, []);
+  }, [active]);
 
   return (
     <div

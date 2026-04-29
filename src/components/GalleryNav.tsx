@@ -299,7 +299,7 @@ const GalleryNav = () => {
                   </span>
                 </Link>
               ) : (
-                <GoogleNavSignIn />
+                <GoogleNavSignIn active={menuOpen} />
               )}
             </div>
           ) : (
@@ -391,7 +391,7 @@ const GalleryNav = () => {
                   </Link>
                 ) : (
                   <div className="flex justify-center">
-                    <GoogleNavSignIn />
+                    <GoogleNavSignIn active={menuOpen} />
                   </div>
                 )}
               </div>
