@@ -178,14 +178,19 @@ export const handler = async (event) => {
     return json(400, { error: "Unknown action" });
   } catch (error) {
     console.error("admin-auth handler error:", error);
+    const name = error?.name || "Error";
+    const message = error?.message || String(error);
+    const stackLine = (error?.stack || "")
+      .split("\n")
+      .slice(1, 3)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" | ");
     return json(500, {
-      error: "Internal error",
-      // TEMPORARY DEBUG: expose error details so we can see WHY init/login
-      // is throwing on Cloudflare Pages. Remove after the underlying bug is
-      // identified and fixed.
+      error: `Internal error: ${name}: ${message}${stackLine ? ` @ ${stackLine}` : ""}`,
       _debug: {
-        message: error?.message || String(error),
-        name: error?.name || null,
+        message,
+        name,
         stack: (error?.stack || "").split("\n").slice(0, 6).join("\n"),
       },
     });
