@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { motion } from "framer-motion";
 import {
   ShoppingCart,
   Menu,
@@ -94,6 +94,30 @@ const GalleryNav = () => {
   }, [menuOpen]);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  // Hover-to-open support. We pre-mount the drawer (see below) so opening
+  // is instant on every page — no first-mount cost, no "blank" frame.
+  // A short grace timeout lets the user travel between the hamburger
+  // button and the drawer body without the menu snapping shut.
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+  const openMenu = useCallback(() => {
+    cancelClose();
+    setMenuOpen(true);
+  }, [cancelClose]);
+  const scheduleClose = useCallback(
+    (delay = 220) => {
+      cancelClose();
+      closeTimerRef.current = setTimeout(() => setMenuOpen(false), delay);
+    },
+    [cancelClose],
+  );
+  useEffect(() => () => cancelClose(), [cancelClose]);
 
   const scrollTo = useCallback(
     (id: string) => {
@@ -200,7 +224,10 @@ const GalleryNav = () => {
             )}
           </button>
           <button
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => (menuOpen ? closeMenu() : openMenu())}
+            onMouseEnter={openMenu}
+            onMouseLeave={() => scheduleClose()}
+            onFocus={openMenu}
             className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
@@ -215,231 +242,221 @@ const GalleryNav = () => {
         </div>
       </div>
 
-      <AnimatePresence>
-        {menuOpen && (
-          <>
-            {/* No dim/blur backdrop — the page underneath stays fully
-                visible and scrollable while the drawer is open. */}
+      {/* Drawer is always mounted so the first hamburger tap on any page
+          (including the homepage with its heavy hero) shows every option
+          instantly — no AnimatePresence enter cost, no blank frame.
+          Open/close is a pure CSS transform toggle. The page underneath
+          stays fully visible and scrollable; the drawer is non-modal. */}
+      <aside
+        id="mobile-nav-drawer"
+        role="dialog"
+        aria-modal="false"
+        aria-label="Site menu"
+        aria-hidden={!menuOpen}
+        onMouseEnter={cancelClose}
+        onMouseLeave={() => scheduleClose()}
+        className={`fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card/40 supports-[backdrop-filter]:bg-card/25 backdrop-blur-xl border-l border-border/40 shadow-2xl flex flex-col transform transition-transform duration-200 ease-out ${
+          menuOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        }`}
+      >
+        {/* Drawer header */}
+        <div className="flex items-center justify-end px-5 py-4 border-b border-border/30">
+          <button
+            onClick={closeMenu}
+            className="p-2 -mr-2 text-foreground/80 hover:text-foreground"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-            {/* Drawer — frosted-glass transparent so visitors can see the
-                page content behind it while still reading the menu. */}
-            <motion.aside
-              key="drawer"
-              id="mobile-nav-drawer"
-              role="dialog"
-              aria-modal="false"
-              aria-label="Site menu"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{
-                type: "tween",
-                duration: 0.3,
-                ease: [0.4, 0, 0.2, 1],
-              }}
-              className="fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card/40 supports-[backdrop-filter]:bg-card/25 backdrop-blur-xl border-l border-border/40 shadow-2xl flex flex-col"
-            >
-              {/* Drawer header */}
-              <div className="flex items-center justify-end px-5 py-4 border-b border-border/30">
-                <button
-                  onClick={closeMenu}
-                  className="p-2 -mr-2 text-foreground/80 hover:text-foreground"
-                  aria-label="Close menu"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 overflow-y-auto py-2">
-                {/* Primary nav — always visible, no accordion, no animation.
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {/* Primary nav — always visible, no accordion, no animation.
                     All main destinations are immediately reachable the moment
                     the drawer opens (no scrolling, no expanding). */}
-                <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
-                  <button
-                    onClick={() => scrollTo("gallery")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                  >
-                    <ImageIcon className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      {t("nav.gallery")}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => scrollTo("contact")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      {t("nav.contact")}
-                    </span>
-                  </button>
-                  {browseItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => scrollTo(item.id)}
-                        className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span className="font-body text-xs tracking-[0.25em] uppercase">
-                          {item.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => {
-                      closeMenu();
-                      openCart();
-                    }}
-                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      {t("nav.cart")}
-                    </span>
-                    {itemCount ? (
-                      <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
-                        {itemCount}
-                      </span>
-                    ) : null}
-                  </button>
-                </div>
-
-                {/* Account / sign-in (compact, below primary nav) */}
-                <div className="px-5 pt-3 pb-3 border-b border-border/30">
-                  {user ? (
-                    <Link
-                      to="/account"
-                      onClick={closeMenu}
-                      className="flex items-center gap-3 group"
-                    >
-                      {user.picture ? (
-                        <img
-                          src={user.picture}
-                          alt=""
-                          className="w-9 h-9 rounded-full object-cover border border-border/40"
-                        />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
-                          <UserCircle className="w-5 h-5" />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {user.name || t("nav.account")}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {user.email}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                    </Link>
-                  ) : (
-                    <Link
-                      to="/login"
-                      onClick={closeMenu}
-                      className="flex items-center justify-center gap-2 py-2.5 rounded-md bg-foreground text-background hover:bg-foreground/90 transition-colors"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      <span className="font-body text-xs tracking-[0.25em] uppercase">
-                        {t("nav.login")}
-                      </span>
-                    </Link>
-                  )}
-                </div>
-
-                {/* Account section */}
-                {user && (
-                  <DrawerSection
-                    label="My account"
-                    storageKey="account"
-                    defaultOpen={true}
-                  >
-                    <DrawerButton
-                      icon={UserCircle}
-                      label="Profile"
-                      onClick={() => goToAccountSection("account-profile")}
-                    />
-                    <DrawerButton
-                      icon={Package}
-                      label="My orders"
-                      badge={ordersCount || undefined}
-                      onClick={() => goToAccountSection("account-orders")}
-                    />
-                    <DrawerButton
-                      icon={Truck}
-                      label="Track order"
-                      onClick={() => goToAccountSection("account-tracker")}
-                    />
-                    <DrawerButton
-                      icon={Heart}
-                      label="Wishlist"
-                      badge={wishlistCount || undefined}
-                      onClick={() => goToAccountSection("account-wishlist")}
-                    />
-                    <DrawerButton
-                      icon={MapPin}
-                      label="Saved addresses"
-                      onClick={() => goToAccountSection("account-addresses")}
-                    />
-                  </DrawerSection>
-                )}
-
-                {/* Policies — open by default so visitors see every link
-                    (Shipping / Refund / Privacy / Terms) immediately on
-                    the first hamburger tap, no extra click required. */}
-                <DrawerSection
-                  label={t("footer.policies")}
-                  storageKey="policies"
-                  defaultOpen={true}
+          <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
+            <button
+              onClick={() => scrollTo("gallery")}
+              className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span className="font-body text-xs tracking-[0.25em] uppercase">
+                {t("nav.gallery")}
+              </span>
+            </button>
+            <button
+              onClick={() => scrollTo("contact")}
+              className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="font-body text-xs tracking-[0.25em] uppercase">
+                {t("nav.contact")}
+              </span>
+            </button>
+            {browseItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => scrollTo(item.id)}
+                  className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
                 >
-                  {POLICY_SLUGS.map((slug) => {
-                    const Icon = SLUG_ICON[slug];
-                    return (
-                      <Link
-                        key={slug}
-                        to="/policy/$slug"
-                        params={{ slug }}
-                        onClick={closeMenu}
-                        className="flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
-                      >
-                        <Icon className="w-4 h-4 text-muted-foreground" />
-                        <span className="flex-1">
-                          {policies[slug]?.title || t(SLUG_LABEL_KEYS[slug])}
-                        </span>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      </Link>
-                    );
-                  })}
-                </DrawerSection>
+                  <Icon className="w-4 h-4" />
+                  <span className="font-body text-xs tracking-[0.25em] uppercase">
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                closeMenu();
+                openCart();
+              }}
+              className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span className="font-body text-xs tracking-[0.25em] uppercase">
+                {t("nav.cart")}
+              </span>
+              {itemCount ? (
+                <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                  {itemCount}
+                </span>
+              ) : null}
+            </button>
+          </div>
 
-                {/* Preferences (theme + locale) live in the top navbar now,
-                    not in the drawer. */}
-
-                {user && (
-                  <div className="px-5 py-4 border-t border-border/30 mt-2">
-                    <button
-                      onClick={handleLogout}
-                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 text-sm text-foreground/85 hover:bg-accent/60 transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      {t("nav.signOut")}
-                    </button>
+          {/* Account / sign-in (compact, below primary nav) */}
+          <div className="px-5 pt-3 pb-3 border-b border-border/30">
+            {user ? (
+              <Link
+                to="/account"
+                onClick={closeMenu}
+                className="flex items-center gap-3 group"
+              >
+                {user.picture ? (
+                  <img
+                    src={user.picture}
+                    alt=""
+                    className="w-9 h-9 rounded-full object-cover border border-border/40"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
+                    <UserCircle className="w-5 h-5" />
                   </div>
                 )}
-              </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {user.name || t("nav.account")}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {user.email}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                onClick={closeMenu}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-md bg-foreground text-background hover:bg-foreground/90 transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                <span className="font-body text-xs tracking-[0.25em] uppercase">
+                  {t("nav.login")}
+                </span>
+              </Link>
+            )}
+          </div>
 
-              {/* Footer note */}
-              <div className="px-5 py-3 border-t border-border/30 text-[10px] tracking-[0.25em] uppercase text-muted-foreground/80 text-center">
-                Canvas Hub · {new Date().getFullYear()}
-              </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+          {/* Account section */}
+          {user && (
+            <DrawerSection
+              label="My account"
+              storageKey="account"
+              defaultOpen={true}
+            >
+              <DrawerButton
+                icon={UserCircle}
+                label="Profile"
+                onClick={() => goToAccountSection("account-profile")}
+              />
+              <DrawerButton
+                icon={Package}
+                label="My orders"
+                badge={ordersCount || undefined}
+                onClick={() => goToAccountSection("account-orders")}
+              />
+              <DrawerButton
+                icon={Truck}
+                label="Track order"
+                onClick={() => goToAccountSection("account-tracker")}
+              />
+              <DrawerButton
+                icon={Heart}
+                label="Wishlist"
+                badge={wishlistCount || undefined}
+                onClick={() => goToAccountSection("account-wishlist")}
+              />
+              <DrawerButton
+                icon={MapPin}
+                label="Saved addresses"
+                onClick={() => goToAccountSection("account-addresses")}
+              />
+            </DrawerSection>
+          )}
+
+          {/* Policies — open by default so visitors see every link
+                    (Shipping / Refund / Privacy / Terms) immediately on
+                    the first hamburger tap, no extra click required. */}
+          <DrawerSection
+            label={t("footer.policies")}
+            storageKey="policies"
+            defaultOpen={true}
+          >
+            {POLICY_SLUGS.map((slug) => {
+              const Icon = SLUG_ICON[slug];
+              return (
+                <Link
+                  key={slug}
+                  to="/policy/$slug"
+                  params={{ slug }}
+                  onClick={closeMenu}
+                  className="flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
+                >
+                  <Icon className="w-4 h-4 text-muted-foreground" />
+                  <span className="flex-1">
+                    {policies[slug]?.title || t(SLUG_LABEL_KEYS[slug])}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </Link>
+              );
+            })}
+          </DrawerSection>
+
+          {/* Preferences (theme + locale) live in the top navbar now,
+                    not in the drawer. */}
+
+          {user && (
+            <div className="px-5 py-4 border-t border-border/30 mt-2">
+              <button
+                onClick={handleLogout}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 text-sm text-foreground/85 hover:bg-accent/60 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                {t("nav.signOut")}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer note */}
+        <div className="px-5 py-3 border-t border-border/30 text-[10px] tracking-[0.25em] uppercase text-muted-foreground/80 text-center">
+          Canvas Hub · {new Date().getFullYear()}
+        </div>
+      </aside>
     </motion.nav>
   );
 };
