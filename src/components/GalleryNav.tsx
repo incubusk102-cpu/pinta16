@@ -192,6 +192,7 @@ const GalleryNav = () => {
             popover with Gallery / Contact (no scroll lock, no backdrop).
             Click still opens the full modal drawer. */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <ThemeLocaleToggle />
           <button
             onClick={openCart}
             className="relative p-2"
@@ -417,12 +418,8 @@ const GalleryNav = () => {
                   })}
                 </DrawerSection>
 
-                {/* Preferences */}
-                <DrawerSection label="Preferences">
-                  <div className="px-5 py-3">
-                    <ThemeLocaleToggle />
-                  </div>
-                </DrawerSection>
+                {/* Preferences (theme + locale) live in the top navbar now,
+                    not in the drawer. */}
 
                 {user && (
                   <div className="px-5 py-4 border-t border-border/30 mt-2">
