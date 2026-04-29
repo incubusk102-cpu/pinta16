@@ -11,7 +11,6 @@ import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import OrderConfirmation from "@/components/OrderConfirmation";
 import RecentlyViewed from "@/components/RecentlyViewed";
-import SplashScreen from "@/components/SplashScreen";
 import Ornament from "@/components/decor/Ornament";
 import TrustBar from "@/components/TrustBar";
 
@@ -45,7 +44,6 @@ function HeroOrFallback() {
 function Index() {
   return (
     <div className="smooth-scroll">
-      <SplashScreen />
       <GalleryNav />
       <HeroOrFallback />
       <TrustBar />
