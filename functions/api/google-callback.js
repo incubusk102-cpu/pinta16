@@ -16,8 +16,9 @@ import { appendAuditEvent } from "./_lib/audit-log.js";
 
 // Google Identity Services in `ux_mode: "redirect"` form-POSTs the credential
 // to this endpoint. We verify it server-side, create/update the user, issue a
-// session token, and 302 the browser to /login#auth=<base64-json> so the SPA
-// can finalize sign-in and store the session in localStorage.
+// session token, and 302 the browser to /#auth=<base64-json> so the SPA can
+// finalize sign-in and store the session in localStorage without bouncing
+// through /login.
 //
 // This avoids the cross-origin postMessage that Brave / Safari / 3rd-party-
 // cookie-blocked browsers drop on the ground in the popup flow.
@@ -51,7 +52,11 @@ const redirect = (location) => ({
 
 const errorRedirect = (event, message) => {
   const origin = resolveOrigin(event);
-  const url = `${origin}/login?error=${encodeURIComponent(message)}`;
+  // Land back on the homepage so visitors who signed in from the cart
+  // (or anywhere else) don't get dropped on /login just to see an
+  // error. The root-level GoogleAuthHashBridge reads `?error=` and
+  // raises a toast on whatever route they end up on.
+  const url = `${origin}/?error=${encodeURIComponent(message)}`;
   return redirect(url);
 };
 
@@ -157,7 +162,10 @@ export const handler = async (event) => {
       "base64url",
     );
     const origin = resolveOrigin(event);
-    return redirect(`${origin}/login#auth=${encoded}`);
+    // Land on the homepage. The root-level GoogleAuthHashBridge reads
+    // `#auth=` and finalizes the session in place — no need to bounce
+    // through /login just to parse the fragment.
+    return redirect(`${origin}/#auth=${encoded}`);
   } catch (error) {
     console.error("google-callback handler error:", error);
     return errorRedirect(event, "Internal error");
