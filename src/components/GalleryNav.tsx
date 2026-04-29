@@ -170,9 +170,10 @@ const GalleryNav = () => {
                 x="20"
                 y="30"
                 textAnchor="middle"
-                fontFamily="Georgia, 'Playfair Display', serif"
+                fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
                 fontSize="34"
                 fontStyle="italic"
+                fontWeight={500}
                 fill="#c4a86a"
               >
                 C
