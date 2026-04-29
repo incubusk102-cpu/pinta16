@@ -148,7 +148,7 @@ const SiteFooter = () => {
           <div className="flex items-center gap-2 mb-4">
             <span
               aria-hidden
-              className="relative inline-flex items-center justify-center w-9 h-9"
+              className="font-logo relative inline-flex items-center justify-center w-9 h-9"
             >
               <svg viewBox="0 0 40 40" className="w-9 h-9">
                 <text
@@ -159,7 +159,7 @@ const SiteFooter = () => {
                   fontSize="34"
                   fontStyle="italic"
                   fontWeight={500}
-                  fill="#c4a86a"
+                  fill="currentColor"
                 >
                   C
                 </text>
