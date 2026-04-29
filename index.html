@@ -109,6 +109,26 @@
           setTimeout(function () { s.remove(); }, 700);
         }
       }, 8000);
+
+      // Respect prefers-reduced-motion: SMIL <animateTransform> ignores CSS
+      // media queries, so remove it directly when the user prefers reduced
+      // motion. Falls back to a static gold C in the same final orientation.
+      try {
+        if (
+          window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ) {
+          var splashEl = document.getElementById("splash");
+          if (splashEl) {
+            var anims = splashEl.getElementsByTagName("animateTransform");
+            for (var i = anims.length - 1; i >= 0; i--) {
+              anims[i].parentNode && anims[i].parentNode.removeChild(anims[i]);
+            }
+          }
+        }
+      } catch (e) {
+        /* ignore */
+      }
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
