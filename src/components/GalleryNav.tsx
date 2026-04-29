@@ -32,6 +32,27 @@ import {
 } from "@/contexts/PoliciesContext";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import ProfileEditor from "@/components/account/ProfileEditor";
+import MyOrders from "@/components/account/MyOrders";
+import OrderTracker from "@/components/account/OrderTracker";
+import WishlistSection from "@/components/account/WishlistSection";
+import AddressBook from "@/components/account/AddressBook";
+
+type AccountSheet = "profile" | "orders" | "tracker" | "wishlist" | "addresses";
+
+const ACCOUNT_SHEET_TITLE: Record<AccountSheet, string> = {
+  profile: "Profile",
+  orders: "My orders",
+  tracker: "Track order",
+  wishlist: "Wishlist",
+  addresses: "Saved addresses",
+};
 
 const SLUG_ICON: Record<
   PolicySlug,
@@ -56,6 +77,7 @@ const SLUG_LABEL_KEYS: Record<
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountSheet, setAccountSheet] = useState<AccountSheet | null>(null);
   const { itemCount, openCart, orders } = useCart();
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
@@ -66,7 +88,6 @@ const GalleryNav = () => {
     select: (s) => s.location.pathname,
   });
   const onIndex = pathname === "/";
-  const onAccount = pathname === "/account";
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -118,16 +139,19 @@ const GalleryNav = () => {
     [closeMenu, onIndex, navigate],
   );
 
-  const goToAccountSection = useCallback(
-    (id: string) => {
+  // Opening an account view (Profile / Orders / Tracker / Wishlist /
+  // Addresses) closes the drawer and slides the content in over the
+  // page so the visitor stays on whatever product or gallery page they
+  // were browsing — no hop to /account. Profile / orders / addresses
+  // reuse the exact components /account renders; Tracker + Wishlist
+  // were extracted into shared components so the drawer and /account
+  // stay in sync.
+  const openAccountSheet = useCallback(
+    (sheet: AccountSheet) => {
       closeMenu();
-      if (onAccount) {
-        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-      } else {
-        void navigate({ to: "/account", hash: id });
-      }
+      setAccountSheet(sheet);
     },
-    [closeMenu, onAccount, navigate],
+    [closeMenu],
   );
 
   const handleLogout = useCallback(() => {
@@ -360,14 +384,15 @@ const GalleryNav = () => {
                 </button>
               </div>
 
-              {/* Account / sign-in (compact, below primary nav) */}
+              {/* Account / sign-in (compact, below primary nav).
+                    Signed-in visitors see a display-only profile card
+                    — NOT a link to /account — because the drawer's
+                    MY ACCOUNT items below already open every account
+                    view inline via slide-over sheets. Tapping the card
+                    doesn't navigate anywhere. */}
               <div className="px-5 pt-3 pb-3 border-b border-border/30">
                 {user ? (
-                  <Link
-                    to="/account"
-                    onClick={closeMenu}
-                    className="flex items-center gap-3 group"
-                  >
+                  <div className="flex items-center gap-3">
                     {user.picture ? (
                       <img
                         src={user.picture}
@@ -387,8 +412,7 @@ const GalleryNav = () => {
                         {user.email}
                       </p>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                  </Link>
+                  </div>
                 ) : (
                   <div className="flex justify-center">
                     <GoogleNavSignIn active={menuOpen} />
@@ -396,7 +420,11 @@ const GalleryNav = () => {
                 )}
               </div>
 
-              {/* Account section */}
+              {/* Account section — every item opens a slide-over sheet
+                    in-place instead of navigating to /account. The sheet
+                    sits above the page the visitor was browsing so they
+                    can check profile / orders / wishlist / addresses
+                    without leaving a product page. */}
               {user && (
                 <DrawerSection
                   label="My account"
@@ -406,29 +434,29 @@ const GalleryNav = () => {
                   <DrawerButton
                     icon={UserCircle}
                     label="Profile"
-                    onClick={() => goToAccountSection("account-profile")}
+                    onClick={() => openAccountSheet("profile")}
                   />
                   <DrawerButton
                     icon={Package}
                     label="My orders"
                     badge={ordersCount || undefined}
-                    onClick={() => goToAccountSection("account-orders")}
+                    onClick={() => openAccountSheet("orders")}
                   />
                   <DrawerButton
                     icon={Truck}
                     label="Track order"
-                    onClick={() => goToAccountSection("account-tracker")}
+                    onClick={() => openAccountSheet("tracker")}
                   />
                   <DrawerButton
                     icon={Heart}
                     label="Wishlist"
                     badge={wishlistCount || undefined}
-                    onClick={() => goToAccountSection("account-wishlist")}
+                    onClick={() => openAccountSheet("wishlist")}
                   />
                   <DrawerButton
                     icon={MapPin}
                     label="Saved addresses"
-                    onClick={() => goToAccountSection("account-addresses")}
+                    onClick={() => openAccountSheet("addresses")}
                   />
                 </DrawerSection>
               )}
@@ -484,6 +512,35 @@ const GalleryNav = () => {
           Canvas Hub · {new Date().getFullYear()}
         </div>
       </aside>
+
+      {/* Account slide-over sheet — opens when any MY ACCOUNT item is
+          tapped. Renders the relevant /account component inline so the
+          visitor never leaves the page they were browsing. Closing the
+          sheet drops them back to the product / gallery / cart page. */}
+      <Sheet
+        open={accountSheet !== null}
+        onOpenChange={(o) => {
+          if (!o) setAccountSheet(null);
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-lg overflow-y-auto"
+        >
+          <SheetHeader className="text-left">
+            <SheetTitle>
+              {accountSheet ? ACCOUNT_SHEET_TITLE[accountSheet] : ""}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            {accountSheet === "profile" && <ProfileEditor />}
+            {accountSheet === "orders" && <MyOrders />}
+            {accountSheet === "tracker" && <OrderTracker />}
+            {accountSheet === "wishlist" && <WishlistSection />}
+            {accountSheet === "addresses" && <AddressBook />}
+          </div>
+        </SheetContent>
+      </Sheet>
     </motion.nav>
   );
 };
