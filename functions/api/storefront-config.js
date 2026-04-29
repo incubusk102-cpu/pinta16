@@ -227,14 +227,29 @@ const sanitizeConfig = (raw) => {
           .toUpperCase()
           .slice(0, 30);
         if (!code) return null;
-        const type = p.type === "fixed" ? "fixed" : "percent";
-        const value = Math.max(0, Math.floor(Number(p.value) || 0));
-        if (value <= 0) return null;
-        if (type === "percent" && value > 100) return null;
+        const allowedTypes = new Set([
+          "percent",
+          "fixed",
+          "flat",
+          "free_shipping",
+        ]);
+        const type = allowedTypes.has(p.type) ? p.type : "percent";
+        const rawValue = Math.max(0, Math.floor(Number(p.value) || 0));
+        // For free_shipping the value field is unused (always 0).
+        // For flat/fixed/percent, the value must be > 0; percent capped at 100.
+        let value = rawValue;
+        if (type === "free_shipping") {
+          value = 0;
+        } else {
+          if (value <= 0) return null;
+          if (type === "percent" && value > 100) return null;
+        }
         return {
           code,
           type,
           value,
+          freeShipping:
+            type === "free_shipping" ? true : Boolean(p.freeShipping),
           minSpend: Math.max(0, Math.floor(Number(p.minSpend) || 0)),
           usageLimit:
             p.usageLimit === null || p.usageLimit === undefined
@@ -269,6 +284,7 @@ const publicView = (config) => ({
       code: p.code,
       type: p.type,
       value: p.value,
+      freeShipping: Boolean(p.freeShipping),
       minSpend: p.minSpend,
       expiresAt: p.expiresAt,
       description: p.description,

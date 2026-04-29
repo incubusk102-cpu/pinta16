@@ -50,10 +50,13 @@ export interface FreeShippingConfig {
   shippingFee: number;
 }
 
+export type PromoCodeType = "percent" | "fixed" | "flat" | "free_shipping";
+
 export interface PromoCodePublic {
   code: string;
-  type: "percent" | "fixed";
+  type: PromoCodeType;
   value: number;
+  freeShipping: boolean;
   minSpend: number;
   expiresAt: string | null;
   description: string;

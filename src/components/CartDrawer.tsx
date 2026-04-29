@@ -66,7 +66,7 @@ const CartDrawer = () => {
               <>
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                   {/* Free shipping progress */}
-                  {!isFreeShipping && freeShippingEnabled && (
+                  {shippingFee > 0 && freeShippingEnabled && (
                     <div className="p-3 bg-muted/30 border border-border/10 rounded-sm mb-4">
                       <div className="flex items-center gap-2 mb-1">
                         <Truck className="w-3.5 h-3.5 text-muted-foreground" />
@@ -150,7 +150,14 @@ const CartDrawer = () => {
                             {voucher.code} (
                             {voucher.type === "percent"
                               ? `${voucher.value}% off`
-                              : `\u20b1${voucher.value.toLocaleString()} off`}
+                              : voucher.type === "flat"
+                                ? `flat \u20b1${voucher.value.toLocaleString()}`
+                                : voucher.type === "free_shipping"
+                                  ? "free shipping"
+                                  : `\u20b1${voucher.value.toLocaleString()} off`}
+                            {voucher.type !== "free_shipping" &&
+                              voucher.freeShipping &&
+                              " + free shipping"}
                             )
                           </span>
                         </div>
@@ -195,7 +202,7 @@ const CartDrawer = () => {
                   </div>
                   <div className="flex justify-between font-body text-xs text-muted-foreground">
                     <span>Shipping</span>
-                    {isFreeShipping ? (
+                    {shippingFee === 0 ? (
                       <span>
                         <span className="line-through mr-1">
                           ₱{shippingFeeOriginal.toLocaleString()}

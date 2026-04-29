@@ -26,10 +26,13 @@ import {
 } from "@/lib/chat-faqs";
 import { toast } from "sonner";
 
+type AdminPromoType = "percent" | "fixed" | "flat" | "free_shipping";
+
 interface AdminPromo {
   code: string;
-  type: "percent" | "fixed";
+  type: AdminPromoType;
   value: number;
+  freeShipping: boolean;
   minSpend: number;
   usageLimit: number | null;
   usageCount: number;
@@ -46,7 +49,13 @@ const sizeClassMap: Record<string, string> = {
 
 const formatPromoLine = (template: string, p: AdminPromo): string => {
   const discount =
-    p.type === "percent" ? `${p.value}%` : `₱${p.value.toLocaleString()}`;
+    p.type === "percent"
+      ? `${p.value}%`
+      : p.type === "flat"
+        ? `flat ₱${p.value.toLocaleString()}`
+        : p.type === "free_shipping"
+          ? "free shipping"
+          : `₱${p.value.toLocaleString()}`;
   const minSpend =
     p.minSpend > 0 ? ` orders ₱${p.minSpend.toLocaleString()}+` : "";
   return template
@@ -55,6 +64,13 @@ const formatPromoLine = (template: string, p: AdminPromo): string => {
     .replace(/\{minSpend\}/g, minSpend)
     .replace(/\{description\}/g, p.description || "")
     .trim();
+};
+
+const formatPromoBadge = (p: AdminPromo): string => {
+  if (p.type === "percent") return `${p.value}% off`;
+  if (p.type === "flat") return `Flat ₱${p.value.toLocaleString()}`;
+  if (p.type === "free_shipping") return "Free shipping";
+  return `₱${p.value.toLocaleString()} off`;
 };
 
 type AdminAnnouncementAnimation =
@@ -147,8 +163,9 @@ export function StorefrontSection() {
 
   // Promo form state
   const [promoCode, setPromoCode] = useState("");
-  const [promoType, setPromoType] = useState<"percent" | "fixed">("percent");
+  const [promoType, setPromoType] = useState<AdminPromoType>("percent");
   const [promoValue, setPromoValue] = useState("");
+  const [promoFreeShipping, setPromoFreeShipping] = useState(false);
   const [promoMinSpend, setPromoMinSpend] = useState("");
   const [promoUsageLimit, setPromoUsageLimit] = useState("");
   const [promoExpiresAt, setPromoExpiresAt] = useState("");
@@ -255,9 +272,12 @@ export function StorefrontSection() {
     const code = promoCode.trim().toUpperCase();
     if (!code) return toast.error("Code required");
     const value = Number(promoValue);
-    if (!value || value <= 0) return toast.error("Discount value must be > 0");
-    if (promoType === "percent" && value > 100)
-      return toast.error("Percent must be 1–100");
+    if (promoType !== "free_shipping") {
+      if (!value || value <= 0)
+        return toast.error("Discount value must be > 0");
+      if (promoType === "percent" && value > 100)
+        return toast.error("Percent must be 1–100");
+    }
     setSaving("promo");
     try {
       await post({
@@ -265,7 +285,9 @@ export function StorefrontSection() {
         promo: {
           code,
           type: promoType,
-          value,
+          value: promoType === "free_shipping" ? 0 : value,
+          freeShipping:
+            promoType === "free_shipping" ? true : promoFreeShipping,
           minSpend: Number(promoMinSpend) || 0,
           usageLimit: promoUsageLimit ? Number(promoUsageLimit) : null,
           expiresAt: promoExpiresAt
@@ -278,6 +300,7 @@ export function StorefrontSection() {
       toast.success(`Promo ${code} saved`);
       setPromoCode("");
       setPromoValue("");
+      setPromoFreeShipping(false);
       setPromoMinSpend("");
       setPromoUsageLimit("");
       setPromoExpiresAt("");
@@ -945,9 +968,10 @@ export function StorefrontSection() {
           <h2 className="font-display text-lg">Promo / discount codes</h2>
         </div>
         <p className="text-sm text-muted-foreground mb-4">
-          Customers redeem these at checkout. Pick a percent or fixed-peso
-          discount, set a minimum spend, optional expiry, and optional usage
-          cap.
+          Customers redeem these at checkout. Pick a discount type — percent
+          off, fixed peso off, a flat order price (e.g. any cart for ₱1), or
+          free shipping — set an optional minimum spend, expiry, and usage cap.
+          Non-shipping codes can also grant free shipping on top.
         </p>
 
         <div className="grid sm:grid-cols-2 gap-3 mb-4">
@@ -967,29 +991,46 @@ export function StorefrontSection() {
             <select
               id="promo-type"
               value={promoType}
-              onChange={(e) =>
-                setPromoType(e.target.value as "percent" | "fixed")
-              }
+              onChange={(e) => setPromoType(e.target.value as AdminPromoType)}
               className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
             >
               <option value="percent">Percent off (%)</option>
               <option value="fixed">Fixed amount off (₱)</option>
+              <option value="flat">Flat order price (₱)</option>
+              <option value="free_shipping">Free shipping</option>
             </select>
           </div>
-          <div>
-            <Label htmlFor="promo-value">
-              {promoType === "percent" ? "Percent (1–100)" : "Amount (₱)"}
-            </Label>
-            <Input
-              id="promo-value"
-              type="number"
-              min={1}
-              max={promoType === "percent" ? 100 : undefined}
-              value={promoValue}
-              onChange={(e) => setPromoValue(e.target.value)}
-              placeholder={promoType === "percent" ? "15" : "500"}
-            />
-          </div>
+          {promoType !== "free_shipping" && (
+            <div>
+              <Label htmlFor="promo-value">
+                {promoType === "percent"
+                  ? "Percent (1–100)"
+                  : promoType === "flat"
+                    ? "Flat order price (₱)"
+                    : "Amount (₱)"}
+              </Label>
+              <Input
+                id="promo-value"
+                type="number"
+                min={promoType === "flat" ? 0 : 1}
+                max={promoType === "percent" ? 100 : undefined}
+                value={promoValue}
+                onChange={(e) => setPromoValue(e.target.value)}
+                placeholder={
+                  promoType === "percent"
+                    ? "15"
+                    : promoType === "flat"
+                      ? "1"
+                      : "500"
+                }
+              />
+              {promoType === "flat" && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Customer pays this exact amount instead of the cart subtotal.
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <Label htmlFor="promo-min">
               Minimum spend (₱){" "}
@@ -1051,6 +1092,20 @@ export function StorefrontSection() {
               placeholder="Summer launch coupon"
             />
           </div>
+          {promoType !== "free_shipping" && (
+            <div className="sm:col-span-2 flex items-center justify-between gap-3 p-3 rounded-md bg-background/40 border border-border/40">
+              <div>
+                <Label className="text-sm">Also grants free shipping</Label>
+                <p className="text-xs text-muted-foreground">
+                  Stack free shipping on top of the discount above.
+                </p>
+              </div>
+              <Switch
+                checked={promoFreeShipping}
+                onCheckedChange={setPromoFreeShipping}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end mb-6">
@@ -1092,10 +1147,13 @@ export function StorefrontSection() {
                         {p.code}
                       </span>
                       <span className="px-1.5 py-0.5 text-[10px] font-medium bg-muted rounded">
-                        {p.type === "percent"
-                          ? `${p.value}% off`
-                          : `₱${p.value.toLocaleString()} off`}
+                        {formatPromoBadge(p)}
                       </span>
+                      {p.type !== "free_shipping" && p.freeShipping && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-primary/15 text-primary rounded">
+                          + free shipping
+                        </span>
+                      )}
                       {p.minSpend > 0 && (
                         <span className="text-[10px] text-muted-foreground">
                           min ₱{p.minSpend.toLocaleString()}

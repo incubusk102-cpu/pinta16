@@ -16,7 +16,13 @@ const DISMISS_KEY_PREFIX = "canvhub_announcement_dismissed_";
 
 const formatPromo = (template: string, p: PromoCodePublic): string => {
   const discount =
-    p.type === "percent" ? `${p.value}%` : `₱${p.value.toLocaleString()}`;
+    p.type === "percent"
+      ? `${p.value}%`
+      : p.type === "flat"
+        ? `flat ₱${p.value.toLocaleString()}`
+        : p.type === "free_shipping"
+          ? "free shipping"
+          : `₱${p.value.toLocaleString()}`;
   const minSpend =
     p.minSpend > 0 ? ` orders ₱${p.minSpend.toLocaleString()}+` : "";
   return template
