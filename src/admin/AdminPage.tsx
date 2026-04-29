@@ -149,7 +149,6 @@ function AdminPage() {
 function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   const { initPassword, login } = useAdminAuth();
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const isInitMode = initialized === false;
@@ -163,9 +162,6 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
         return toast.error(
           `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
         );
-      }
-      if (password !== confirmPassword) {
-        return toast.error("Passwords do not match");
       }
     }
 
@@ -214,18 +210,6 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
               disabled={initialized === null}
             />
           </div>
-          {isInitMode && (
-            <div>
-              <Label htmlFor="confirmPassword">Confirm password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-          )}
           <Button
             type="submit"
             className="w-full"
@@ -2372,7 +2356,6 @@ function SettingsSection() {
   const { changePassword, logout } = useAdminAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -2389,9 +2372,6 @@ function SettingsSection() {
     if (newPassword === currentPassword) {
       return toast.error("New password must be different");
     }
-    if (newPassword !== confirmNewPassword) {
-      return toast.error("New passwords do not match");
-    }
 
     setChangingPassword(true);
     try {
@@ -2399,7 +2379,6 @@ function SettingsSection() {
       toast.success("Password updated");
       setCurrentPassword("");
       setNewPassword("");
-      setConfirmNewPassword("");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not change password",
@@ -2439,16 +2418,6 @@ function SettingsSection() {
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="confirmNewPassword">Confirm new password</Label>
-            <Input
-              id="confirmNewPassword"
-              type="password"
-              autoComplete="new-password"
-              value={confirmNewPassword}
-              onChange={(e) => setConfirmNewPassword(e.target.value)}
             />
           </div>
           <Button type="submit" disabled={changingPassword} className="w-full">
