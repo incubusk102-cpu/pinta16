@@ -388,11 +388,13 @@ const GalleryNav = () => {
                   </DrawerSection>
                 )}
 
-                {/* Policies */}
+                {/* Policies — open by default so visitors see every link
+                    (Shipping / Refund / Privacy / Terms) immediately on
+                    the first hamburger tap, no extra click required. */}
                 <DrawerSection
                   label={t("footer.policies")}
                   storageKey="policies"
-                  defaultOpen={false}
+                  defaultOpen={true}
                 >
                   {POLICY_SLUGS.map((slug) => {
                     const Icon = SLUG_ICON[slug];
