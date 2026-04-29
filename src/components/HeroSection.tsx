@@ -40,19 +40,14 @@ const HeroSection = () => {
         >
           Affordable Art, Authentic Stories
         </motion.p>
-        <motion.h1
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.2, delay: 0.5 }}
-          className="font-logo text-4xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
-        >
-          Canvas Hub
-        </motion.h1>
-        <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
+        {/* The big 'Canvas Hub' wordmark used to render here as a follow-up
+            to the gold-C splash. Removed so the splash is the only brand
+            mark a first-time visitor sees on load. */}
+        <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.5} />
         <motion.p
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.7 }}
+          transition={{ duration: 1, delay: 0.5 }}
           className="font-body text-sm text-muted-foreground max-w-md mb-12 leading-relaxed"
         >
           Discover hand-crafted paintings that transform spaces. Each piece
