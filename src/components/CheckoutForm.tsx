@@ -146,9 +146,20 @@ const CheckoutForm = () => {
   }, [isSignedIn, items.length, showCheckout, setShowCheckout]);
 
   // Render Google's official branded button into the choose screen every
-  // time the screen becomes visible. Tapping it redirects the top-level
-  // window to Google — we set the resume flag just before so the drawer
-  // reopens after sign-in completes.
+  // time the screen becomes visible, and arm the resume-checkout flag
+  // eagerly so that if the visitor taps Google and comes back signed-in
+  // the cart drawer re-opens.
+  //
+  // Eager-arm is necessary because GSI's button is rendered inside a
+  // cross-origin iframe from accounts.google.com. Pointer / click events
+  // that happen inside that iframe stay within the iframe's browsing
+  // context and never bubble up to this component's DOM, so hanging the
+  // flag off `onPointerDownCapture` on the wrapper never actually fired.
+  // Arming the flag as soon as the button is visible is a safe proxy:
+  // if the visitor closes the drawer without signing in we clear it in
+  // the effect's cleanup, and if they sign in via a totally unrelated
+  // path the normal resume-check requires `items.length > 0` and a
+  // signed-in session, which is already the behaviour we want anyway.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (isSignedIn) return;
@@ -157,6 +168,11 @@ const CheckoutForm = () => {
     const target = googleBtnRef.current;
     if (!target) return;
     target.innerHTML = "";
+    try {
+      sessionStorage.setItem(RESUME_CHECKOUT_FLAG, "1");
+    } catch {
+      /* ignore */
+    }
     const width = Math.max(240, Math.min(400, target.clientWidth || 320));
     renderGoogleButton({
       target,
@@ -169,15 +185,17 @@ const CheckoutForm = () => {
       /* GSI script failed to load — leave the empty slot; visitors can
          still use "Continue as Guest" above. */
     });
+    return () => {
+      // If the visitor closes the drawer or switches to the guest form
+      // without completing Google sign-in, don't leave the flag armed.
+      // The post-sign-in resume effect clears it on a successful use.
+      try {
+        sessionStorage.removeItem(RESUME_CHECKOUT_FLAG);
+      } catch {
+        /* ignore */
+      }
+    };
   }, [isSignedIn, showCheckout, checkoutMode]);
-
-  const markResumeCheckout = () => {
-    try {
-      sessionStorage.setItem(RESUME_CHECKOUT_FLAG, "1");
-    } catch {
-      /* ignore */
-    }
-  };
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof OrderInfo, string>> = {};
@@ -363,10 +381,7 @@ const CheckoutForm = () => {
                         </p>
                       </div>
                     </button>
-                    <div
-                      onPointerDownCapture={markResumeCheckout}
-                      className="w-full flex flex-col items-center gap-2 p-4 border border-border/30 rounded-sm"
-                    >
+                    <div className="w-full flex flex-col items-center gap-2 p-4 border border-border/30 rounded-sm">
                       <div
                         ref={googleBtnRef}
                         className="w-full flex justify-center"
