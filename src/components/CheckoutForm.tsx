@@ -23,7 +23,11 @@ import {
   isValidPhone,
   enforceMaxLength,
 } from "@/lib/sanitize";
-import { GOOGLE_CALLBACK_PATH, renderGoogleButton } from "@/lib/google-signin";
+import {
+  GOOGLE_CALLBACK_PATH,
+  cancelGoogleOneTap,
+  renderGoogleButton,
+} from "@/lib/google-signin";
 import PaymentModal from "./PaymentModal";
 import { createPayment } from "@/utils/payment.functions";
 
@@ -181,19 +185,34 @@ const CheckoutForm = () => {
       theme: "outline",
       shape: "rectangular",
       loginUri: `${window.location.origin}${GOOGLE_CALLBACK_PATH}`,
+      // Near-zero-tap sign-in: if the visitor is already signed into
+      // their Google account AND previously granted us consent, Google
+      // silently auto-selects that account and form-POSTs the credential
+      // to /api/google-callback — no buttons to tap, no extra page to
+      // visit. If they've never signed in here before, Google instead
+      // shows the One Tap card ("Continue as [Name]") so a single tap
+      // signs them in without leaving the site for Google's full login
+      // page. If they're not signed into Google at all, One Tap stays
+      // hidden and they fall back to the manual "Continue with Google"
+      // button above, which opens Google's real email/password page.
+      autoSelect: true,
+      showOneTap: true,
     }).catch(() => {
       /* GSI script failed to load — leave the empty slot; visitors can
          still use "Continue as Guest" above. */
     });
     return () => {
       // If the visitor closes the drawer or switches to the guest form
-      // without completing Google sign-in, don't leave the flag armed.
-      // The post-sign-in resume effect clears it on a successful use.
+      // without completing Google sign-in, don't leave the flag armed
+      // or leave Google's One Tap card floating over an unrelated page.
+      // The post-sign-in resume effect clears the flag on a successful
+      // use.
       try {
         sessionStorage.removeItem(RESUME_CHECKOUT_FLAG);
       } catch {
         /* ignore */
       }
+      cancelGoogleOneTap();
     };
   }, [isSignedIn, showCheckout, checkoutMode]);
 
