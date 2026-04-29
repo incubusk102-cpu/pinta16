@@ -13,6 +13,7 @@ import { connectLambda, getStore } from "./_lib/kv-stores.js";
 import { purgeCacheByTags } from "./_lib/cache-purge.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
+import { wrapHandler } from "./_lib/handler-wrapper.js";
 
 // Cache tag attached to public policy GETs so admin POSTs can purge the
 // edge cache after a successful write.
