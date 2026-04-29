@@ -18,7 +18,12 @@ export const STORE_NAME = "admin-auth";
 export const CREDENTIALS_KEY = "credentials";
 export const SECRET_KEY = "session-secret";
 export const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
-export const PBKDF2_ITERATIONS = 120_000;
+// Cloudflare Workers' WebCrypto caps PBKDF2 iterations at 100_000. The
+// previous Netlify implementation used 120_000; we lower to 100_000 here so
+// the platform accepts the request. Each credential record persists the
+// iteration count it was hashed with, so the constant can be raised again in
+// the future without invalidating existing admins.
+export const PBKDF2_ITERATIONS = 100_000;
 export const PBKDF2_KEYLEN = 32;
 export const PBKDF2_DIGEST = "SHA-256";
 export const MIN_PASSWORD_LENGTH = 8;
@@ -85,21 +90,27 @@ const hmacSha256 = async (secret, data) => {
 export const hashPassword = async (password) => {
   const saltBytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
   const salt = toHex(saltBytes);
+  const iterations = PBKDF2_ITERATIONS;
   const hashBytes = await pbkdf2Bytes(
     password,
     salt,
-    PBKDF2_ITERATIONS,
+    iterations,
     PBKDF2_KEYLEN,
     PBKDF2_DIGEST,
   );
-  return { salt, hash: toHex(hashBytes) };
+  return { salt, hash: toHex(hashBytes), iterations };
 };
 
-export const verifyPassword = async (password, salt, expectedHash) => {
+export const verifyPassword = async (
+  password,
+  salt,
+  expectedHash,
+  iterations = PBKDF2_ITERATIONS,
+) => {
   const hashBytes = await pbkdf2Bytes(
     password,
     salt,
-    PBKDF2_ITERATIONS,
+    iterations,
     PBKDF2_KEYLEN,
     PBKDF2_DIGEST,
   );

@@ -74,10 +74,11 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = await hashPassword(password);
+      const { salt, hash, iterations } = await hashPassword(password);
       const written = await writeCredentialsIfNew(store, {
         salt,
         hash,
+        iterations,
         updatedAt: new Date().toISOString(),
       });
       if (!written) {
@@ -106,6 +107,7 @@ export const handler = async (event) => {
         password,
         credentials.salt,
         credentials.hash,
+        credentials.iterations,
       );
       const matchesRecovery =
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
@@ -145,6 +147,7 @@ export const handler = async (event) => {
         currentPassword,
         credentials.salt,
         credentials.hash,
+        credentials.iterations,
       );
       const currentMatchesRecovery =
         recoveryPw.length >= MIN_PASSWORD_LENGTH &&
@@ -158,10 +161,11 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = await hashPassword(newPassword);
+      const { salt, hash, iterations } = await hashPassword(newPassword);
       await writeCredentials(store, {
         salt,
         hash,
+        iterations,
         updatedAt: new Date().toISOString(),
       });
       const newSecret = await rotateSessionSecret(store);
@@ -178,17 +182,7 @@ export const handler = async (event) => {
     return json(400, { error: "Unknown action" });
   } catch (error) {
     console.error("admin-auth handler error:", error);
-    return json(500, {
-      error: "Internal error",
-      // TEMPORARY DEBUG: expose error details so we can see WHY init/login
-      // is throwing on Cloudflare Pages. Remove after the underlying bug is
-      // identified and fixed.
-      _debug: {
-        message: error?.message || String(error),
-        name: error?.name || null,
-        stack: (error?.stack || "").split("\n").slice(0, 6).join("\n"),
-      },
-    });
+    return json(500, { error: "Internal error" });
   }
 };
 
