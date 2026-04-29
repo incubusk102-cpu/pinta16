@@ -13,7 +13,6 @@ import {
   Heart,
   MapPin,
   LogOut,
-  LogIn,
   ChevronRight,
   ChevronDown,
   FileText,
@@ -32,6 +31,7 @@ import {
   usePolicies,
 } from "@/contexts/PoliciesContext";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
+import GoogleNavSignIn from "@/components/GoogleNavSignIn";
 
 const SLUG_ICON: Record<
   PolicySlug,
@@ -299,16 +299,7 @@ const GalleryNav = () => {
                   </span>
                 </Link>
               ) : (
-                <Link
-                  to="/login"
-                  onClick={closeMenu}
-                  className="flex items-center justify-center gap-2 py-3 rounded-md bg-foreground text-background hover:bg-foreground/90 transition-colors"
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span className="font-body text-xs tracking-[0.25em] uppercase">
-                    {t("nav.login")}
-                  </span>
-                </Link>
+                <GoogleNavSignIn active={menuOpen} />
               )}
             </div>
           ) : (
@@ -399,16 +390,9 @@ const GalleryNav = () => {
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
                   </Link>
                 ) : (
-                  <Link
-                    to="/login"
-                    onClick={closeMenu}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-md bg-foreground text-background hover:bg-foreground/90 transition-colors"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      {t("nav.login")}
-                    </span>
-                  </Link>
+                  <div className="flex justify-center">
+                    <GoogleNavSignIn active={menuOpen} />
+                  </div>
                 )}
               </div>
 
