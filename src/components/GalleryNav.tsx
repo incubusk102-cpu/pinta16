@@ -295,11 +295,15 @@ const GalleryNav = () => {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto py-2">
-          <>
-            {/* Primary nav — always visible, no accordion, no animation.
-                    All main destinations are immediately reachable the moment
-                    the drawer opens (no scrolling, no expanding). */}
-            <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
+          {onIndex && !user ? (
+            /* Homepage, signed-out: per user, show ONLY Google sign-in,
+               Gallery, and Contact. Nothing else. As soon as they sign
+               in (or visit any other route) they get the full drawer
+               below. */
+            <div className="px-5 pt-3 pb-4 flex flex-col gap-2">
+              <div className="flex justify-center">
+                <GoogleNavSignIn active={menuOpen} />
+              </div>
               <button
                 onClick={() => scrollTo("gallery")}
                 className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
@@ -318,160 +322,186 @@ const GalleryNav = () => {
                   {t("nav.contact")}
                 </span>
               </button>
-              {browseItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => scrollTo(item.id)}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => {
-                  closeMenu();
-                  openCart();
-                }}
-                className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                <span className="font-body text-xs tracking-[0.25em] uppercase">
-                  {t("nav.cart")}
-                </span>
-                {itemCount ? (
-                  <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
-                    {itemCount}
-                  </span>
-                ) : null}
-              </button>
             </div>
+          ) : (
+            <>
+              {/* Primary nav — always visible, no accordion, no animation.
+                    All main destinations are immediately reachable the moment
+                    the drawer opens (no scrolling, no expanding). */}
+              <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
+                <button
+                  onClick={() => scrollTo("gallery")}
+                  className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span className="font-body text-xs tracking-[0.25em] uppercase">
+                    {t("nav.gallery")}
+                  </span>
+                </button>
+                <button
+                  onClick={() => scrollTo("contact")}
+                  className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="font-body text-xs tracking-[0.25em] uppercase">
+                    {t("nav.contact")}
+                  </span>
+                </button>
+                {browseItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => scrollTo(item.id)}
+                      className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="font-body text-xs tracking-[0.25em] uppercase">
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    openCart();
+                  }}
+                  className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  <span className="font-body text-xs tracking-[0.25em] uppercase">
+                    {t("nav.cart")}
+                  </span>
+                  {itemCount ? (
+                    <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                      {itemCount}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
 
-            {/* Account / sign-in (compact, below primary nav).
+              {/* Account / sign-in (compact, below primary nav).
                     Signed-in visitors see a display-only profile card
                     — NOT a link to /account — because the drawer's
                     MY ACCOUNT items below already open every account
                     view inline via slide-over sheets. Tapping the card
                     doesn't navigate anywhere. */}
-            <div className="px-5 pt-3 pb-3 border-b border-border/30">
-              {user ? (
-                <div className="flex items-center gap-3">
-                  {user.picture ? (
-                    <img
-                      src={user.picture}
-                      alt=""
-                      className="w-9 h-9 rounded-full object-cover border border-border/40"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
-                      <UserCircle className="w-5 h-5" />
+              <div className="px-5 pt-3 pb-3 border-b border-border/30">
+                {user ? (
+                  <div className="flex items-center gap-3">
+                    {user.picture ? (
+                      <img
+                        src={user.picture}
+                        alt=""
+                        className="w-9 h-9 rounded-full object-cover border border-border/40"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
+                        <UserCircle className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {user.name || t("nav.account")}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {user.email}
+                      </p>
                     </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {user.name || t("nav.account")}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {user.email}
-                    </p>
                   </div>
-                </div>
-              ) : (
-                <div className="flex justify-center">
-                  <GoogleNavSignIn active={menuOpen} />
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <GoogleNavSignIn active={menuOpen} />
+                  </div>
+                )}
+              </div>
 
-            {/* Account section — every item opens a slide-over sheet
+              {/* Account section — every item opens a slide-over sheet
                     in-place instead of navigating to /account. The sheet
                     sits above the page the visitor was browsing so they
                     can check profile / orders / wishlist / addresses
                     without leaving a product page. */}
-            {user && (
-              <DrawerSection
-                label="My account"
-                storageKey="account"
-                defaultOpen={true}
-              >
-                <DrawerButton
-                  icon={UserCircle}
-                  label="Profile"
-                  onClick={() => openAccountSheet("profile")}
-                />
-                <DrawerButton
-                  icon={Package}
-                  label="My orders"
-                  badge={ordersCount || undefined}
-                  onClick={() => openAccountSheet("orders")}
-                />
-                <DrawerButton
-                  icon={Truck}
-                  label="Track order"
-                  onClick={() => openAccountSheet("tracker")}
-                />
-                <DrawerButton
-                  icon={Heart}
-                  label="Wishlist"
-                  badge={wishlistCount || undefined}
-                  onClick={() => openAccountSheet("wishlist")}
-                />
-                <DrawerButton
-                  icon={MapPin}
-                  label="Saved addresses"
-                  onClick={() => openAccountSheet("addresses")}
-                />
-              </DrawerSection>
-            )}
+              {user && (
+                <DrawerSection
+                  label="My account"
+                  storageKey="account"
+                  defaultOpen={true}
+                >
+                  <DrawerButton
+                    icon={UserCircle}
+                    label="Profile"
+                    onClick={() => openAccountSheet("profile")}
+                  />
+                  <DrawerButton
+                    icon={Package}
+                    label="My orders"
+                    badge={ordersCount || undefined}
+                    onClick={() => openAccountSheet("orders")}
+                  />
+                  <DrawerButton
+                    icon={Truck}
+                    label="Track order"
+                    onClick={() => openAccountSheet("tracker")}
+                  />
+                  <DrawerButton
+                    icon={Heart}
+                    label="Wishlist"
+                    badge={wishlistCount || undefined}
+                    onClick={() => openAccountSheet("wishlist")}
+                  />
+                  <DrawerButton
+                    icon={MapPin}
+                    label="Saved addresses"
+                    onClick={() => openAccountSheet("addresses")}
+                  />
+                </DrawerSection>
+              )}
 
-            {/* Policies — open by default so visitors see every link
+              {/* Policies — open by default so visitors see every link
                     (Shipping / Refund / Privacy / Terms) immediately on
                     the first hamburger tap, no extra click required. */}
-            <DrawerSection
-              label={t("footer.policies")}
-              storageKey="policies"
-              defaultOpen={true}
-            >
-              {POLICY_SLUGS.map((slug) => {
-                const Icon = SLUG_ICON[slug];
-                return (
-                  <Link
-                    key={slug}
-                    to="/policy/$slug"
-                    params={{ slug }}
-                    onClick={closeMenu}
-                    className="flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
-                  >
-                    <Icon className="w-4 h-4 text-muted-foreground" />
-                    <span className="flex-1">
-                      {policies[slug]?.title || t(SLUG_LABEL_KEYS[slug])}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </Link>
-                );
-              })}
-            </DrawerSection>
+              <DrawerSection
+                label={t("footer.policies")}
+                storageKey="policies"
+                defaultOpen={true}
+              >
+                {POLICY_SLUGS.map((slug) => {
+                  const Icon = SLUG_ICON[slug];
+                  return (
+                    <Link
+                      key={slug}
+                      to="/policy/$slug"
+                      params={{ slug }}
+                      onClick={closeMenu}
+                      className="flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
+                    >
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                      <span className="flex-1">
+                        {policies[slug]?.title || t(SLUG_LABEL_KEYS[slug])}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </Link>
+                  );
+                })}
+              </DrawerSection>
 
-            {/* Preferences (theme + locale) live in the top navbar now,
+              {/* Preferences (theme + locale) live in the top navbar now,
                     not in the drawer. */}
 
-            {user && (
-              <div className="px-5 py-4 border-t border-border/30 mt-2">
-                <button
-                  onClick={handleLogout}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 text-sm text-foreground/85 hover:bg-accent/60 transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  {t("nav.signOut")}
-                </button>
-              </div>
-            )}
-          </>
+              {user && (
+                <div className="px-5 py-4 border-t border-border/30 mt-2">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 text-sm text-foreground/85 hover:bg-accent/60 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    {t("nav.signOut")}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer note */}
