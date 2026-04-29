@@ -44,7 +44,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2, delay: 0.5 }}
-          className="font-logo text-4xl sm:text-5xl md:text-7xl lg:text-8xl text-gradient-elegant mb-2 md:mb-3"
+          className="font-logo text-4xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
         >
           Canvas Hub
         </motion.h1>

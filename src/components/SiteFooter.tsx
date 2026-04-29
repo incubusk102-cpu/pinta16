@@ -165,16 +165,8 @@ const SiteFooter = () => {
                 </text>
               </svg>
             </span>
-            <p className="font-logo text-2xl text-gradient-elegant">
-              Canvas Hub
-            </p>
+            <p className="font-logo text-2xl">Canvas Hub</p>
           </div>
-          <p className="text-muted-foreground leading-relaxed max-w-md">
-            Hand-crafted oil and acrylic paintings from independent Filipino
-            artists. Every piece is one of one — never reproduced, signed and
-            shipped with a Certificate of Authenticity.
-          </p>
-
           {/* Socials — only render when a real profile URL is configured */}
           {(FACEBOOK_URL || INSTAGRAM_URL) && (
             <div className="mt-5 flex items-center gap-3">
