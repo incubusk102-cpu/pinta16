@@ -20,6 +20,8 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
+import { useGoogleAuthHash } from "@/hooks/useGoogleAuthHash";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -56,6 +58,15 @@ function HeartbeatBridge() {
   return null;
 }
 
+// Parses `#auth=...` / `?error=...` that /api/google-callback redirects
+// back with. Mounted at root so Google's redirect can land on any
+// route (we send visitors to `/` now) instead of bouncing through
+// `/login` just to finalize the session.
+function GoogleAuthHashBridge() {
+  useGoogleAuthHash();
+  return null;
+}
+
 function ConditionalAnnouncementBar() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -85,11 +96,13 @@ function RootComponent() {
                     <ProductProvider>
                       <CartProvider>
                         <HeartbeatBridge />
+                        <GoogleAuthHashBridge />
                         <ConditionalAnnouncementBar />
                         <Outlet />
                         <ConditionalSiteFooter />
                         <ChatWidget />
                         <PwaPrompts />
+                        <Toaster richColors position="top-right" />
                       </CartProvider>
                     </ProductProvider>
                   </HeroSlidesProvider>
