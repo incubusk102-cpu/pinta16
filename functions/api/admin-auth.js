@@ -43,7 +43,7 @@ export const handler = async (event) => {
       if (params.action === "audit") {
         const secret = await ensureSessionSecret(store);
         const token = extractToken(event);
-        if (!token || !verifyTokenWithSecret(token, secret)) {
+        if (!token || !(await verifyTokenWithSecret(token, secret))) {
           return json(401, { error: "Not authenticated" });
         }
         const limit = Math.max(1, Math.min(500, Number(params.limit) || 200));
@@ -74,7 +74,7 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = hashPassword(password);
+      const { salt, hash } = await hashPassword(password);
       const written = await writeCredentialsIfNew(store, {
         salt,
         hash,
@@ -84,7 +84,7 @@ export const handler = async (event) => {
         return json(409, { error: "Admin password already set" });
       }
 
-      return json(200, { token: issueToken(secret) });
+      return json(200, { token: await issueToken(secret) });
     }
 
     if (action === "login") {
@@ -102,14 +102,14 @@ export const handler = async (event) => {
       const recoveryPassword = (
         process.env.ADMIN_RECOVERY_PASSWORD || ""
       ).trim();
-      const matchesStored = verifyPassword(
+      const matchesStored = await verifyPassword(
         password,
         credentials.salt,
         credentials.hash,
       );
       const matchesRecovery =
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
-        constantTimeEquals(password, recoveryPassword);
+        (await constantTimeEquals(password, recoveryPassword));
       if (!matchesStored && !matchesRecovery) {
         await appendAuditEvent(event, {
           type: "admin.login",
@@ -127,7 +127,7 @@ export const handler = async (event) => {
         detail: matchesRecovery ? "Recovery password used" : "Password OK",
         ...meta,
       });
-      return json(200, { token: issueToken(secret) });
+      return json(200, { token: await issueToken(secret) });
     }
 
     if (action === "change") {
@@ -135,20 +135,20 @@ export const handler = async (event) => {
         return json(404, { error: "Admin password not set" });
       }
       const token = extractToken(event);
-      if (!token || !verifyTokenWithSecret(token, secret)) {
+      if (!token || !(await verifyTokenWithSecret(token, secret))) {
         return json(401, { error: "Not authenticated" });
       }
       const currentPassword = String(body.currentPassword || "");
       const newPassword = String(body.newPassword || "");
       const recoveryPw = (process.env.ADMIN_RECOVERY_PASSWORD || "").trim();
-      const currentMatchesStored = verifyPassword(
+      const currentMatchesStored = await verifyPassword(
         currentPassword,
         credentials.salt,
         credentials.hash,
       );
       const currentMatchesRecovery =
         recoveryPw.length >= MIN_PASSWORD_LENGTH &&
-        constantTimeEquals(currentPassword, recoveryPw);
+        (await constantTimeEquals(currentPassword, recoveryPw));
       if (!currentMatchesStored && !currentMatchesRecovery) {
         return json(401, { error: "Current password is incorrect" });
       }
@@ -158,7 +158,7 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = hashPassword(newPassword);
+      const { salt, hash } = await hashPassword(newPassword);
       await writeCredentials(store, {
         salt,
         hash,
@@ -172,13 +172,23 @@ export const handler = async (event) => {
         detail: "Password updated, session secret rotated",
         ...captureRequestMeta(event),
       });
-      return json(200, { token: issueToken(newSecret) });
+      return json(200, { token: await issueToken(newSecret) });
     }
 
     return json(400, { error: "Unknown action" });
   } catch (error) {
     console.error("admin-auth handler error:", error);
-    return json(500, { error: "Internal error" });
+    return json(500, {
+      error: "Internal error",
+      // TEMPORARY DEBUG: expose error details so we can see WHY init/login
+      // is throwing on Cloudflare Pages. Remove after the underlying bug is
+      // identified and fixed.
+      _debug: {
+        message: error?.message || String(error),
+        name: error?.name || null,
+        stack: (error?.stack || "").split("\n").slice(0, 6).join("\n"),
+      },
+    });
   }
 };
 
