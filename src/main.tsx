@@ -17,7 +17,7 @@ createRoot(document.getElementById("root")!).render(
 // Hide the splash screen once React has had a chance to render the first frame.
 // Keeps it on screen for at least MIN_DISPLAY_MS so it doesn't flash on fast
 // connections, and triggers the CSS fade-out (defined in index.html).
-const MIN_DISPLAY_MS = 500;
+const MIN_DISPLAY_MS = 900;
 const FADE_MS = 700;
 const splashStart =
   (window as unknown as { __splashStart?: number }).__splashStart ??
