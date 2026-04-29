@@ -145,26 +145,7 @@ const SiteFooter = () => {
       <div className="max-w-6xl mx-auto grid gap-10 sm:gap-12 sm:grid-cols-2 md:grid-cols-4 text-sm">
         {/* Brand + tagline */}
         <div className="md:col-span-2">
-          <div className="flex items-center gap-2 mb-4">
-            <span
-              aria-hidden
-              className="font-logo relative inline-flex items-center justify-center w-9 h-9"
-            >
-              <svg viewBox="0 0 40 40" className="w-9 h-9">
-                <text
-                  x="20"
-                  y="30"
-                  textAnchor="middle"
-                  fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
-                  fontSize="34"
-                  fontStyle="italic"
-                  fontWeight={500}
-                  fill="currentColor"
-                >
-                  C
-                </text>
-              </svg>
-            </span>
+          <div className="mb-4">
             <p className="font-logo text-2xl">Canvas Hub</p>
           </div>
           {/* Socials — only render when a real profile URL is configured */}
