@@ -8,9 +8,9 @@ name: Deploy to Cloudflare Pages
 # than the raw source tree.
 #
 # Required GitHub repo secrets (Settings → Secrets and variables → Actions):
-#   - CLOUDFLARE_API_TOKEN
-#       Token must include the "Cloudflare Pages — Edit" permission for
-#       the account that owns the `canvhub` project.
+#   - CANVHUB_PAGES_DEPLOY
+#       Cloudflare API token. Must include the "Cloudflare Pages — Edit"
+#       permission for the account that owns the `canvhub` project.
 #       Create at: https://dash.cloudflare.com/profile/api-tokens
 #       (use the "Edit Cloudflare Pages" template).
 #   - CLOUDFLARE_ACCOUNT_ID
@@ -56,7 +56,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.CANVHUB_PAGES_DEPLOY }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: >
             pages deploy dist
