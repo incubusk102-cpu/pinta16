@@ -55,6 +55,7 @@ const SLUG_LABEL_KEYS: Record<
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hoverPopoverOpen, setHoverPopoverOpen] = useState(false);
   const { itemCount, openCart, orders } = useCart();
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
@@ -182,11 +183,14 @@ const GalleryNav = () => {
           </span>
         </button>
 
-        {/* Desktop quick links removed — Gallery, Contact, account, and
-            theme/locale toggle now live inside the hamburger drawer, which
-            opens on hover (or click) on md+ screens. */}
+        {/* Desktop quick links removed — Gallery and Contact now appear in
+            the lightweight hover popover next to the hamburger (md+ only).
+            The full hamburger drawer still opens on click for the rest. */}
 
-        {/* Right cluster: cart + hamburger (always visible) */}
+        {/* Right cluster: cart + hamburger (always visible).
+            On md+ screens, hovering the hamburger area shows a small
+            popover with Gallery / Contact (no scroll lock, no backdrop).
+            Click still opens the full modal drawer. */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             onClick={openCart}
@@ -200,17 +204,52 @@ const GalleryNav = () => {
               </span>
             )}
           </button>
-          <button
-            onClick={() => setMenuOpen(true)}
-            onMouseEnter={() => setMenuOpen(true)}
-            onFocus={() => setMenuOpen(true)}
-            className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
-            aria-label="Open menu"
-            aria-expanded={menuOpen}
-            aria-controls="mobile-nav-drawer"
+          <div
+            className="relative"
+            onMouseEnter={() => setHoverPopoverOpen(true)}
+            onMouseLeave={() => setHoverPopoverOpen(false)}
           >
-            <Menu className="w-6 h-6" />
-          </button>
+            <button
+              onClick={() => setMenuOpen(true)}
+              className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav-drawer"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <AnimatePresence>
+              {hoverPopoverOpen && (
+                <motion.div
+                  key="hover-popover"
+                  role="menu"
+                  aria-label="Quick links"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="hidden md:flex absolute right-0 top-full mt-2 min-w-[180px] flex-col bg-card border border-border/40 rounded-md shadow-lg overflow-hidden"
+                >
+                  {[
+                    { id: "gallery", label: t("nav.gallery") },
+                    { id: "contact", label: t("nav.contact") },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      role="menuitem"
+                      onClick={() => {
+                        setHoverPopoverOpen(false);
+                        scrollTo(item.id);
+                      }}
+                      className="px-4 py-3 text-left font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
