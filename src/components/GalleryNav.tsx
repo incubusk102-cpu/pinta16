@@ -298,53 +298,11 @@ const GalleryNav = () => {
                 </button>
               </div>
 
-              {/* Account/Greeting card */}
-              <div className="px-5 pt-4 pb-3 border-b border-border/30">
-                {user ? (
-                  <Link
-                    to="/account"
-                    onClick={closeMenu}
-                    className="flex items-center gap-3 group"
-                  >
-                    {user.picture ? (
-                      <img
-                        src={user.picture}
-                        alt=""
-                        className="w-11 h-11 rounded-full object-cover border border-border/40"
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center text-foreground/70">
-                        <UserCircle className="w-6 h-6" />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {user.name || t("nav.account")}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {user.email}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                  </Link>
-                ) : (
-                  <Link
-                    to="/login"
-                    onClick={closeMenu}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-foreground text-background hover:bg-foreground/90 transition-colors"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      {t("nav.login")}
-                    </span>
-                  </Link>
-                )}
-              </div>
-
               {/* Body */}
               <div className="flex-1 overflow-y-auto py-2">
-                {/* Primary nav: Gallery + Contact — prominent on first open
-                    so the user sees them without expanding any section. */}
+                {/* Primary nav — always visible, no accordion, no animation.
+                    All main destinations are immediately reachable the moment
+                    the drawer opens (no scrolling, no expanding). */}
                 <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
                   <button
                     onClick={() => scrollTo("gallery")}
@@ -364,31 +322,82 @@ const GalleryNav = () => {
                       {t("nav.contact")}
                     </span>
                   </button>
-                </div>
-                {/* Browse (other sections) */}
-                <DrawerSection
-                  label="Browse"
-                  storageKey="browse"
-                  defaultOpen={true}
-                >
-                  {browseItems.map((item) => (
-                    <DrawerButton
-                      key={item.id}
-                      icon={item.icon}
-                      label={item.label}
-                      onClick={() => scrollTo(item.id)}
-                    />
-                  ))}
-                  <DrawerLink
-                    icon={ShoppingCart}
-                    label={t("nav.cart")}
-                    badge={itemCount || undefined}
+                  {browseItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => scrollTo(item.id)}
+                        className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span className="font-body text-xs tracking-[0.25em] uppercase">
+                          {item.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <button
                     onClick={() => {
                       closeMenu();
                       openCart();
                     }}
-                  />
-                </DrawerSection>
+                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/40 bg-background/40 hover:bg-foreground hover:text-background transition-colors"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    <span className="font-body text-xs tracking-[0.25em] uppercase">
+                      {t("nav.cart")}
+                    </span>
+                    {itemCount ? (
+                      <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                        {itemCount}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+
+                {/* Account / sign-in (compact, below primary nav) */}
+                <div className="px-5 pt-3 pb-3 border-b border-border/30">
+                  {user ? (
+                    <Link
+                      to="/account"
+                      onClick={closeMenu}
+                      className="flex items-center gap-3 group"
+                    >
+                      {user.picture ? (
+                        <img
+                          src={user.picture}
+                          alt=""
+                          className="w-9 h-9 rounded-full object-cover border border-border/40"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
+                          <UserCircle className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {user.name || t("nav.account")}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {user.email}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/login"
+                      onClick={closeMenu}
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-md bg-foreground text-background hover:bg-foreground/90 transition-colors"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      <span className="font-body text-xs tracking-[0.25em] uppercase">
+                        {t("nav.login")}
+                      </span>
+                    </Link>
+                  )}
+                </div>
 
                 {/* Account section */}
                 {user && (
@@ -541,20 +550,7 @@ const DrawerSection = ({
           }`}
         />
       </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden"
-          >
-            <div>{children}</div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {open ? <div>{children}</div> : null}
     </div>
   );
 };
@@ -581,7 +577,5 @@ const DrawerButton = ({ icon: Icon, label, badge, onClick }: ItemProps) => (
     <ChevronRight className="w-4 h-4 text-muted-foreground" />
   </button>
 );
-
-const DrawerLink = DrawerButton;
 
 export default GalleryNav;
