@@ -228,24 +228,26 @@ const GalleryNav = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.15 }}
-                  className="hidden md:flex absolute right-0 top-full mt-2 min-w-[180px] flex-col bg-card border border-border/40 rounded-md shadow-lg overflow-hidden"
+                  className="hidden md:block absolute right-0 top-full pt-2 min-w-[180px]"
                 >
-                  {[
-                    { id: "gallery", label: t("nav.gallery") },
-                    { id: "contact", label: t("nav.contact") },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      role="menuitem"
-                      onClick={() => {
-                        setHoverPopoverOpen(false);
-                        scrollTo(item.id);
-                      }}
-                      className="px-4 py-3 text-left font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                  <div className="flex flex-col bg-card border border-border/40 rounded-md shadow-lg overflow-hidden">
+                    {[
+                      { id: "gallery", label: t("nav.gallery") },
+                      { id: "contact", label: t("nav.contact") },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        role="menuitem"
+                        onClick={() => {
+                          setHoverPopoverOpen(false);
+                          scrollTo(item.id);
+                        }}
+                        className="px-4 py-3 text-left font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
