@@ -19,7 +19,8 @@ interface Gsi {
     id: {
       initialize: (config: GsiConfig) => void;
       renderButton: (el: HTMLElement, config: GsiConfig) => void;
-      prompt?: () => void;
+      prompt?: (listener?: (notification: unknown) => void) => void;
+      cancel?: () => void;
     };
   };
 }
@@ -89,6 +90,14 @@ export interface RenderRedirectButtonOptions {
   // callback with the credential. Used by `/login` to keep the in-page
   // flow working.
   onCredential?: (credential: string) => void;
+  // When true, Google silently re-signs in a returning visitor whose
+  // Google session and prior consent are both still valid — zero taps.
+  autoSelect?: boolean;
+  // When true, also show Google's One Tap prompt (a small card with
+  // "Continue as [Name]") so a visitor who's signed into Google but
+  // not yet into our site can sign in with one tap, no redirect to
+  // Google's full login page.
+  showOneTap?: boolean;
 }
 
 // Render Google's official branded button. When `loginUri` is provided
@@ -110,6 +119,9 @@ export const renderGoogleButton = async (
     use_fedcm_for_button: true,
     use_fedcm_for_prompt: true,
   };
+  if (opts.autoSelect) {
+    config.auto_select = true;
+  }
   if (opts.loginUri) {
     config.ux_mode = "redirect";
     config.login_uri = opts.loginUri;
@@ -125,4 +137,25 @@ export const renderGoogleButton = async (
     text: opts.text ?? "continue_with",
     width,
   });
+  if (opts.showOneTap) {
+    // One Tap is best-effort: browsers that block 3rd-party cookies,
+    // users who've previously dismissed it, and private-browsing modes
+    // will silently skip it. The rendered button above is always the
+    // visible fallback.
+    try {
+      g.accounts.id.prompt?.();
+    } catch {
+      /* ignore — manual button still works */
+    }
+  }
+};
+
+// Hide Google's One Tap card if it's currently shown. Safe to call even
+// when GSI hasn't been loaded.
+export const cancelGoogleOneTap = (): void => {
+  try {
+    getGsi()?.accounts.id.cancel?.();
+  } catch {
+    /* ignore */
+  }
 };
