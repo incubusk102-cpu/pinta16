@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ShoppingCart,
@@ -97,27 +97,14 @@ const GalleryNav = () => {
 
   // Hover-to-open support. We pre-mount the drawer (see below) so opening
   // is instant on every page — no first-mount cost, no "blank" frame.
-  // A short grace timeout lets the user travel between the hamburger
-  // button and the drawer body without the menu snapping shut.
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelClose = useCallback(() => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
+  // The drawer intentionally does NOT auto-close on mouse leave: once the
+  // visitor has summoned it (hover OR click), every option (including
+  // Logout) stays visible while they scroll past paintings, change focus,
+  // or move the cursor away. Closing is explicit only — click the
+  // hamburger again, the X button, press ESC, or navigate to a new route.
   const openMenu = useCallback(() => {
-    cancelClose();
     setMenuOpen(true);
-  }, [cancelClose]);
-  const scheduleClose = useCallback(
-    (delay = 220) => {
-      cancelClose();
-      closeTimerRef.current = setTimeout(() => setMenuOpen(false), delay);
-    },
-    [cancelClose],
-  );
-  useEffect(() => () => cancelClose(), [cancelClose]);
+  }, []);
 
   const scrollTo = useCallback(
     (id: string) => {
@@ -226,7 +213,6 @@ const GalleryNav = () => {
           <button
             onClick={() => (menuOpen ? closeMenu() : openMenu())}
             onMouseEnter={openMenu}
-            onMouseLeave={() => scheduleClose()}
             onFocus={openMenu}
             className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
@@ -253,8 +239,6 @@ const GalleryNav = () => {
         aria-modal="false"
         aria-label="Site menu"
         aria-hidden={!menuOpen}
-        onMouseEnter={cancelClose}
-        onMouseLeave={() => scheduleClose()}
         className={`fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card/40 supports-[backdrop-filter]:bg-card/25 backdrop-blur-xl border-l border-border/40 shadow-2xl flex flex-col transform transition-transform duration-200 ease-out ${
           menuOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
         }`}
