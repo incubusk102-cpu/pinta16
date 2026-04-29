@@ -15,6 +15,7 @@ import {
   LogOut,
   LogIn,
   ChevronRight,
+  ChevronDown,
   FileText,
   ShieldCheck,
   Truck,
@@ -345,7 +346,11 @@ const GalleryNav = () => {
               {/* Body */}
               <div className="flex-1 overflow-y-auto py-2">
                 {/* Browse */}
-                <DrawerSection label="Browse">
+                <DrawerSection
+                  label="Browse"
+                  storageKey="browse"
+                  defaultOpen={true}
+                >
                   {browseItems.map((item) => (
                     <DrawerButton
                       key={item.id}
@@ -367,7 +372,11 @@ const GalleryNav = () => {
 
                 {/* Account section */}
                 {user && (
-                  <DrawerSection label="My account">
+                  <DrawerSection
+                    label="My account"
+                    storageKey="account"
+                    defaultOpen={true}
+                  >
                     <DrawerButton
                       icon={UserCircle}
                       label="Profile"
@@ -399,7 +408,11 @@ const GalleryNav = () => {
                 )}
 
                 {/* Policies */}
-                <DrawerSection label={t("footer.policies")}>
+                <DrawerSection
+                  label={t("footer.policies")}
+                  storageKey="policies"
+                  defaultOpen={false}
+                >
                   {POLICY_SLUGS.map((slug) => {
                     const Icon = SLUG_ICON[slug];
                     return (
@@ -451,15 +464,80 @@ const GalleryNav = () => {
 interface SectionProps {
   label: string;
   children: React.ReactNode;
+  defaultOpen?: boolean;
+  storageKey?: string;
 }
-const DrawerSection = ({ label, children }: SectionProps) => (
-  <div className="py-2">
-    <p className="px-5 pt-2 pb-1 font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground/80">
-      {label}
-    </p>
-    <div>{children}</div>
-  </div>
-);
+const DrawerSection = ({
+  label,
+  children,
+  defaultOpen = true,
+  storageKey,
+}: SectionProps) => {
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !storageKey) return defaultOpen;
+    try {
+      const v = window.sessionStorage.getItem(
+        `canvhub_drawer_section_${storageKey}`,
+      );
+      if (v === "1") return true;
+      if (v === "0") return false;
+      return defaultOpen;
+    } catch {
+      return defaultOpen;
+    }
+  });
+
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined" && storageKey) {
+        try {
+          window.sessionStorage.setItem(
+            `canvhub_drawer_section_${storageKey}`,
+            next ? "1" : "0",
+          );
+        } catch {
+          // ignore storage failures (Safari private mode, etc.)
+        }
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="py-1">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-5 pt-3 pb-2 text-left hover:bg-accent/30 active:bg-accent/50 transition-colors"
+      >
+        <span className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground/80">
+          {label}
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-muted-foreground/70 transition-transform duration-200 ${
+            open ? "rotate-0" : "-rotate-90"
+          }`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            className="overflow-hidden"
+          >
+            <div>{children}</div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 interface ItemProps {
   icon: React.ComponentType<{ className?: string }>;
