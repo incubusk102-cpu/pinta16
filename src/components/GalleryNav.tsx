@@ -289,10 +289,7 @@ const GalleryNav = () => {
               className="fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card border-l border-border/40 shadow-2xl flex flex-col"
             >
               {/* Drawer header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
-                <p className="font-display text-base tracking-[0.25em] uppercase text-gradient-elegant">
-                  Canvas Hub
-                </p>
+              <div className="flex items-center justify-end px-5 py-4 border-b border-border/30">
                 <button
                   onClick={closeMenu}
                   className="p-2 -mr-2 text-foreground/80 hover:text-foreground"
@@ -381,6 +378,11 @@ const GalleryNav = () => {
                       label="My orders"
                       badge={ordersCount || undefined}
                       onClick={() => goToAccountSection("account-orders")}
+                    />
+                    <DrawerButton
+                      icon={Truck}
+                      label="Track order"
+                      onClick={() => goToAccountSection("account-tracker")}
                     />
                     <DrawerButton
                       icon={Heart}
