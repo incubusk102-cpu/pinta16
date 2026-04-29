@@ -62,18 +62,9 @@
       @media (min-width: 640px) {
         #splash svg { width: 160px; height: 160px; }
       }
-      #splash .splash-letter {
-        transform-box: fill-box;
-        transform-origin: 50% 50%;
-        animation: splash-letter-rotate 1.8s linear infinite;
-      }
-      @keyframes splash-letter-rotate {
-        from { transform: rotate(0deg); }
-        to   { transform: rotate(360deg); }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        #splash .splash-letter { animation: none; }
-      }
+      /* Rotation is driven by an SVG <animateTransform> below for maximum
+         cross-browser/mobile compatibility (CSS transform-box: fill-box is
+         flaky on Android Chrome/Brave for SVG groups). */
     </style>
   </head>
   <body>
@@ -88,8 +79,19 @@
           cx="256" cy="256" r="220"
           fill="none" stroke="#c4a86a" stroke-width="3" stroke-opacity="0.12"
         />
-        <!-- Rotating italic C from EB Garamond, gold fill -->
-        <g class="splash-letter">
+        <!-- Rotating italic C from EB Garamond, gold fill.
+             SMIL animateTransform rotates 360deg around viewBox center
+             (256, 256) every 1.8s. -->
+        <g>
+          <animateTransform
+            attributeName="transform"
+            attributeType="XML"
+            type="rotate"
+            from="0 256 256"
+            to="360 256 256"
+            dur="1.8s"
+            repeatCount="indefinite"
+          />
           <g transform="translate(53 422) scale(0.50 -0.50)" fill="#c4a86a">
             <path d="M384 -14C435 -14 452 11 472 11C492 11 502 -11 512 -9C523 -7 576 115 576 138C576 149 575 157 569 157C564 157 558 149 552 139C513 76 465 23 402 23C294 23 180 110 180 228C180 432 326 628 519 628C558 628 596 616 613 593C634 565 628 523 622 493C620 481 625 467 637 467C644 467 653 477 655 487C664 532 700 599 722 629C726 634 727 645 715 645C700 645 684 629 672 629C662 629 610 663 529 663C293 663 96 494 96 240C96 90 234 -14 384 -14Z"/>
           </g>
