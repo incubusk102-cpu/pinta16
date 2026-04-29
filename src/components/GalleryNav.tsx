@@ -95,9 +95,16 @@ const GalleryNav = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Close drawer on route change
+  // Close drawer AND any open account sheet on route change.
+  // Components rendered inside the sheet can trigger navigation —
+  // WishlistSection has product links, MyOrders has a home link, and
+  // ProfileEditor redirects to "/" on sign-out / Google disconnect.
+  // Without clearing accountSheet here, the sheet would remain mounted
+  // as an overlay on the new page (and in the sign-out case would
+  // render empty content since ProfileEditor returns null when !user).
   useEffect(() => {
     setMenuOpen(false);
+    setAccountSheet(null);
   }, [pathname]);
 
   // ESC to close while drawer is open. Body scroll is intentionally NOT
