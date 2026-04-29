@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 import { useUserAuth, type PublicUser } from "@/contexts/UserAuthContext";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { ArrowLeft } from "lucide-react";
 
 const GOOGLE_CLIENT_ID =
@@ -190,7 +189,6 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 sm:px-6 py-10">
-      <Toaster richColors position="top-right" />
       <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-6 sm:p-8 space-y-6">
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl">Sign in</h1>

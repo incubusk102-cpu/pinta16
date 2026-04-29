@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import {
   Sheet,
   SheetContent,
@@ -133,7 +132,6 @@ function AdminPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Toaster richColors position="top-right" />
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -185,7 +183,6 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <Toaster richColors position="top-right" />
       <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-8 space-y-6">
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl">Admin · Canvas Hub</h1>
@@ -248,7 +245,6 @@ function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
       <header className="border-b border-border/50 bg-card/30 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
           <Button

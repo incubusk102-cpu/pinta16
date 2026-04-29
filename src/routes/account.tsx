@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import GalleryNav from "@/components/GalleryNav";
 import {
   Bell,
@@ -422,7 +421,6 @@ function AccountPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
       <GalleryNav />
       <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-28 md:pt-32 pb-16 space-y-8 scroll-pt-28">
         <div>
