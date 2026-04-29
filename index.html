@@ -36,8 +36,65 @@
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <style>
+      /* Initial splash screen — gold italic C on dark background.
+         Inlined here so it paints before any CSS or JS download. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #181613;
+        transition: opacity 600ms ease 100ms;
+      }
+      #splash.splash-hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #splash svg {
+        width: 96px;
+        height: 96px;
+        animation: splash-pulse 1.8s ease-in-out infinite;
+        will-change: transform, opacity;
+      }
+      @media (min-width: 640px) {
+        #splash svg { width: 128px; height: 128px; }
+      }
+      @keyframes splash-pulse {
+        0%, 100% { opacity: 0.85; transform: scale(1); }
+        50%      { opacity: 1;    transform: scale(1.06); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash svg { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="splash" role="status" aria-label="Loading Canvas Hub">
+      <svg
+        viewBox="0 0 512 512"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <g transform="translate(53 422) scale(0.50 -0.50)" fill="#c4a86a">
+          <path d="M384 -14C435 -14 452 11 472 11C492 11 502 -11 512 -9C523 -7 576 115 576 138C576 149 575 157 569 157C564 157 558 149 552 139C513 76 465 23 402 23C294 23 180 110 180 228C180 432 326 628 519 628C558 628 596 616 613 593C634 565 628 523 622 493C620 481 625 467 637 467C644 467 653 477 655 487C664 532 700 599 722 629C726 634 727 645 715 645C700 645 684 629 672 629C662 629 610 663 529 663C293 663 96 494 96 240C96 90 234 -14 384 -14Z"/>
+        </g>
+      </svg>
+    </div>
+    <script>
+      // Mark splash start time + safety net: hide splash after 8s no matter what,
+      // in case main.tsx fails to load.
+      window.__splashStart = performance.now();
+      setTimeout(function () {
+        var s = document.getElementById("splash");
+        if (s && !s.classList.contains("splash-hide")) {
+          s.classList.add("splash-hide");
+          setTimeout(function () { s.remove(); }, 700);
+        }
+      }, 8000);
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
