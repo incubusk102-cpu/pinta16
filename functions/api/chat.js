@@ -21,6 +21,7 @@ import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
+import { wrapHandler } from "./_lib/handler-wrapper.js";
 
 const STORE_NAME = "chat-threads";
 const INDEX_KEY = "index";

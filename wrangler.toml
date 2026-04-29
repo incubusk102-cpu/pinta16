@@ -32,65 +32,65 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "PRODUCTS"
-id = "REPLACE_WITH_PRODUCTS_KV_ID"
-preview_id = "REPLACE_WITH_PRODUCTS_KV_PREVIEW_ID"
+id = "a892c12dd94048669dbd1cd8f77ef031"
+preview_id = "2424f379a3c84ee4a0beffa1c3c4ac77"
 
 [[kv_namespaces]]
 binding = "HERO_SLIDES"
-id = "REPLACE_WITH_HERO_SLIDES_KV_ID"
-preview_id = "REPLACE_WITH_HERO_SLIDES_KV_PREVIEW_ID"
+id = "e3384f7eea9941eda995c060b9e35949"
+preview_id = "70a56fa3c31f4872b5d02c4c572531a8"
 
 [[kv_namespaces]]
 binding = "STOREFRONT_CONFIG"
-id = "REPLACE_WITH_STOREFRONT_CONFIG_KV_ID"
-preview_id = "REPLACE_WITH_STOREFRONT_CONFIG_KV_PREVIEW_ID"
+id = "b19124e7c1a14becb530474591d58576"
+preview_id = "7ac4624bf7e14db2b5dc7e319000ce28"
 
 [[kv_namespaces]]
 binding = "POLICIES"
-id = "REPLACE_WITH_POLICIES_KV_ID"
-preview_id = "REPLACE_WITH_POLICIES_KV_PREVIEW_ID"
+id = "bd612e81f61e46ff930483b2b0695485"
+preview_id = "695bffdeacd241019bdc8b67cc972b7b"
 
 [[kv_namespaces]]
 binding = "NEWSLETTER"
-id = "REPLACE_WITH_NEWSLETTER_KV_ID"
-preview_id = "REPLACE_WITH_NEWSLETTER_KV_PREVIEW_ID"
+id = "29dfcf9ede214827b3fce888a3591f29"
+preview_id = "38f1b48025f447c7a269df1a07fcc32f"
 
 [[kv_namespaces]]
 binding = "VISITORS"
-id = "REPLACE_WITH_VISITORS_KV_ID"
-preview_id = "REPLACE_WITH_VISITORS_KV_PREVIEW_ID"
+id = "eea654b5603f4e47bdc9ac002506ce9a"
+preview_id = "08063c118579438b91b45782f9cd0010"
 
 [[kv_namespaces]]
 binding = "ORDERS"
-id = "REPLACE_WITH_ORDERS_KV_ID"
-preview_id = "REPLACE_WITH_ORDERS_KV_PREVIEW_ID"
+id = "84646326b4a04e5c88e4fbb18d87969d"
+preview_id = "6a21856fc7da43a9aac06cd509e4b81b"
 
 [[kv_namespaces]]
 binding = "USERS"
-id = "REPLACE_WITH_USERS_KV_ID"
-preview_id = "REPLACE_WITH_USERS_KV_PREVIEW_ID"
+id = "a6b407b9e8384a5893fe0c60ad2f9ece"
+preview_id = "86e8513e206949018aa89730a481a09a"
 
 [[kv_namespaces]]
 binding = "CHAT_THREADS"
-id = "REPLACE_WITH_CHAT_THREADS_KV_ID"
-preview_id = "REPLACE_WITH_CHAT_THREADS_KV_PREVIEW_ID"
+id = "fd3e36943fc4436e9df7d8eee7971cf0"
+preview_id = "05e02e65089447719fb2c4acdfb49a0c"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "REPLACE_WITH_RATE_LIMITS_KV_ID"
-preview_id = "REPLACE_WITH_RATE_LIMITS_KV_PREVIEW_ID"
+id = "7e6af1c8231c4ca7b9f50e45ad0f6c4b"
+preview_id = "3bc241cf6ff04f78b54845c6abccb2d7"
 
 [[kv_namespaces]]
 binding = "AUDIT_LOG"
-id = "REPLACE_WITH_AUDIT_LOG_KV_ID"
-preview_id = "REPLACE_WITH_AUDIT_LOG_KV_PREVIEW_ID"
+id = "893b5fd53eeb4aa79c065a7ba8e7104e"
+preview_id = "927778dd0dd1476da6a68d6c852cfb7d"
 
 [[kv_namespaces]]
 binding = "ADMIN_AUTH"
-id = "REPLACE_WITH_ADMIN_AUTH_KV_ID"
-preview_id = "REPLACE_WITH_ADMIN_AUTH_KV_PREVIEW_ID"
+id = "9f7a6ffd6e044110a2ee1e2b84e76956"
+preview_id = "2401b357b17948b0b09bd694ab850cbd"
 
 [[kv_namespaces]]
 binding = "CUSTOMER_META"
-id = "REPLACE_WITH_CUSTOMER_META_KV_ID"
-preview_id = "REPLACE_WITH_CUSTOMER_META_KV_PREVIEW_ID"
+id = "b55d858597374aaa8a0ff2ecf21a9177"
+preview_id = "a03c9102eeb1456d87683043d48e001d"
