@@ -14,8 +14,6 @@ import RecentlyViewed from "@/components/RecentlyViewed";
 import SplashScreen from "@/components/SplashScreen";
 import Ornament from "@/components/decor/Ornament";
 import TrustBar from "@/components/TrustBar";
-import StatsStrip from "@/components/StatsStrip";
-import AuthenticityCallout from "@/components/AuthenticityCallout";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -55,12 +53,10 @@ function Index() {
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />
       </section>
-      <AuthenticityCallout />
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
         <Ornament label="The studio" />
       </div>
       <AboutSection />
-      <StatsStrip />
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
         <Ornament label="Voices" />
       </div>
