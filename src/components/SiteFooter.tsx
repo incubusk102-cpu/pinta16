@@ -145,33 +145,27 @@ const SiteFooter = () => {
       <div className="max-w-6xl mx-auto grid gap-10 sm:gap-12 sm:grid-cols-2 md:grid-cols-4 text-sm">
         {/* Brand + tagline */}
         <div className="md:col-span-2">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-2 mb-4">
             <span
               aria-hidden
-              className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-foreground text-background"
+              className="relative inline-flex items-center justify-center w-9 h-9"
             >
-              <svg viewBox="0 0 40 40" className="w-5 h-5">
+              <svg viewBox="0 0 40 40" className="w-9 h-9">
                 <text
                   x="20"
-                  y="26"
+                  y="30"
                   textAnchor="middle"
-                  fontFamily="Georgia, 'Playfair Display', serif"
-                  fontSize="26"
+                  fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
+                  fontSize="34"
                   fontStyle="italic"
-                  fill="currentColor"
+                  fontWeight={500}
+                  fill="#c4a86a"
                 >
                   C
                 </text>
-                <rect
-                  x="6"
-                  y="30"
-                  width="28"
-                  height="1.5"
-                  fill="currentColor"
-                />
               </svg>
             </span>
-            <p className="font-display text-lg tracking-[0.25em] uppercase text-gradient-elegant">
+            <p className="font-logo text-2xl text-gradient-elegant">
               Canvas Hub
             </p>
           </div>
