@@ -455,10 +455,10 @@ function AccountPage() {
             <Mail className="w-4 h-4" /> Inactivity
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            Canvas Hub removes accounts that have been inactive for{" "}
-            <strong className="text-foreground">30 days</strong> and emails you
-            when this happens. Just visit your account any time to keep it
-            active.
+            Accounts that have been inactive for{" "}
+            <strong className="text-foreground">30 days</strong> are removed,
+            and we email you when this happens. Just visit your account any
+            time to keep it active.
           </p>
           <p className="mt-3 text-xs text-muted-foreground">
             Joined {formatDate(user.createdAt)} · Last seen{" "}

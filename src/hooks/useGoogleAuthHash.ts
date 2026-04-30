@@ -82,7 +82,7 @@ export const useGoogleAuthHash = (): void => {
         return;
       }
       applySession(parsed.token, parsed.user);
-      toast.success("Welcome to Canvas Hub");
+      toast.success("Signed in");
     } catch {
       toast.error("Could not read Google sign-in response");
     }
