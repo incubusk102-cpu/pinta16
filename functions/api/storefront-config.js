@@ -105,6 +105,90 @@ const sanitizeChatFaqs = (raw) => {
   return out;
 };
 
+// Site-copy defaults match the strings hard-coded in the React components.
+// When admin saves a blank field we fall back to these so the storefront
+// never shows an empty heading.
+const SITE_COPY_DEFAULTS = {
+  gallery: {
+    eyebrow: "The Collection",
+    title: "Our Collection",
+  },
+  about: {
+    eyebrow: "Our Story",
+    title: "About Canvas Hub",
+    body: "Every painting has a soul \u2014 a story waiting to be told. We bring affordable, hand-crafted art to homes and spaces that deserve beauty. Each piece is made to order, ensuring that what you receive is as unique as your vision.",
+  },
+  reviews: {
+    eyebrow: "What customers say",
+    title: "Reviews from our collectors",
+  },
+  contact: {
+    eyebrow: "Get in touch",
+    title: "Contact us",
+  },
+};
+
+const SITE_COPY_FIELD_MAX = 280;
+const SITE_COPY_BODY_MAX = 1500;
+
+const sanitizeSiteCopyField = (value, fallback, max = SITE_COPY_FIELD_MAX) => {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return trimmed.slice(0, max);
+};
+
+const sanitizeSiteCopy = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    gallery: {
+      eyebrow: sanitizeSiteCopyField(
+        data.gallery?.eyebrow,
+        SITE_COPY_DEFAULTS.gallery.eyebrow,
+      ),
+      title: sanitizeSiteCopyField(
+        data.gallery?.title,
+        SITE_COPY_DEFAULTS.gallery.title,
+      ),
+    },
+    about: {
+      eyebrow: sanitizeSiteCopyField(
+        data.about?.eyebrow,
+        SITE_COPY_DEFAULTS.about.eyebrow,
+      ),
+      title: sanitizeSiteCopyField(
+        data.about?.title,
+        SITE_COPY_DEFAULTS.about.title,
+      ),
+      body: sanitizeSiteCopyField(
+        data.about?.body,
+        SITE_COPY_DEFAULTS.about.body,
+        SITE_COPY_BODY_MAX,
+      ),
+    },
+    reviews: {
+      eyebrow: sanitizeSiteCopyField(
+        data.reviews?.eyebrow,
+        SITE_COPY_DEFAULTS.reviews.eyebrow,
+      ),
+      title: sanitizeSiteCopyField(
+        data.reviews?.title,
+        SITE_COPY_DEFAULTS.reviews.title,
+      ),
+    },
+    contact: {
+      eyebrow: sanitizeSiteCopyField(
+        data.contact?.eyebrow,
+        SITE_COPY_DEFAULTS.contact.eyebrow,
+      ),
+      title: sanitizeSiteCopyField(
+        data.contact?.title,
+        SITE_COPY_DEFAULTS.contact.title,
+      ),
+    },
+  };
+};
+
 const DEFAULT_CONFIG = {
   announcement: {
     enabled: false,
@@ -139,6 +223,7 @@ const DEFAULT_CONFIG = {
     agentHandoff: true,
     faqs: DEFAULT_CHAT_FAQS,
   },
+  siteCopy: SITE_COPY_DEFAULTS,
 };
 
 const sanitizeConfig = (raw) => {
@@ -219,6 +304,7 @@ const sanitizeConfig = (raw) => {
       agentHandoff: chatRaw.agentHandoff !== false,
       faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
     },
+    siteCopy: sanitizeSiteCopy(data.siteCopy),
     promoCodes: promoCodes
       .map((p) => {
         if (!p || typeof p !== "object") return null;
@@ -274,6 +360,7 @@ const readConfig = async (store) => {
 const publicView = (config) => ({
   announcement: config.announcement,
   freeShipping: config.freeShipping,
+  siteCopy: config.siteCopy,
   promoCodes: config.promoCodes
     .filter((p) => p.enabled)
     .filter((p) => p.usageLimit === null || p.usageCount < p.usageLimit)
@@ -335,6 +422,27 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           chat: { ...existing.chat, ...body.chat },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-site-copy") {
+        // Merge with existing so a partial / malformed body doesn't wipe
+        // previously-saved admin customisations \u2014 same pattern the other
+        // update-* actions use.
+        const incoming =
+          body.siteCopy && typeof body.siteCopy === "object"
+            ? body.siteCopy
+            : {};
+        const next = sanitizeConfig({
+          ...existing,
+          siteCopy: {
+            gallery: { ...existing.siteCopy.gallery, ...(incoming.gallery ?? {}) },
+            about: { ...existing.siteCopy.about, ...(incoming.about ?? {}) },
+            reviews: { ...existing.siteCopy.reviews, ...(incoming.reviews ?? {}) },
+            contact: { ...existing.siteCopy.contact, ...(incoming.contact ?? {}) },
+          },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });

@@ -24,6 +24,7 @@ import {
   type DisplayArtwork,
 } from "@/lib/artworks";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 type SortOption =
   | "featured"
@@ -111,6 +112,8 @@ const GallerySection = () => {
   const [filterPrice, setFilterPrice] = useState<string>("all");
   const { products } = useProducts();
   const { user } = useUserAuth();
+  const { config } = useStorefrontConfig();
+  const galleryCopy = config.siteCopy.gallery;
   const isLoggedIn = Boolean(user);
 
   const allArtworks = useMemo(
@@ -195,10 +198,10 @@ const GallerySection = () => {
         className="text-center mb-10 sm:mb-16"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-          The Collection
+          {galleryCopy.eyebrow}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
-          Our Collection
+          {galleryCopy.title}
         </h2>
       </motion.div>
 

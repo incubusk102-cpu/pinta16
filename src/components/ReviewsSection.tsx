@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 interface PublishedReview {
   orderId: string;
@@ -39,6 +40,8 @@ const Stars = ({ rating }: { rating: number }) => (
 );
 
 const ReviewsSection = () => {
+  const { config } = useStorefrontConfig();
+  const reviewsCopy = config.siteCopy.reviews;
   const [reviews, setReviews] = useState<PublishedReview[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -80,10 +83,10 @@ const ReviewsSection = () => {
         className="text-center mb-12"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-          What customers say
+          {reviewsCopy.eyebrow}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant mb-4">
-          Reviews from our collectors
+          {reviewsCopy.title}
         </h2>
         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Stars rating={Math.round(avg)} />
