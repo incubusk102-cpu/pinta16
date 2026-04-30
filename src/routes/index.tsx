@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
+import HeroSection from "@/components/HeroSection";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import GallerySection from "@/components/GallerySection";
@@ -34,27 +35,12 @@ export const Route = createFileRoute("/")({
 
 function HeroOrFallback() {
   const { slides, loading } = useHeroSlides();
-  // No admin-configured slides → render nothing and let the gallery be
-  // the first thing visitors see. The previous static "Canvas Hub" hero
-  // was removed so the homepage doesn't show a placeholder block before
-  // an admin uploads a real hero. Manage slides at /admin → Hero slider.
-  if (loading || slides.length === 0) return null;
+  // While loading or when no admin slides are configured, fall back to
+  // the original static hero (eyebrow + Canvas Hub + brush divider +
+  // tagline + View Collection). When admin uploads slides via
+  // /admin → Hero slider, those replace the static hero.
+  if (loading || slides.length === 0) return <HeroSection />;
   return <HeroSlider />;
-}
-
-function HomeBrand() {
-  // Compact wordmark at the top of the homepage only. Lives outside the
-  // admin Hero slider so it always shows on `/` even when no slides are
-  // configured. Other routes don't render this — they rely on the
-  // navbar logo for branding.
-  return (
-    <div className="px-4 sm:px-6 md:px-12 pt-10 sm:pt-14 md:pt-16 pb-2 text-center">
-      <h1 className="font-logo text-4xl sm:text-5xl md:text-6xl">Canvas Hub</h1>
-      <p className="mt-2 font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground">
-        Affordable Art, Authentic Stories
-      </p>
-    </div>
-  );
 }
 
 function Index() {
@@ -62,7 +48,6 @@ function Index() {
   return (
     <div className="smooth-scroll">
       {user && <GalleryNav />}
-      <HomeBrand />
       <HeroOrFallback />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
