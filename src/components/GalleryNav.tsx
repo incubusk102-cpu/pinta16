@@ -21,7 +21,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useCart } from "@/contexts/CartContext";
+import { useCart, type CompletedOrder } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useWishlist } from "@/contexts/WishlistContext";
@@ -64,6 +64,13 @@ const SLUG_ICON: Record<
   privacy: ShieldCheck,
 };
 
+const ORDER_STATUS_LABEL: Record<CompletedOrder["status"], string> = {
+  confirmed: "Confirmed",
+  in_progress: "In progress",
+  out_for_delivery: "Out for delivery",
+  received: "Received",
+};
+
 const SLUG_LABEL_KEYS: Record<
   PolicySlug,
   "footer.terms" | "footer.refund" | "footer.shipping" | "footer.privacy"
@@ -78,7 +85,8 @@ const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountSheet, setAccountSheet] = useState<AccountSheet | null>(null);
-  const { itemCount, openCart, orders } = useCart();
+  const [myOrdersOpen, setMyOrdersOpen] = useState(false);
+  const { itemCount, openCart, orders, viewOrder } = useCart();
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
   const { policies } = usePolicies();
@@ -356,19 +364,67 @@ const GalleryNav = () => {
                   );
                 })}
                 {user && (
-                  <button
-                    onClick={() => openAccountSheet("orders")}
-                    className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
-                  >
-                    <Package className="w-4 h-4 text-muted-foreground" />
-                    <span className="flex-1 text-left">My orders</span>
-                    {ordersCount ? (
-                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
-                        {ordersCount}
-                      </span>
+                  <>
+                    {/* My orders — inline dropdown inside the drawer.
+                          Tapping the row toggles a compact list of recent
+                          orders (ID + status + total). Tapping a row opens
+                          the existing order-confirmation modal with the
+                          full journey + items. The drawer closes when the
+                          modal opens so the visitor can see it clearly. */}
+                    <button
+                      onClick={() => setMyOrdersOpen((v) => !v)}
+                      aria-expanded={myOrdersOpen}
+                      className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
+                    >
+                      <Package className="w-4 h-4 text-muted-foreground" />
+                      <span className="flex-1 text-left">My orders</span>
+                      {ordersCount ? (
+                        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                          {ordersCount}
+                        </span>
+                      ) : null}
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
+                          myOrdersOpen ? "rotate-0" : "-rotate-90"
+                        }`}
+                      />
+                    </button>
+                    {myOrdersOpen ? (
+                      ordersCount === 0 ? (
+                        <p className="px-5 pb-3 text-xs text-muted-foreground">
+                          No orders yet.
+                        </p>
+                      ) : (
+                        <ul className="pb-2">
+                          {orders.map((o) => (
+                            <li key={o.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  closeMenu();
+                                  viewOrder(o.id);
+                                }}
+                                className="w-full flex items-center gap-3 pl-12 pr-5 py-2 text-left hover:bg-accent/40 active:bg-accent/60 transition-colors"
+                                aria-label={`Open order ${o.id}`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium text-foreground truncate">
+                                    {o.id}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground truncate">
+                                    {ORDER_STATUS_LABEL[o.status]}
+                                  </p>
+                                </div>
+                                <span className="text-xs font-semibold whitespace-nowrap text-foreground/90">
+                                  ₱{o.total.toLocaleString()}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )
                     ) : null}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
+                  </>
                 )}
                 <button
                   onClick={() => {
