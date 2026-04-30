@@ -2,12 +2,27 @@ import { motion } from "framer-motion";
 import { Mail, Phone, MapPin } from "lucide-react";
 import NewsletterForm from "@/components/NewsletterForm";
 import { useLocale } from "@/contexts/LocaleContext";
-import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import {
+  DEFAULT_SITE_COPY,
+  useStorefrontConfig,
+} from "@/contexts/StorefrontConfigContext";
 
 const ContactSection = () => {
   const { t } = useLocale();
   const { config } = useStorefrontConfig();
   const contactCopy = config.siteCopy.contact;
+  // Preserve i18n for Contact when the admin hasn't customised the copy.
+  // The other sections were already English-only before this PR; Contact
+  // was the only one wired to the locale-aware translations, so we fall
+  // back to t() while the saved values still match the English defaults.
+  const eyebrowText =
+    contactCopy.eyebrow === DEFAULT_SITE_COPY.contact.eyebrow
+      ? t("contact.title")
+      : contactCopy.eyebrow;
+  const titleText =
+    contactCopy.title === DEFAULT_SITE_COPY.contact.title
+      ? t("contact.heading")
+      : contactCopy.title;
   return (
     <section
       id="contact"
@@ -21,10 +36,10 @@ const ContactSection = () => {
         className="text-center mb-12"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-          {contactCopy.eyebrow}
+          {eyebrowText}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
-          {contactCopy.title}
+          {titleText}
         </h2>
       </motion.div>
       <motion.div

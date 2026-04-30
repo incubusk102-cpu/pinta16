@@ -428,9 +428,21 @@ const handle = async ({ request, env }) => {
       }
 
       if (action === "update-site-copy") {
+        // Merge with existing so a partial / malformed body doesn't wipe
+        // previously-saved admin customisations \u2014 same pattern the other
+        // update-* actions use.
+        const incoming =
+          body.siteCopy && typeof body.siteCopy === "object"
+            ? body.siteCopy
+            : {};
         const next = sanitizeConfig({
           ...existing,
-          siteCopy: body.siteCopy,
+          siteCopy: {
+            gallery: { ...existing.siteCopy.gallery, ...(incoming.gallery ?? {}) },
+            about: { ...existing.siteCopy.about, ...(incoming.about ?? {}) },
+            reviews: { ...existing.siteCopy.reviews, ...(incoming.reviews ?? {}) },
+            contact: { ...existing.siteCopy.contact, ...(incoming.contact ?? {}) },
+          },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });
