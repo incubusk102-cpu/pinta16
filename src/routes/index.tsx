@@ -42,11 +42,27 @@ function HeroOrFallback() {
   return <HeroSlider />;
 }
 
+function HomeBrand() {
+  // Compact wordmark at the top of the homepage only. Lives outside the
+  // admin Hero slider so it always shows on `/` even when no slides are
+  // configured. Other routes don't render this — they rely on the
+  // navbar logo for branding.
+  return (
+    <div className="px-4 sm:px-6 md:px-12 pt-10 sm:pt-14 md:pt-16 pb-2 text-center">
+      <h1 className="font-logo text-4xl sm:text-5xl md:text-6xl">Canvas Hub</h1>
+      <p className="mt-2 font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground">
+        Affordable Art, Authentic Stories
+      </p>
+    </div>
+  );
+}
+
 function Index() {
   const { user } = useUserAuth();
   return (
     <div className="smooth-scroll">
       {user && <GalleryNav />}
+      <HomeBrand />
       <HeroOrFallback />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
