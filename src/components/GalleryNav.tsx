@@ -113,6 +113,7 @@ const GalleryNav = () => {
   useEffect(() => {
     setMenuOpen(false);
     setAccountSheet(null);
+    setMyOrdersOpen(false);
   }, [pathname]);
 
   // ESC to close while drawer is open. Body scroll is intentionally NOT
