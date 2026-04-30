@@ -111,7 +111,7 @@ const DEFAULTS: WelcomeEmailConfig = {
   showBanner: false,
   avatarUrl: "",
   avatarName: "Canvas Hub team",
-  showAvatar: false,
+  showAvatar: true,
   products: {
     enabled: true,
     mode: "auto",
@@ -409,13 +409,21 @@ const renderPreviewHtml = (
   const discountHtml = discountHtmlForPreview(config, discount);
   const productsHtml = productsHtmlForPreview(config, pickedProducts);
 
-  const avatarHtml =
-    config.showAvatar && config.avatarUrl
-      ? `
+  const cMarkAvatarBadge = `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:48px;height:48px;background:#f5f1e6;border-radius:9999px;border:1px solid #efece4;">
+      <tr>
+        <td align="center" valign="middle" width="48" height="48" style="width:48px;height:48px;text-align:center;vertical-align:middle;font-family:'EB Garamond', Georgia, 'Playfair Display', serif;font-style:italic;font-weight:500;font-size:36px;line-height:48px;color:#c4a86a;">C</td>
+      </tr>
+    </table>`;
+  const avatarCell = config.avatarUrl
+    ? `<img src="${config.avatarUrl}" alt="${escapeHtml(config.avatarName || config.fromName)}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />`
+    : cMarkAvatarBadge;
+  const avatarHtml = config.showAvatar
+    ? `
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:28px;">
           <tr>
             <td valign="middle" style="padding:0 12px 0 0;line-height:0;">
-              <img src="${config.avatarUrl}" alt="${escapeHtml(config.avatarName || config.fromName)}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
+              ${avatarCell}
             </td>
             <td valign="middle" style="font-size:13px;color:${primary};line-height:1.4;">
               <div style="font-weight:500;">${escapeHtml(config.avatarName || config.fromName || "Canvas Hub team")}</div>
@@ -423,19 +431,15 @@ const renderPreviewHtml = (
             </td>
           </tr>
         </table>`
-      : "";
+    : "";
 
   const logoBlock = showLogo
     ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
     : `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
         <tr>
-          <td valign="middle" style="padding:0 10px 0 0;line-height:0;">
-            <svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas Hub">
-              <text x="20" y="30" text-anchor="middle" font-family="'EB Garamond', Georgia, 'Playfair Display', serif" font-size="34" font-style="italic" font-weight="500" fill="#c4a86a">C</text>
-            </svg>
-          </td>
-          <td valign="middle" style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:24px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</td>
+          <td align="center" valign="middle" width="40" height="40" style="width:40px;height:40px;text-align:center;vertical-align:middle;font-family:'EB Garamond', Georgia, 'Playfair Display', serif;font-style:italic;font-weight:500;font-size:34px;line-height:40px;color:#c4a86a;">C</td>
+          <td valign="middle" style="padding-left:10px;font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:24px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</td>
         </tr>
       </table>`;
 
@@ -958,7 +962,7 @@ export const WelcomeEmailSection = () => {
 
         <ImageUploader
           label="Profile photo"
-          description="Optional round avatar shown above the signature, so the email feels personal. A square image works best (e.g. 256×256). For the round avatar that appears next to the From name in Gmail's inbox list, set up Gravatar at gravatar.com using account@canvhub.com."
+          description="Round avatar shown above the signature. Leave empty to use the default Canvas Hub C-mark (gold italic C in a circle, matches the website logo). Upload a square image (e.g. 256×256) to use a custom photo instead. For the round avatar that appears next to the From name in Gmail's inbox list, set up Gravatar at gravatar.com using account@canvhub.com."
           value={config.avatarUrl}
           show={config.showAvatar}
           onShowChange={(v) => update("showAvatar", v)}
