@@ -370,6 +370,50 @@ const isSafeUrl = (value) =>
   typeof value === "string" &&
   /^(https?:\/\/|mailto:|data:image\/)/i.test(value.trim());
 
+const isDataImageUrl = (value) =>
+  typeof value === "string" && /^data:image\//i.test(value.trim());
+
+// Resolve the storefront origin we should use for absolute URLs in the
+// rendered email (logo / banner / product image hosting). Prefers the
+// admin-configured CTA URL, falls back to the production origin.
+const resolveBaseUrl = (welcome) => {
+  const fallback = "https://canvhub.com";
+  const raw = String(welcome?.ctaUrl || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return fallback;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return fallback;
+  }
+};
+
+// Quick non-cryptographic 32-bit hash → hex. Just enough entropy to
+// bust Gmail's image proxy cache when an admin re-uploads the same
+// slot, without pulling in crypto.subtle (which is async).
+const shortHash = (input) => {
+  let h = 0x811c9dc5;
+  const s = String(input);
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // Fold to 32-bit unsigned and hex-stringify.
+  return (h >>> 0).toString(16).padStart(8, "0");
+};
+
+// Convert a data: image URL into a hosted /api/welcome-asset/<slot>
+// URL that Gmail will actually fetch. Non-data URLs are returned
+// untouched so admins who paste an HTTPS URL keep working.
+const rehostEmailImage = (welcome, slot, value) => {
+  if (!value) return "";
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  if (!isDataImageUrl(trimmed)) return trimmed;
+  const base = resolveBaseUrl(welcome);
+  const v = shortHash(trimmed);
+  return `${base}/api/welcome-asset/${slot}?v=${v}`;
+};
+
 // Footer link URLs additionally allow tel: for phone numbers, but Gmail
 // strips javascript: and other schemes either way.
 const isSafeLinkUrl = (value) =>
@@ -414,20 +458,7 @@ const FOOTER_ICON_FILES = {
 
 const footerIconUrl = (welcome, kind) => {
   const file = FOOTER_ICON_FILES[kind] || FOOTER_ICON_FILES.custom;
-  // Use the storefront base URL (welcome.ctaUrl) when it's an absolute
-  // canvhub.com link; otherwise fall back to the production origin so
-  // the icons still resolve in test sends.
-  const fallback = "https://canvhub.com";
-  const raw = String(welcome?.ctaUrl || "").trim();
-  let base = fallback;
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      base = new URL(raw).origin;
-    } catch {
-      base = fallback;
-    }
-  }
-  return `${base}/email-icons/${file}`;
+  return `${resolveBaseUrl(welcome)}/email-icons/${file}`;
 };
 
 // Plain-text fallback. Email clients that fall back to text/plain still
@@ -491,14 +522,20 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
   const fromName = escapeHtml(welcome.fromName || "Canvas Hub");
   const showLogo = welcome.showLogo !== false && welcome.logoUrl;
   const showBanner = Boolean(welcome.showBanner) && welcome.bannerUrl;
-  const logoHtml =
+  const logoSrc =
     showLogo && isSafeUrl(welcome.logoUrl)
-      ? `<img src="${welcome.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
-      : defaultBrandLogoHtml(fromName);
-  const bannerHtml =
-    showBanner && isSafeUrl(welcome.bannerUrl)
-      ? `<tr><td style="padding:0;"><img src="${welcome.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
+      ? rehostEmailImage(welcome, "logo", welcome.logoUrl)
       : "";
+  const logoHtml = logoSrc
+    ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
+    : defaultBrandLogoHtml(fromName);
+  const bannerSrc =
+    showBanner && isSafeUrl(welcome.bannerUrl)
+      ? rehostEmailImage(welcome, "banner", welcome.bannerUrl)
+      : "";
+  const bannerHtml = bannerSrc
+    ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc)}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
+    : "";
   const bodyFontStack = resolveBodyFont(welcome);
   const footerLinksHtml = buildFooterLinksHtml(welcome, accent);
   const footerTagline = String(
@@ -606,11 +643,14 @@ const buildAvatarHtml = (welcome) => {
     String(welcome.avatarName || welcome.fromName || "Canvas Hub team").trim(),
   );
   const fromEmail = escapeHtml(String(welcome.fromEmail || "").trim());
+  const avatarSrc = escapeHtml(
+    rehostEmailImage(welcome, "avatar", welcome.avatarUrl),
+  );
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:28px;">
       <tr>
         <td valign="middle" style="padding:0 12px 0 0;line-height:0;">
-          <img src="${welcome.avatarUrl}" alt="${name}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
+          <img src="${avatarSrc}" alt="${name}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
         </td>
         <td valign="middle" style="font-size:13px;color:#1c1c1c;line-height:1.4;">
           <div style="font-weight:500;">${name}</div>
@@ -624,28 +664,31 @@ const buildAvatarHtml = (welcome) => {
 // "products" grid. Storefront products link to the public product page;
 // email-only custom uploads link to /preview/<id> on the storefront.
 const productEmailRow = (welcome, item) => {
-  const baseUrl = String(welcome.ctaUrl || "https://canvhub.com").replace(
-    /\/$/,
-    "",
-  );
+  const baseUrl = resolveBaseUrl(welcome);
   const isCustom = item && item.__custom === true;
   if (isCustom) {
-    const img = String(item.imageUrl || "");
+    const id = String(item.id || "");
+    const rawImg = String(item.imageUrl || "");
     return {
-      img,
+      img: rehostEmailImage(
+        welcome,
+        `custom/${encodeURIComponent(id)}`,
+        rawImg,
+      ),
       title: String(item.title || "Untitled"),
-      link: `${baseUrl}/preview/${encodeURIComponent(item.id || "")}`,
+      link: `${baseUrl}/preview/${encodeURIComponent(id)}`,
       price: Number(item.price) || 0,
       description: String(item.description || ""),
     };
   }
-  const img = productThumbnailUrl(item);
+  const id = String(item?.id || "");
+  const rawImg = productThumbnailUrl(item);
   const price =
     item && item.salePrice && item.salePrice > 0 ? item.salePrice : item?.price;
   return {
-    img,
+    img: rehostEmailImage(welcome, `product/${encodeURIComponent(id)}`, rawImg),
     title: String(item?.title || "Untitled"),
-    link: `${baseUrl}/product/${encodeURIComponent(item?.id || "")}`,
+    link: `${baseUrl}/product/${encodeURIComponent(id)}`,
     price: Number(price) || 0,
     description: "",
   };
@@ -661,9 +704,12 @@ const buildProductsHtml = (welcome, products) => {
     if (!item) return `<td style="width:50%;padding:6px;"></td>`;
     const row = productEmailRow(welcome, item);
     const title = escapeHtml(row.title);
+    // row.img has already been routed through rehostEmailImage so any
+    // data: URL has been replaced with a public /api/welcome-asset/...
+    // URL Gmail can fetch.
     const safeImg =
-      row.img && (isSafeUrl(row.img) || /^data:image\//i.test(row.img))
-        ? `<img src="${row.img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
+      row.img && isSafeUrl(row.img)
+        ? `<img src="${escapeHtml(row.img)}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
         : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
     const priceLine =
       cfg.showPrice && row.price > 0
