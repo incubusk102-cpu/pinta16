@@ -301,37 +301,37 @@ const GalleryNav = () => {
             </div>
           ) : (
             <>
-              {/* Primary nav — Reviews, My orders (signed-in), and Cart. */}
-              <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
+              {/* Primary nav — Reviews, My orders (signed-in), and Cart.
+                    Row-style (icon · label · chevron) to match the
+                    Policies section below, instead of boxed tiles. */}
+              <div className="border-b border-border/30">
                 {browseItems.map((item) => {
                   const Icon = item.icon;
                   return (
                     <button
                       key={item.id}
                       onClick={() => scrollTo(item.id)}
-                      className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                      className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
                     >
-                      <Icon className="w-4 h-4" />
-                      <span className="font-body text-xs tracking-[0.25em] uppercase">
-                        {item.label}
-                      </span>
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </button>
                   );
                 })}
                 {user && (
                   <button
                     onClick={() => openAccountSheet("orders")}
-                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                    className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
                   >
-                    <Package className="w-4 h-4" />
-                    <span className="font-body text-xs tracking-[0.25em] uppercase">
-                      My orders
-                    </span>
+                    <Package className="w-4 h-4 text-muted-foreground" />
+                    <span className="flex-1 text-left">My orders</span>
                     {ordersCount ? (
-                      <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
                         {ordersCount}
                       </span>
                     ) : null}
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </button>
                 )}
                 <button
@@ -339,17 +339,16 @@ const GalleryNav = () => {
                     closeMenu();
                     openCart();
                   }}
-                  className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                  className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
                 >
-                  <ShoppingCart className="w-4 h-4" />
-                  <span className="font-body text-xs tracking-[0.25em] uppercase">
-                    {t("nav.cart")}
-                  </span>
+                  <ShoppingCart className="w-4 h-4 text-muted-foreground" />
+                  <span className="flex-1 text-left">{t("nav.cart")}</span>
                   {itemCount ? (
-                    <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
                       {itemCount}
                     </span>
                   ) : null}
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 </button>
               </div>
 
