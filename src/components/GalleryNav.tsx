@@ -174,10 +174,7 @@ const GalleryNav = () => {
     id: string;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
-  }[] = [
-    { id: "about", label: t("nav.about"), icon: Info },
-    { id: "reviews", label: t("nav.reviews"), icon: Star },
-  ];
+  }[] = [{ id: "reviews", label: t("nav.reviews"), icon: Star }];
 
   return (
     <motion.nav
@@ -296,57 +293,16 @@ const GalleryNav = () => {
         {/* Body */}
         <div className="flex-1 overflow-y-auto py-2">
           {onIndex && !user ? (
-            /* Homepage, signed-out: per user, show ONLY Google sign-in,
-               Gallery, and Contact. Nothing else. As soon as they sign
-               in (or visit any other route) they get the full drawer
-               below. */
+            /* Homepage, signed-out: just the Google sign-in tile. */
             <div className="px-5 pt-3 pb-4 flex flex-col gap-2">
               <div className="flex justify-center">
                 <GoogleNavSignIn active={menuOpen} />
               </div>
-              <button
-                onClick={() => scrollTo("gallery")}
-                className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-              >
-                <ImageIcon className="w-4 h-4" />
-                <span className="font-body text-xs tracking-[0.25em] uppercase">
-                  {t("nav.gallery")}
-                </span>
-              </button>
-              <button
-                onClick={() => scrollTo("contact")}
-                className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span className="font-body text-xs tracking-[0.25em] uppercase">
-                  {t("nav.contact")}
-                </span>
-              </button>
             </div>
           ) : (
             <>
-              {/* Primary nav — always visible, no accordion, no animation.
-                    All main destinations are immediately reachable the moment
-                    the drawer opens (no scrolling, no expanding). */}
+              {/* Primary nav — Reviews, My orders (signed-in), and Cart. */}
               <div className="px-5 pt-3 pb-4 grid grid-cols-2 gap-2 border-b border-border/30">
-                <button
-                  onClick={() => scrollTo("gallery")}
-                  className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                  <span className="font-body text-xs tracking-[0.25em] uppercase">
-                    {t("nav.gallery")}
-                  </span>
-                </button>
-                <button
-                  onClick={() => scrollTo("contact")}
-                  className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span className="font-body text-xs tracking-[0.25em] uppercase">
-                    {t("nav.contact")}
-                  </span>
-                </button>
                 {browseItems.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -362,6 +318,22 @@ const GalleryNav = () => {
                     </button>
                   );
                 })}
+                {user && (
+                  <button
+                    onClick={() => openAccountSheet("orders")}
+                    className="flex items-center justify-center gap-2 py-3 rounded-md border border-border/60 bg-card/85 backdrop-blur-md hover:bg-foreground hover:text-background transition-colors"
+                  >
+                    <Package className="w-4 h-4" />
+                    <span className="font-body text-xs tracking-[0.25em] uppercase">
+                      My orders
+                    </span>
+                    {ordersCount ? (
+                      <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+                        {ordersCount}
+                      </span>
+                    ) : null}
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     closeMenu();
@@ -417,45 +389,20 @@ const GalleryNav = () => {
                 )}
               </div>
 
-              {/* Account section — every item opens a slide-over sheet
-                    in-place instead of navigating to /account. The sheet
-                    sits above the page the visitor was browsing so they
-                    can check profile / orders / wishlist / addresses
-                    without leaving a product page. */}
+              {/* Sign out — replaces the prior "My account" sub-section.
+                    My orders is now in the primary nav above. */}
               {user && (
-                <DrawerSection
-                  label="My account"
-                  storageKey="account"
-                  defaultOpen={true}
-                >
-                  <DrawerButton
-                    icon={UserCircle}
-                    label="Profile"
-                    onClick={() => openAccountSheet("profile")}
-                  />
-                  <DrawerButton
-                    icon={Package}
-                    label="My orders"
-                    badge={ordersCount || undefined}
-                    onClick={() => openAccountSheet("orders")}
-                  />
-                  <DrawerButton
-                    icon={Truck}
-                    label="Track order"
-                    onClick={() => openAccountSheet("tracker")}
-                  />
-                  <DrawerButton
-                    icon={Heart}
-                    label="Wishlist"
-                    badge={wishlistCount || undefined}
-                    onClick={() => openAccountSheet("wishlist")}
-                  />
-                  <DrawerButton
-                    icon={MapPin}
-                    label="Saved addresses"
-                    onClick={() => openAccountSheet("addresses")}
-                  />
-                </DrawerSection>
+                <div className="px-5 pt-3 pb-3 border-b border-border/30">
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      void logout();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 bg-card/85 hover:bg-foreground hover:text-background transition-colors text-xs tracking-[0.25em] uppercase"
+                  >
+                    Sign out
+                  </button>
+                </div>
               )}
 
               {/* Policies — open by default so visitors see every link
