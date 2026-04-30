@@ -39,8 +39,8 @@ const OrderConfirmation = () => {
     }
   }, [lastOrder]);
 
-  // Close on Escape key — defends against the X tap being missed on
-  // small touch targets and gives keyboard users a way out.
+  // Close on Escape key — silent fallback for keyboard users alongside
+  // the visible Close button and backdrop tap.
   useEffect(() => {
     if (!showConfirmation) return;
     const onKey = (e: KeyboardEvent) => {
