@@ -8,6 +8,12 @@
  * EMAIL_FROM (e.g. "Canvas Hub <orders@canvhub.com>") is required when a
  * provider is configured. EMAIL_REPLY_TO is optional. EMAIL_BCC is optional.
  *
+ * Per-purpose overrides are supported: any caller that passes a `purpose`
+ * (currently "order") will resolve EMAIL_FROM_<PURPOSE>, EMAIL_REPLY_TO_<PURPOSE>,
+ * and EMAIL_BCC_<PURPOSE> first, falling back to the bare EMAIL_FROM /
+ * EMAIL_REPLY_TO / EMAIL_BCC. This lets order-confirmation mail come from
+ * order@canvhub.com while other channels keep their own from-address.
+ *
  * If no key is configured, sendEmail() resolves to
  *   { delivered: false, skipped: true, reason: "not configured" }
  * so callers can still record their notification entry without crashing.
@@ -17,6 +23,23 @@ import { getCloudflareEnv } from "./context.js";
 import { getStore } from "./kv-stores.js";
 
 const envOf = (name) => getCloudflareEnv()[name] || "";
+
+/**
+ * Resolve an EMAIL_* env var, preferring the per-purpose override
+ * (EMAIL_<NAME>_<PURPOSE>) when set, otherwise the bare EMAIL_<NAME>.
+ * Exported so admin metrics can show the value that will actually be
+ * used for a given purpose without duplicating the lookup logic.
+ */
+export const resolveEmailEnv = (name, purpose) => {
+  const suffix = String(purpose || "")
+    .trim()
+    .toUpperCase();
+  if (suffix) {
+    const override = envOf(`EMAIL_${name}_${suffix}`);
+    if (override) return override;
+  }
+  return envOf(`EMAIL_${name}`);
+};
 
 const PROVIDERS = {
   resend: {
@@ -43,8 +66,8 @@ export const getEmailProvider = () => {
   return null;
 };
 
-export const isEmailConfigured = () =>
-  Boolean(getEmailProvider()) && Boolean(envOf("EMAIL_FROM"));
+export const isEmailConfigured = (purpose) =>
+  Boolean(getEmailProvider()) && Boolean(resolveEmailEnv("FROM", purpose));
 
 async function sendViaResend({ from, to, subject, html, text, replyTo, bcc }) {
   const res = await fetch("https://api.resend.com/emails", {
@@ -124,7 +147,7 @@ const parseAddress = (raw) => {
   return { email: raw.trim() };
 };
 
-export const sendEmail = async ({ to, subject, html, text }) => {
+export const sendEmail = async ({ to, subject, html, text, purpose }) => {
   if (!to || !subject) {
     return { delivered: false, skipped: true, reason: "missing fields" };
   }
@@ -132,12 +155,17 @@ export const sendEmail = async ({ to, subject, html, text }) => {
   if (!providerKey) {
     return { delivered: false, skipped: true, reason: "not configured" };
   }
-  const from = envOf("EMAIL_FROM");
+  const from = resolveEmailEnv("FROM", purpose);
   if (!from) {
+    const suffix = String(purpose || "")
+      .trim()
+      .toUpperCase();
     return {
       delivered: false,
       skipped: true,
-      reason: "EMAIL_FROM not set",
+      reason: suffix
+        ? `EMAIL_FROM_${suffix} / EMAIL_FROM not set`
+        : "EMAIL_FROM not set",
     };
   }
   const provider = PROVIDERS[providerKey];
@@ -148,8 +176,8 @@ export const sendEmail = async ({ to, subject, html, text }) => {
       subject,
       html,
       text: text || stripTags(html),
-      replyTo: envOf("EMAIL_REPLY_TO") || undefined,
-      bcc: envOf("EMAIL_BCC") || undefined,
+      replyTo: resolveEmailEnv("REPLY_TO", purpose) || undefined,
+      bcc: resolveEmailEnv("BCC", purpose) || undefined,
     });
   } catch (err) {
     return {
@@ -354,6 +382,7 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
     subject: built.subject,
     html: built.html,
     text: built.text,
+    purpose: "order",
   });
 };
 

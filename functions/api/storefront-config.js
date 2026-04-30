@@ -877,7 +877,7 @@ const handle = async ({ request, env }) => {
         if (!isEmailConfigured()) {
           return json(400, {
             error:
-              "Email transport not configured. Set RESEND_API_KEY (or BREVO_API_KEY) and EMAIL_FROM in Cloudflare Pages env vars.",
+              "Email transport not configured. Set RESEND_API_KEY (or BREVO_API_KEY) and EMAIL_FROM (or EMAIL_FROM_<PURPOSE>) in Cloudflare Pages env vars.",
           });
         }
         const to = normalizeEmail(body.to);
