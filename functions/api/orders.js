@@ -6,7 +6,11 @@ import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
-import { sendOrderEmail, isEmailConfigured } from "./_lib/email.js";
+import {
+  sendOrderEmail,
+  isEmailConfigured,
+  resolveEmailEnv,
+} from "./_lib/email.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -342,10 +346,10 @@ export const handler = async (event) => {
             : null;
         return json(200, {
           email: {
-            configured: isEmailConfigured(),
+            configured: isEmailConfigured("order"),
             provider,
-            from: process.env.EMAIL_FROM || null,
-            replyTo: process.env.EMAIL_REPLY_TO || null,
+            from: resolveEmailEnv("FROM", "order") || null,
+            replyTo: resolveEmailEnv("REPLY_TO", "order") || null,
           },
         });
       }
