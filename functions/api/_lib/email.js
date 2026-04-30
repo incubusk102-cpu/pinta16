@@ -14,6 +14,7 @@
  */
 
 import { getCloudflareEnv } from "./context.js";
+import { getStore } from "./kv-stores.js";
 
 const envOf = (name) => getCloudflareEnv()[name] || "";
 
@@ -348,6 +349,174 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
     return { delivered: false, skipped: true, reason: "no recipient" };
   }
   const built = buildOrderEmail(kind, order, extra || {});
+  return await sendEmail({
+    to: recipient,
+    subject: built.subject,
+    html: built.html,
+    text: built.text,
+  });
+};
+
+const renderTemplateString = (template, vars) =>
+  String(template ?? "").replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+    const v = vars[key];
+    return v == null ? "" : String(v);
+  });
+
+const isSafeColor = (value) =>
+  typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
+
+const isSafeUrl = (value) =>
+  typeof value === "string" &&
+  /^(https?:\/\/|mailto:|data:image\/)/i.test(value.trim());
+
+const wrapWelcomeHtml = (welcome, contentHtml) => {
+  const primary = isSafeColor(welcome.primaryColor)
+    ? welcome.primaryColor
+    : "#1c1c1c";
+  const accent = isSafeColor(welcome.accentColor)
+    ? welcome.accentColor
+    : "#7a7468";
+  const fromName = escapeHtml(welcome.fromName || "Canvas Hub");
+  const showLogo = welcome.showLogo !== false && welcome.logoUrl;
+  const showBanner = Boolean(welcome.showBanner) && welcome.bannerUrl;
+  const logoHtml =
+    showLogo && isSafeUrl(welcome.logoUrl)
+      ? `<img src="${welcome.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
+      : `<div style="font-family:'Playfair Display',Georgia,serif;font-size:22px;letter-spacing:0.02em;color:${primary};">${fromName}</div>`;
+  const bannerHtml =
+    showBanner && isSafeUrl(welcome.bannerUrl)
+      ? `<tr><td style="padding:0;"><img src="${welcome.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
+      : "";
+  return `
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${fromName}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f5f3ee;font-family:Inter,Helvetica,Arial,sans-serif;color:#1c1c1c;">
+  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;overflow:hidden;">
+    <tr>
+      <td style="padding:24px 28px;border-bottom:1px solid #efece4;">
+        ${logoHtml}
+      </td>
+    </tr>
+    ${bannerHtml}
+    <tr>
+      <td style="padding:24px 28px;font-size:14px;line-height:1.6;color:${primary};">
+        ${contentHtml}
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">
+        ${fromName} &mdash; original Filipino paintings.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+};
+
+const ctaButtonHtml = (welcome) => {
+  const label = String(welcome.ctaLabel || "").trim();
+  const url = String(welcome.ctaUrl || "").trim();
+  if (!label || !url || !isSafeUrl(url)) return "";
+  const primary = isSafeColor(welcome.primaryColor)
+    ? welcome.primaryColor
+    : "#1c1c1c";
+  return `
+    <p style="margin:24px 0;">
+      <a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;border-radius:4px;">
+        ${escapeHtml(label)}
+      </a>
+    </p>`;
+};
+
+const buildTemplateVars = (user) => {
+  const email = String(user?.email || "");
+  const name = String(user?.name || "").trim();
+  const firstName = name.split(/\s+/)[0] || name || email.split("@")[0] || "";
+  return { name: name || firstName, firstName, email };
+};
+
+/**
+ * Build the welcome email subject/html/text from the admin-edited template.
+ * Templates may include {{name}}, {{firstName}}, {{email}} placeholders.
+ */
+export const buildWelcomeEmail = (welcome, user) => {
+  const vars = buildTemplateVars(user);
+  const subject = renderTemplateString(welcome.subject, vars).slice(0, 240);
+  const bodyText = renderTemplateString(welcome.body, vars);
+  const signature = String(welcome.signature || "").trim();
+
+  const paragraphsHtml = bodyText
+    .split(/\n{2,}/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map(
+      (para) =>
+        `<p style="margin:0 0 12px;white-space:pre-line;">${escapeHtml(para)}</p>`,
+    )
+    .join("");
+
+  const signatureHtml = signature
+    ? `<p style="margin:24px 0 0;color:#7a7468;font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
+    : "";
+
+  const contentHtml = `
+    ${paragraphsHtml}
+    ${ctaButtonHtml(welcome)}
+    ${signatureHtml}
+  `;
+
+  const text = `${bodyText}${signature ? `\n\n${signature}` : ""}`;
+
+  return {
+    subject,
+    html: wrapWelcomeHtml(welcome, contentHtml),
+    text,
+  };
+};
+
+/**
+ * Load the welcomeEmail subtree from the storefront-config KV. Returns null
+ * when the binding or the doc isn't there yet so callers can no-op cleanly.
+ */
+export const loadWelcomeEmailConfig = async () => {
+  try {
+    const store = getStore("storefront-config");
+    const raw = await store.get("config", { type: "json" });
+    if (!raw || typeof raw !== "object") return null;
+    if (!raw.welcomeEmail || typeof raw.welcomeEmail !== "object") return null;
+    return raw.welcomeEmail;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Send the configured welcome email to a single recipient. Resolves to a
+ * skipped result when the welcome email is disabled or no transport is
+ * configured, so callers can ignore the return value safely.
+ */
+export const sendWelcomeEmail = async ({ welcome, user, override }) => {
+  const recipient = override?.to || user?.email;
+  if (!recipient) {
+    return { delivered: false, skipped: true, reason: "no recipient" };
+  }
+  if (!welcome || welcome.enabled === false) {
+    return { delivered: false, skipped: true, reason: "disabled" };
+  }
+  if (!isEmailConfigured()) {
+    return { delivered: false, skipped: true, reason: "not configured" };
+  }
+  const built = buildWelcomeEmail(welcome, user || { email: recipient });
+  if (override?.subjectPrefix) {
+    built.subject = `${override.subjectPrefix}${built.subject}`;
+  }
   return await sendEmail({
     to: recipient,
     subject: built.subject,

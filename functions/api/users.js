@@ -23,6 +23,38 @@ import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { loadWelcomeEmailConfig, sendWelcomeEmail } from "./_lib/email.js";
+
+// Fire the welcome email without blocking the auth response on it. We log
+// failures via the audit trail so admins can see misconfigurations.
+const fireWelcomeEmail = async (event, user, source) => {
+  try {
+    const welcome = await loadWelcomeEmailConfig();
+    if (!welcome || welcome.enabled === false) return;
+    const result = await sendWelcomeEmail({ welcome, user });
+    await appendAuditEvent(event, {
+      type: "user.welcome-email",
+      outcome: result?.delivered ? "success" : "skipped",
+      subject: user.email,
+      detail: result?.delivered
+        ? `Welcome email sent via ${result.provider} (${source})`
+        : `Welcome email skipped: ${result?.reason || result?.error || "unknown"} (${source})`,
+      ...captureRequestMeta(event),
+    });
+  } catch (err) {
+    try {
+      await appendAuditEvent(event, {
+        type: "user.welcome-email",
+        outcome: "failure",
+        subject: user.email,
+        detail: `Welcome email error: ${err instanceof Error ? err.message : String(err)} (${source})`,
+        ...captureRequestMeta(event),
+      });
+    } catch {
+      /* swallow audit errors so signup still succeeds */
+    }
+  }
+};
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -139,6 +171,7 @@ export const handler = async (event) => {
       const now = new Date().toISOString();
       const users = await readUsers(store);
       let user = users[email];
+      let isNewUser = false;
 
       if (user) {
         user.lastSeenAt = now;
@@ -149,6 +182,7 @@ export const handler = async (event) => {
           user.picture = String(googlePayload.picture).slice(0, 2000);
         }
       } else {
+        isNewUser = true;
         user = {
           id: crypto.randomUUID(),
           email,
@@ -170,6 +204,9 @@ export const handler = async (event) => {
         detail: "Google ID token verified",
         ...captureRequestMeta(event),
       });
+      if (isNewUser) {
+        await fireWelcomeEmail(event, user, "google-login");
+      }
       return json(200, {
         token: issueToken(user.id, secret),
         user: publicUser(user),
@@ -228,6 +265,7 @@ export const handler = async (event) => {
         detail: "Account created",
         ...captureRequestMeta(event),
       });
+      await fireWelcomeEmail(event, user, "signup");
       return json(200, {
         token: issueToken(user.id, secret),
         user: publicUser(user),

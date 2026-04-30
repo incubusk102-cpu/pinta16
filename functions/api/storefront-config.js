@@ -8,6 +8,8 @@ import { setCloudflareContext } from "./_lib/context.js";
 import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
+import { isEmailConfigured, sendWelcomeEmail } from "./_lib/email.js";
+import { isValidEmail, normalizeEmail } from "./_lib/user-auth.js";
 
 const CONFIG_KEY = "config";
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -138,6 +140,119 @@ const sanitizeSiteCopyField = (value, fallback, max = SITE_COPY_FIELD_MAX) => {
   return trimmed.slice(0, max);
 };
 
+// Welcome email — sent to a user the first time they sign up (email/password)
+// or sign in with Google. The template + assets are admin-only; nothing here
+// is included in the public storefront-config read.
+const DEFAULT_WELCOME_EMAIL = {
+  enabled: false,
+  fromName: "Canvas Hub",
+  fromEmail: "account@canvhub.com",
+  replyTo: "account@canvhub.com",
+  subject: "Welcome to Canvas Hub, {{firstName}}!",
+  body:
+    "Hi {{firstName}},\n\n" +
+    "Thanks for joining Canvas Hub — we're glad to have you. " +
+    "Every painting on the storefront is original, hand-painted, and shipped from the artist's studio.\n\n" +
+    "Take your time exploring the collection. If a piece speaks to you, just tap it to see the full details and sizes.\n\n" +
+    "If you have any questions, reply to this email and the team will get back to you.\n\n" +
+    "— The Canvas Hub team",
+  signature: "— The Canvas Hub team",
+  primaryColor: "#1c1c1c",
+  accentColor: "#7a7468",
+  logoUrl: "",
+  bannerUrl: "",
+  ctaLabel: "Browse the collection",
+  ctaUrl: "https://canvhub.com",
+  showLogo: true,
+  showBanner: false,
+};
+
+const WELCOME_EMAIL_SUBJECT_MAX = 200;
+const WELCOME_EMAIL_BODY_MAX = 8000;
+const WELCOME_EMAIL_FIELD_MAX = 200;
+const WELCOME_EMAIL_IMAGE_MAX = 3_500_000; // ~3.5 MB encoded data URL
+
+const sanitizeWelcomeEmailString = (value, fallback, max) => {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return trimmed.slice(0, max);
+};
+
+const sanitizeWelcomeEmailImage = (value) => {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.length > WELCOME_EMAIL_IMAGE_MAX) return "";
+  // Accept either an absolute URL or a data: URL. Reject anything else
+  // (relative paths, javascript: URIs, etc.) so we never inject something
+  // unexpected into an outbound email.
+  if (/^data:image\//i.test(trimmed)) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.slice(0, 2000);
+  return "";
+};
+
+const sanitizeWelcomeEmail = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    enabled: Boolean(data.enabled),
+    fromName: sanitizeWelcomeEmailString(
+      data.fromName,
+      DEFAULT_WELCOME_EMAIL.fromName,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    fromEmail: sanitizeWelcomeEmailString(
+      data.fromEmail,
+      DEFAULT_WELCOME_EMAIL.fromEmail,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    replyTo: sanitizeWelcomeEmailString(
+      data.replyTo,
+      DEFAULT_WELCOME_EMAIL.replyTo,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    subject: sanitizeWelcomeEmailString(
+      data.subject,
+      DEFAULT_WELCOME_EMAIL.subject,
+      WELCOME_EMAIL_SUBJECT_MAX,
+    ),
+    body: sanitizeWelcomeEmailString(
+      data.body,
+      DEFAULT_WELCOME_EMAIL.body,
+      WELCOME_EMAIL_BODY_MAX,
+    ),
+    signature: sanitizeWelcomeEmailString(
+      data.signature,
+      DEFAULT_WELCOME_EMAIL.signature,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    primaryColor: sanitizeWelcomeEmailString(
+      data.primaryColor,
+      DEFAULT_WELCOME_EMAIL.primaryColor,
+      30,
+    ),
+    accentColor: sanitizeWelcomeEmailString(
+      data.accentColor,
+      DEFAULT_WELCOME_EMAIL.accentColor,
+      30,
+    ),
+    logoUrl: sanitizeWelcomeEmailImage(data.logoUrl),
+    bannerUrl: sanitizeWelcomeEmailImage(data.bannerUrl),
+    ctaLabel: sanitizeWelcomeEmailString(
+      data.ctaLabel,
+      DEFAULT_WELCOME_EMAIL.ctaLabel,
+      80,
+    ),
+    ctaUrl: sanitizeWelcomeEmailString(
+      data.ctaUrl,
+      DEFAULT_WELCOME_EMAIL.ctaUrl,
+      500,
+    ),
+    showLogo: data.showLogo !== false,
+    showBanner: Boolean(data.showBanner),
+  };
+};
+
 const sanitizeSiteCopy = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
   return {
@@ -224,6 +339,7 @@ const DEFAULT_CONFIG = {
     faqs: DEFAULT_CHAT_FAQS,
   },
   siteCopy: SITE_COPY_DEFAULTS,
+  welcomeEmail: DEFAULT_WELCOME_EMAIL,
 };
 
 const sanitizeConfig = (raw) => {
@@ -305,6 +421,7 @@ const sanitizeConfig = (raw) => {
       faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
     },
     siteCopy: sanitizeSiteCopy(data.siteCopy),
+    welcomeEmail: sanitizeWelcomeEmail(data.welcomeEmail),
     promoCodes: promoCodes
       .map((p) => {
         if (!p || typeof p !== "object") return null;
@@ -427,6 +544,59 @@ const handle = async ({ request, env }) => {
         return json(200, { config: next });
       }
 
+      if (action === "send-welcome-test") {
+        if (!isEmailConfigured()) {
+          return json(400, {
+            error:
+              "Email transport not configured. Set RESEND_API_KEY (or BREVO_API_KEY) and EMAIL_FROM in Cloudflare Pages env vars.",
+          });
+        }
+        const to = normalizeEmail(body.to);
+        if (!isValidEmail(to)) {
+          return json(400, { error: "Enter a valid recipient email" });
+        }
+        // Use the draft welcomeEmail from the body if provided, otherwise the
+        // currently-saved one. Always force-enable for a test send so admins
+        // can preview the template even before flipping the toggle on.
+        const draft =
+          body.welcomeEmail && typeof body.welcomeEmail === "object"
+            ? sanitizeWelcomeEmail({
+                ...existing.welcomeEmail,
+                ...body.welcomeEmail,
+              })
+            : existing.welcomeEmail;
+        const result = await sendWelcomeEmail({
+          welcome: { ...draft, enabled: true },
+          user: {
+            email: to,
+            name: String(body.name || "Test collector").slice(0, 80),
+          },
+          override: { subjectPrefix: "[Test] " },
+        });
+        if (result?.delivered) {
+          return json(200, { ok: true, provider: result.provider });
+        }
+        return json(502, {
+          error:
+            result?.error ||
+            result?.reason ||
+            "Could not send test email (unknown error)",
+        });
+      }
+
+      if (action === "update-welcome-email") {
+        const incoming =
+          body.welcomeEmail && typeof body.welcomeEmail === "object"
+            ? body.welcomeEmail
+            : {};
+        const next = sanitizeConfig({
+          ...existing,
+          welcomeEmail: { ...existing.welcomeEmail, ...incoming },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
       if (action === "update-site-copy") {
         // Merge with existing so a partial / malformed body doesn't wipe
         // previously-saved admin customisations \u2014 same pattern the other
@@ -438,10 +608,19 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           siteCopy: {
-            gallery: { ...existing.siteCopy.gallery, ...(incoming.gallery ?? {}) },
+            gallery: {
+              ...existing.siteCopy.gallery,
+              ...(incoming.gallery ?? {}),
+            },
             about: { ...existing.siteCopy.about, ...(incoming.about ?? {}) },
-            reviews: { ...existing.siteCopy.reviews, ...(incoming.reviews ?? {}) },
-            contact: { ...existing.siteCopy.contact, ...(incoming.contact ?? {}) },
+            reviews: {
+              ...existing.siteCopy.reviews,
+              ...(incoming.reviews ?? {}),
+            },
+            contact: {
+              ...existing.siteCopy.contact,
+              ...(incoming.contact ?? {}),
+            },
           },
         });
         await store.setJSON(CONFIG_KEY, next);
