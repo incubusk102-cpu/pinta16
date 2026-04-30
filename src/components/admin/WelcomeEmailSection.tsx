@@ -4,10 +4,12 @@ import {
   Image as ImageIcon,
   Loader2,
   Mail,
+  Package,
   RotateCcw,
   Save,
   Send,
   Sparkles,
+  Tag,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -19,6 +21,25 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { compressImage } from "@/lib/imageCompress";
+
+export interface WelcomeProductsConfig {
+  enabled: boolean;
+  mode: "auto" | "manual";
+  count: number;
+  manualIds: string[];
+  sectionTitle: string;
+  showPrice: boolean;
+}
+
+export interface WelcomeDiscountConfig {
+  enabled: boolean;
+  source: "linked" | "inline";
+  linkedCode: string;
+  inlineHeadline: string;
+  inlineCode: string;
+  inlineDescription: string;
+  inlineExpiresAt: string;
+}
 
 // Mirrors functions/api/storefront-config.js DEFAULT_WELCOME_EMAIL.
 export interface WelcomeEmailConfig {
@@ -37,6 +58,30 @@ export interface WelcomeEmailConfig {
   ctaUrl: string;
   showLogo: boolean;
   showBanner: boolean;
+  products: WelcomeProductsConfig;
+  discount: WelcomeDiscountConfig;
+}
+
+interface AdminProductSummary {
+  id: string;
+  title: string;
+  image?: string;
+  images?: { url: string }[];
+  price?: number;
+  salePrice?: number;
+  availability?: string;
+  createdAt?: string;
+}
+
+interface AdminPromoSummary {
+  code: string;
+  type?: string;
+  value?: number;
+  description?: string;
+  enabled?: boolean;
+  expiresAt?: string;
+  usageLimit?: number | null;
+  usageCount?: number;
 }
 
 const DEFAULTS: WelcomeEmailConfig = {
@@ -61,7 +106,33 @@ const DEFAULTS: WelcomeEmailConfig = {
   ctaUrl: "https://canvhub.com",
   showLogo: true,
   showBanner: false,
+  products: {
+    enabled: true,
+    mode: "auto",
+    count: 4,
+    manualIds: [],
+    sectionTitle: "A glimpse of the collection",
+    showPrice: true,
+  },
+  discount: {
+    enabled: false,
+    source: "linked",
+    linkedCode: "",
+    inlineHeadline: "Your welcome gift",
+    inlineCode: "WELCOME10",
+    inlineDescription: "10% off your first painting.",
+    inlineExpiresAt: "",
+  },
 };
+
+const mergeWelcomeConfig = (
+  partial: Partial<WelcomeEmailConfig> | undefined,
+): WelcomeEmailConfig => ({
+  ...DEFAULTS,
+  ...(partial || {}),
+  products: { ...DEFAULTS.products, ...(partial?.products || {}) },
+  discount: { ...DEFAULTS.discount, ...(partial?.discount || {}) },
+});
 
 type SuggestedTemplate = {
   id: string;
@@ -180,9 +251,118 @@ const escapeHtml = (s: string): string =>
 const isSafeColor = (value: string): boolean =>
   /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
 
+interface ResolvedDiscount {
+  headline: string;
+  code: string;
+  description: string;
+  expiresAt: string;
+}
+
+const formatPHP = (n?: number): string =>
+  `₱${Number(n || 0).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+
+const formatPromoDescription = (promo: AdminPromoSummary): string => {
+  switch (promo.type) {
+    case "percent":
+      return `${promo.value}% off`;
+    case "fixed":
+    case "flat":
+      return `${formatPHP(promo.value)} off`;
+    case "free_shipping":
+      return "Free shipping";
+    default:
+      return "";
+  }
+};
+
+const productThumbnailUrl = (p: AdminProductSummary): string => {
+  if (Array.isArray(p.images) && p.images[0]?.url) return p.images[0].url;
+  return p.image || "";
+};
+
+const formatExpiryLabel = (iso: string): string => {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const productsHtmlForPreview = (
+  config: WelcomeEmailConfig,
+  picked: AdminProductSummary[],
+): string => {
+  const cfg = config.products;
+  if (!cfg.enabled || picked.length === 0) return "";
+  const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
+  const renderCell = (p?: AdminProductSummary): string => {
+    if (!p) return `<td style="width:50%;padding:6px;"></td>`;
+    const img = productThumbnailUrl(p);
+    const title = escapeHtml(p.title || "Untitled");
+    const priceLine = cfg.showPrice
+      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(
+          p.salePrice && p.salePrice > 0 ? p.salePrice : p.price,
+        )}</div>`
+      : "";
+    const safeImg = img
+      ? `<img src="${img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
+      : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
+    return `<td valign="top" style="padding:6px;width:50%;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}</td>`;
+  };
+  const rows: string[] = [];
+  for (let i = 0; i < picked.length; i += 2) {
+    rows.push(`<tr>${renderCell(picked[i])}${renderCell(picked[i + 1])}</tr>`);
+  }
+  return `
+    <h3 style="margin:32px 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
+    <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;">
+      ${rows.join("")}
+    </table>
+  `;
+};
+
+const discountHtmlForPreview = (
+  config: WelcomeEmailConfig,
+  discount: ResolvedDiscount | null,
+): string => {
+  if (!discount || !discount.code) return "";
+  const primary = isSafeColor(config.primaryColor)
+    ? config.primaryColor
+    : "#1c1c1c";
+  const accent = isSafeColor(config.accentColor)
+    ? config.accentColor
+    : "#7a7468";
+  const headline = escapeHtml(discount.headline || "Your welcome gift");
+  const description = escapeHtml(discount.description || "");
+  const code = escapeHtml(discount.code);
+  const expiry = formatExpiryLabel(discount.expiresAt || "");
+  const expiryLine = expiry
+    ? `<div style="margin-top:6px;font-size:11px;color:${accent};">Use before ${escapeHtml(expiry)}.</div>`
+    : "";
+  return `
+    <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;margin:24px 0;">
+      <tr>
+        <td style="background:${primary};padding:18px 20px;border-radius:6px;color:#ffffff;text-align:center;">
+          <div style="font-family:'Playfair Display',Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
+          ${description ? `<div style="margin-top:4px;font-size:13px;opacity:0.92;">${description}</div>` : ""}
+          <div style="margin-top:12px;display:inline-block;padding:8px 14px;border:1px dashed rgba(255,255,255,0.55);border-radius:4px;font-family:'Courier New',monospace;font-size:18px;letter-spacing:0.18em;">${code}</div>
+          ${expiryLine}
+        </td>
+      </tr>
+    </table>
+  `;
+};
+
 // Approximates the server-side wrapper so admins see the same thing the
 // recipient will see (sans email-client quirks).
-const renderPreviewHtml = (config: WelcomeEmailConfig): string => {
+const renderPreviewHtml = (
+  config: WelcomeEmailConfig,
+  pickedProducts: AdminProductSummary[],
+  discount: ResolvedDiscount | null,
+): string => {
   const vars = {
     name: "Sample collector",
     firstName: "Sample",
@@ -220,9 +400,12 @@ const renderPreviewHtml = (config: WelcomeEmailConfig): string => {
       ? `<p style="margin:24px 0;"><a href="${escapeHtml(config.ctaUrl)}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;border-radius:4px;">${escapeHtml(config.ctaLabel)}</a></p>`
       : "";
 
+  const discountHtml = discountHtmlForPreview(config, discount);
+  const productsHtml = productsHtmlForPreview(config, pickedProducts);
+
   const logoBlock = showLogo
     ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
-    : `<div style="font-family:Georgia,serif;font-size:22px;letter-spacing:0.02em;color:${primary};">${fromName}</div>`;
+    : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
 
   const bannerBlock = showBanner
     ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
@@ -230,7 +413,11 @@ const renderPreviewHtml = (config: WelcomeEmailConfig): string => {
 
   return `
 <!doctype html>
-<html><body style="margin:0;padding:24px;background:#f5f3ee;font-family:Helvetica,Arial,sans-serif;color:${primary};">
+<html><head>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
+</head><body style="margin:0;padding:24px;background:#f5f3ee;font-family:Helvetica,Arial,sans-serif;color:${primary};">
   <div style="max-width:560px;margin:0 auto;font-size:11px;color:${accent};margin-bottom:8px;">
     <strong>Subject:</strong> ${escapeHtml(subject)}
   </div>
@@ -239,10 +426,12 @@ const renderPreviewHtml = (config: WelcomeEmailConfig): string => {
     ${bannerBlock}
     <tr><td style="padding:24px 28px;font-size:14px;line-height:1.6;">
       ${paragraphsHtml}
+      ${discountHtml}
+      ${productsHtml}
       ${ctaHtml}
       ${signatureHtml}
     </td></tr>
-    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">${fromName} &mdash; original Filipino paintings.</td></tr>
+    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};"><span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> &mdash; original Filipino paintings.</td></tr>
   </table>
 </body></html>`;
 };
@@ -255,8 +444,31 @@ export const WelcomeEmailSection = () => {
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const [products, setProducts] = useState<AdminProductSummary[]>([]);
+  const [promoCodes, setPromoCodes] = useState<AdminPromoSummary[]>([]);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Pull the storefront product list so the manual picker has something to
+  // show. Public endpoint, so no admin token required.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/products");
+        if (!res.ok) return;
+        const data = (await res.json()) as { products?: AdminProductSummary[] };
+        if (!cancelled && Array.isArray(data.products)) {
+          setProducts(data.products);
+        }
+      } catch {
+        /* fail silently — manual picker will just be empty */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,11 +479,17 @@ export const WelcomeEmailSection = () => {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as {
-          config?: { welcomeEmail?: Partial<WelcomeEmailConfig> };
+          config?: {
+            welcomeEmail?: Partial<WelcomeEmailConfig>;
+            promoCodes?: AdminPromoSummary[];
+          };
         };
         if (cancelled) return;
         if (data?.config?.welcomeEmail) {
-          setConfig({ ...DEFAULTS, ...data.config.welcomeEmail });
+          setConfig(mergeWelcomeConfig(data.config.welcomeEmail));
+        }
+        if (Array.isArray(data?.config?.promoCodes)) {
+          setPromoCodes(data.config.promoCodes as AdminPromoSummary[]);
         }
       } catch (e) {
         if (!cancelled) {
@@ -293,6 +511,30 @@ export const WelcomeEmailSection = () => {
     value: WelcomeEmailConfig[K],
   ) => {
     setConfig((c) => ({ ...c, [key]: value }));
+  };
+
+  const updateProducts = <K extends keyof WelcomeProductsConfig>(
+    key: K,
+    value: WelcomeProductsConfig[K],
+  ) => {
+    setConfig((c) => ({ ...c, products: { ...c.products, [key]: value } }));
+  };
+
+  const updateDiscount = <K extends keyof WelcomeDiscountConfig>(
+    key: K,
+    value: WelcomeDiscountConfig[K],
+  ) => {
+    setConfig((c) => ({ ...c, discount: { ...c.discount, [key]: value } }));
+  };
+
+  const toggleManualProduct = (id: string) => {
+    setConfig((c) => {
+      const present = c.products.manualIds.includes(id);
+      const next = present
+        ? c.products.manualIds.filter((x) => x !== id)
+        : [...c.products.manualIds, id].slice(0, 8);
+      return { ...c, products: { ...c.products, manualIds: next } };
+    });
   };
 
   const handleUploadImage = async (
@@ -393,7 +635,60 @@ export const WelcomeEmailSection = () => {
     }
   };
 
-  const previewHtml = useMemo(() => renderPreviewHtml(config), [config]);
+  const sortedProducts = useMemo(() => {
+    return [...products]
+      .filter((p) => p.availability !== "draft")
+      .sort(
+        (a, b) => Date.parse(b.createdAt || "") - Date.parse(a.createdAt || ""),
+      );
+  }, [products]);
+
+  const previewProducts = useMemo<AdminProductSummary[]>(() => {
+    if (!config.products.enabled) return [];
+    if (config.products.mode === "manual") {
+      const byId = new Map(products.map((p) => [p.id, p]));
+      return config.products.manualIds
+        .map((id) => byId.get(id))
+        .filter(
+          (p): p is AdminProductSummary =>
+            Boolean(p) && p!.availability !== "draft",
+        )
+        .slice(0, config.products.count);
+    }
+    return sortedProducts.slice(0, config.products.count);
+  }, [config.products, products, sortedProducts]);
+
+  const previewDiscount = useMemo<ResolvedDiscount | null>(() => {
+    const d = config.discount;
+    if (!d.enabled) return null;
+    if (d.source === "inline") {
+      if (!d.inlineCode) return null;
+      return {
+        headline: d.inlineHeadline,
+        code: d.inlineCode,
+        description: d.inlineDescription,
+        expiresAt: d.inlineExpiresAt || "",
+      };
+    }
+    if (!d.linkedCode) return null;
+    const promo = promoCodes.find(
+      (p) =>
+        p.enabled !== false &&
+        p.code.toUpperCase() === d.linkedCode.toUpperCase(),
+    );
+    if (!promo) return null;
+    return {
+      headline: "Your welcome gift",
+      code: promo.code,
+      description: promo.description || formatPromoDescription(promo),
+      expiresAt: promo.expiresAt || "",
+    };
+  }, [config.discount, promoCodes]);
+
+  const previewHtml = useMemo(
+    () => renderPreviewHtml(config, previewProducts, previewDiscount),
+    [config, previewProducts, previewDiscount],
+  );
 
   if (loading) {
     return (
@@ -643,6 +938,312 @@ export const WelcomeEmailSection = () => {
         <p className="text-[11px] text-muted-foreground">
           Leave the label or URL blank to hide the button.
         </p>
+      </section>
+
+      <section className="space-y-4 rounded-md border border-border/60 bg-card/30 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-display text-sm uppercase tracking-[0.2em] flex items-center gap-2">
+            <Package className="w-4 h-4" /> Products in the email
+          </h3>
+          <div className="flex items-center gap-2">
+            <Label
+              htmlFor="welcome-products-enabled"
+              className="text-xs text-muted-foreground"
+            >
+              Show
+            </Label>
+            <Switch
+              id="welcome-products-enabled"
+              checked={config.products.enabled}
+              onCheckedChange={(v) => updateProducts("enabled", Boolean(v))}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Drops a small grid of paintings into the email so the customer sees
+          something they can click straight from their inbox. Draft products are
+          skipped automatically.
+        </p>
+
+        {config.products.enabled && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label>Mode</Label>
+                <select
+                  className="w-full bg-background border border-border/60 rounded-md px-3 py-2 text-sm"
+                  value={config.products.mode}
+                  onChange={(e) =>
+                    updateProducts(
+                      "mode",
+                      e.target.value === "manual" ? "manual" : "auto",
+                    )
+                  }
+                >
+                  <option value="auto">Auto — newest products</option>
+                  <option value="manual">Manual — I'll pick</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>How many to show</Label>
+                <select
+                  className="w-full bg-background border border-border/60 rounded-md px-3 py-2 text-sm"
+                  value={String(config.products.count)}
+                  onChange={(e) =>
+                    updateProducts("count", Number(e.target.value) || 4)
+                  }
+                >
+                  {[2, 3, 4, 6, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Show prices</Label>
+                <div className="flex items-center gap-2 h-10">
+                  <Switch
+                    checked={config.products.showPrice}
+                    onCheckedChange={(v) =>
+                      updateProducts("showPrice", Boolean(v))
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {config.products.showPrice ? "On" : "Off"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Section heading</Label>
+              <Input
+                value={config.products.sectionTitle}
+                onChange={(e) => updateProducts("sectionTitle", e.target.value)}
+                placeholder="A glimpse of the collection"
+              />
+            </div>
+
+            {config.products.mode === "manual" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>
+                    Pick paintings ({config.products.manualIds.length}/
+                    {config.products.count} chosen)
+                  </Label>
+                  {config.products.manualIds.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => updateProducts("manualIds", [])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {sortedProducts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No products yet — add some in <em>Stock listings</em> first.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-72 overflow-auto rounded-md border border-border/60 p-2">
+                    {sortedProducts.map((p) => {
+                      const checked = config.products.manualIds.includes(p.id);
+                      const overflow =
+                        !checked &&
+                        config.products.manualIds.length >=
+                          config.products.count;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          disabled={overflow}
+                          onClick={() => toggleManualProduct(p.id)}
+                          className={`text-left rounded-md border p-1.5 transition ${
+                            checked
+                              ? "border-foreground bg-foreground/5"
+                              : "border-border/60 hover:border-foreground/40"
+                          } ${overflow ? "opacity-40 cursor-not-allowed" : ""}`}
+                        >
+                          <div className="aspect-square rounded bg-card/40 overflow-hidden">
+                            {productThumbnailUrl(p) ? (
+                              <img
+                                src={productThumbnailUrl(p)}
+                                alt={p.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-[11px] mt-1 line-clamp-2">
+                            {p.title}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Order matches the order you click them.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="space-y-4 rounded-md border border-border/60 bg-card/30 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-display text-sm uppercase tracking-[0.2em] flex items-center gap-2">
+            <Tag className="w-4 h-4" /> Welcome discount
+          </h3>
+          <div className="flex items-center gap-2">
+            <Label
+              htmlFor="welcome-discount-enabled"
+              className="text-xs text-muted-foreground"
+            >
+              Include
+            </Label>
+            <Switch
+              id="welcome-discount-enabled"
+              checked={config.discount.enabled}
+              onCheckedChange={(v) => updateDiscount("enabled", Boolean(v))}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Drop a promo code into the email. Customers like a small "thanks for
+          joining" gift and tend to come back to use it.
+        </p>
+
+        {config.discount.enabled && (
+          <>
+            <div className="space-y-1">
+              <Label>Source</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    {
+                      id: "linked",
+                      label: "Pick an existing promo code",
+                    },
+                    {
+                      id: "inline",
+                      label: "Write it inline",
+                    },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => updateDiscount("source", opt.id)}
+                    className={`px-3 py-1.5 rounded-md border text-xs ${
+                      config.discount.source === opt.id
+                        ? "border-foreground bg-foreground/5"
+                        : "border-border/60 hover:border-foreground/40"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {config.discount.source === "linked" ? (
+              <div className="space-y-1">
+                <Label>Promo code</Label>
+                {promoCodes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No promo codes set up yet — create one in{" "}
+                    <em>Storefront → Promo codes</em>, then come back.
+                  </p>
+                ) : (
+                  <select
+                    className="w-full bg-background border border-border/60 rounded-md px-3 py-2 text-sm"
+                    value={config.discount.linkedCode}
+                    onChange={(e) =>
+                      updateDiscount("linkedCode", e.target.value.toUpperCase())
+                    }
+                  >
+                    <option value="">— Pick a code —</option>
+                    {promoCodes.map((p) => (
+                      <option key={p.code} value={p.code}>
+                        {p.code} ({formatPromoDescription(p) || "custom"})
+                        {p.enabled === false ? " — disabled" : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Description and expiry are pulled from the promo code, so
+                  edits there flow into future welcome emails automatically.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Headline</Label>
+                  <Input
+                    value={config.discount.inlineHeadline}
+                    onChange={(e) =>
+                      updateDiscount("inlineHeadline", e.target.value)
+                    }
+                    placeholder="Your welcome gift"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Code</Label>
+                  <Input
+                    value={config.discount.inlineCode}
+                    onChange={(e) =>
+                      updateDiscount("inlineCode", e.target.value.toUpperCase())
+                    }
+                    placeholder="WELCOME10"
+                  />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label>Description</Label>
+                  <Input
+                    value={config.discount.inlineDescription}
+                    onChange={(e) =>
+                      updateDiscount("inlineDescription", e.target.value)
+                    }
+                    placeholder="10% off your first painting."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Expires (optional)</Label>
+                  <Input
+                    type="date"
+                    value={
+                      config.discount.inlineExpiresAt
+                        ? config.discount.inlineExpiresAt.slice(0, 10)
+                        : ""
+                    }
+                    onChange={(e) =>
+                      updateDiscount(
+                        "inlineExpiresAt",
+                        e.target.value
+                          ? new Date(e.target.value).toISOString()
+                          : "",
+                      )
+                    }
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground sm:col-span-2">
+                  Make sure to actually create a matching code in{" "}
+                  <em>Storefront → Promo codes</em>, otherwise the customer
+                  won't be able to redeem it at checkout.
+                </p>
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       <section className="space-y-3">
