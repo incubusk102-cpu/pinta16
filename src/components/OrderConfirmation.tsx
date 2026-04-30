@@ -70,7 +70,7 @@ const OrderConfirmation = () => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={() => setShowConfirmation(false)}
-          className="fixed inset-0 z-[200] bg-background/90 backdrop-blur-xl flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1100] bg-background/90 backdrop-blur-xl flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 30 }}
