@@ -58,6 +58,9 @@ export interface WelcomeEmailConfig {
   ctaUrl: string;
   showLogo: boolean;
   showBanner: boolean;
+  avatarUrl: string;
+  avatarName: string;
+  showAvatar: boolean;
   products: WelcomeProductsConfig;
   discount: WelcomeDiscountConfig;
 }
@@ -106,6 +109,9 @@ const DEFAULTS: WelcomeEmailConfig = {
   ctaUrl: "https://canvhub.com",
   showLogo: true,
   showBanner: false,
+  avatarUrl: "",
+  avatarName: "Canvas Hub team",
+  showAvatar: false,
   products: {
     enabled: true,
     mode: "auto",
@@ -403,6 +409,22 @@ const renderPreviewHtml = (
   const discountHtml = discountHtmlForPreview(config, discount);
   const productsHtml = productsHtmlForPreview(config, pickedProducts);
 
+  const avatarHtml =
+    config.showAvatar && config.avatarUrl
+      ? `
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:28px;">
+          <tr>
+            <td valign="middle" style="padding:0 12px 0 0;line-height:0;">
+              <img src="${config.avatarUrl}" alt="${escapeHtml(config.avatarName || config.fromName)}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
+            </td>
+            <td valign="middle" style="font-size:13px;color:${primary};line-height:1.4;">
+              <div style="font-weight:500;">${escapeHtml(config.avatarName || config.fromName || "Canvas Hub team")}</div>
+              <div style="color:${accent};font-size:12px;">${escapeHtml(config.fromEmail || "")}</div>
+            </td>
+          </tr>
+        </table>`
+      : "";
+
   const logoBlock = showLogo
     ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
     : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
@@ -429,6 +451,7 @@ const renderPreviewHtml = (
       ${discountHtml}
       ${productsHtml}
       ${ctaHtml}
+      ${avatarHtml}
       ${signatureHtml}
     </td></tr>
     <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};"><span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> &mdash; original Filipino paintings.</td></tr>
@@ -448,6 +471,7 @@ export const WelcomeEmailSection = () => {
   const [promoCodes, setPromoCodes] = useState<AdminPromoSummary[]>([]);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   // Pull the storefront product list so the manual picker has something to
   // show. Public endpoint, so no admin token required.
@@ -539,7 +563,7 @@ export const WelcomeEmailSection = () => {
 
   const handleUploadImage = async (
     file: File | null,
-    field: "logoUrl" | "bannerUrl",
+    field: "logoUrl" | "bannerUrl" | "avatarUrl",
   ) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -547,13 +571,23 @@ export const WelcomeEmailSection = () => {
       return;
     }
     try {
-      const compressed = await compressImage(file, {
-        maxDim: field === "bannerUrl" ? 1600 : 600,
-        maxBytes: field === "bannerUrl" ? 600 * 1024 : 200 * 1024,
-      });
+      const presets: Record<
+        typeof field,
+        { maxDim: number; maxBytes: number }
+      > = {
+        logoUrl: { maxDim: 600, maxBytes: 200 * 1024 },
+        bannerUrl: { maxDim: 1600, maxBytes: 600 * 1024 },
+        avatarUrl: { maxDim: 256, maxBytes: 80 * 1024 },
+      };
+      const labels: Record<typeof field, string> = {
+        logoUrl: "Logo",
+        bannerUrl: "Banner",
+        avatarUrl: "Avatar",
+      };
+      const compressed = await compressImage(file, presets[field]);
       update(field, compressed.url);
       toast.success(
-        `${field === "bannerUrl" ? "Banner" : "Logo"} uploaded (${Math.round(compressed.bytes / 1024)} KB)`,
+        `${labels[field]} uploaded (${Math.round(compressed.bytes / 1024)} KB)`,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not upload image");
@@ -911,6 +945,32 @@ export const WelcomeEmailSection = () => {
           onUrlChange={(v) => update("bannerUrl", v)}
           inputRef={bannerInputRef}
         />
+
+        <ImageUploader
+          label="Profile photo"
+          description="Optional round avatar shown above the signature, so the email feels personal. A square image works best (e.g. 256×256). For the round avatar that appears next to the From name in Gmail's inbox list, set up Gravatar at gravatar.com using account@canvhub.com."
+          value={config.avatarUrl}
+          show={config.showAvatar}
+          onShowChange={(v) => update("showAvatar", v)}
+          onUpload={(file) => handleUploadImage(file, "avatarUrl")}
+          onClear={() => update("avatarUrl", "")}
+          onUrlChange={(v) => update("avatarUrl", v)}
+          inputRef={avatarInputRef}
+        />
+
+        {config.showAvatar && (
+          <div className="space-y-1">
+            <Label>Sender name (next to the photo)</Label>
+            <Input
+              value={config.avatarName}
+              onChange={(e) => update("avatarName", e.target.value)}
+              placeholder="Canvas Hub team"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Shown next to the avatar with the From email below it.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="space-y-4">
