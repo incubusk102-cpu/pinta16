@@ -198,7 +198,7 @@ const GallerySection = () => {
           The Collection
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
-          Our Products
+          Our Collection
         </h2>
       </motion.div>
 
