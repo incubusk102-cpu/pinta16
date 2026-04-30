@@ -83,7 +83,7 @@ const en = {
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Checkout",
   // Footer
-  "footer.copyright": "© {year} Canvas Hub. All rights reserved.",
+  "footer.copyright": "© {year}. All rights reserved.",
   "footer.policies": "Policies",
   "footer.terms": "Terms & Conditions",
   "footer.refund": "Refund & Returns",
@@ -158,7 +158,7 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "cart.empty": "Walang laman ang iyong cart.",
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Mag-checkout",
-  "footer.copyright": "© {year} Canvas Hub. Lahat ng karapatan ay nakalaan.",
+  "footer.copyright": "© {year}. Lahat ng karapatan ay nakalaan.",
   "footer.policies": "Mga patakaran",
   "footer.terms": "Mga Tuntunin at Kondisyon",
   "footer.refund": "Refund at Returns",

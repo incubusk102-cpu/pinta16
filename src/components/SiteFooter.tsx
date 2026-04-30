@@ -142,40 +142,37 @@ const SiteFooter = () => {
 
   return (
     <footer className="border-t border-border/30 mt-16 sm:mt-24 px-4 sm:px-6 md:px-12 py-10 sm:py-14 bg-card/30">
-      <div className="max-w-6xl mx-auto grid gap-10 sm:gap-12 sm:grid-cols-2 md:grid-cols-4 text-sm">
-        {/* Brand + tagline */}
-        <div className="md:col-span-2">
-          <div className="mb-4">
-            <p className="font-logo text-2xl">Canvas Hub</p>
+      <div className="max-w-6xl mx-auto grid gap-10 sm:gap-12 sm:grid-cols-2 text-sm">
+        {/* Socials — only render when a real profile URL is configured.
+              Brand wordmark moved out: 'Canvas Hub' now lives only on the
+              homepage hero (and meta tab titles), not in the footer of
+              every page. */}
+        {(FACEBOOK_URL || INSTAGRAM_URL) && (
+          <div className="sm:col-span-2 flex items-center gap-3">
+            {FACEBOOK_URL && (
+              <a
+                href={FACEBOOK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
+              >
+                <Facebook className="w-4 h-4" />
+              </a>
+            )}
+            {INSTAGRAM_URL && (
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
+              >
+                <Instagram className="w-4 h-4" />
+              </a>
+            )}
           </div>
-          {/* Socials — only render when a real profile URL is configured */}
-          {(FACEBOOK_URL || INSTAGRAM_URL) && (
-            <div className="mt-5 flex items-center gap-3">
-              {FACEBOOK_URL && (
-                <a
-                  href={FACEBOOK_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Canvas Hub on Facebook"
-                  className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
-                >
-                  <Facebook className="w-4 h-4" />
-                </a>
-              )}
-              {INSTAGRAM_URL && (
-                <a
-                  href={INSTAGRAM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Canvas Hub on Instagram"
-                  className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
-                >
-                  <Instagram className="w-4 h-4" />
-                </a>
-              )}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Policies */}
         <nav aria-label={t("footer.policies")}>

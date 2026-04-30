@@ -13,7 +13,11 @@ const HeroSection = () => {
   const scale = useTransform(scrollYProgress, [0, 1], [1.05, 1.2]);
 
   return (
-    <section id="hero" ref={ref} className="relative h-screen overflow-hidden">
+    <section
+      id="hero"
+      ref={ref}
+      className="relative h-[70vh] sm:h-[80vh] md:h-screen overflow-hidden"
+    >
       {[
         "https://via.placeholder.com/400",
         "https://via.placeholder.com/400",
@@ -40,6 +44,14 @@ const HeroSection = () => {
         >
           Affordable Art, Authentic Stories
         </motion.p>
+        <motion.h1
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.2, delay: 0.5 }}
+          className="font-logo text-4xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
+        >
+          Canvas Hub
+        </motion.h1>
         <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
         <motion.p
           initial={{ opacity: 0, y: 30 }}
