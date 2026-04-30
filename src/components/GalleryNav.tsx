@@ -148,7 +148,15 @@ const GalleryNav = () => {
     (id: string) => {
       closeMenu();
       if (onIndex) {
-        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+        const target = document.getElementById(id);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth" });
+        } else {
+          // Target may be conditionally rendered (e.g. the hero is hidden
+          // for signed-in users). Fall back to scrolling to the top so the
+          // logo / home button always feels responsive.
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
       } else {
         void navigate({ to: "/", hash: id });
       }
