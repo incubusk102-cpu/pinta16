@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import GalleryNav from "@/components/GalleryNav";
 import HeroSection from "@/components/HeroSection";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
@@ -42,7 +41,6 @@ function HeroOrFallback() {
 function Index() {
   return (
     <div className="smooth-scroll">
-      <GalleryNav />
       <HeroOrFallback />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
