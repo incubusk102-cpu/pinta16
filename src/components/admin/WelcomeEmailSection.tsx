@@ -22,11 +22,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { compressImage } from "@/lib/imageCompress";
 
+export interface WelcomeCustomItem {
+  id: string;
+  imageUrl: string;
+  title: string;
+  price: number;
+  description: string;
+}
+
 export interface WelcomeProductsConfig {
   enabled: boolean;
-  mode: "auto" | "manual";
+  // "auto"   = newest products from the storefront
+  // "manual" = explicit picks from the storefront
+  // "custom" = email-only uploads (image + title + price + description)
+  mode: "auto" | "manual" | "custom";
   count: number;
   manualIds: string[];
+  customItems: WelcomeCustomItem[];
   sectionTitle: string;
   showPrice: boolean;
 }
@@ -117,6 +129,7 @@ const DEFAULTS: WelcomeEmailConfig = {
     mode: "auto",
     count: 4,
     manualIds: [],
+    customItems: [],
     sectionTitle: "A glimpse of the collection",
     showPrice: true,
   },
@@ -297,26 +310,38 @@ const formatExpiryLabel = (iso: string): string => {
   });
 };
 
+// Unified shape rendered in the live admin preview. Storefront products and
+// custom email-only uploads both flatten into this so the renderer doesn't
+// have to branch.
+interface PreviewItem {
+  imageUrl: string;
+  title: string;
+  price: number;
+  description: string;
+}
+
 const productsHtmlForPreview = (
   config: WelcomeEmailConfig,
-  picked: AdminProductSummary[],
+  picked: PreviewItem[],
 ): string => {
   const cfg = config.products;
   if (!cfg.enabled || picked.length === 0) return "";
   const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
-  const renderCell = (p?: AdminProductSummary): string => {
+  const renderCell = (p?: PreviewItem): string => {
     if (!p) return `<td style="width:50%;padding:6px;"></td>`;
-    const img = productThumbnailUrl(p);
+    const img = p.imageUrl;
     const title = escapeHtml(p.title || "Untitled");
-    const priceLine = cfg.showPrice
-      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(
-          p.salePrice && p.salePrice > 0 ? p.salePrice : p.price,
-        )}</div>`
+    const priceLine =
+      cfg.showPrice && p.price > 0
+        ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(p.price)}</div>`
+        : "";
+    const descLine = p.description
+      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;line-height:1.4;">${escapeHtml(p.description)}</div>`
       : "";
     const safeImg = img
       ? `<img src="${img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
       : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
-    return `<td valign="top" style="padding:6px;width:50%;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}</td>`;
+    return `<td valign="top" style="padding:6px;width:50%;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</td>`;
   };
   const rows: string[] = [];
   for (let i = 0; i < picked.length; i += 2) {
@@ -329,6 +354,13 @@ const productsHtmlForPreview = (
     </table>
   `;
 };
+
+const productToPreviewItem = (p: AdminProductSummary): PreviewItem => ({
+  imageUrl: productThumbnailUrl(p),
+  title: p.title || "Untitled",
+  price: Number(p.salePrice && p.salePrice > 0 ? p.salePrice : p.price) || 0,
+  description: "",
+});
 
 const discountHtmlForPreview = (
   config: WelcomeEmailConfig,
@@ -366,7 +398,7 @@ const discountHtmlForPreview = (
 // recipient will see (sans email-client quirks).
 const renderPreviewHtml = (
   config: WelcomeEmailConfig,
-  pickedProducts: AdminProductSummary[],
+  pickedProducts: PreviewItem[],
   discount: ResolvedDiscount | null,
 ): string => {
   const vars = {
@@ -561,6 +593,74 @@ export const WelcomeEmailSection = () => {
     });
   };
 
+  // Sync the custom-items array length with the configured count so admins
+  // see the right number of empty slots when they change "How many to show"
+  // or first switch to the custom mode.
+  const ensureCustomItems = (count: number, items: WelcomeCustomItem[]) => {
+    const next = items.slice(0, count);
+    while (next.length < count) {
+      next.push({
+        id: `item-${Math.random().toString(36).slice(2, 10)}`,
+        imageUrl: "",
+        title: "",
+        price: 0,
+        description: "",
+      });
+    }
+    return next;
+  };
+
+  const updateCustomItem = (
+    index: number,
+    patch: Partial<WelcomeCustomItem>,
+  ) => {
+    setConfig((c) => {
+      const items = ensureCustomItems(c.products.count, c.products.customItems);
+      items[index] = { ...items[index], ...patch };
+      return { ...c, products: { ...c.products, customItems: items } };
+    });
+  };
+
+  const handleCustomItemImage = async (index: number, file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    try {
+      const compressed = await compressImage(file, {
+        maxDim: 1400,
+        maxBytes: 500 * 1024,
+      });
+      updateCustomItem(index, { imageUrl: compressed.url });
+      toast.success(
+        `Image uploaded (${Math.round(compressed.bytes / 1024)} KB)`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not upload image");
+    }
+  };
+
+  // Make sure the custom items array is the right length for the current
+  // count. Runs whenever the admin enters custom mode or changes count.
+  useEffect(() => {
+    if (config.products.mode !== "custom") return;
+    const desired = ensureCustomItems(
+      config.products.count,
+      config.products.customItems,
+    );
+    if (desired.length !== config.products.customItems.length) {
+      setConfig((c) => ({
+        ...c,
+        products: { ...c.products, customItems: desired },
+      }));
+    }
+  }, [
+    config.products.mode,
+    config.products.count,
+    config.products.customItems,
+  ]);
+
   const handleUploadImage = async (
     file: File | null,
     field: "logoUrl" | "bannerUrl" | "avatarUrl",
@@ -677,8 +777,19 @@ export const WelcomeEmailSection = () => {
       );
   }, [products]);
 
-  const previewProducts = useMemo<AdminProductSummary[]>(() => {
+  const previewProducts = useMemo<PreviewItem[]>(() => {
     if (!config.products.enabled) return [];
+    if (config.products.mode === "custom") {
+      return config.products.customItems
+        .filter((it) => it.imageUrl || it.title)
+        .slice(0, config.products.count)
+        .map((it) => ({
+          imageUrl: it.imageUrl,
+          title: it.title || "Untitled",
+          price: Number(it.price) || 0,
+          description: it.description,
+        }));
+    }
     if (config.products.mode === "manual") {
       const byId = new Map(products.map((p) => [p.id, p]));
       return config.products.manualIds
@@ -687,9 +798,12 @@ export const WelcomeEmailSection = () => {
           (p): p is AdminProductSummary =>
             Boolean(p) && p!.availability !== "draft",
         )
-        .slice(0, config.products.count);
+        .slice(0, config.products.count)
+        .map(productToPreviewItem);
     }
-    return sortedProducts.slice(0, config.products.count);
+    return sortedProducts
+      .slice(0, config.products.count)
+      .map(productToPreviewItem);
   }, [config.products, products, sortedProducts]);
 
   const previewDiscount = useMemo<ResolvedDiscount | null>(() => {
@@ -1033,15 +1147,22 @@ export const WelcomeEmailSection = () => {
                 <select
                   className="w-full bg-background border border-border/60 rounded-md px-3 py-2 text-sm"
                   value={config.products.mode}
-                  onChange={(e) =>
-                    updateProducts(
-                      "mode",
-                      e.target.value === "manual" ? "manual" : "auto",
-                    )
-                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const next: WelcomeProductsConfig["mode"] =
+                      v === "manual"
+                        ? "manual"
+                        : v === "custom"
+                          ? "custom"
+                          : "auto";
+                    updateProducts("mode", next);
+                  }}
                 >
                   <option value="auto">Auto — newest products</option>
                   <option value="manual">Manual — I'll pick</option>
+                  <option value="custom">
+                    Email-only uploads — image + title + price + description
+                  </option>
                 </select>
               </div>
               <div className="space-y-1">
@@ -1151,6 +1272,132 @@ export const WelcomeEmailSection = () => {
                 <p className="text-[11px] text-muted-foreground">
                   Order matches the order you click them.
                 </p>
+              </div>
+            )}
+
+            {config.products.mode === "custom" && (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Email-only paintings</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    These don't appear on the public storefront. Each card links
+                    to a preview page (
+                    <code className="text-[10px]">/preview/&lt;id&gt;</code>)
+                    that shows the painting larger so customers can browse
+                    before deciding to visit the full collection.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {Array.from({ length: config.products.count }).map((_, i) => {
+                    const item = config.products.customItems[i] ?? {
+                      id: "",
+                      imageUrl: "",
+                      title: "",
+                      price: 0,
+                      description: "",
+                    };
+                    return (
+                      <div
+                        key={item.id || `slot-${i}`}
+                        className="rounded-md border border-border/60 bg-background/50 p-3 space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">
+                            Slot {i + 1}
+                          </Label>
+                          {item.imageUrl || item.title ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2"
+                              onClick={() =>
+                                updateCustomItem(i, {
+                                  imageUrl: "",
+                                  title: "",
+                                  price: 0,
+                                  description: "",
+                                })
+                              }
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="aspect-square rounded-md bg-card/40 overflow-hidden border border-border/60 relative">
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title || ""}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                              <ImageIcon className="w-8 h-8" />
+                            </div>
+                          )}
+                        </div>
+                        <label className="block">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) =>
+                              handleCustomItemImage(
+                                i,
+                                e.target.files?.[0] ?? null,
+                              )
+                            }
+                          />
+                          <span className="inline-flex items-center gap-1 text-xs underline cursor-pointer text-foreground/80 hover:text-foreground">
+                            <Upload className="w-3 h-3" />
+                            {item.imageUrl ? "Replace image" : "Upload image"}
+                          </span>
+                        </label>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Title</Label>
+                          <Input
+                            value={item.title}
+                            onChange={(e) =>
+                              updateCustomItem(i, { title: e.target.value })
+                            }
+                            placeholder="Untitled painting"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Price (₱)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={item.price || ""}
+                            onChange={(e) =>
+                              updateCustomItem(i, {
+                                price: Math.max(
+                                  0,
+                                  Math.round(Number(e.target.value) || 0),
+                                ),
+                              })
+                            }
+                            placeholder="2500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Short description</Label>
+                          <Textarea
+                            rows={2}
+                            value={item.description}
+                            onChange={(e) =>
+                              updateCustomItem(i, {
+                                description: e.target.value,
+                              })
+                            }
+                            placeholder="One or two lines about the piece"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </>

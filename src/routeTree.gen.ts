@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from "./routes/login";
 import { Route as SignupRouteImport } from "./routes/signup";
 import { Route as ProductIdRouteImport } from "./routes/product.$id";
 import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
+import { Route as PreviewIdRouteImport } from "./routes/preview.$id";
 
 const AccountRoute = AccountRouteImport.update({
   id: "/account",
@@ -52,6 +53,11 @@ const PolicySlugRoute = PolicySlugRouteImport.update({
   path: "/policy/$slug",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PreviewIdRoute = PreviewIdRouteImport.update({
+  id: "/preview/$id",
+  path: "/preview/$id",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
   "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
   "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
   "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/signup"
     | "/policy/$slug"
+    | "/preview/$id"
     | "/product/$id";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/signup"
     | "/policy/$slug"
+    | "/preview/$id"
     | "/product/$id";
   id:
     | "__root__"
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/signup"
     | "/policy/$slug"
+    | "/preview/$id"
     | "/product/$id";
   fileRoutesById: FileRoutesById;
 }
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute;
   SignupRoute: typeof SignupRoute;
   PolicySlugRoute: typeof PolicySlugRoute;
+  PreviewIdRoute: typeof PreviewIdRoute;
   ProductIdRoute: typeof ProductIdRoute;
 }
 
@@ -172,6 +185,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PolicySlugRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/preview/$id": {
+      id: "/preview/$id";
+      path: "/preview/$id";
+      fullPath: "/preview/$id";
+      preLoaderRoute: typeof PreviewIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
   PolicySlugRoute: PolicySlugRoute,
+  PreviewIdRoute: PreviewIdRoute,
   ProductIdRoute: ProductIdRoute,
 };
 export const routeTree = rootRouteImport
