@@ -51,7 +51,7 @@ function LoginPage() {
     async (response: { credential: string }) => {
       try {
         await googleLogin(response.credential);
-        toast.success("Welcome to Canvas Hub");
+        toast.success("Signed in");
         void navigate({ to: "/", hash: "gallery" });
       } catch (error) {
         toast.error(
@@ -105,7 +105,7 @@ function LoginPage() {
         return;
       }
       applySession(parsed.token, parsed.user);
-      toast.success("Welcome to Canvas Hub");
+      toast.success("Signed in");
       void navigate({ to: "/", hash: "gallery" });
     } catch {
       toast.error("Could not read Google sign-in response");
@@ -193,7 +193,7 @@ function LoginPage() {
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl">Sign in</h1>
           <p className="text-sm text-muted-foreground">
-            Welcome to Canvas Hub. Sign in with your Google account.
+            Sign in with your Google account.
           </p>
         </div>
 
