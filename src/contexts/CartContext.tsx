@@ -198,6 +198,7 @@ interface CartContextType {
   lastOrder: CompletedOrder | null;
   showConfirmation: boolean;
   setShowConfirmation: (show: boolean) => void;
+  viewOrder: (orderId: string) => void;
 }
 
 const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
@@ -510,6 +511,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         showCheckout,
         setShowCheckout,
         lastOrder,
+        viewOrder: (orderId: string) => {
+          const found = orders.find((o) => o.id === orderId);
+          if (!found) return;
+          setLastOrder(found);
+          setShowConfirmation(true);
+        },
         showConfirmation,
         setShowConfirmation,
       }}

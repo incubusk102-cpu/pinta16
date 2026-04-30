@@ -12,6 +12,7 @@ import { PoliciesProvider } from "@/contexts/PoliciesContext";
 import { HeroSlidesProvider } from "@/contexts/HeroSlidesContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import ChatWidget from "@/components/ChatWidget";
+import OrderConfirmation from "@/components/OrderConfirmation";
 import PwaPrompts from "@/components/PwaPrompts";
 import SiteFooter from "@/components/SiteFooter";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
@@ -83,6 +84,17 @@ function ConditionalSiteFooter() {
   return <SiteFooter />;
 }
 
+// Mounted globally so the order-journey modal can be opened from anywhere
+// (My Orders panel in the hamburger sheet, account page, post-checkout, etc.)
+// rather than only on the homepage / product pages where it used to live.
+function ConditionalOrderConfirmation() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return <OrderConfirmation />;
+}
+
 function RootComponent() {
   return (
     <ThemeProvider>
@@ -100,6 +112,7 @@ function RootComponent() {
                         <ConditionalAnnouncementBar />
                         <Outlet />
                         <ConditionalSiteFooter />
+                        <ConditionalOrderConfirmation />
                         <ChatWidget />
                         <PwaPrompts />
                         <Toaster richColors position="top-right" />

@@ -9,7 +9,6 @@ import ReviewsSection from "@/components/ReviewsSection";
 import ContactSection from "@/components/ContactSection";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
-import OrderConfirmation from "@/components/OrderConfirmation";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import Ornament from "@/components/decor/Ornament";
 
@@ -63,7 +62,6 @@ function Index() {
       <ContactSection />
       <CartDrawer />
       <CheckoutForm />
-      <OrderConfirmation />
     </div>
   );
 }

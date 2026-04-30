@@ -33,7 +33,7 @@ const isWithin = (iso: string, fromIso?: string, toIso?: string) => {
 };
 
 export default function MyOrders() {
-  const { orders } = useCart();
+  const { orders, viewOrder } = useCart();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [from, setFrom] = useState("");
@@ -176,26 +176,30 @@ export default function MyOrders() {
       ) : (
         <ul className="divide-y divide-border/30">
           {filtered.map((o) => (
-            <li
-              key={o.id}
-              className="py-3 flex items-start justify-between gap-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{o.id}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {o.items.map((i) => i.title).join(", ")}
+            <li key={o.id}>
+              <button
+                type="button"
+                onClick={() => viewOrder(o.id)}
+                className="w-full py-3 flex items-start justify-between gap-3 text-left rounded-md -mx-2 px-2 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 transition-colors"
+                aria-label={`View journey for order ${o.id}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{o.id}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {o.items.map((i) => i.title).join(", ")}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(o.createdAt).toLocaleString()} ·{" "}
+                    <span className="text-foreground/80">
+                      {STATUS_LABEL[o.status]}
+                    </span>
+                    {o.shipment?.courier ? ` · ${o.shipment.courier}` : ""}
+                  </p>
+                </div>
+                <p className="text-sm font-semibold whitespace-nowrap">
+                  ₱{o.total.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {new Date(o.createdAt).toLocaleString()} ·{" "}
-                  <span className="text-foreground/80">
-                    {STATUS_LABEL[o.status]}
-                  </span>
-                  {o.shipment?.courier ? ` · ${o.shipment.courier}` : ""}
-                </p>
-              </div>
-              <p className="text-sm font-semibold whitespace-nowrap">
-                ₱{o.total.toLocaleString()}
-              </p>
+              </button>
             </li>
           ))}
         </ul>
