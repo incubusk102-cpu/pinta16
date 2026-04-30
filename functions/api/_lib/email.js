@@ -371,24 +371,46 @@ const isSafeUrl = (value) =>
   /^(https?:\/\/|mailto:|data:image\/)/i.test(value.trim());
 
 /**
+ * Render the gold italic "C" mark as a plain HTML cell. Gmail (esp. mobile
+ * + dark mode) strips inline SVG, which is why an earlier SVG version
+ * showed up empty. Plain text inside a styled <td> renders identically in
+ * every major mail client.
+ *
+ *   size — width/height of the cell (px). The font-size is derived so the
+ *          glyph fills the cell visually, matching the site's nav mark.
+ */
+const cMarkCellHtml = (size = 40) => {
+  const fontSize = Math.round(size * 0.85);
+  return `<td align="center" valign="middle" width="${size}" height="${size}" style="width:${size}px;height:${size}px;text-align:center;vertical-align:middle;font-family:'EB Garamond', Georgia, 'Playfair Display', serif;font-style:italic;font-weight:500;font-size:${fontSize}px;line-height:${size}px;color:#c4a86a;">C</td>`;
+};
+
+/**
  * Render the default Canvas Hub brand mark + wordmark when no custom logo
- * has been uploaded. Mirrors the site's nav treatment: italic EB Garamond
- * "C" rendered as inline SVG (so the glyph is identical even when the
- * recipient's mail client doesn't load Google Fonts) followed by the
- * "Canvas Hub" wordmark in the same gold. Uses a table for layout because
- * inline-flex is not reliable across older mail clients (Outlook, etc.).
+ * has been uploaded. Uses a 2-column table (mark on the left, wordmark on
+ * the right) so it lays out the same in Outlook, Gmail, Apple Mail, etc.
  */
 const defaultBrandLogoHtml = (fromName) => `
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
     <tr>
-      <td valign="middle" style="padding:0 10px 0 0;line-height:0;">
-        <svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas Hub">
-          <text x="20" y="30" text-anchor="middle" font-family="'EB Garamond', Georgia, 'Playfair Display', serif" font-size="34" font-style="italic" font-weight="500" fill="#c4a86a">C</text>
-        </svg>
-      </td>
-      <td valign="middle" style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:24px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</td>
+      ${cMarkCellHtml(40)}
+      <td valign="middle" style="padding-left:10px;font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:24px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</td>
     </tr>
   </table>`;
+
+/**
+ * Render the C mark inside a circular badge — used as the default profile
+ * photo when the admin hasn't uploaded one. border-radius is honored by
+ * every modern client; older Outlook just shows a square, which is
+ * acceptable.
+ */
+const cMarkAvatarHtml = (size = 48) => {
+  const fontSize = Math.round(size * 0.75);
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:${size}px;height:${size}px;background:#f5f1e6;border-radius:9999px;border:1px solid #efece4;">
+      <tr>
+        <td align="center" valign="middle" width="${size}" height="${size}" style="width:${size}px;height:${size}px;text-align:center;vertical-align:middle;font-family:'EB Garamond', Georgia, 'Playfair Display', serif;font-style:italic;font-weight:500;font-size:${fontSize}px;line-height:${size}px;color:#c4a86a;">C</td>
+      </tr>
+    </table>`;
+};
 
 const wrapWelcomeHtml = (welcome, contentHtml) => {
   const primary = isSafeColor(welcome.primaryColor)
@@ -498,19 +520,25 @@ const productThumbnailUrl = (product) => {
 const buildAvatarHtml = (welcome) => {
   if (!welcome) return "";
   if (welcome.showAvatar !== true) return "";
-  if (!welcome.avatarUrl || !isSafeUrl(welcome.avatarUrl)) return "";
   const name = escapeHtml(
     String(welcome.avatarName || welcome.fromName || "Canvas Hub team").trim(),
   );
+  const fromEmail = escapeHtml(String(welcome.fromEmail || "").trim());
+  // Prefer a custom uploaded photo; otherwise fall back to the gold C mark
+  // so the avatar block always has *something* to anchor the signature.
+  const avatarCellHtml =
+    welcome.avatarUrl && isSafeUrl(welcome.avatarUrl)
+      ? `<img src="${welcome.avatarUrl}" alt="${name}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />`
+      : cMarkAvatarHtml(48);
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:28px;">
       <tr>
         <td valign="middle" style="padding:0 12px 0 0;line-height:0;">
-          <img src="${welcome.avatarUrl}" alt="${name}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
+          ${avatarCellHtml}
         </td>
         <td valign="middle" style="font-size:13px;color:#1c1c1c;line-height:1.4;">
           <div style="font-weight:500;">${name}</div>
-          <div style="color:#7a7468;font-size:12px;">${escapeHtml(String(welcome.fromEmail || "").trim())}</div>
+          <div style="color:#7a7468;font-size:12px;">${fromEmail}</div>
         </td>
       </tr>
     </table>`;

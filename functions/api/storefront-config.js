@@ -167,7 +167,7 @@ const DEFAULT_WELCOME_EMAIL = {
   ctaUrl: "https://canvhub.com",
   showLogo: true,
   showBanner: false,
-  showAvatar: false,
+  showAvatar: true,
   products: {
     enabled: true,
     mode: "auto", // "auto" = newest first | "manual" = explicit picks
@@ -276,7 +276,10 @@ const sanitizeWelcomeEmail = (raw) => {
     ),
     showLogo: data.showLogo !== false,
     showBanner: Boolean(data.showBanner),
-    showAvatar: Boolean(data.showAvatar),
+    // Default to true so the C-mark avatar shows up out of the box. Users
+    // who explicitly turned it off will still have showAvatar === false
+    // and stay off.
+    showAvatar: data.showAvatar !== false,
     products: sanitizeWelcomeProducts(data.products),
     discount: sanitizeWelcomeDiscount(data.discount),
   };
