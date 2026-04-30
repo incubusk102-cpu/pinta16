@@ -53,6 +53,30 @@ export interface WelcomeDiscountConfig {
   inlineExpiresAt: string;
 }
 
+export type WelcomeBodyFont = "inter" | "playfair" | "garamond" | "georgia";
+
+export type WelcomeFooterLinkKind =
+  | "instagram"
+  | "facebook"
+  | "tiktok"
+  | "x"
+  | "twitter"
+  | "youtube"
+  | "pinterest"
+  | "threads"
+  | "mail"
+  | "phone"
+  | "globe"
+  | "headphones"
+  | "custom";
+
+export interface WelcomeFooterLink {
+  id: string;
+  kind: WelcomeFooterLinkKind;
+  label: string;
+  url: string;
+}
+
 // Mirrors functions/api/storefront-config.js DEFAULT_WELCOME_EMAIL.
 export interface WelcomeEmailConfig {
   enabled: boolean;
@@ -73,9 +97,147 @@ export interface WelcomeEmailConfig {
   avatarUrl: string;
   avatarName: string;
   showAvatar: boolean;
+  bodyFont: WelcomeBodyFont;
+  footerTagline: string;
+  footerLinks: WelcomeFooterLink[];
   products: WelcomeProductsConfig;
   discount: WelcomeDiscountConfig;
 }
+
+// Curated, email-safe font stacks. Keys are the schema enum values.
+export const BODY_FONT_OPTIONS: {
+  value: WelcomeBodyFont;
+  label: string;
+  description: string;
+  stack: string;
+}[] = [
+  {
+    value: "inter",
+    label: "Inter (modern sans)",
+    description:
+      "Default. Clean and friendly, the same font the storefront uses.",
+    stack: "Inter, Helvetica, Arial, sans-serif",
+  },
+  {
+    value: "playfair",
+    label: "Playfair Display (serif)",
+    description: "Editorial display serif — feels gallery / magazine.",
+    stack: "'Playfair Display', Georgia, 'Times New Roman', serif",
+  },
+  {
+    value: "garamond",
+    label: "EB Garamond (classic serif)",
+    description: "Warm, classical serif. Great for longer copy.",
+    stack: "'EB Garamond', Garamond, Georgia, 'Times New Roman', serif",
+  },
+  {
+    value: "georgia",
+    label: "Georgia (system serif)",
+    description: "Always available — never falls back. Safest choice.",
+    stack: "Georgia, 'Times New Roman', serif",
+  },
+];
+
+const resolveBodyFontStack = (font: WelcomeBodyFont | undefined) =>
+  BODY_FONT_OPTIONS.find((o) => o.value === font)?.stack ??
+  BODY_FONT_OPTIONS[0].stack;
+
+// Catalog of footer link kinds shown in the kind dropdown. The icon files
+// are served from /public/email-icons (committed alongside this PR).
+export const FOOTER_LINK_OPTIONS: {
+  value: WelcomeFooterLinkKind;
+  label: string;
+  iconFile: string;
+  defaultLabel: string;
+  placeholder: string;
+}[] = [
+  {
+    value: "instagram",
+    label: "Instagram",
+    iconFile: "instagram.png",
+    defaultLabel: "Instagram",
+    placeholder: "https://instagram.com/canvhub",
+  },
+  {
+    value: "facebook",
+    label: "Facebook",
+    iconFile: "facebook.png",
+    defaultLabel: "Facebook",
+    placeholder: "https://facebook.com/canvhub",
+  },
+  {
+    value: "tiktok",
+    label: "TikTok",
+    iconFile: "tiktok.png",
+    defaultLabel: "TikTok",
+    placeholder: "https://tiktok.com/@canvhub",
+  },
+  {
+    value: "x",
+    label: "X (Twitter)",
+    iconFile: "x.png",
+    defaultLabel: "X",
+    placeholder: "https://x.com/canvhub",
+  },
+  {
+    value: "youtube",
+    label: "YouTube",
+    iconFile: "youtube.png",
+    defaultLabel: "YouTube",
+    placeholder: "https://youtube.com/@canvhub",
+  },
+  {
+    value: "pinterest",
+    label: "Pinterest",
+    iconFile: "pinterest.png",
+    defaultLabel: "Pinterest",
+    placeholder: "https://pinterest.com/canvhub",
+  },
+  {
+    value: "threads",
+    label: "Threads",
+    iconFile: "threads.png",
+    defaultLabel: "Threads",
+    placeholder: "https://threads.net/@canvhub",
+  },
+  {
+    value: "mail",
+    label: "Email",
+    iconFile: "mail.png",
+    defaultLabel: "Email us",
+    placeholder: "mailto:hello@canvhub.com",
+  },
+  {
+    value: "phone",
+    label: "Phone",
+    iconFile: "phone.png",
+    defaultLabel: "Call us",
+    placeholder: "tel:+639170000000",
+  },
+  {
+    value: "globe",
+    label: "Website",
+    iconFile: "globe.png",
+    defaultLabel: "Website",
+    placeholder: "https://canvhub.com",
+  },
+  {
+    value: "headphones",
+    label: "Support",
+    iconFile: "headphones.png",
+    defaultLabel: "Contact support",
+    placeholder: "https://canvhub.com/support",
+  },
+  {
+    value: "custom",
+    label: "Custom link",
+    iconFile: "custom.png",
+    defaultLabel: "",
+    placeholder: "https://",
+  },
+];
+
+const FOOTER_LINKS_MAX = 8;
 
 interface AdminProductSummary {
   id: string;
@@ -124,6 +286,9 @@ const DEFAULTS: WelcomeEmailConfig = {
   avatarUrl: "",
   avatarName: "Canvas Hub team",
   showAvatar: false,
+  bodyFont: "inter",
+  footerTagline: "original Filipino paintings",
+  footerLinks: [],
   products: {
     enabled: true,
     mode: "auto",
@@ -465,20 +630,54 @@ const renderPreviewHtml = (
     ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
     : "";
 
+  const bodyFontStack = resolveBodyFontStack(config.bodyFont);
+
+  // Footer link row preview — same shape as functions/api/_lib/email.js's
+  // buildFooterLinksHtml output, just inline so the admin sees exactly
+  // what the recipient will see (icons + label + the editable tagline).
+  const footerLinks = (config.footerLinks || []).filter(
+    (l) => l && (l.url || l.label),
+  );
+  const footerLinksBlock = footerLinks.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 0 10px;"><tr>${footerLinks
+        .map((l) => {
+          const opt =
+            FOOTER_LINK_OPTIONS.find((o) => o.value === l.kind) ??
+            FOOTER_LINK_OPTIONS[FOOTER_LINK_OPTIONS.length - 1];
+          const labelHtml = l.label
+            ? `<span style="display:inline-block;vertical-align:middle;margin-left:6px;">${escapeHtml(l.label)}</span>`
+            : "";
+          const inner = `<img src="/email-icons/${opt.iconFile}" alt="" width="16" height="16" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;" />${labelHtml}`;
+          const cellStyle = `padding:4px 10px;font-size:12px;color:${accent};line-height:1;`;
+          if (l.url) {
+            return `<td style="${cellStyle}"><a href="${escapeHtml(l.url)}" style="color:${accent};text-decoration:none;">${inner}</a></td>`;
+          }
+          return `<td style="${cellStyle}">${inner}</td>`;
+        })
+        .join("")}</tr></table>`
+    : "";
+
+  const footerTagline = (
+    config.footerTagline || "original Filipino paintings"
+  ).trim();
+  const footerTaglineHtml = footerTagline
+    ? `&mdash; ${escapeHtml(footerTagline)}`
+    : "";
+
   return `
 <!doctype html>
 <html><head>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
-</head><body style="margin:0;padding:24px;background:#f5f3ee;font-family:Helvetica,Arial,sans-serif;color:${primary};">
-  <div style="max-width:560px;margin:0 auto;font-size:11px;color:${accent};margin-bottom:8px;">
+</head><body style="margin:0;padding:24px;background:#f5f3ee;font-family:${bodyFontStack};color:${primary};">
+  <div style="max-width:560px;margin:0 auto;font-size:11px;color:${accent};margin-bottom:8px;font-family:Inter,Helvetica,Arial,sans-serif;">
     <strong>Subject:</strong> ${escapeHtml(subject)}
   </div>
   <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e1d8;border-radius:6px;overflow:hidden;">
     <tr><td style="padding:24px 28px;border-bottom:1px solid #efece4;">${logoBlock}</td></tr>
     ${bannerBlock}
-    <tr><td style="padding:24px 28px;font-size:14px;line-height:1.6;">
+    <tr><td style="padding:24px 28px;font-size:14px;line-height:1.6;font-family:${bodyFontStack};">
       ${paragraphsHtml}
       ${discountHtml}
       ${productsHtml}
@@ -486,7 +685,10 @@ const renderPreviewHtml = (
       ${avatarHtml}
       ${signatureHtml}
     </td></tr>
-    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};"><span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> &mdash; original Filipino paintings.</td></tr>
+    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">
+      ${footerLinksBlock}
+      <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> ${footerTaglineHtml}
+    </td></tr>
   </table>
 </body></html>`;
 };
@@ -581,6 +783,63 @@ export const WelcomeEmailSection = () => {
     value: WelcomeDiscountConfig[K],
   ) => {
     setConfig((c) => ({ ...c, discount: { ...c.discount, [key]: value } }));
+  };
+
+  const addFooterLink = () => {
+    setConfig((c) => {
+      const links = c.footerLinks || [];
+      if (links.length >= FOOTER_LINKS_MAX) return c;
+      // Pick the first unused brand kind so each new row defaults to a
+      // different icon — admins rarely want two "Custom" rows in a row.
+      const used = new Set(links.map((l) => l.kind));
+      const pickFrom =
+        FOOTER_LINK_OPTIONS.find((o) => !used.has(o.value)) ??
+        FOOTER_LINK_OPTIONS[0];
+      const id = `link-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      return {
+        ...c,
+        footerLinks: [
+          ...links,
+          {
+            id,
+            kind: pickFrom.value,
+            label: pickFrom.defaultLabel,
+            url: "",
+          },
+        ],
+      };
+    });
+  };
+
+  const updateFooterLink = (
+    index: number,
+    patch: Partial<WelcomeFooterLink>,
+  ) => {
+    setConfig((c) => {
+      const links = (c.footerLinks || []).slice();
+      const current = links[index];
+      if (!current) return c;
+      const next: WelcomeFooterLink = { ...current, ...patch };
+      // When the admin changes the kind, prefill an empty label with the
+      // sensible default for that kind so they don't have to retype every
+      // single time.
+      if (patch.kind && !current.label) {
+        const opt = FOOTER_LINK_OPTIONS.find((o) => o.value === patch.kind);
+        if (opt && opt.defaultLabel) next.label = opt.defaultLabel;
+      }
+      links[index] = next;
+      return { ...c, footerLinks: links };
+    });
+  };
+
+  const removeFooterLink = (index: number) => {
+    setConfig((c) => {
+      const links = (c.footerLinks || []).slice();
+      links.splice(index, 1);
+      return { ...c, footerLinks: links };
+    });
   };
 
   const toggleManualProduct = (id: string) => {
@@ -981,6 +1240,33 @@ export const WelcomeEmailSection = () => {
             rows={3}
             placeholder={DEFAULTS.signature}
           />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="welcome-body-font">Body font</Label>
+          <select
+            id="welcome-body-font"
+            value={config.bodyFont}
+            onChange={(e) =>
+              update("bodyFont", e.target.value as WelcomeBodyFont)
+            }
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+          >
+            {BODY_FONT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p
+            className="text-[11px] text-muted-foreground"
+            style={{ fontFamily: resolveBodyFontStack(config.bodyFont) }}
+          >
+            {BODY_FONT_OPTIONS.find((o) => o.value === config.bodyFont)
+              ?.description ?? ""}{" "}
+            <span className="opacity-70">
+              The quick brown fox jumps over the lazy dog. 1234567890.
+            </span>
+          </p>
         </div>
       </section>
 
@@ -1551,6 +1837,112 @@ export const WelcomeEmailSection = () => {
             )}
           </>
         )}
+      </section>
+
+      <section className="space-y-4 rounded-md border border-border/60 bg-card/30 p-4">
+        <div>
+          <h3 className="font-display text-sm uppercase tracking-[0.2em]">
+            Footer & links
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Shown at the very bottom of the email, above the Canvas Hub
+            wordmark. Add up to {FOOTER_LINKS_MAX} icons — social profiles,
+            contact links, anything you want recipients to be able to tap. Empty
+            rows (no URL and no label) are dropped automatically.
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <Label>Footer caption</Label>
+          <Input
+            value={config.footerTagline}
+            onChange={(e) => update("footerTagline", e.target.value)}
+            placeholder={DEFAULTS.footerTagline}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Appears after the wordmark, e.g. &ldquo;
+            <em>Canvas Hub — original Filipino paintings.</em>&rdquo;
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {(config.footerLinks || []).map((link, idx) => {
+            const opt =
+              FOOTER_LINK_OPTIONS.find((o) => o.value === link.kind) ??
+              FOOTER_LINK_OPTIONS[FOOTER_LINK_OPTIONS.length - 1];
+            return (
+              <div
+                key={link.id}
+                className="grid grid-cols-1 sm:grid-cols-[140px_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-start rounded-md border border-border/40 p-3 bg-background/40"
+              >
+                <div className="flex items-center gap-2">
+                  <img
+                    src={`/email-icons/${opt.iconFile}`}
+                    alt=""
+                    width={20}
+                    height={20}
+                    className="rounded-sm bg-white p-0.5"
+                  />
+                  <select
+                    aria-label={`Footer link ${idx + 1} kind`}
+                    value={link.kind}
+                    onChange={(e) =>
+                      updateFooterLink(idx, {
+                        kind: e.target.value as WelcomeFooterLinkKind,
+                      })
+                    }
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                  >
+                    {FOOTER_LINK_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Input
+                  aria-label={`Footer link ${idx + 1} label`}
+                  value={link.label}
+                  onChange={(e) =>
+                    updateFooterLink(idx, { label: e.target.value })
+                  }
+                  placeholder={opt.defaultLabel || "Label"}
+                />
+                <Input
+                  aria-label={`Footer link ${idx + 1} URL`}
+                  value={link.url}
+                  onChange={(e) =>
+                    updateFooterLink(idx, { url: e.target.value })
+                  }
+                  placeholder={opt.placeholder}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove footer link ${idx + 1}`}
+                  onClick={() => removeFooterLink(idx)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            );
+          })}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addFooterLink}
+            disabled={(config.footerLinks || []).length >= FOOTER_LINKS_MAX}
+          >
+            Add footer link
+          </Button>
+          {(config.footerLinks || []).length >= FOOTER_LINKS_MAX && (
+            <p className="text-[11px] text-muted-foreground">
+              Up to {FOOTER_LINKS_MAX} links — keeps the footer scannable.
+            </p>
+          )}
+        </div>
       </section>
 
       <section className="space-y-3">

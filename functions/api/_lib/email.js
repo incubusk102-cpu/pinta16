@@ -370,6 +370,109 @@ const isSafeUrl = (value) =>
   typeof value === "string" &&
   /^(https?:\/\/|mailto:|data:image\/)/i.test(value.trim());
 
+// Footer link URLs additionally allow tel: for phone numbers, but Gmail
+// strips javascript: and other schemes either way.
+const isSafeLinkUrl = (value) =>
+  typeof value === "string" &&
+  /^(https?:\/\/|mailto:|tel:)/i.test(value.trim());
+
+// Body font choices exposed in the admin. Keys match the schema's
+// `bodyFont` enum; values are the email-safe CSS font-family stack to
+// stamp into the body wrapper. We always end with a system fallback so
+// the email reads even if the embedded webfonts fail to load.
+const BODY_FONT_STACKS = {
+  inter: "Inter, Helvetica, Arial, sans-serif",
+  playfair: "'Playfair Display', Georgia, 'Times New Roman', serif",
+  garamond: "'EB Garamond', Garamond, Georgia, 'Times New Roman', serif",
+  georgia: "Georgia, 'Times New Roman', serif",
+};
+
+const resolveBodyFont = (welcome) => {
+  const key = String(welcome?.bodyFont || "inter").toLowerCase();
+  return BODY_FONT_STACKS[key] || BODY_FONT_STACKS.inter;
+};
+
+// Map a footer link "kind" (instagram, tiktok, mail, …) to the public
+// PNG hosted under /public/email-icons. We use absolute URLs because
+// most email clients won't load /relative paths and Gmail blocks data:
+// image URIs.
+const FOOTER_ICON_FILES = {
+  instagram: "instagram.png",
+  facebook: "facebook.png",
+  tiktok: "tiktok.png",
+  x: "x.png",
+  twitter: "x.png",
+  youtube: "youtube.png",
+  pinterest: "pinterest.png",
+  threads: "threads.png",
+  mail: "mail.png",
+  phone: "phone.png",
+  globe: "globe.png",
+  headphones: "headphones.png",
+  custom: "custom.png",
+};
+
+const footerIconUrl = (welcome, kind) => {
+  const file = FOOTER_ICON_FILES[kind] || FOOTER_ICON_FILES.custom;
+  // Use the storefront base URL (welcome.ctaUrl) when it's an absolute
+  // canvhub.com link; otherwise fall back to the production origin so
+  // the icons still resolve in test sends.
+  const fallback = "https://canvhub.com";
+  const raw = String(welcome?.ctaUrl || "").trim();
+  let base = fallback;
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      base = new URL(raw).origin;
+    } catch {
+      base = fallback;
+    }
+  }
+  return `${base}/email-icons/${file}`;
+};
+
+// Plain-text fallback. Email clients that fall back to text/plain still
+// see "Instagram: https://...   Email: support@canvhub.com" so the
+// admin's contact intent isn't silently dropped.
+const formatFooterLinksText = (welcome) => {
+  const links = Array.isArray(welcome?.footerLinks) ? welcome.footerLinks : [];
+  const visible = links.filter((l) => l && (l.url || l.label));
+  if (!visible.length) return "";
+  const lines = visible.map((l) => {
+    const label = (l.label || l.kind || "").toString().trim();
+    const url = (l.url || "").toString().trim();
+    if (label && url) return `${label}: ${url}`;
+    return url || label;
+  });
+  return `\n\n${lines.join("\n")}`;
+};
+
+const buildFooterLinksHtml = (welcome, accent) => {
+  const links = Array.isArray(welcome?.footerLinks) ? welcome.footerLinks : [];
+  const visible = links.filter((l) => l && (l.url || l.label));
+  if (!visible.length) return "";
+  const cells = visible
+    .map((l) => {
+      const url = isSafeLinkUrl(l.url) ? l.url : "";
+      const labelText = String(l.label || "").trim();
+      const escapedLabel = escapeHtml(labelText);
+      const iconSrc = footerIconUrl(welcome, l.kind || "custom");
+      const inner = `
+        <img src="${iconSrc}" alt="" width="16" height="16" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;outline:none;" />
+        ${labelText ? `<span style="display:inline-block;vertical-align:middle;margin-left:6px;">${escapedLabel}</span>` : ""}
+      `.trim();
+      const cellStyle = `padding:4px 10px;font-size:12px;color:${accent};line-height:1;`;
+      if (url) {
+        return `<td style="${cellStyle}"><a href="${escapeHtml(url)}" style="color:${accent};text-decoration:none;">${inner}</a></td>`;
+      }
+      return `<td style="${cellStyle}">${inner}</td>`;
+    })
+    .join("");
+  return `
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 0 10px;">
+          <tr>${cells}</tr>
+        </table>`;
+};
+
 /**
  * Render the default Canvas Hub wordmark when no custom logo has been
  * uploaded. Just the italic gold wordmark — the brand "C" lives in the
@@ -396,6 +499,14 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
     showBanner && isSafeUrl(welcome.bannerUrl)
       ? `<tr><td style="padding:0;"><img src="${welcome.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
       : "";
+  const bodyFontStack = resolveBodyFont(welcome);
+  const footerLinksHtml = buildFooterLinksHtml(welcome, accent);
+  const footerTagline = String(
+    welcome.footerTagline || "original Filipino paintings",
+  ).trim();
+  const footerTaglineHtml = footerTagline
+    ? `&mdash; ${escapeHtml(footerTagline)}`
+    : "";
   return `
 <!doctype html>
 <html lang="en">
@@ -407,7 +518,7 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
-<body style="margin:0;padding:24px;background:#f5f3ee;font-family:Inter,Helvetica,Arial,sans-serif;color:#1c1c1c;">
+<body style="margin:0;padding:24px;background:#f5f3ee;font-family:${bodyFontStack};color:#1c1c1c;">
   <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;overflow:hidden;">
     <tr>
       <td style="padding:24px 28px;border-bottom:1px solid #efece4;">
@@ -416,13 +527,14 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
     </tr>
     ${bannerHtml}
     <tr>
-      <td style="padding:24px 28px;font-size:14px;line-height:1.6;color:${primary};">
+      <td style="padding:24px 28px;font-size:14px;line-height:1.6;color:${primary};font-family:${bodyFontStack};">
         ${contentHtml}
       </td>
     </tr>
     <tr>
       <td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">
-        <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> &mdash; original Filipino paintings.
+        ${footerLinksHtml}
+        <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> ${footerTaglineHtml}
       </td>
     </tr>
   </table>
@@ -686,7 +798,8 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
     `${bodyText}` +
     formatDiscountText(context.discount) +
     formatProductsText(welcome, context.products) +
-    (signature ? `\n\n${signature}` : "");
+    (signature ? `\n\n${signature}` : "") +
+    formatFooterLinksText(welcome);
 
   return {
     subject,

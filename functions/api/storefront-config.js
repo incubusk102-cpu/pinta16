@@ -168,6 +168,16 @@ const DEFAULT_WELCOME_EMAIL = {
   showLogo: true,
   showBanner: false,
   showAvatar: false,
+  // Font for the email body copy. The brand wordmark + section headers
+  // stay in their gallery-style serifs; this only swaps the running
+  // paragraphs and signature.
+  bodyFont: "inter",
+  // Replaces the previously hardcoded footer caption so admins can edit
+  // or translate the line that follows the wordmark.
+  footerTagline: "original Filipino paintings",
+  // Footer link rows. Each renders as a clickable icon + label
+  // (Instagram, Facebook, Contact support, …).
+  footerLinks: [],
   products: {
     enabled: true,
     // "auto"   = newest products from the storefront
@@ -282,9 +292,92 @@ const sanitizeWelcomeEmail = (raw) => {
     showLogo: data.showLogo !== false,
     showBanner: Boolean(data.showBanner),
     showAvatar: Boolean(data.showAvatar),
+    bodyFont: sanitizeBodyFont(data.bodyFont),
+    footerTagline: sanitizeWelcomeEmailString(
+      data.footerTagline,
+      DEFAULT_WELCOME_EMAIL.footerTagline,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    footerLinks: sanitizeFooterLinks(data.footerLinks),
     products: sanitizeWelcomeProducts(data.products),
     discount: sanitizeWelcomeDiscount(data.discount),
   };
+};
+
+// Allow only the four curated body fonts. Anything else falls back to the
+// system Inter sans we use as the storefront default.
+const ALLOWED_BODY_FONTS = new Set([
+  "inter",
+  "playfair",
+  "garamond",
+  "georgia",
+]);
+
+const sanitizeBodyFont = (value) => {
+  if (typeof value !== "string") return DEFAULT_WELCOME_EMAIL.bodyFont;
+  const normalized = value.trim().toLowerCase();
+  return ALLOWED_BODY_FONTS.has(normalized)
+    ? normalized
+    : DEFAULT_WELCOME_EMAIL.bodyFont;
+};
+
+// Footer link rows shown above the wordmark + tagline. Each row is one
+// of a fixed set of "kinds" (instagram, facebook, …) so the email can
+// render the right icon. URL must be http(s), mailto:, or tel:.
+const ALLOWED_FOOTER_LINK_KINDS = new Set([
+  "instagram",
+  "facebook",
+  "tiktok",
+  "x",
+  "twitter",
+  "youtube",
+  "pinterest",
+  "threads",
+  "mail",
+  "phone",
+  "globe",
+  "headphones",
+  "custom",
+]);
+
+const FOOTER_LINK_LABEL_MAX = 60;
+const FOOTER_LINK_URL_MAX = 500;
+const FOOTER_LINKS_MAX = 8;
+
+const sanitizeFooterLinkUrl = (value) => {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim().slice(0, FOOTER_LINK_URL_MAX);
+  if (!trimmed) return "";
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(trimmed)) return trimmed;
+  return "";
+};
+
+const sanitizeFooterLink = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const kind =
+    typeof data.kind === "string" &&
+    ALLOWED_FOOTER_LINK_KINDS.has(data.kind.toLowerCase())
+      ? data.kind.toLowerCase()
+      : "custom";
+  const label = sanitizeWelcomeEmailString(
+    data.label,
+    "",
+    FOOTER_LINK_LABEL_MAX,
+  );
+  const url = sanitizeFooterLinkUrl(data.url);
+  // Drop entirely empty rows so admins can leave blanks in the editor
+  // without polluting the rendered email.
+  if (!url && !label) return null;
+  const id =
+    typeof data.id === "string" && data.id.trim()
+      ? data.id.trim().slice(0, 60)
+      : `link-${Math.random().toString(36).slice(2, 10)}`;
+  return { id, kind, label, url };
+};
+
+const sanitizeFooterLinks = (raw) => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(sanitizeFooterLink).filter(Boolean).slice(0, FOOTER_LINKS_MAX);
 };
 
 const WELCOME_CUSTOM_DESCRIPTION_MAX = 600;
