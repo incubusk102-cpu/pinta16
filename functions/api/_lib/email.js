@@ -14,6 +14,15 @@
  * EMAIL_REPLY_TO / EMAIL_BCC. This lets order-confirmation mail come from
  * order@canvhub.com while other channels keep their own from-address.
  *
+ * Order-confirmation mail (kind = "confirmed" / "in_progress" /
+ * "out_for_delivery" / "received" / "refund_requested" /
+ * "refund_succeeded" / "refund_failed") additionally honours an admin-edited
+ * `orderEmail` subtree on the storefront-config KV: per-kind subject /
+ * heading / intro plus shared chrome (logo, banner, fonts, palette,
+ * template, dividers, button style, footer). When the subtree is missing,
+ * absent, or a kind is disabled the renderer falls back to the hard-coded
+ * defaults below so existing deployments stay green.
+ *
  * If no key is configured, sendEmail() resolves to
  *   { delivered: false, skipped: true, reason: "not configured" }
  * so callers can still record their notification entry without crashing.
@@ -49,6 +58,77 @@ const PROVIDERS = {
   brevo: {
     envKey: "BREVO_API_KEY",
     send: sendViaBrevo,
+  },
+};
+
+// Order-email kinds — every transactional email the order pipeline can
+// fire. Exposed so storefront-config.js can sanitize a kinds map of the
+// same shape and the admin UI can iterate the same list to render tabs.
+export const ORDER_EMAIL_KINDS = [
+  "confirmed",
+  "in_progress",
+  "out_for_delivery",
+  "received",
+  "refund_requested",
+  "refund_succeeded",
+  "refund_failed",
+];
+
+// Hard-coded defaults the renderer falls back to when the admin hasn't
+// customised a kind (or when the storefront-config KV doc is missing).
+// Placeholders supported in subject + heading + intro:
+//   {{name}}          - customer's full name (or "Collector" fallback)
+//   {{firstName}}     - first token of {{name}}
+//   {{orderId}}       - human-readable order id
+//   {{total}}         - formatted PHP total
+//   {{itemCount}}     - number of line items
+//   {{itemPlural}}    - empty string for 1 item, "s" for 2+ items
+//   {{courier}}       - shipment courier (out_for_delivery only)
+//   {{trackingNumber}} - shipment tracking number (out_for_delivery only)
+//   {{refundAmount}}  - formatted PHP refund amount (refund_* only)
+//   {{failureMessage}} - refund-failed details (refund_failed only)
+export const DEFAULT_ORDER_EMAIL_KINDS = {
+  confirmed: {
+    subject: "Order {{orderId}} confirmed",
+    heading: "Thanks — your order is confirmed",
+    intro:
+      "Hi {{name}},\n\nThanks for your order at Canvas Hub. We've recorded your payment of {{total}} and the team is getting your painting{{itemPlural}} ready. We'll send another note the moment the artist starts on it.",
+  },
+  in_progress: {
+    subject: "Order {{orderId}}: in progress",
+    heading: "Painting in progress",
+    intro:
+      "Hi {{name}},\n\nGood news — the artist has started working on your order. We'll send another note the moment it ships.",
+  },
+  out_for_delivery: {
+    subject: "Order {{orderId}}: shipped",
+    heading: "Out for delivery",
+    intro:
+      "Hi {{name}},\n\nYour painting is on its way! Tracking details are below — keep them handy in case you'd like to follow the parcel's journey.",
+  },
+  received: {
+    subject: "Order {{orderId}}: delivered",
+    heading: "Order delivered — thank you",
+    intro:
+      "Hi {{name}},\n\nWe've marked your order as received. We hope your painting feels right at home — we'd love to hear what you think.",
+  },
+  refund_requested: {
+    subject: "Refund initiated for order {{orderId}}",
+    heading: "Refund in progress",
+    intro:
+      "Hi {{name}},\n\nYour refund of {{refundAmount}} for order {{orderId}} has been initiated and should land back in your wallet shortly.",
+  },
+  refund_succeeded: {
+    subject: "Refund completed for order {{orderId}}",
+    heading: "Refund completed",
+    intro:
+      "Hi {{name}},\n\nYour refund of {{refundAmount}} for order {{orderId}} has been credited back. Thank you for your patience.",
+  },
+  refund_failed: {
+    subject: "Refund failed for order {{orderId}}",
+    heading: "Refund could not be processed",
+    intro:
+      "Hi {{name}},\n\nUnfortunately your refund for order {{orderId}} could not be processed automatically{{failureMessage}}. Please reply to this email and we'll sort it out manually.",
   },
 };
 
@@ -274,112 +354,307 @@ const renderTotals = (order) => `
   </table>
 `;
 
+// Substitute {{placeholder}} tokens in admin-edited template strings.
+// Returns a plain (un-escaped) string suitable for use as the email
+// subject. Unknown placeholders are dropped (replaced with empty string).
+const substituteOrderTemplate = (template, vars) => {
+  if (!template) return "";
+  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const v = vars[key];
+    return v === undefined || v === null ? "" : String(v);
+  });
+};
+
+// HTML-render the admin-edited intro: every static segment AND every
+// substituted value is escaped so admins can't inject markup, then
+// double-newlines become paragraph breaks and single newlines become
+// <br>. Returns a string of one or more <p> blocks.
+const renderOrderIntroHtml = (template, vars) => {
+  if (!template) return "";
+  const parts = [];
+  let last = 0;
+  const re = /\{\{(\w+)\}\}/g;
+  let m;
+  while ((m = re.exec(template)) !== null) {
+    parts.push(escapeHtml(template.slice(last, m.index)));
+    const v = vars[m[1]];
+    parts.push(v === undefined || v === null ? "" : escapeHtml(String(v)));
+    last = re.lastIndex;
+  }
+  parts.push(escapeHtml(template.slice(last)));
+  const escaped = parts.join("");
+  return escaped
+    .split(/\n{2,}/)
+    .filter((p) => p.length)
+    .map((p) => `<p style="margin:0 0 12px;">${p.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+};
+
+// Resolve which orderEmail config + per-kind override to use. Falls back
+// to DEFAULT_ORDER_EMAIL_KINDS when the admin hasn't customised the kind
+// or the orderEmail subtree is missing.
+const resolveOrderKindConfig = (orderEmail, kind) => {
+  const def =
+    DEFAULT_ORDER_EMAIL_KINDS[kind] || DEFAULT_ORDER_EMAIL_KINDS.confirmed;
+  const adminKind = orderEmail?.kinds?.[kind];
+  if (!adminKind || typeof adminKind !== "object")
+    return { ...def, enabled: true };
+  return {
+    enabled: adminKind.enabled !== false,
+    subject:
+      typeof adminKind.subject === "string" && adminKind.subject.trim()
+        ? adminKind.subject
+        : def.subject,
+    heading:
+      typeof adminKind.heading === "string" && adminKind.heading.trim()
+        ? adminKind.heading
+        : def.heading,
+    intro:
+      typeof adminKind.intro === "string" && adminKind.intro.trim()
+        ? adminKind.intro
+        : def.intro,
+  };
+};
+
 /**
  * Build subject + html + text for a given notification kind. `extra` may
- * include shipment / refund-specific values.
+ * include shipment / refund-specific values. `orderEmail` is the
+ * admin-edited storefront-config.orderEmail subtree (optional — when
+ * absent the renderer falls back to the hard-coded chrome / copy).
  */
-export const buildOrderEmail = (kind, order, extra = {}) => {
-  const id = escapeHtml(order.id || "");
-  const name = escapeHtml(order.orderInfo?.fullName || "Collector");
+export const buildOrderEmail = (kind, order, extra = {}, orderEmail = null) => {
+  const id = String(order.id || "");
+  const fullName =
+    String(order.orderInfo?.fullName || "").trim() || "Collector";
+  const firstName = fullName.split(/\s+/)[0] || fullName;
+  const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+  const itemPlural = itemCount > 1 ? "s" : "";
+  const totalFormatted = formatPHP(order.total);
+
+  const trackUrl = extra.trackingUrl || extra.shipment?.trackingUrl || "";
+  const courier = extra.courier || extra.shipment?.courier || "";
+  const trackingNumber =
+    extra.trackingNumber || extra.shipment?.trackingNumber || "";
+  const refundAmountRaw = extra.refundAmount ?? order.refund?.amount ?? 0;
+  const refundAmount = formatPHP(refundAmountRaw);
+  const failureMessage = extra.failureMessage
+    ? `: ${extra.failureMessage}`
+    : "";
+
+  const vars = {
+    name: fullName,
+    firstName,
+    orderId: id,
+    total: totalFormatted,
+    itemCount: String(itemCount),
+    itemPlural,
+    courier,
+    trackingNumber,
+    refundAmount,
+    failureMessage,
+  };
+
+  const tpl = resolveOrderKindConfig(orderEmail, kind);
+
+  const subject = substituteOrderTemplate(tpl.subject, vars);
+  const heading = substituteOrderTemplate(tpl.heading, vars);
+  const introHtml = renderOrderIntroHtml(tpl.intro, vars);
+
   const itemsHtml = renderItemsTable(order.items);
   const totalsHtml = renderTotals(order);
 
-  const trackUrl = extra.trackingUrl || extra.shipment?.trackingUrl;
-  const courier = extra.courier || extra.shipment?.courier;
-  const trackingNumber = extra.trackingNumber || extra.shipment?.trackingNumber;
-
-  let subject;
-  let heading;
-  let intro;
-
-  switch (kind) {
-    case "confirmed":
-      subject = `Order ${order.id} confirmed`;
-      heading = "Order received";
-      intro = `Hi ${name}, thanks for your order at Canvas Hub. We've recorded your payment and we're getting your painting${(order.items || []).length > 1 ? "s" : ""} ready.`;
-      break;
-    case "in_progress":
-      subject = `Order ${order.id}: in progress`;
-      heading = "Painting in progress";
-      intro = `Good news ${name}! The artist has started working on your painting.`;
-      break;
-    case "out_for_delivery":
-    case "shipped":
-      subject = `Order ${order.id}: shipped`;
-      heading = "Out for delivery";
-      intro = `Hi ${name}, your order has shipped${courier ? ` via <strong>${escapeHtml(courier)}</strong>` : ""}${trackingNumber ? ` &mdash; tracking <code>${escapeHtml(trackingNumber)}</code>` : ""}.`;
-      break;
-    case "received":
-      subject = `Order ${order.id}: received`;
-      heading = "Order delivered";
-      intro = `Hi ${name}, we've marked your order as received. We'd love to hear what you think &mdash; your review really helps other collectors.`;
-      break;
-    case "refund_requested":
-      subject = `Refund initiated for ${order.id}`;
-      heading = "Refund in progress";
-      intro = `Hi ${name}, your refund of <strong>${formatPHP(extra.refundAmount ?? order.refund?.amount ?? 0)}</strong> is being processed and should land back in your QR Ph wallet shortly.`;
-      break;
-    case "refund_succeeded":
-      subject = `Refund completed for ${order.id}`;
-      heading = "Refund completed";
-      intro = `Hi ${name}, your refund of <strong>${formatPHP(extra.refundAmount ?? order.refund?.amount ?? 0)}</strong> has been credited back. Thank you for your patience.`;
-      break;
-    case "refund_failed":
-      subject = `Refund failed for ${order.id}`;
-      heading = "Refund failed";
-      intro = `Hi ${name}, unfortunately your refund could not be processed${
-        extra.failureMessage ? `: ${escapeHtml(extra.failureMessage)}` : ""
-      }. Please reply to this email and we'll sort it out manually.`;
-      break;
-    default:
-      subject = `Update on order ${order.id}`;
-      heading = "Order update";
-      intro = extra.message
-        ? escapeHtml(extra.message)
-        : `Hi ${name}, there's an update on your order.`;
-  }
-
-  const trackingBlock =
-    trackUrl && trackingNumber
-      ? `
-    <p style="margin:16px 0;">
-      <a href="${trackUrl}" style="display:inline-block;padding:10px 18px;background:#1c1c1c;color:#ffffff;text-decoration:none;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;border-radius:4px;">
-        Track shipment
-      </a>
-    </p>`
+  // Auto-rendered shipment line for out_for_delivery (and any kind that
+  // happens to have shipment data attached). Sits between the intro and
+  // the items table so admins don't need to bake it into every kind's
+  // intro template.
+  const shipmentLine =
+    courier || trackingNumber
+      ? `<p style="margin:0 0 12px;color:#7a7468;font-size:13px;">${
+          courier ? `Shipped via <strong>${escapeHtml(courier)}</strong>` : ""
+        }${courier && trackingNumber ? " &mdash; " : ""}${
+          trackingNumber
+            ? `tracking <code>${escapeHtml(trackingNumber)}</code>`
+            : ""
+        }.</p>`
       : "";
 
+  // Shared chrome: track-shipment button (out_for_delivery only). Uses
+  // the admin-edited button label + button style; falls back to a black
+  // pill when no orderEmail config is loaded.
+  const trackButtonText =
+    (orderEmail && typeof orderEmail.trackButtonText === "string"
+      ? orderEmail.trackButtonText
+      : "") || "Track shipment";
+  const buttonStyle = String(orderEmail?.buttonStyle || "filled").toLowerCase();
+  const primary = isSafeColor(orderEmail?.primaryColor)
+    ? orderEmail.primaryColor
+    : "#1c1c1c";
+  const trackingBlock =
+    trackUrl && isSafeUrl(trackUrl)
+      ? `<p style="margin:16px 0;">${renderActionLink({
+          label: trackButtonText,
+          url: trackUrl,
+          primary,
+          style: buttonStyle,
+        })}</p>`
+      : "";
+
+  // Section divider (admin-tunable). Mirrors the welcome email's chrome
+  // so order + welcome can share a visual identity.
+  const accent = isSafeColor(orderEmail?.accentColor)
+    ? orderEmail.accentColor
+    : "#7a7468";
+  const divider = sectionDividerHtml(orderEmail || {}, accent);
+
   const bodyHtml = `
-    <p style="margin:0 0 12px;">${intro}</p>
-    <p style="margin:0 0 12px;color:#7a7468;font-size:12px;letter-spacing:0.05em;">Order ${id}</p>
+    ${introHtml}
+    <p style="margin:0 0 12px;color:${accent};font-size:12px;letter-spacing:0.05em;">Order ${escapeHtml(id)}</p>
+    ${shipmentLine}
+    ${divider}
     ${itemsHtml}
     ${totalsHtml}
     ${trackingBlock}
-    <p style="margin:24px 0 0;font-size:12px;color:#7a7468;">
+    <p style="margin:24px 0 0;font-size:12px;color:${accent};">
       Questions? Just reply to this email.
     </p>
   `;
 
+  const introText = stripTags(introHtml);
   const text = stripTags(
-    `${heading}\n\n${intro}\n\nOrder ${id}\nTotal ${formatPHP(order.total)}${trackUrl ? `\nTrack: ${trackUrl}` : ""}`,
+    `${heading}\n\n${introText}\n\nOrder ${id}\nTotal ${totalFormatted}${
+      trackUrl ? `\nTrack: ${trackUrl}` : ""
+    }`,
   );
 
-  return { subject, html: wrapHtml(heading, bodyHtml), text };
+  // When orderEmail config is present, render through the shared branded
+  // chrome (logo / banner / palette / template / footer links). Otherwise
+  // fall back to the original minimal wrapHtml so existing deployments
+  // without admin customisation see exactly what they saw before.
+  const html = orderEmail
+    ? wrapWelcomeHtml(
+        {
+          ...orderEmail,
+          // Route order-channel uploads through dedicated asset slots so
+          // they don't collide with welcome's logo/banner.
+          _logoSlot: "order-logo",
+          _bannerSlot: "order-banner",
+        },
+        bodyHtml,
+      )
+    : wrapHtml(heading, bodyHtml);
+
+  return { subject, html, text };
 };
 
 /**
  * Convenience wrapper around buildOrderEmail + sendEmail. Returns a value
  * suitable for stamping onto a notification record.
  */
+/**
+ * Load the orderEmail subtree from the storefront-config KV. Returns null
+ * when the binding or the doc isn't there yet so callers can no-op cleanly
+ * (the renderer falls back to its hard-coded defaults).
+ */
+export const loadOrderEmailConfig = async () => {
+  try {
+    const store = getStore("storefront-config");
+    const raw = await store.get("config", { type: "json" });
+    if (!raw || typeof raw !== "object") return null;
+    if (!raw.orderEmail || typeof raw.orderEmail !== "object") return null;
+    return raw.orderEmail;
+  } catch {
+    return null;
+  }
+};
+
 export const sendOrderEmail = async ({ kind, order, extra }) => {
   const recipient = order?.orderInfo?.email;
   if (!recipient) {
     return { delivered: false, skipped: true, reason: "no recipient" };
   }
-  const built = buildOrderEmail(kind, order, extra || {});
+  const orderEmail = await loadOrderEmailConfig();
+  // Master switch — admin can disable all order email globally.
+  if (orderEmail && orderEmail.enabled === false) {
+    return { delivered: false, skipped: true, reason: "disabled" };
+  }
+  // Per-kind switch — admin can mute individual stages without disabling
+  // the whole channel.
+  const kindCfg = orderEmail?.kinds?.[kind];
+  if (kindCfg && kindCfg.enabled === false) {
+    return { delivered: false, skipped: true, reason: "kind disabled" };
+  }
+  const built = buildOrderEmail(kind, order, extra || {}, orderEmail);
   return await sendEmail({
     to: recipient,
     subject: built.subject,
+    html: built.html,
+    text: built.text,
+    purpose: "order",
+  });
+};
+
+/**
+ * Send a fake order through the order-email pipeline so admins can preview
+ * a specific kind in their inbox before flipping anything live. Always
+ * forces the master + kind switches on so the test send works even when
+ * the channel is paused.
+ */
+export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
+  const recipient = String(to || "").trim();
+  if (!recipient) {
+    return { delivered: false, skipped: true, reason: "no recipient" };
+  }
+  if (!isEmailConfigured("order")) {
+    return { delivered: false, skipped: true, reason: "not configured" };
+  }
+  const safeKind = ORDER_EMAIL_KINDS.includes(kind) ? kind : "confirmed";
+  const fakeOrder = {
+    id: "TEST-1234",
+    orderInfo: {
+      email: recipient,
+      fullName: String(name || "Test collector").slice(0, 80),
+    },
+    items: [
+      { title: "Sunset over Mayon", quantity: 1, price: 4500 },
+      { title: "Banaue rice terraces", quantity: 1, price: 6500 },
+    ],
+    subtotal: 11000,
+    shippingFee: 250,
+    discount: 0,
+    total: 11250,
+    voucherCode: "",
+    refund: { amount: 11250 },
+  };
+  const fakeExtra = {
+    courier: "LBC Express",
+    trackingNumber: "LBC-PREVIEW-001",
+    trackingUrl: "https://www.lbcexpress.com/track",
+    refundAmount: 11250,
+    failureMessage: "insufficient wallet balance at provider",
+  };
+  // Force master + kind switches on for previews.
+  const previewOrderEmail = orderEmail
+    ? {
+        ...orderEmail,
+        enabled: true,
+        kinds: {
+          ...orderEmail.kinds,
+          [safeKind]: {
+            ...(orderEmail.kinds?.[safeKind] || {}),
+            enabled: true,
+          },
+        },
+      }
+    : null;
+  const built = buildOrderEmail(
+    safeKind,
+    fakeOrder,
+    fakeExtra,
+    previewOrderEmail,
+  );
+  return await sendEmail({
+    to: recipient,
+    subject: `[Test] ${built.subject}`,
     html: built.html,
     text: built.text,
     purpose: "order",
@@ -664,9 +939,14 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
   const fromName = escapeHtml(welcome.fromName || "Canvas Hub");
   const showLogo = welcome.showLogo !== false && welcome.logoUrl;
   const showBanner = Boolean(welcome.showBanner) && welcome.bannerUrl;
+  // _logoSlot / _bannerSlot let the order-email renderer route uploads
+  // through /api/welcome-asset/order-logo|order-banner so welcome and
+  // order assets don't collide. Welcome callers don't set these and
+  // fall through to the default "logo"/"banner" slots.
+  const logoSlot = welcome._logoSlot || "logo";
   const logoSrc =
     showLogo && isSafeUrl(welcome.logoUrl)
-      ? rehostEmailImage(welcome, "logo", welcome.logoUrl)
+      ? rehostEmailImage(welcome, logoSlot, welcome.logoUrl)
       : "";
   const logoInner = logoSrc
     ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
@@ -675,9 +955,10 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
     headerAlign === "center"
       ? `<div style="text-align:center;">${logoInner}</div>`
       : logoInner;
+  const bannerSlot = welcome._bannerSlot || "banner";
   const bannerSrc =
     showBanner && isSafeUrl(welcome.bannerUrl)
-      ? rehostEmailImage(welcome, "banner", welcome.bannerUrl)
+      ? rehostEmailImage(welcome, bannerSlot, welcome.bannerUrl)
       : "";
   const bannerHtml = bannerSrc
     ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc)}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`

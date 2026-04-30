@@ -92,6 +92,14 @@ const WELCOME_FIELD_SLOTS = {
   avatar: "avatarUrl",
 };
 
+// Slots that point at top-level orderEmail string fields. Mirrors the
+// welcome slots so admins can upload a separate logo / banner for the
+// order-confirmation channel without it bleeding into welcome mail.
+const ORDER_FIELD_SLOTS = {
+  "order-logo": "logoUrl",
+  "order-banner": "bannerUrl",
+};
+
 const resolveSlot = async (env, segments) => {
   if (!segments.length) return null;
   const [first, second] = segments;
@@ -101,6 +109,13 @@ const resolveSlot = async (env, segments) => {
     const store = makeStore(env.STOREFRONT_CONFIG);
     const config = await store.get(CONFIG_KEY, { type: "json" });
     return config?.welcomeEmail?.[WELCOME_FIELD_SLOTS[first]] ?? null;
+  }
+
+  // /api/welcome-asset/order-logo|order-banner
+  if (ORDER_FIELD_SLOTS[first]) {
+    const store = makeStore(env.STOREFRONT_CONFIG);
+    const config = await store.get(CONFIG_KEY, { type: "json" });
+    return config?.orderEmail?.[ORDER_FIELD_SLOTS[first]] ?? null;
   }
 
   // /api/welcome-asset/custom/<id>

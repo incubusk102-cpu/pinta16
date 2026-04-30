@@ -48,6 +48,7 @@ import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
 import { SiteCopySection } from "@/components/admin/SiteCopySection";
 import { WelcomeEmailSection } from "@/components/admin/WelcomeEmailSection";
+import { OrderEmailSection } from "@/components/admin/OrderEmailSection";
 import ExportPanel from "@/admin/ExportPanel";
 import {
   ArrowLeft,
@@ -106,6 +107,7 @@ type AdminSection =
   | "hero"
   | "siteCopy"
   | "welcomeEmail"
+  | "orderEmail"
   | "policies"
   | "exports"
   | "security"
@@ -125,6 +127,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   hero: "Hero slider",
   siteCopy: "Site copy",
   welcomeEmail: "Welcome email",
+  orderEmail: "Order email",
   policies: "Policies",
   exports: "Exports",
   security: "Security",
@@ -380,6 +383,13 @@ function AdminDashboard() {
               hint="Auto-reply on signup + first Google login"
             />
             <NavLink
+              icon={<Package className="w-4 h-4" />}
+              label="Order email"
+              active={section === "orderEmail"}
+              onClick={() => navigate("orderEmail")}
+              hint="Customise confirmed / shipped / delivered / refund mail"
+            />
+            <NavLink
               icon={<FileText className="w-4 h-4" />}
               label="Policies"
               active={section === "policies"}
@@ -435,6 +445,7 @@ function AdminDashboard() {
         {section === "hero" && <HeroSlidesSection />}
         {section === "siteCopy" && <SiteCopySection />}
         {section === "welcomeEmail" && <WelcomeEmailSection />}
+        {section === "orderEmail" && <OrderEmailSection />}
         {section === "policies" && <PoliciesSection />}
         {section === "exports" && <ExportsSection />}
         {section === "security" && <SecuritySection />}
