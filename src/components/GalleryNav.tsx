@@ -32,27 +32,12 @@ import {
 } from "@/contexts/PoliciesContext";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import ProfileEditor from "@/components/account/ProfileEditor";
-import MyOrders from "@/components/account/MyOrders";
 import OrderTracker from "@/components/account/OrderTracker";
 import WishlistSection from "@/components/account/WishlistSection";
 import AddressBook from "@/components/account/AddressBook";
 
-type AccountSheet = "profile" | "orders" | "tracker" | "wishlist" | "addresses";
-
-const ACCOUNT_SHEET_TITLE: Record<AccountSheet, string> = {
-  profile: "Profile",
-  orders: "My orders",
-  tracker: "Track order",
-  wishlist: "Wishlist",
-  addresses: "Saved addresses",
-};
+type AccountDropdown = "profile" | "tracker" | "wishlist" | "addresses";
 
 const SLUG_ICON: Record<
   PolicySlug,
@@ -84,8 +69,20 @@ const SLUG_LABEL_KEYS: Record<
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [accountSheet, setAccountSheet] = useState<AccountSheet | null>(null);
   const [myOrdersOpen, setMyOrdersOpen] = useState(false);
+  const [accountDropdowns, setAccountDropdowns] = useState<
+    Record<AccountDropdown, boolean>
+  >({
+    profile: false,
+    tracker: false,
+    wishlist: false,
+    addresses: false,
+  });
+  const toggleAccountDropdown = useCallback(
+    (key: AccountDropdown) =>
+      setAccountDropdowns((prev) => ({ ...prev, [key]: !prev[key] })),
+    [],
+  );
   const { itemCount, openCart, orders, viewOrder } = useCart();
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
@@ -103,17 +100,21 @@ const GalleryNav = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Close drawer AND any open account sheet on route change.
-  // Components rendered inside the sheet can trigger navigation —
-  // WishlistSection has product links, MyOrders has a home link, and
-  // ProfileEditor redirects to "/" on sign-out / Google disconnect.
-  // Without clearing accountSheet here, the sheet would remain mounted
-  // as an overlay on the new page (and in the sign-out case would
-  // render empty content since ProfileEditor returns null when !user).
+  // Close drawer and reset every transient drawer dropdown on route
+  // change. Components rendered inside the dropdowns can trigger
+  // navigation — WishlistSection has product links and ProfileEditor
+  // redirects to "/" on sign-out / Google disconnect — so without
+  // resetting these, the dropdowns would stay expanded the next time
+  // the visitor opened the drawer on a new page.
   useEffect(() => {
     setMenuOpen(false);
-    setAccountSheet(null);
     setMyOrdersOpen(false);
+    setAccountDropdowns({
+      profile: false,
+      tracker: false,
+      wishlist: false,
+      addresses: false,
+    });
   }, [pathname]);
 
   // ESC to close while drawer is open. Body scroll is intentionally NOT
@@ -153,21 +154,6 @@ const GalleryNav = () => {
       }
     },
     [closeMenu, onIndex, navigate],
-  );
-
-  // Opening an account view (Profile / Orders / Tracker / Wishlist /
-  // Addresses) closes the drawer and slides the content in over the
-  // page so the visitor stays on whatever product or gallery page they
-  // were browsing — no hop to /account. Profile / orders / addresses
-  // reuse the exact components /account renders; Tracker + Wishlist
-  // were extracted into shared components so the drawer and /account
-  // stay in sync.
-  const openAccountSheet = useCallback(
-    (sheet: AccountSheet) => {
-      closeMenu();
-      setAccountSheet(sheet);
-    },
-    [closeMenu],
   );
 
   const handleLogout = useCallback(() => {
@@ -446,37 +432,50 @@ const GalleryNav = () => {
               </div>
 
               {/* My account — Profile, Track order, Wishlist, Saved
-                    addresses. Each row opens its account view inline as
-                    a slide-over sheet (so the visitor never leaves the
-                    page they were browsing). My orders sits in the
-                    primary nav above, so it isn't repeated here. */}
+                    addresses. Each row is now an inline dropdown that
+                    expands the matching account view directly inside
+                    the drawer (no slide-over, no separate page). My
+                    orders sits in the primary nav above with its own
+                    inline dropdown, so it isn't repeated here. */}
               {user && (
                 <DrawerSection
                   label="My account"
                   storageKey="account"
                   defaultOpen={true}
                 >
-                  <DrawerButton
+                  <DrawerCollapsible
                     icon={UserCircle}
                     label="Profile"
-                    onClick={() => openAccountSheet("profile")}
-                  />
-                  <DrawerButton
+                    open={accountDropdowns.profile}
+                    onToggle={() => toggleAccountDropdown("profile")}
+                  >
+                    <ProfileEditor />
+                  </DrawerCollapsible>
+                  <DrawerCollapsible
                     icon={Truck}
                     label="Track order"
-                    onClick={() => openAccountSheet("tracker")}
-                  />
-                  <DrawerButton
+                    open={accountDropdowns.tracker}
+                    onToggle={() => toggleAccountDropdown("tracker")}
+                  >
+                    <OrderTracker />
+                  </DrawerCollapsible>
+                  <DrawerCollapsible
                     icon={Heart}
                     label="Wishlist"
                     badge={wishlistCount || undefined}
-                    onClick={() => openAccountSheet("wishlist")}
-                  />
-                  <DrawerButton
+                    open={accountDropdowns.wishlist}
+                    onToggle={() => toggleAccountDropdown("wishlist")}
+                  >
+                    <WishlistSection />
+                  </DrawerCollapsible>
+                  <DrawerCollapsible
                     icon={MapPin}
                     label="Saved addresses"
-                    onClick={() => openAccountSheet("addresses")}
-                  />
+                    open={accountDropdowns.addresses}
+                    onToggle={() => toggleAccountDropdown("addresses")}
+                  >
+                    <AddressBook />
+                  </DrawerCollapsible>
                 </DrawerSection>
               )}
 
@@ -547,35 +546,6 @@ const GalleryNav = () => {
           Canvas Hub · {new Date().getFullYear()}
         </div>
       </aside>
-
-      {/* Account slide-over sheet — opens when any MY ACCOUNT item is
-          tapped. Renders the relevant /account component inline so the
-          visitor never leaves the page they were browsing. Closing the
-          sheet drops them back to the product / gallery / cart page. */}
-      <Sheet
-        open={accountSheet !== null}
-        onOpenChange={(o) => {
-          if (!o) setAccountSheet(null);
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-lg overflow-y-auto"
-        >
-          <SheetHeader className="text-left">
-            <SheetTitle>
-              {accountSheet ? ACCOUNT_SHEET_TITLE[accountSheet] : ""}
-            </SheetTitle>
-          </SheetHeader>
-          <div className="mt-4">
-            {accountSheet === "profile" && <ProfileEditor />}
-            {accountSheet === "orders" && <MyOrders />}
-            {accountSheet === "tracker" && <OrderTracker />}
-            {accountSheet === "wishlist" && <WishlistSection />}
-            {accountSheet === "addresses" && <AddressBook />}
-          </div>
-        </SheetContent>
-      </Sheet>
     </motion.nav>
   );
 };
@@ -645,27 +615,47 @@ const DrawerSection = ({
   );
 };
 
-interface ItemProps {
+interface CollapsibleProps {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   badge?: number;
-  onClick: () => void;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
 }
-const DrawerButton = ({ icon: Icon, label, badge, onClick }: ItemProps) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors text-left"
-  >
-    <Icon className="w-4 h-4 text-muted-foreground" />
-    <span className="flex-1">{label}</span>
-    {badge ? (
-      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
-        {badge}
-      </span>
-    ) : null}
-    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-  </button>
+// Drawer row that expands inline to render its account view directly
+// inside the drawer (no slide-over, no separate page). The chevron
+// flips down when open.
+const DrawerCollapsible = ({
+  icon: Icon,
+  label,
+  badge,
+  open,
+  onToggle,
+  children,
+}: CollapsibleProps) => (
+  <>
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors text-left"
+    >
+      <Icon className="w-4 h-4 text-muted-foreground" />
+      <span className="flex-1">{label}</span>
+      {badge ? (
+        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+          {badge}
+        </span>
+      ) : null}
+      <ChevronDown
+        className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
+          open ? "rotate-0" : "-rotate-90"
+        }`}
+      />
+    </button>
+    {open ? <div className="px-3 pb-3">{children}</div> : null}
+  </>
 );
 
 export default GalleryNav;

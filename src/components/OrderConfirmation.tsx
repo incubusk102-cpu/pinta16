@@ -9,7 +9,6 @@ import {
   Copy,
   Bell,
   Star,
-  X,
 } from "lucide-react";
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
 import { buildTrackingUrl } from "@/lib/shipment";
@@ -40,8 +39,8 @@ const OrderConfirmation = () => {
     }
   }, [lastOrder]);
 
-  // Close on Escape key — defends against the X tap being missed on
-  // small touch targets and gives keyboard users a way out.
+  // Close on Escape key — gives keyboard users a way out without
+  // having to scroll to the bottom Close button.
   useEffect(() => {
     if (!showConfirmation) return;
     const onKey = (e: KeyboardEvent) => {
@@ -82,20 +81,6 @@ const OrderConfirmation = () => {
             onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border/20 rounded-sm max-w-lg w-full relative max-h-[90vh] flex flex-col"
           >
-            {/* Persistent top-right close — always visible regardless of
-                  scroll position. Lives outside the scrollable content area
-                  so the touch target never moves and never gets eaten by
-                  the scroll-gesture detector mid-scroll on mobile. Large
-                  44x44 hit area + touch-manipulation removes the historic
-                  300ms tap delay on Android Chrome. */}
-            <button
-              type="button"
-              onClick={closeConfirmation}
-              aria-label="Close order confirmation"
-              className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-11 h-11 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/40 active:bg-muted/60 transition-colors touch-manipulation"
-            >
-              <X className="w-5 h-5" />
-            </button>
             <div className="flex-1 overflow-y-auto p-8">
               <div className="text-center mb-8">
                 <motion.div
