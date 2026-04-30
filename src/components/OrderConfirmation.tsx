@@ -73,6 +73,20 @@ const OrderConfirmation = () => {
           onClick={() => setShowConfirmation(false)}
           className="fixed inset-0 z-[200] bg-background/90 backdrop-blur-xl flex items-center justify-center p-4"
         >
+          {/* X lives OUTSIDE the scrolling card so it can never be scrolled
+              away or covered by inner content; sits above everything at
+              z-[210]. Tap area is intentionally large for thumb reach. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowConfirmation(false);
+            }}
+            aria-label="Close order details"
+            className="fixed top-3 right-3 z-[210] p-3 rounded-full bg-card/80 hover:bg-card text-foreground shadow-md backdrop-blur-sm touch-manipulation"
+          >
+            <X className="w-5 h-5" />
+          </button>
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -80,14 +94,6 @@ const OrderConfirmation = () => {
             onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border/20 rounded-sm max-w-lg w-full p-8 relative max-h-[90vh] overflow-y-auto"
           >
-            <button
-              type="button"
-              onClick={() => setShowConfirmation(false)}
-              aria-label="Close order details"
-              className="absolute top-2 right-2 z-10 p-3 -m-1 rounded-sm text-foreground hover:bg-accent transition-colors touch-manipulation"
-            >
-              <X className="w-5 h-5" />
-            </button>
 
             <div className="text-center mb-8">
               <motion.div
@@ -375,6 +381,14 @@ const OrderConfirmation = () => {
               <p className="font-body text-[10px] text-center text-muted-foreground">
                 Save your Order ID to check the status anytime
               </p>
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmation(false)}
+                className="w-full py-3 rounded-md border border-border/60 bg-foreground text-background font-body text-sm hover:opacity-90 transition-opacity touch-manipulation"
+              >
+                Close
+              </button>
             </div>
           </motion.div>
         </motion.div>
