@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle,
-  X,
   Package,
   Clock,
   Truck,
@@ -73,20 +72,6 @@ const OrderConfirmation = () => {
           onClick={() => setShowConfirmation(false)}
           className="fixed inset-0 z-[200] bg-background/90 backdrop-blur-xl flex items-center justify-center p-4"
         >
-          {/* X lives OUTSIDE the scrolling card so it can never be scrolled
-              away or covered by inner content; sits above everything at
-              z-[210]. Tap area is intentionally large for thumb reach. */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowConfirmation(false);
-            }}
-            aria-label="Close order details"
-            className="fixed top-3 right-3 z-[210] p-3 rounded-full bg-card/80 hover:bg-card text-foreground shadow-md backdrop-blur-sm touch-manipulation"
-          >
-            <X className="w-5 h-5" />
-          </button>
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
