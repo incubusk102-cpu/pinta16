@@ -383,7 +383,7 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
   const logoHtml =
     showLogo && isSafeUrl(welcome.logoUrl)
       ? `<img src="${welcome.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
-      : `<div style="font-family:'Playfair Display',Georgia,serif;font-size:22px;letter-spacing:0.02em;color:${primary};">${fromName}</div>`;
+      : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
   const bannerHtml =
     showBanner && isSafeUrl(welcome.bannerUrl)
       ? `<tr><td style="padding:0;"><img src="${welcome.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
@@ -395,6 +395,9 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${fromName}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body style="margin:0;padding:24px;background:#f5f3ee;font-family:Inter,Helvetica,Arial,sans-serif;color:#1c1c1c;">
   <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;overflow:hidden;">
@@ -411,7 +414,7 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
     </tr>
     <tr>
       <td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">
-        ${fromName} &mdash; original Filipino paintings.
+        <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> &mdash; original Filipino paintings.
       </td>
     </tr>
   </table>
@@ -498,7 +501,7 @@ const buildProductsHtml = (welcome, products) => {
     rows.push(`<tr>${renderCell(list[i])}${renderCell(list[i + 1])}</tr>`);
   }
   return `
-    <h3 style="margin:32px 0 12px;font-family:Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
+    <h3 style="margin:32px 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
     <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;">
       ${rows.join("")}
     </table>
@@ -535,7 +538,7 @@ const buildDiscountHtml = (welcome, discount) => {
     <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;margin:24px 0;">
       <tr>
         <td style="background:${primary};padding:18px 20px;border-radius:6px;color:#ffffff;text-align:center;">
-          <div style="font-family:Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
+          <div style="font-family:'Playfair Display',Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
           ${description ? `<div style="margin-top:4px;font-size:13px;opacity:0.92;">${description}</div>` : ""}
           <div style="margin-top:12px;display:inline-block;padding:8px 14px;border:1px dashed rgba(255,255,255,0.55);border-radius:4px;font-family:'Courier New',monospace;font-size:18px;letter-spacing:0.18em;">${code}</div>
           ${expiryLine}

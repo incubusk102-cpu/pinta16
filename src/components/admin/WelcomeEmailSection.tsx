@@ -317,7 +317,7 @@ const productsHtmlForPreview = (
     rows.push(`<tr>${renderCell(picked[i])}${renderCell(picked[i + 1])}</tr>`);
   }
   return `
-    <h3 style="margin:32px 0 12px;font-family:Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
+    <h3 style="margin:32px 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
     <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;">
       ${rows.join("")}
     </table>
@@ -346,7 +346,7 @@ const discountHtmlForPreview = (
     <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;margin:24px 0;">
       <tr>
         <td style="background:${primary};padding:18px 20px;border-radius:6px;color:#ffffff;text-align:center;">
-          <div style="font-family:Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
+          <div style="font-family:'Playfair Display',Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
           ${description ? `<div style="margin-top:4px;font-size:13px;opacity:0.92;">${description}</div>` : ""}
           <div style="margin-top:12px;display:inline-block;padding:8px 14px;border:1px dashed rgba(255,255,255,0.55);border-radius:4px;font-family:'Courier New',monospace;font-size:18px;letter-spacing:0.18em;">${code}</div>
           ${expiryLine}
@@ -405,7 +405,7 @@ const renderPreviewHtml = (
 
   const logoBlock = showLogo
     ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
-    : `<div style="font-family:Georgia,serif;font-size:22px;letter-spacing:0.02em;color:${primary};">${fromName}</div>`;
+    : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
 
   const bannerBlock = showBanner
     ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
@@ -413,7 +413,11 @@ const renderPreviewHtml = (
 
   return `
 <!doctype html>
-<html><body style="margin:0;padding:24px;background:#f5f3ee;font-family:Helvetica,Arial,sans-serif;color:${primary};">
+<html><head>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
+</head><body style="margin:0;padding:24px;background:#f5f3ee;font-family:Helvetica,Arial,sans-serif;color:${primary};">
   <div style="max-width:560px;margin:0 auto;font-size:11px;color:${accent};margin-bottom:8px;">
     <strong>Subject:</strong> ${escapeHtml(subject)}
   </div>
@@ -427,7 +431,7 @@ const renderPreviewHtml = (
       ${ctaHtml}
       ${signatureHtml}
     </td></tr>
-    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">${fromName} &mdash; original Filipino paintings.</td></tr>
+    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};"><span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> &mdash; original Filipino paintings.</td></tr>
   </table>
 </body></html>`;
 };
