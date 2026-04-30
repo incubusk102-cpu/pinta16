@@ -15,7 +15,6 @@ import { toast } from "sonner";
 import GalleryNav from "@/components/GalleryNav";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
-import OrderConfirmation from "@/components/OrderConfirmation";
 import RelatedProducts from "@/components/RelatedProducts";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import ZoomableImage from "@/components/ZoomableImage";
@@ -602,7 +601,6 @@ function ProductPage() {
 
       <CartDrawer />
       <CheckoutForm />
-      <OrderConfirmation />
     </div>
   );
 }
