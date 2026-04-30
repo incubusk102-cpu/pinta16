@@ -45,10 +45,14 @@ function HeroOrFallback() {
 
 function Index() {
   const { user } = useUserAuth();
+  // Hero shows only to signed-out visitors so first-time visitors get the
+  // Canvas Hub welcome and a reason to register. Once a customer is signed
+  // in there's no need for the welcome — drop straight into the collection
+  // so they can focus on picking artwork.
   return (
     <div className="smooth-scroll">
       {user && <GalleryNav />}
-      <HeroOrFallback />
+      {!user && <HeroOrFallback />}
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
         <RecentlyViewed />
