@@ -370,6 +370,26 @@ const isSafeUrl = (value) =>
   typeof value === "string" &&
   /^(https?:\/\/|mailto:|data:image\/)/i.test(value.trim());
 
+/**
+ * Render the default Canvas Hub brand mark + wordmark when no custom logo
+ * has been uploaded. Mirrors the site's nav treatment: italic EB Garamond
+ * "C" rendered as inline SVG (so the glyph is identical even when the
+ * recipient's mail client doesn't load Google Fonts) followed by the
+ * "Canvas Hub" wordmark in the same gold. Uses a table for layout because
+ * inline-flex is not reliable across older mail clients (Outlook, etc.).
+ */
+const defaultBrandLogoHtml = (fromName) => `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+    <tr>
+      <td valign="middle" style="padding:0 10px 0 0;line-height:0;">
+        <svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas Hub">
+          <text x="20" y="30" text-anchor="middle" font-family="'EB Garamond', Georgia, 'Playfair Display', serif" font-size="34" font-style="italic" font-weight="500" fill="#c4a86a">C</text>
+        </svg>
+      </td>
+      <td valign="middle" style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:24px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</td>
+    </tr>
+  </table>`;
+
 const wrapWelcomeHtml = (welcome, contentHtml) => {
   const primary = isSafeColor(welcome.primaryColor)
     ? welcome.primaryColor
@@ -383,7 +403,7 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
   const logoHtml =
     showLogo && isSafeUrl(welcome.logoUrl)
       ? `<img src="${welcome.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
-      : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
+      : defaultBrandLogoHtml(fromName);
   const bannerHtml =
     showBanner && isSafeUrl(welcome.bannerUrl)
       ? `<tr><td style="padding:0;"><img src="${welcome.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`

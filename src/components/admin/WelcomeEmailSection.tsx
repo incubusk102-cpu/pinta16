@@ -405,7 +405,17 @@ const renderPreviewHtml = (
 
   const logoBlock = showLogo
     ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
-    : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
+    : `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+        <tr>
+          <td valign="middle" style="padding:0 10px 0 0;line-height:0;">
+            <svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas Hub">
+              <text x="20" y="30" text-anchor="middle" font-family="'EB Garamond', Georgia, 'Playfair Display', serif" font-size="34" font-style="italic" font-weight="500" fill="#c4a86a">C</text>
+            </svg>
+          </td>
+          <td valign="middle" style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:24px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</td>
+        </tr>
+      </table>`;
 
   const bannerBlock = showBanner
     ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
@@ -890,7 +900,7 @@ export const WelcomeEmailSection = () => {
 
         <ImageUploader
           label="Logo"
-          description="Shown at the top of the email. Recommended ~200×48 px on a transparent or white background."
+          description="Optional. Leave empty to use the default Canvas Hub C-mark + wordmark (matches the website nav). Recommended ~200×48 px on a transparent or white background."
           value={config.logoUrl}
           show={config.showLogo}
           onShowChange={(v) => update("showLogo", v)}
