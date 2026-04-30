@@ -2384,7 +2384,7 @@ export const WelcomeEmailSection = () => {
           ) : (
             <Save className="w-4 h-4" />
           )}
-          Save welcome email
+          Save
         </Button>
       </div>
     </div>
