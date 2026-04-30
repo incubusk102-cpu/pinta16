@@ -8,7 +8,13 @@ import { setCloudflareContext } from "./_lib/context.js";
 import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
-import { isEmailConfigured, sendWelcomeEmail } from "./_lib/email.js";
+import {
+  isEmailConfigured,
+  sendWelcomeEmail,
+  sendOrderTestEmail,
+  ORDER_EMAIL_KINDS,
+  DEFAULT_ORDER_EMAIL_KINDS,
+} from "./_lib/email.js";
 import { isValidEmail, normalizeEmail } from "./_lib/user-auth.js";
 
 const CONFIG_KEY = "config";
@@ -555,6 +561,140 @@ const sanitizeWelcomeDiscount = (raw) => {
   };
 };
 
+// Order-confirmation email — sent to customers on every order lifecycle
+// transition (placed → confirmed, in_progress, out_for_delivery,
+// received) plus the three refund states. The chrome (template / fonts
+// / palette / logo / banner / footer) is shared across all 7 kinds;
+// per-kind subject + heading + intro are independently editable so
+// admins can tune voice per stage.
+//
+// The transport "purpose" is wired separately via #161 — sendOrderEmail
+// passes purpose: "order" so the renderer prefers EMAIL_FROM_ORDER /
+// EMAIL_REPLY_TO_ORDER when those env vars are set.
+const DEFAULT_ORDER_EMAIL = {
+  enabled: true,
+  fromName: "Canvas Hub",
+  fromEmail: "order@canvhub.com",
+  replyTo: "order@canvhub.com",
+  primaryColor: "#1c1c1c",
+  accentColor: "#7a7468",
+  logoUrl: "",
+  bannerUrl: "",
+  showLogo: true,
+  showBanner: false,
+  bodyFont: "inter",
+  template: "classic",
+  headerAlign: "left",
+  dividerStyle: "line",
+  buttonStyle: "filled",
+  footerTagline: "original Filipino paintings",
+  footerLinks: [],
+  trackButtonText: "Track shipment",
+  reviewButtonText: "Write a review",
+  // Per-kind overrides (subject / heading / intro). Each kind can be
+  // muted independently via its `enabled` flag without disabling the
+  // whole channel.
+  kinds: Object.fromEntries(
+    ORDER_EMAIL_KINDS.map((k) => [
+      k,
+      { enabled: true, ...DEFAULT_ORDER_EMAIL_KINDS[k] },
+    ]),
+  ),
+};
+
+const ORDER_EMAIL_SUBJECT_MAX = 200;
+const ORDER_EMAIL_HEADING_MAX = 200;
+const ORDER_EMAIL_INTRO_MAX = 4000;
+const ORDER_EMAIL_FIELD_MAX = WELCOME_EMAIL_FIELD_MAX;
+
+const sanitizeOrderEmailKind = (raw, key) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const def = DEFAULT_ORDER_EMAIL_KINDS[key];
+  return {
+    enabled: data.enabled !== false,
+    subject: sanitizeWelcomeEmailString(
+      data.subject,
+      def.subject,
+      ORDER_EMAIL_SUBJECT_MAX,
+    ),
+    heading: sanitizeWelcomeEmailString(
+      data.heading,
+      def.heading,
+      ORDER_EMAIL_HEADING_MAX,
+    ),
+    intro: sanitizeWelcomeEmailString(
+      data.intro,
+      def.intro,
+      ORDER_EMAIL_INTRO_MAX,
+    ),
+  };
+};
+
+const sanitizeOrderEmailKinds = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return Object.fromEntries(
+    ORDER_EMAIL_KINDS.map((k) => [k, sanitizeOrderEmailKind(data[k], k)]),
+  );
+};
+
+const sanitizeOrderEmail = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    enabled: data.enabled !== false,
+    fromName: sanitizeWelcomeEmailString(
+      data.fromName,
+      DEFAULT_ORDER_EMAIL.fromName,
+      ORDER_EMAIL_FIELD_MAX,
+    ),
+    fromEmail: sanitizeWelcomeEmailString(
+      data.fromEmail,
+      DEFAULT_ORDER_EMAIL.fromEmail,
+      ORDER_EMAIL_FIELD_MAX,
+    ),
+    replyTo: sanitizeWelcomeEmailString(
+      data.replyTo,
+      DEFAULT_ORDER_EMAIL.replyTo,
+      ORDER_EMAIL_FIELD_MAX,
+    ),
+    primaryColor: sanitizeWelcomeEmailString(
+      data.primaryColor,
+      DEFAULT_ORDER_EMAIL.primaryColor,
+      30,
+    ),
+    accentColor: sanitizeWelcomeEmailString(
+      data.accentColor,
+      DEFAULT_ORDER_EMAIL.accentColor,
+      30,
+    ),
+    logoUrl: sanitizeWelcomeEmailImage(data.logoUrl),
+    bannerUrl: sanitizeWelcomeEmailImage(data.bannerUrl),
+    showLogo: data.showLogo !== false,
+    showBanner: Boolean(data.showBanner),
+    bodyFont: sanitizeBodyFont(data.bodyFont),
+    template: sanitizeWelcomeTemplate(data.template),
+    headerAlign: sanitizeHeaderAlign(data.headerAlign),
+    dividerStyle: sanitizeDividerStyle(data.dividerStyle),
+    buttonStyle: sanitizeButtonStyle(data.buttonStyle),
+    footerTagline: sanitizeWelcomeEmailString(
+      data.footerTagline,
+      DEFAULT_ORDER_EMAIL.footerTagline,
+      ORDER_EMAIL_FIELD_MAX,
+    ),
+    footerLinks: sanitizeFooterLinks(data.footerLinks),
+    trackButtonText: sanitizeWelcomeEmailString(
+      data.trackButtonText,
+      DEFAULT_ORDER_EMAIL.trackButtonText,
+      80,
+    ),
+    reviewButtonText: sanitizeWelcomeEmailString(
+      data.reviewButtonText,
+      DEFAULT_ORDER_EMAIL.reviewButtonText,
+      80,
+    ),
+    kinds: sanitizeOrderEmailKinds(data.kinds),
+  };
+};
+
 const sanitizeSiteCopy = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
   return {
@@ -642,6 +782,7 @@ const DEFAULT_CONFIG = {
   },
   siteCopy: SITE_COPY_DEFAULTS,
   welcomeEmail: DEFAULT_WELCOME_EMAIL,
+  orderEmail: DEFAULT_ORDER_EMAIL,
 };
 
 const sanitizeConfig = (raw) => {
@@ -724,6 +865,7 @@ const sanitizeConfig = (raw) => {
     },
     siteCopy: sanitizeSiteCopy(data.siteCopy),
     welcomeEmail: sanitizeWelcomeEmail(data.welcomeEmail),
+    orderEmail: sanitizeOrderEmail(data.orderEmail),
     promoCodes: promoCodes
       .map((p) => {
         if (!p || typeof p !== "object") return null;
@@ -924,6 +1066,79 @@ const handle = async ({ request, env }) => {
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });
+      }
+
+      if (action === "update-order-email") {
+        const incoming =
+          body.orderEmail && typeof body.orderEmail === "object"
+            ? body.orderEmail
+            : {};
+        // Deep-merge the kinds map so a partial update (e.g. "just the
+        // refund_failed intro") doesn't reset the other six kinds back to
+        // their hard-coded defaults.
+        const mergedKinds = { ...(existing.orderEmail.kinds || {}) };
+        if (incoming.kinds && typeof incoming.kinds === "object") {
+          for (const [k, v] of Object.entries(incoming.kinds)) {
+            mergedKinds[k] = {
+              ...(existing.orderEmail.kinds?.[k] || {}),
+              ...(v && typeof v === "object" ? v : {}),
+            };
+          }
+        }
+        const next = sanitizeConfig({
+          ...existing,
+          orderEmail: {
+            ...existing.orderEmail,
+            ...incoming,
+            kinds: mergedKinds,
+          },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "send-order-test") {
+        if (!isEmailConfigured("order")) {
+          return json(400, {
+            error:
+              "Email transport not configured. Set RESEND_API_KEY (or BREVO_API_KEY) and EMAIL_FROM_ORDER (or EMAIL_FROM) in Cloudflare Pages env vars.",
+          });
+        }
+        const to = normalizeEmail(body.to);
+        if (!isValidEmail(to)) {
+          return json(400, { error: "Enter a valid recipient email" });
+        }
+        const kind = ORDER_EMAIL_KINDS.includes(body.kind)
+          ? body.kind
+          : "confirmed";
+        // Use the draft orderEmail from the body when provided, otherwise
+        // the currently-saved one. Always force-enable for a test send.
+        const draft =
+          body.orderEmail && typeof body.orderEmail === "object"
+            ? sanitizeOrderEmail({
+                ...existing.orderEmail,
+                ...body.orderEmail,
+                kinds: {
+                  ...existing.orderEmail.kinds,
+                  ...(body.orderEmail.kinds || {}),
+                },
+              })
+            : existing.orderEmail;
+        const result = await sendOrderTestEmail({
+          kind,
+          to,
+          name: String(body.name || "Test collector").slice(0, 80),
+          orderEmail: draft,
+        });
+        if (result?.delivered) {
+          return json(200, { ok: true, result });
+        }
+        return json(500, {
+          error:
+            result?.error ||
+            result?.reason ||
+            "Could not send test email. Check the Cloudflare logs.",
+        });
       }
 
       if (action === "update-site-copy") {
