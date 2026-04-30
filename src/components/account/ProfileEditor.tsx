@@ -329,9 +329,9 @@ export default function ProfileEditor() {
           (showDisconnect ? (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-3">
               <p className="text-xs text-foreground/85 leading-relaxed">
-                Disconnecting Google removes your account. Your saved
-                addresses, wishlist, and order history attached to this
-                profile will be deleted. To continue, type{" "}
+                Disconnecting Google removes your account. Your saved addresses,
+                wishlist, and order history attached to this profile will be
+                deleted. To continue, type{" "}
                 <span className="font-mono font-semibold">CONFIRM</span> below.
               </p>
               <Input

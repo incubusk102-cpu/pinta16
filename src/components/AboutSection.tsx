@@ -1,6 +1,9 @@
 import { motion } from "framer-motion";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 const AboutSection = () => {
+  const { config } = useStorefrontConfig();
+  const { eyebrow, title, body } = config.siteCopy.about;
   return (
     <section
       id="about"
@@ -13,16 +16,13 @@ const AboutSection = () => {
         transition={{ duration: 0.8 }}
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-          Our Story
+          {eyebrow}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant mb-8">
-          About Canvas Hub
+          {title}
         </h2>
-        <p className="font-body text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-          Every painting has a soul — a story waiting to be told. We bring
-          affordable, hand-crafted art to homes and spaces that deserve beauty.
-          Each piece is made to order, ensuring that what you receive is as
-          unique as your vision.
+        <p className="font-body text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto whitespace-pre-line">
+          {body}
         </p>
       </motion.div>
     </section>

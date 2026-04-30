@@ -126,9 +126,7 @@ export default function PwaPrompts() {
           <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[999] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
             <Download className="w-4 h-4 text-foreground mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">
-                Install Canvas Hub
-              </p>
+              <p className="text-sm font-medium text-foreground">Install app</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Add to your home screen for one-tap access and offline browsing
                 of saved paintings.

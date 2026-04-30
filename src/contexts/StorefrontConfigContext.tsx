@@ -69,11 +69,54 @@ export interface ChatConfig {
   faqs: ChatFaqItem[];
 }
 
+// Section-level copy that the admin can override from /admin → Site copy.
+// Default values match the strings hard-coded in the React components so
+// the storefront falls back gracefully when the admin hasn't customised
+// anything yet.
+export interface SiteCopySectionTwo {
+  eyebrow: string;
+  title: string;
+}
+
+export interface SiteCopyAbout {
+  eyebrow: string;
+  title: string;
+  body: string;
+}
+
+export interface SiteCopy {
+  gallery: SiteCopySectionTwo;
+  about: SiteCopyAbout;
+  reviews: SiteCopySectionTwo;
+  contact: SiteCopySectionTwo;
+}
+
+export const DEFAULT_SITE_COPY: SiteCopy = {
+  gallery: {
+    eyebrow: "The Collection",
+    title: "Our Collection",
+  },
+  about: {
+    eyebrow: "Our Story",
+    title: "About Canvas Hub",
+    body: "Every painting has a soul — a story waiting to be told. We bring affordable, hand-crafted art to homes and spaces that deserve beauty. Each piece is made to order, ensuring that what you receive is as unique as your vision.",
+  },
+  reviews: {
+    eyebrow: "What customers say",
+    title: "Reviews from our collectors",
+  },
+  contact: {
+    eyebrow: "Get in touch",
+    title: "Contact us",
+  },
+};
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
   promoCodes: PromoCodePublic[];
   chat: ChatConfig;
+  siteCopy: SiteCopy;
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -110,6 +153,22 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     agentHandoff: true,
     faqs: DEFAULT_CHAT_FAQS,
   },
+  siteCopy: DEFAULT_SITE_COPY,
+};
+
+const mergeSiteCopy = (raw: unknown): SiteCopy => {
+  const data = (raw && typeof raw === "object" ? raw : {}) as Partial<{
+    gallery: Partial<SiteCopySectionTwo>;
+    about: Partial<SiteCopyAbout>;
+    reviews: Partial<SiteCopySectionTwo>;
+    contact: Partial<SiteCopySectionTwo>;
+  }>;
+  return {
+    gallery: { ...DEFAULT_SITE_COPY.gallery, ...(data.gallery ?? {}) },
+    about: { ...DEFAULT_SITE_COPY.about, ...(data.about ?? {}) },
+    reviews: { ...DEFAULT_SITE_COPY.reviews, ...(data.reviews ?? {}) },
+    contact: { ...DEFAULT_SITE_COPY.contact, ...(data.contact ?? {}) },
+  };
 };
 
 interface ContextType {
@@ -165,6 +224,7 @@ export const StorefrontConfigProvider = ({
             agentHandoff: rawChat.agentHandoff !== false,
             faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
           },
+          siteCopy: mergeSiteCopy(data.config.siteCopy),
         });
       }
     } catch {

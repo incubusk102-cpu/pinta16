@@ -2,9 +2,12 @@ import { motion } from "framer-motion";
 import { Mail, Phone, MapPin } from "lucide-react";
 import NewsletterForm from "@/components/NewsletterForm";
 import { useLocale } from "@/contexts/LocaleContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 const ContactSection = () => {
   const { t } = useLocale();
+  const { config } = useStorefrontConfig();
+  const contactCopy = config.siteCopy.contact;
   return (
     <section
       id="contact"
@@ -18,10 +21,10 @@ const ContactSection = () => {
         className="text-center mb-12"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-          {t("contact.title")}
+          {contactCopy.eyebrow}
         </p>
         <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
-          {t("contact.heading")}
+          {contactCopy.title}
         </h2>
       </motion.div>
       <motion.div
