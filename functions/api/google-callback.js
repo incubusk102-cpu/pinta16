@@ -13,6 +13,7 @@ import {
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
+import { loadWelcomeEmailConfig, sendWelcomeEmail } from "./_lib/email.js";
 
 // Google Identity Services in `ux_mode: "redirect"` form-POSTs the credential
 // to this endpoint. We verify it server-side, create/update the user, issue a
@@ -123,6 +124,7 @@ export const handler = async (event) => {
     const now = new Date().toISOString();
     const users = await readUsers(store);
     let user = users[email];
+    let isNewUser = false;
 
     if (user) {
       user.lastSeenAt = now;
@@ -133,6 +135,7 @@ export const handler = async (event) => {
         user.picture = String(googlePayload.picture).slice(0, 2000);
       }
     } else {
+      isNewUser = true;
       user = {
         id: crypto.randomUUID(),
         email,
@@ -156,6 +159,26 @@ export const handler = async (event) => {
       detail: "Google ID token verified (redirect flow)",
       ...captureRequestMeta(event),
     });
+
+    if (isNewUser) {
+      try {
+        const welcome = await loadWelcomeEmailConfig();
+        if (welcome && welcome.enabled !== false) {
+          const result = await sendWelcomeEmail({ welcome, user });
+          await appendAuditEvent(event, {
+            type: "user.welcome-email",
+            outcome: result?.delivered ? "success" : "skipped",
+            subject: email,
+            detail: result?.delivered
+              ? `Welcome email sent via ${result.provider} (google-callback)`
+              : `Welcome email skipped: ${result?.reason || result?.error || "unknown"} (google-callback)`,
+            ...captureRequestMeta(event),
+          });
+        }
+      } catch {
+        /* never block sign-in on welcome-email failures */
+      }
+    }
 
     const payload = { token, user: publicUser(user) };
     const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
