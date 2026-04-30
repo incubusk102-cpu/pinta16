@@ -4,12 +4,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  type AddressInput,
+  type AddressInput as AddressInputType,
   type SavedAddress,
   useUserAuth,
 } from "@/contexts/UserAuthContext";
+import { AddressInput, type AddressValue } from "@/components/AddressInput";
 
-const EMPTY: AddressInput = {
+const EMPTY: AddressInputType = {
   label: "",
   fullName: "",
   phone: "",
@@ -19,9 +20,12 @@ const EMPTY: AddressInput = {
   province: "",
   postalCode: "",
   country: "Philippines",
+  latitude: null,
+  longitude: null,
+  formatted: "",
 };
 
-const toInput = (a: SavedAddress): AddressInput => ({
+const toInput = (a: SavedAddress): AddressInputType => ({
   label: a.label || "",
   fullName: a.fullName || "",
   phone: a.phone || "",
@@ -31,13 +35,17 @@ const toInput = (a: SavedAddress): AddressInput => ({
   province: a.province || "",
   postalCode: a.postalCode || "",
   country: a.country || "Philippines",
+  latitude: a.latitude ?? null,
+  longitude: a.longitude ?? null,
+  formatted: a.formatted || "",
+  placeId: a.placeId,
 });
 
 export default function AddressBook() {
   const { user, addAddress, updateAddress, removeAddress, setDefaultAddress } =
     useUserAuth();
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
-  const [form, setForm] = useState<AddressInput>(EMPTY);
+  const [form, setForm] = useState<AddressInputType>(EMPTY);
   const [busy, setBusy] = useState(false);
 
   if (!user) return null;
@@ -58,10 +66,20 @@ export default function AddressBook() {
     setForm(EMPTY);
   };
 
-  const onChange =
-    (key: keyof AddressInput) =>
-    (e: React.ChangeEvent<HTMLInputElement>): void =>
-      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const onAddressChange = (next: AddressValue): void =>
+    setForm((prev) => ({
+      ...prev,
+      line1: next.line1,
+      line2: next.line2 || "",
+      city: next.city,
+      province: next.province || "",
+      postalCode: next.postalCode || "",
+      country: next.country || prev.country || "Philippines",
+      latitude: next.latitude ?? null,
+      longitude: next.longitude ?? null,
+      formatted: next.formatted,
+      placeId: next.placeId,
+    }));
 
   const submit = async () => {
     if (!form.fullName.trim() || !form.line1.trim() || !form.city.trim()) {
@@ -108,6 +126,19 @@ export default function AddressBook() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const addressValue: AddressValue = {
+    line1: form.line1,
+    line2: form.line2,
+    city: form.city,
+    province: form.province,
+    postalCode: form.postalCode,
+    country: form.country,
+    latitude: form.latitude ?? null,
+    longitude: form.longitude ?? null,
+    formatted: form.formatted,
+    placeId: form.placeId,
   };
 
   return (
@@ -199,63 +230,34 @@ export default function AddressBook() {
       )}
 
       {editingId != null && (
-        <div className="border border-border/40 rounded-lg p-4 space-y-2">
+        <div className="border border-border/40 rounded-lg p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Input
               placeholder="Label (Home, Studio…)"
               value={form.label}
-              onChange={onChange("label")}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, label: e.target.value }))
+              }
               className="text-sm"
             />
             <Input
               placeholder="Recipient name *"
               value={form.fullName}
-              onChange={onChange("fullName")}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, fullName: e.target.value }))
+              }
               className="text-sm"
             />
             <Input
               placeholder="Phone"
               value={form.phone}
-              onChange={onChange("phone")}
-              className="text-sm"
-            />
-            <Input
-              placeholder="Country"
-              value={form.country}
-              onChange={onChange("country")}
-              className="text-sm"
-            />
-            <Input
-              placeholder="Street, building, unit *"
-              value={form.line1}
-              onChange={onChange("line1")}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, phone: e.target.value }))
+              }
               className="text-sm sm:col-span-2"
-            />
-            <Input
-              placeholder="Apt / suite / barangay"
-              value={form.line2}
-              onChange={onChange("line2")}
-              className="text-sm sm:col-span-2"
-            />
-            <Input
-              placeholder="City *"
-              value={form.city}
-              onChange={onChange("city")}
-              className="text-sm"
-            />
-            <Input
-              placeholder="Province / State"
-              value={form.province}
-              onChange={onChange("province")}
-              className="text-sm"
-            />
-            <Input
-              placeholder="Postal code"
-              value={form.postalCode}
-              onChange={onChange("postalCode")}
-              className="text-sm"
             />
           </div>
+          <AddressInput value={addressValue} onChange={onAddressChange} />
           <div className="flex justify-end gap-2 pt-1">
             <Button size="sm" variant="ghost" onClick={cancel} disabled={busy}>
               Cancel
