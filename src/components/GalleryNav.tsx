@@ -301,6 +301,42 @@ const GalleryNav = () => {
             </div>
           ) : (
             <>
+              {/* Profile card — pinned to the top of the drawer so the
+                    visitor's identity is the first thing they see.
+                    Signed-in users get a display-only card (tapping it
+                    doesn't navigate; the My account rows below open
+                    inline slide-over sheets). Signed-out non-homepage
+                    visitors get the Google sign-in button instead. */}
+              <div className="px-5 pt-3 pb-3 border-b border-border/30">
+                {user ? (
+                  <div className="flex items-center gap-3">
+                    {user.picture ? (
+                      <img
+                        src={user.picture}
+                        alt=""
+                        className="w-9 h-9 rounded-full object-cover border border-border/40"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
+                        <UserCircle className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {user.name || t("nav.account")}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {user.email}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <GoogleNavSignIn active={menuOpen} />
+                  </div>
+                )}
+              </div>
+
               {/* Primary nav — Reviews, My orders (signed-in), and Cart.
                     Row-style (icon · label · chevron) to match the
                     Policies section below, instead of boxed tiles. */}
@@ -352,44 +388,43 @@ const GalleryNav = () => {
                 </button>
               </div>
 
-              {/* Account / sign-in (compact, below primary nav).
-                    Signed-in visitors see a display-only profile card
-                    — NOT a link to /account — because the drawer's
-                    MY ACCOUNT items below already open every account
-                    view inline via slide-over sheets. Tapping the card
-                    doesn't navigate anywhere. */}
-              <div className="px-5 pt-3 pb-3 border-b border-border/30">
-                {user ? (
-                  <div className="flex items-center gap-3">
-                    {user.picture ? (
-                      <img
-                        src={user.picture}
-                        alt=""
-                        className="w-9 h-9 rounded-full object-cover border border-border/40"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
-                        <UserCircle className="w-5 h-5" />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {user.name || t("nav.account")}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {user.email}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-center">
-                    <GoogleNavSignIn active={menuOpen} />
-                  </div>
-                )}
-              </div>
+              {/* My account — Profile, Track order, Wishlist, Saved
+                    addresses. Each row opens its account view inline as
+                    a slide-over sheet (so the visitor never leaves the
+                    page they were browsing). My orders sits in the
+                    primary nav above, so it isn't repeated here. */}
+              {user && (
+                <DrawerSection
+                  label="My account"
+                  storageKey="account"
+                  defaultOpen={true}
+                >
+                  <DrawerButton
+                    icon={UserCircle}
+                    label="Profile"
+                    onClick={() => openAccountSheet("profile")}
+                  />
+                  <DrawerButton
+                    icon={Truck}
+                    label="Track order"
+                    onClick={() => openAccountSheet("tracker")}
+                  />
+                  <DrawerButton
+                    icon={Heart}
+                    label="Wishlist"
+                    badge={wishlistCount || undefined}
+                    onClick={() => openAccountSheet("wishlist")}
+                  />
+                  <DrawerButton
+                    icon={MapPin}
+                    label="Saved addresses"
+                    onClick={() => openAccountSheet("addresses")}
+                  />
+                </DrawerSection>
+              )}
 
-              {/* Sign out — replaces the prior "My account" sub-section.
-                    My orders is now in the primary nav above. */}
+              {/* Sign out — compact button between My account and
+                    Policies so signed-in users always have an exit. */}
               {user && (
                 <div className="px-5 pt-3 pb-3 border-b border-border/30">
                   <button
