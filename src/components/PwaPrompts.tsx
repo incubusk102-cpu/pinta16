@@ -6,6 +6,7 @@ import {
   onPwaEvent,
   triggerInstallPrompt,
 } from "@/lib/pwa";
+import { useCart } from "@/contexts/CartContext";
 
 const INSTALL_DISMISSED_KEY = "canvhub:pwa:install-dismissed-at";
 const INSTALL_DISMISS_DAYS = 14;
@@ -32,6 +33,7 @@ export default function PwaPrompts() {
   const [dismissedInstall, setDismissedInstall] = useState(
     () => wasRecentlyDismissed() || isStandalone(),
   );
+  const { showConfirmation } = useCart();
 
   useEffect(() => {
     const off = onPwaEvent((e) => {
@@ -78,7 +80,7 @@ export default function PwaPrompts() {
   return (
     <>
       {/* Offline indicator */}
-      {offline && (
+      {offline && !showConfirmation && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-foreground text-background text-xs shadow-md">
           <WifiOff className="w-3.5 h-3.5" />
           You&apos;re offline · cached pages and saved cart still work
@@ -86,7 +88,7 @@ export default function PwaPrompts() {
       )}
 
       {/* Update banner */}
-      {updateAvailable && (
+      {updateAvailable && !showConfirmation && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
           <RefreshCw className="w-4 h-4 text-foreground mt-0.5" />
           <div className="flex-1 min-w-0">
@@ -117,45 +119,48 @@ export default function PwaPrompts() {
       )}
 
       {/* Install prompt */}
-      {installAvailable && !dismissedInstall && !updateAvailable && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[999] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
-          <Download className="w-4 h-4 text-foreground mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Install Canvas Hub
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Add to your home screen for one-tap access and offline browsing of
-              saved paintings.
-            </p>
-            <div className="flex gap-2 mt-2">
-              <button
-                type="button"
-                disabled={installing}
-                onClick={() => void handleInstall()}
-                className="text-xs px-3 py-1.5 rounded bg-foreground text-background hover:opacity-90 disabled:opacity-50"
-              >
-                {installing ? "Installing…" : "Install app"}
-              </button>
-              <button
-                type="button"
-                onClick={handleDismissInstall}
-                className="text-xs px-3 py-1.5 rounded text-muted-foreground hover:text-foreground"
-              >
-                Not now
-              </button>
+      {installAvailable &&
+        !dismissedInstall &&
+        !updateAvailable &&
+        !showConfirmation && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[999] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
+            <Download className="w-4 h-4 text-foreground mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                Install Canvas Hub
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Add to your home screen for one-tap access and offline browsing
+                of saved paintings.
+              </p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  disabled={installing}
+                  onClick={() => void handleInstall()}
+                  className="text-xs px-3 py-1.5 rounded bg-foreground text-background hover:opacity-90 disabled:opacity-50"
+                >
+                  {installing ? "Installing…" : "Install app"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissInstall}
+                  className="text-xs px-3 py-1.5 rounded text-muted-foreground hover:text-foreground"
+                >
+                  Not now
+                </button>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={handleDismissInstall}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss install prompt"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleDismissInstall}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Dismiss install prompt"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+        )}
     </>
   );
 }
