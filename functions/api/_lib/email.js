@@ -508,32 +508,59 @@ const buildAvatarHtml = (welcome) => {
     </table>`;
 };
 
+// Resolve the thumbnail src + click destination for one row of the email
+// "products" grid. Storefront products link to the public product page;
+// email-only custom uploads link to /preview/<id> on the storefront.
+const productEmailRow = (welcome, item) => {
+  const baseUrl = String(welcome.ctaUrl || "https://canvhub.com").replace(
+    /\/$/,
+    "",
+  );
+  const isCustom = item && item.__custom === true;
+  if (isCustom) {
+    const img = String(item.imageUrl || "");
+    return {
+      img,
+      title: String(item.title || "Untitled"),
+      link: `${baseUrl}/preview/${encodeURIComponent(item.id || "")}`,
+      price: Number(item.price) || 0,
+      description: String(item.description || ""),
+    };
+  }
+  const img = productThumbnailUrl(item);
+  const price =
+    item && item.salePrice && item.salePrice > 0 ? item.salePrice : item?.price;
+  return {
+    img,
+    title: String(item?.title || "Untitled"),
+    link: `${baseUrl}/product/${encodeURIComponent(item?.id || "")}`,
+    price: Number(price) || 0,
+    description: "",
+  };
+};
+
 const buildProductsHtml = (welcome, products) => {
   const cfg = welcome?.products;
   if (!cfg || cfg.enabled === false) return "";
   const list = Array.isArray(products) ? products.slice(0, cfg.count || 4) : [];
   if (list.length === 0) return "";
-  const baseUrl = String(welcome.ctaUrl || "https://canvhub.com").replace(
-    /\/$/,
-    "",
-  );
   const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
-  const renderCell = (product) => {
-    if (!product) return `<td style="width:50%;padding:6px;"></td>`;
-    const img = productThumbnailUrl(product);
-    const title = escapeHtml(String(product.title || "Untitled"));
-    const link = `${baseUrl}/product/${encodeURIComponent(product.id || "")}`;
-    const safeImg = isSafeUrl(img)
-      ? `<img src="${img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
-      : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
-    const priceLine = cfg.showPrice
-      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(
-          product.salePrice && product.salePrice > 0
-            ? product.salePrice
-            : product.price,
-        )}</div>`
+  const renderCell = (item) => {
+    if (!item) return `<td style="width:50%;padding:6px;"></td>`;
+    const row = productEmailRow(welcome, item);
+    const title = escapeHtml(row.title);
+    const safeImg =
+      row.img && (isSafeUrl(row.img) || /^data:image\//i.test(row.img))
+        ? `<img src="${row.img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
+        : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
+    const priceLine =
+      cfg.showPrice && row.price > 0
+        ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(row.price)}</div>`
+        : "";
+    const descLine = row.description
+      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;line-height:1.4;">${escapeHtml(row.description)}</div>`
       : "";
-    return `<td valign="top" style="padding:6px;width:50%;"><a href="${link}" style="text-decoration:none;color:inherit;display:block;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}</a></td>`;
+    return `<td valign="top" style="padding:6px;width:50%;"><a href="${row.link}" style="text-decoration:none;color:inherit;display:block;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</a></td>`;
   };
   const rows = [];
   for (let i = 0; i < list.length; i += 2) {
@@ -603,11 +630,11 @@ const formatProductsText = (welcome, products) => {
   const list = Array.isArray(products) ? products.slice(0, cfg.count || 4) : [];
   if (list.length === 0) return "";
   const lines = [`\n\n${cfg.sectionTitle || "A glimpse of the collection"}:`];
-  for (const product of list) {
-    const price = cfg.showPrice
-      ? ` — ${formatPHP(product.salePrice && product.salePrice > 0 ? product.salePrice : product.price)}`
-      : "";
-    lines.push(`• ${product.title || "Untitled"}${price}`);
+  for (const item of list) {
+    const row = productEmailRow(welcome, item);
+    const price =
+      cfg.showPrice && row.price > 0 ? ` — ${formatPHP(row.price)}` : "";
+    lines.push(`• ${row.title}${price}`);
   }
   return lines.join("\n");
 };
@@ -675,12 +702,21 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
  */
 export const loadWelcomeEmailProducts = async (welcomeProducts) => {
   if (!welcomeProducts || welcomeProducts.enabled === false) return [];
+  const count = Math.max(1, Math.min(8, Number(welcomeProducts.count) || 4));
+  // Custom mode is fully self-contained — items live in the welcomeEmail
+  // doc itself, so there's no KV lookup to do. Tag each row with __custom
+  // so the renderer knows to point clicks at /preview/<id>.
+  if (welcomeProducts.mode === "custom") {
+    return (welcomeProducts.customItems || [])
+      .filter((it) => it && (it.imageUrl || it.title))
+      .slice(0, count)
+      .map((it) => ({ ...it, __custom: true }));
+  }
   try {
     const store = getStore("products");
     const all = await store.get("all-products", { type: "json" });
     if (!Array.isArray(all)) return [];
     const visible = all.filter((p) => p && p.availability !== "draft");
-    const count = Math.max(1, Math.min(8, Number(welcomeProducts.count) || 4));
     if (welcomeProducts.mode === "manual") {
       const byId = new Map(visible.map((p) => [p.id, p]));
       return (welcomeProducts.manualIds || [])

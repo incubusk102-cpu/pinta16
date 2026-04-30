@@ -170,9 +170,14 @@ const DEFAULT_WELCOME_EMAIL = {
   showAvatar: false,
   products: {
     enabled: true,
-    mode: "auto", // "auto" = newest first | "manual" = explicit picks
+    // "auto"   = newest products from the storefront
+    // "manual" = explicit picks from the storefront
+    // "custom" = email-only uploads (image + title + price + description),
+    //           each links to /preview/<id> on the storefront
+    mode: "auto",
     count: 4,
     manualIds: [],
+    customItems: [],
     sectionTitle: "A glimpse of the collection",
     showPrice: true,
   },
@@ -282,9 +287,44 @@ const sanitizeWelcomeEmail = (raw) => {
   };
 };
 
+const WELCOME_CUSTOM_DESCRIPTION_MAX = 600;
+
+const sanitizeWelcomeCustomItem = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const id =
+    typeof data.id === "string" && data.id.trim()
+      ? data.id.trim().slice(0, 60)
+      : `item-${Math.random().toString(36).slice(2, 10)}`;
+  const title = sanitizeWelcomeEmailString(
+    data.title,
+    "",
+    WELCOME_EMAIL_FIELD_MAX,
+  );
+  const description = sanitizeWelcomeEmailString(
+    data.description,
+    "",
+    WELCOME_CUSTOM_DESCRIPTION_MAX,
+  );
+  const rawPrice = Number(data.price);
+  const price =
+    Number.isFinite(rawPrice) && rawPrice > 0 ? Math.round(rawPrice) : 0;
+  return {
+    id,
+    imageUrl: sanitizeWelcomeEmailImage(data.imageUrl),
+    title,
+    price,
+    description,
+  };
+};
+
 const sanitizeWelcomeProducts = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
-  const mode = data.mode === "manual" ? "manual" : "auto";
+  const mode =
+    data.mode === "manual"
+      ? "manual"
+      : data.mode === "custom"
+        ? "custom"
+        : "auto";
   const rawCount = Number(data.count);
   const count = Number.isFinite(rawCount)
     ? Math.max(1, Math.min(8, Math.round(rawCount)))
@@ -295,11 +335,20 @@ const sanitizeWelcomeProducts = (raw) => {
         .filter(Boolean)
         .slice(0, 8)
     : [];
+  const customItems = Array.isArray(data.customItems)
+    ? data.customItems
+        .map(sanitizeWelcomeCustomItem)
+        // Drop empty rows (no image AND no title) so we never render blank
+        // teaser cards in an email.
+        .filter((item) => item.imageUrl || item.title)
+        .slice(0, 8)
+    : [];
   return {
     enabled: data.enabled !== false,
     mode,
     count,
     manualIds,
+    customItems,
     sectionTitle: sanitizeWelcomeEmailString(
       data.sectionTitle,
       DEFAULT_WELCOME_EMAIL.products.sectionTitle,
@@ -565,6 +614,32 @@ const readConfig = async (store) => {
   return sanitizeConfig(raw || DEFAULT_CONFIG);
 };
 
+// Strip out everything but the bits the public /preview/<id> landing page
+// needs so we never leak the welcome email's transport config (api keys,
+// reply-to, draft body, etc.) on the public storefront-config endpoint.
+const publicWelcomePreview = (welcome) => {
+  if (!welcome || welcome.products?.mode !== "custom") {
+    return { customItems: [] };
+  }
+  const customItems = Array.isArray(welcome.products.customItems)
+    ? welcome.products.customItems.map((it) => ({
+        id: String(it.id || ""),
+        imageUrl: String(it.imageUrl || ""),
+        title: String(it.title || ""),
+        price: Number(it.price) || 0,
+        description: String(it.description || ""),
+      }))
+    : [];
+  return {
+    customItems,
+    showPrice: welcome.products.showPrice !== false,
+    ctaLabel: String(welcome.ctaLabel || "Browse the collection"),
+    ctaUrl: String(welcome.ctaUrl || ""),
+    primaryColor: String(welcome.primaryColor || "#1c1c1c"),
+    accentColor: String(welcome.accentColor || "#7a7468"),
+  };
+};
+
 const publicView = (config) => ({
   announcement: config.announcement,
   freeShipping: config.freeShipping,
@@ -585,6 +660,7 @@ const publicView = (config) => ({
       description: p.description,
     })),
   chat: config.chat,
+  welcomeEmailPreview: publicWelcomePreview(config.welcomeEmail),
 });
 
 const handle = async ({ request, env }) => {
