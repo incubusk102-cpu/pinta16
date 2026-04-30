@@ -79,7 +79,6 @@ const OrderConfirmation = () => {
             onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border/20 rounded-sm max-w-lg w-full p-8 relative max-h-[90vh] overflow-y-auto"
           >
-
             <div className="text-center mb-8">
               <motion.div
                 initial={{ scale: 0 }}
