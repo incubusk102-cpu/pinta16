@@ -12,7 +12,6 @@ import {
   Package,
   Heart,
   MapPin,
-  LogOut,
   ChevronRight,
   ChevronDown,
   FileText,
@@ -535,19 +534,9 @@ const GalleryNav = () => {
               </DrawerSection>
 
               {/* Preferences (theme + locale) live in the top navbar now,
-                    not in the drawer. */}
-
-              {user && (
-                <div className="px-5 py-4 border-t border-border/30 mt-2">
-                  <button
-                    onClick={handleLogout}
-                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 text-sm text-foreground/85 hover:bg-accent/60 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    {t("nav.signOut")}
-                  </button>
-                </div>
-              )}
+                    not in the drawer. The signed-in user's Sign out lives
+                    above Policies (compact button) — no duplicate after
+                    Privacy Policy. */}
             </>
           )}
         </div>
