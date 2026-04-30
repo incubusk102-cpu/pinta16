@@ -469,6 +469,33 @@ const productThumbnailUrl = (product) => {
   return "";
 };
 
+/**
+ * Render a small round profile photo + sender label inside the email body
+ * (above the signature) so the message feels personal even when the inbox
+ * client doesn't show the Gravatar avatar yet. Skipped entirely when the
+ * admin hasn't uploaded an avatar or has hidden it.
+ */
+const buildAvatarHtml = (welcome) => {
+  if (!welcome) return "";
+  if (welcome.showAvatar !== true) return "";
+  if (!welcome.avatarUrl || !isSafeUrl(welcome.avatarUrl)) return "";
+  const name = escapeHtml(
+    String(welcome.avatarName || welcome.fromName || "Canvas Hub team").trim(),
+  );
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:28px;">
+      <tr>
+        <td valign="middle" style="padding:0 12px 0 0;line-height:0;">
+          <img src="${welcome.avatarUrl}" alt="${name}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
+        </td>
+        <td valign="middle" style="font-size:13px;color:#1c1c1c;line-height:1.4;">
+          <div style="font-weight:500;">${name}</div>
+          <div style="color:#7a7468;font-size:12px;">${escapeHtml(String(welcome.fromEmail || "").trim())}</div>
+        </td>
+      </tr>
+    </table>`;
+};
+
 const buildProductsHtml = (welcome, products) => {
   const cfg = welcome?.products;
   if (!cfg || cfg.enabled === false) return "";
@@ -602,6 +629,8 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
     ? `<p style="margin:24px 0 0;color:#7a7468;font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
     : "";
 
+  const avatarHtml = buildAvatarHtml(welcome);
+
   const productsHtml = buildProductsHtml(welcome, context.products);
   const discountHtml = buildDiscountHtml(welcome, context.discount);
 
@@ -610,6 +639,7 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
     ${discountHtml}
     ${productsHtml}
     ${ctaButtonHtml(welcome)}
+    ${avatarHtml}
     ${signatureHtml}
   `;
 

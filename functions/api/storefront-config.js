@@ -161,10 +161,13 @@ const DEFAULT_WELCOME_EMAIL = {
   accentColor: "#7a7468",
   logoUrl: "",
   bannerUrl: "",
+  avatarUrl: "",
+  avatarName: "Canvas Hub team",
   ctaLabel: "Browse the collection",
   ctaUrl: "https://canvhub.com",
   showLogo: true,
   showBanner: false,
+  showAvatar: false,
   products: {
     enabled: true,
     mode: "auto", // "auto" = newest first | "manual" = explicit picks
@@ -255,6 +258,12 @@ const sanitizeWelcomeEmail = (raw) => {
     ),
     logoUrl: sanitizeWelcomeEmailImage(data.logoUrl),
     bannerUrl: sanitizeWelcomeEmailImage(data.bannerUrl),
+    avatarUrl: sanitizeWelcomeEmailImage(data.avatarUrl),
+    avatarName: sanitizeWelcomeEmailString(
+      data.avatarName,
+      DEFAULT_WELCOME_EMAIL.avatarName,
+      80,
+    ),
     ctaLabel: sanitizeWelcomeEmailString(
       data.ctaLabel,
       DEFAULT_WELCOME_EMAIL.ctaLabel,
@@ -267,6 +276,7 @@ const sanitizeWelcomeEmail = (raw) => {
     ),
     showLogo: data.showLogo !== false,
     showBanner: Boolean(data.showBanner),
+    showAvatar: Boolean(data.showAvatar),
     products: sanitizeWelcomeProducts(data.products),
     discount: sanitizeWelcomeDiscount(data.discount),
   };
