@@ -172,6 +172,22 @@ const DEFAULT_WELCOME_EMAIL = {
   // stay in their gallery-style serifs; this only swaps the running
   // paragraphs and signature.
   bodyFont: "inter",
+  // Named layout preset. "classic" preserves the original Canvas Hub
+  // look; the other presets adjust spacing, alignment, dividers, and
+  // background to feel editorial / minimal / gallery-dark. Individual
+  // controls below still override per-template defaults.
+  template: "classic",
+  // Header (logo + greeting) horizontal alignment.
+  headerAlign: "left",
+  // Section divider between body / discount / products / footer.
+  // "line" = single hairline rule, "brush" = the storefront brush
+  // stroke art, "none" = nothing between sections.
+  dividerStyle: "line",
+  // CTA button visual treatment in the discount + products blocks.
+  // "filled" = solid dark background (current default),
+  // "outline" = bordered transparent button,
+  // "underline" = inline text link with underline.
+  buttonStyle: "filled",
   // Replaces the previously hardcoded footer caption so admins can edit
   // or translate the line that follows the wordmark.
   footerTagline: "original Filipino paintings",
@@ -293,6 +309,10 @@ const sanitizeWelcomeEmail = (raw) => {
     showBanner: Boolean(data.showBanner),
     showAvatar: Boolean(data.showAvatar),
     bodyFont: sanitizeBodyFont(data.bodyFont),
+    template: sanitizeWelcomeTemplate(data.template),
+    headerAlign: sanitizeHeaderAlign(data.headerAlign),
+    dividerStyle: sanitizeDividerStyle(data.dividerStyle),
+    buttonStyle: sanitizeButtonStyle(data.buttonStyle),
     footerTagline: sanitizeWelcomeEmailString(
       data.footerTagline,
       DEFAULT_WELCOME_EMAIL.footerTagline,
@@ -319,6 +339,55 @@ const sanitizeBodyFont = (value) => {
   return ALLOWED_BODY_FONTS.has(normalized)
     ? normalized
     : DEFAULT_WELCOME_EMAIL.bodyFont;
+};
+
+// Layout presets. "classic" is the original Canvas Hub look; the other
+// three are opinionated bundles of font/alignment/divider/button
+// defaults that the email renderer reads as fallbacks when individual
+// controls aren't set.
+const ALLOWED_TEMPLATES = new Set([
+  "classic",
+  "editorial",
+  "minimal",
+  "gallery",
+]);
+
+const sanitizeWelcomeTemplate = (value) => {
+  if (typeof value !== "string") return DEFAULT_WELCOME_EMAIL.template;
+  const normalized = value.trim().toLowerCase();
+  return ALLOWED_TEMPLATES.has(normalized)
+    ? normalized
+    : DEFAULT_WELCOME_EMAIL.template;
+};
+
+const ALLOWED_HEADER_ALIGNS = new Set(["left", "center"]);
+
+const sanitizeHeaderAlign = (value) => {
+  if (typeof value !== "string") return DEFAULT_WELCOME_EMAIL.headerAlign;
+  const normalized = value.trim().toLowerCase();
+  return ALLOWED_HEADER_ALIGNS.has(normalized)
+    ? normalized
+    : DEFAULT_WELCOME_EMAIL.headerAlign;
+};
+
+const ALLOWED_DIVIDER_STYLES = new Set(["none", "line", "brush"]);
+
+const sanitizeDividerStyle = (value) => {
+  if (typeof value !== "string") return DEFAULT_WELCOME_EMAIL.dividerStyle;
+  const normalized = value.trim().toLowerCase();
+  return ALLOWED_DIVIDER_STYLES.has(normalized)
+    ? normalized
+    : DEFAULT_WELCOME_EMAIL.dividerStyle;
+};
+
+const ALLOWED_BUTTON_STYLES = new Set(["filled", "outline", "underline"]);
+
+const sanitizeButtonStyle = (value) => {
+  if (typeof value !== "string") return DEFAULT_WELCOME_EMAIL.buttonStyle;
+  const normalized = value.trim().toLowerCase();
+  return ALLOWED_BUTTON_STYLES.has(normalized)
+    ? normalized
+    : DEFAULT_WELCOME_EMAIL.buttonStyle;
 };
 
 // Footer link rows shown above the wordmark + tagline. Each row is one

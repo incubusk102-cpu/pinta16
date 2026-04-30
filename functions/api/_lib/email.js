@@ -436,6 +436,120 @@ const resolveBodyFont = (welcome) => {
   return BODY_FONT_STACKS[key] || BODY_FONT_STACKS.inter;
 };
 
+// Layout presets. Each one is a small palette of "wrapper" tokens that
+// the email renderer uses to dress the outer card — page background,
+// card surface color + border, section padding, body text color. The
+// per-field controls (font / alignment / divider style / button style)
+// are still authoritative for their own concern; templates only theme
+// the surrounding chrome. This keeps each control independently
+// overridable while still letting an admin pick a one-click "look".
+const TEMPLATE_PRESETS = {
+  classic: {
+    pageBg: "#f5f3ee",
+    cardBg: "#ffffff",
+    cardBorder: "1px solid #e5e1d8",
+    cardRadius: "6px",
+    headerPad: "24px 28px",
+    contentPad: "24px 28px",
+    footerPad: "18px 28px",
+    bodyColor: "#1c1c1c",
+    headingColor: "#1c1c1c",
+    headerSeparator: "1px solid #efece4",
+    footerSeparator: "1px solid #efece4",
+  },
+  editorial: {
+    // Magazine-style: warm paper page, generous padding, hairline
+    // borders top + bottom only (no card surround), bigger headline
+    // breathing room.
+    pageBg: "#f1ede4",
+    cardBg: "#fdfbf6",
+    cardBorder: "none",
+    cardRadius: "0",
+    headerPad: "32px 36px 24px",
+    contentPad: "16px 36px 32px",
+    footerPad: "22px 36px",
+    bodyColor: "#1c1c1c",
+    headingColor: "#1c1c1c",
+    headerSeparator: "1px solid #d8d3c6",
+    footerSeparator: "1px solid #d8d3c6",
+  },
+  minimal: {
+    // Tight, modern, no card. Crisp white page, single hairline
+    // separators, condensed padding.
+    pageBg: "#ffffff",
+    cardBg: "#ffffff",
+    cardBorder: "none",
+    cardRadius: "0",
+    headerPad: "20px 24px",
+    contentPad: "16px 24px 24px",
+    footerPad: "16px 24px",
+    bodyColor: "#1c1c1c",
+    headingColor: "#1c1c1c",
+    headerSeparator: "1px solid #e7e3da",
+    footerSeparator: "1px solid #e7e3da",
+  },
+  gallery: {
+    // Dark hero card with gold accents — feels like a private-view
+    // invitation. The default body color is light cream so paragraphs
+    // remain readable against the dark surface.
+    pageBg: "#1c1c1c",
+    cardBg: "#262422",
+    cardBorder: "1px solid #3a3631",
+    cardRadius: "6px",
+    headerPad: "28px 28px 22px",
+    contentPad: "24px 28px",
+    footerPad: "20px 28px",
+    bodyColor: "#f5f3ee",
+    headingColor: "#f5f3ee",
+    headerSeparator: "1px solid #3a3631",
+    footerSeparator: "1px solid #3a3631",
+  },
+};
+
+const resolveTemplate = (welcome) => {
+  const key = String(welcome?.template || "classic").toLowerCase();
+  return TEMPLATE_PRESETS[key] || TEMPLATE_PRESETS.classic;
+};
+
+const resolveHeaderAlign = (welcome) =>
+  welcome?.headerAlign === "center" ? "center" : "left";
+
+// Brush divider art lifted from the storefront's BrushDivider component
+// so the email matches the homepage. Inline SVG works in Apple Mail and
+// modern Outlook; Gmail strips it but the line above falls back via
+// `dividerStyle="line"` for Gmail-only users.
+const BRUSH_DIVIDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 12" preserveAspectRatio="none" style="display:block;width:100%;height:12px;">
+  <path d="M2 7 C 40 1, 80 11, 120 4 S 180 9, 198 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+  <circle cx="198" cy="5" r="1.4" fill="currentColor" />
+</svg>`;
+
+const sectionDividerHtml = (welcome, accent) => {
+  const style = String(welcome?.dividerStyle || "line").toLowerCase();
+  if (style === "none") return "";
+  if (style === "brush") {
+    return `<div style="margin:24px 0;color:${accent};line-height:0;">${BRUSH_DIVIDER_SVG}</div>`;
+  }
+  // hairline rule
+  return `<hr style="border:none;border-top:1px solid ${accent}33;margin:24px 0;" />`;
+};
+
+// Render the CTA / discount-button as filled / outline / underline.
+const renderActionLink = ({ label, url, primary, style }) => {
+  if (!label || !url) return "";
+  const safeLabel = escapeHtml(label);
+  const safeUrl = escapeHtml(url);
+  const baseLabelStyle =
+    "font-size:13px;letter-spacing:0.18em;text-transform:uppercase;font-weight:500;";
+  if (style === "outline") {
+    return `<a href="${safeUrl}" style="display:inline-block;padding:11px 22px;background:transparent;color:${primary};text-decoration:none;border:1px solid ${primary};border-radius:4px;${baseLabelStyle}">${safeLabel}</a>`;
+  }
+  if (style === "underline") {
+    return `<a href="${safeUrl}" style="display:inline-block;padding:6px 0;color:${primary};text-decoration:underline;text-underline-offset:4px;${baseLabelStyle}">${safeLabel}</a>`;
+  }
+  // filled — current default
+  return `<a href="${safeUrl}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;border-radius:4px;${baseLabelStyle}">${safeLabel}</a>`;
+};
+
 // Map a footer link "kind" (instagram, tiktok, mail, …) to the public
 // PNG hosted under /public/email-icons. We use absolute URLs because
 // most email clients won't load /relative paths and Gmail blocks data:
@@ -513,12 +627,11 @@ const defaultBrandLogoHtml = (fromName) =>
   `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
 
 const wrapWelcomeHtml = (welcome, contentHtml) => {
-  const primary = isSafeColor(welcome.primaryColor)
-    ? welcome.primaryColor
-    : "#1c1c1c";
   const accent = isSafeColor(welcome.accentColor)
     ? welcome.accentColor
     : "#7a7468";
+  const tpl = resolveTemplate(welcome);
+  const headerAlign = resolveHeaderAlign(welcome);
   const fromName = escapeHtml(welcome.fromName || "Canvas Hub");
   const showLogo = welcome.showLogo !== false && welcome.logoUrl;
   const showBanner = Boolean(welcome.showBanner) && welcome.bannerUrl;
@@ -526,9 +639,13 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
     showLogo && isSafeUrl(welcome.logoUrl)
       ? rehostEmailImage(welcome, "logo", welcome.logoUrl)
       : "";
-  const logoHtml = logoSrc
-    ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
+  const logoInner = logoSrc
+    ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
     : defaultBrandLogoHtml(fromName);
+  const logoHtml =
+    headerAlign === "center"
+      ? `<div style="text-align:center;">${logoInner}</div>`
+      : logoInner;
   const bannerSrc =
     showBanner && isSafeUrl(welcome.bannerUrl)
       ? rehostEmailImage(welcome, "banner", welcome.bannerUrl)
@@ -555,21 +672,21 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
-<body style="margin:0;padding:24px;background:#f5f3ee;font-family:${bodyFontStack};color:#1c1c1c;">
-  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;overflow:hidden;">
+<body style="margin:0;padding:24px;background:${tpl.pageBg};font-family:${bodyFontStack};color:${tpl.bodyColor};">
+  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:${tpl.cardBg};border:${tpl.cardBorder};border-radius:${tpl.cardRadius};overflow:hidden;">
     <tr>
-      <td style="padding:24px 28px;border-bottom:1px solid #efece4;">
+      <td style="padding:${tpl.headerPad};border-bottom:${tpl.headerSeparator};text-align:${headerAlign};">
         ${logoHtml}
       </td>
     </tr>
     ${bannerHtml}
     <tr>
-      <td style="padding:24px 28px;font-size:14px;line-height:1.6;color:${primary};font-family:${bodyFontStack};">
+      <td style="padding:${tpl.contentPad};font-size:14px;line-height:1.6;color:${tpl.bodyColor};font-family:${bodyFontStack};">
         ${contentHtml}
       </td>
     </tr>
     <tr>
-      <td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">
+      <td style="padding:${tpl.footerPad};border-top:${tpl.footerSeparator};font-size:11px;color:${accent};text-align:${headerAlign};">
         ${footerLinksHtml}
         <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> ${footerTaglineHtml}
       </td>
@@ -587,12 +704,9 @@ const ctaButtonHtml = (welcome) => {
   const primary = isSafeColor(welcome.primaryColor)
     ? welcome.primaryColor
     : "#1c1c1c";
-  return `
-    <p style="margin:24px 0;">
-      <a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;border-radius:4px;">
-        ${escapeHtml(label)}
-      </a>
-    </p>`;
+  const buttonStyle = String(welcome.buttonStyle || "filled").toLowerCase();
+  const link = renderActionLink({ label, url, primary, style: buttonStyle });
+  return `<p style="margin:24px 0;">${link}</p>`;
 };
 
 const buildTemplateVars = (user) => {
@@ -830,12 +944,23 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
 
   const productsHtml = buildProductsHtml(welcome, context.products);
   const discountHtml = buildDiscountHtml(welcome, context.discount);
+  const ctaHtml = ctaButtonHtml(welcome);
+
+  // Walk the section blocks in order, dropping empty ones, and join
+  // with the configured divider (line / brush / none) between them.
+  // This avoids stamping dividers above empty blocks (e.g. when the
+  // discount or products section is disabled).
+  const accentColor = isSafeColor(welcome.accentColor)
+    ? welcome.accentColor
+    : "#7a7468";
+  const divider = sectionDividerHtml(welcome, accentColor);
+  const blocks = [paragraphsHtml, discountHtml, productsHtml, ctaHtml].filter(
+    (block) => block && block.trim(),
+  );
+  const sectionsHtml = divider ? blocks.join(divider) : blocks.join("");
 
   const contentHtml = `
-    ${paragraphsHtml}
-    ${discountHtml}
-    ${productsHtml}
-    ${ctaButtonHtml(welcome)}
+    ${sectionsHtml}
     ${avatarHtml}
     ${signatureHtml}
   `;

@@ -55,6 +55,14 @@ export interface WelcomeDiscountConfig {
 
 export type WelcomeBodyFont = "inter" | "playfair" | "garamond" | "georgia";
 
+export type WelcomeTemplate = "classic" | "editorial" | "minimal" | "gallery";
+
+export type WelcomeHeaderAlign = "left" | "center";
+
+export type WelcomeDividerStyle = "none" | "line" | "brush";
+
+export type WelcomeButtonStyle = "filled" | "outline" | "underline";
+
 export type WelcomeFooterLinkKind =
   | "instagram"
   | "facebook"
@@ -98,6 +106,10 @@ export interface WelcomeEmailConfig {
   avatarName: string;
   showAvatar: boolean;
   bodyFont: WelcomeBodyFont;
+  template: WelcomeTemplate;
+  headerAlign: WelcomeHeaderAlign;
+  dividerStyle: WelcomeDividerStyle;
+  buttonStyle: WelcomeButtonStyle;
   footerTagline: string;
   footerLinks: WelcomeFooterLink[];
   products: WelcomeProductsConfig;
@@ -141,6 +153,162 @@ export const BODY_FONT_OPTIONS: {
 const resolveBodyFontStack = (font: WelcomeBodyFont | undefined) =>
   BODY_FONT_OPTIONS.find((o) => o.value === font)?.stack ??
   BODY_FONT_OPTIONS[0].stack;
+
+// One-click template presets. Picking a template seeds the related
+// individual controls (body font, header align, divider, button) but
+// each control remains independently overridable underneath. The token
+// values mirror functions/api/_lib/email.js TEMPLATE_PRESETS so the
+// admin preview matches the rendered email.
+export interface WelcomeTemplateOption {
+  value: WelcomeTemplate;
+  label: string;
+  description: string;
+  bodyFont: WelcomeBodyFont;
+  headerAlign: WelcomeHeaderAlign;
+  dividerStyle: WelcomeDividerStyle;
+  buttonStyle: WelcomeButtonStyle;
+  pageBg: string;
+  cardBg: string;
+  cardBorder: string;
+  cardRadius: string;
+  headerPad: string;
+  contentPad: string;
+  footerPad: string;
+  bodyColor: string;
+  separator: string;
+}
+
+export const TEMPLATE_OPTIONS: WelcomeTemplateOption[] = [
+  {
+    value: "classic",
+    label: "Classic",
+    description:
+      "The original Canvas Hub look: cream paper page, white card, gold accent rule.",
+    bodyFont: "inter",
+    headerAlign: "left",
+    dividerStyle: "line",
+    buttonStyle: "filled",
+    pageBg: "#f5f3ee",
+    cardBg: "#ffffff",
+    cardBorder: "1px solid #e5e1d8",
+    cardRadius: "6px",
+    headerPad: "24px 28px",
+    contentPad: "24px 28px",
+    footerPad: "18px 28px",
+    bodyColor: "#1c1c1c",
+    separator: "1px solid #efece4",
+  },
+  {
+    value: "editorial",
+    label: "Editorial",
+    description:
+      "Magazine-style. Centered header, Playfair body, brush dividers, generous padding.",
+    bodyFont: "playfair",
+    headerAlign: "center",
+    dividerStyle: "brush",
+    buttonStyle: "outline",
+    pageBg: "#f1ede4",
+    cardBg: "#fdfbf6",
+    cardBorder: "none",
+    cardRadius: "0",
+    headerPad: "32px 36px 24px",
+    contentPad: "16px 36px 32px",
+    footerPad: "22px 36px",
+    bodyColor: "#1c1c1c",
+    separator: "1px solid #d8d3c6",
+  },
+  {
+    value: "minimal",
+    label: "Minimal",
+    description:
+      "Tight, modern, no card. Georgia body, hairline rules, condensed spacing.",
+    bodyFont: "georgia",
+    headerAlign: "left",
+    dividerStyle: "line",
+    buttonStyle: "underline",
+    pageBg: "#ffffff",
+    cardBg: "#ffffff",
+    cardBorder: "none",
+    cardRadius: "0",
+    headerPad: "20px 24px",
+    contentPad: "16px 24px 24px",
+    footerPad: "16px 24px",
+    bodyColor: "#1c1c1c",
+    separator: "1px solid #e7e3da",
+  },
+  {
+    value: "gallery",
+    label: "Gallery",
+    description:
+      "Dark hero card with gold accents. EB Garamond italic body — feels like a private-view invite.",
+    bodyFont: "garamond",
+    headerAlign: "center",
+    dividerStyle: "brush",
+    buttonStyle: "outline",
+    pageBg: "#1c1c1c",
+    cardBg: "#262422",
+    cardBorder: "1px solid #3a3631",
+    cardRadius: "6px",
+    headerPad: "28px 28px 22px",
+    contentPad: "24px 28px",
+    footerPad: "20px 28px",
+    bodyColor: "#f5f3ee",
+    separator: "1px solid #3a3631",
+  },
+];
+
+const resolveTemplate = (
+  template: WelcomeTemplate | undefined,
+): WelcomeTemplateOption =>
+  TEMPLATE_OPTIONS.find((o) => o.value === template) ?? TEMPLATE_OPTIONS[0];
+
+export const HEADER_ALIGN_OPTIONS: {
+  value: WelcomeHeaderAlign;
+  label: string;
+}[] = [
+  { value: "left", label: "Left" },
+  { value: "center", label: "Center" },
+];
+
+export const DIVIDER_STYLE_OPTIONS: {
+  value: WelcomeDividerStyle;
+  label: string;
+  description: string;
+}[] = [
+  { value: "none", label: "None", description: "No section dividers." },
+  {
+    value: "line",
+    label: "Hairline",
+    description: "Thin rule between sections — quietest option.",
+  },
+  {
+    value: "brush",
+    label: "Brush stroke",
+    description: "The brush divider art from the homepage.",
+  },
+];
+
+export const BUTTON_STYLE_OPTIONS: {
+  value: WelcomeButtonStyle;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "filled",
+    label: "Filled",
+    description: "Solid dark button (current default).",
+  },
+  {
+    value: "outline",
+    label: "Outline",
+    description: "Bordered transparent button.",
+  },
+  {
+    value: "underline",
+    label: "Underline",
+    description: "Inline text link with underline.",
+  },
+];
 
 // Catalog of footer link kinds shown in the kind dropdown. The icon files
 // are served from /public/email-icons (committed alongside this PR).
@@ -287,6 +455,10 @@ const DEFAULTS: WelcomeEmailConfig = {
   avatarName: "Canvas Hub team",
   showAvatar: false,
   bodyFont: "inter",
+  template: "classic",
+  headerAlign: "left",
+  dividerStyle: "line",
+  buttonStyle: "filled",
   footerTagline: "original Filipino paintings",
   footerLinks: [],
   products: {
@@ -598,10 +770,21 @@ const renderPreviewHtml = (
     ? `<p style="margin:24px 0 0;color:${accent};font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
     : "";
 
-  const ctaHtml =
-    config.ctaLabel.trim() && config.ctaUrl.trim()
-      ? `<p style="margin:24px 0;"><a href="${escapeHtml(config.ctaUrl)}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;border-radius:4px;">${escapeHtml(config.ctaLabel)}</a></p>`
-      : "";
+  const ctaButton = (() => {
+    const label = config.ctaLabel.trim();
+    const url = config.ctaUrl.trim();
+    if (!label || !url) return "";
+    const baseLabelStyle =
+      "font-size:13px;letter-spacing:0.18em;text-transform:uppercase;font-weight:500;";
+    if (config.buttonStyle === "outline") {
+      return `<a href="${escapeHtml(url)}" style="display:inline-block;padding:11px 22px;background:transparent;color:${primary};text-decoration:none;border:1px solid ${primary};border-radius:4px;${baseLabelStyle}">${escapeHtml(label)}</a>`;
+    }
+    if (config.buttonStyle === "underline") {
+      return `<a href="${escapeHtml(url)}" style="display:inline-block;padding:6px 0;color:${primary};text-decoration:underline;text-underline-offset:4px;${baseLabelStyle}">${escapeHtml(label)}</a>`;
+    }
+    return `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;border-radius:4px;${baseLabelStyle}">${escapeHtml(label)}</a>`;
+  })();
+  const ctaHtml = ctaButton ? `<p style="margin:24px 0;">${ctaButton}</p>` : "";
 
   const discountHtml = discountHtmlForPreview(config, discount);
   const productsHtml = productsHtmlForPreview(config, pickedProducts);
@@ -622,9 +805,14 @@ const renderPreviewHtml = (
         </table>`
       : "";
 
-  const logoBlock = showLogo
-    ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:block;" />`
+  const headerAlign = config.headerAlign === "center" ? "center" : "left";
+  const logoInner = showLogo
+    ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
     : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
+  const logoBlock =
+    headerAlign === "center"
+      ? `<div style="text-align:center;">${logoInner}</div>`
+      : logoInner;
 
   const bannerBlock = showBanner
     ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
@@ -664,28 +852,42 @@ const renderPreviewHtml = (
     ? `&mdash; ${escapeHtml(footerTagline)}`
     : "";
 
+  const tpl = resolveTemplate(config.template);
+
+  // Brush divider art mirrored from functions/api/_lib/email.js so the
+  // admin preview matches the rendered email exactly. Inline SVG works
+  // in the in-browser preview iframe.
+  const brushDividerSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 12" preserveAspectRatio="none" style="display:block;width:100%;height:12px;"><path d="M2 7 C 40 1, 80 11, 120 4 S 180 9, 198 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="198" cy="5" r="1.4" fill="currentColor" /></svg>`;
+  const sectionDivider = (() => {
+    if (config.dividerStyle === "none") return "";
+    if (config.dividerStyle === "brush") {
+      return `<div style="margin:24px 0;color:${accent};line-height:0;">${brushDividerSvg}</div>`;
+    }
+    return `<hr style="border:none;border-top:1px solid ${accent}33;margin:24px 0;" />`;
+  })();
+  const sectionBlocks = [paragraphsHtml, discountHtml, productsHtml, ctaHtml]
+    .filter((b) => b && b.trim())
+    .join(sectionDivider || "");
+
   return `
 <!doctype html>
 <html><head>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
-</head><body style="margin:0;padding:24px;background:#f5f3ee;font-family:${bodyFontStack};color:${primary};">
+</head><body style="margin:0;padding:24px;background:${tpl.pageBg};font-family:${bodyFontStack};color:${tpl.bodyColor};">
   <div style="max-width:560px;margin:0 auto;font-size:11px;color:${accent};margin-bottom:8px;font-family:Inter,Helvetica,Arial,sans-serif;">
     <strong>Subject:</strong> ${escapeHtml(subject)}
   </div>
-  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e1d8;border-radius:6px;overflow:hidden;">
-    <tr><td style="padding:24px 28px;border-bottom:1px solid #efece4;">${logoBlock}</td></tr>
+  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:${tpl.cardBg};border:${tpl.cardBorder};border-radius:${tpl.cardRadius};overflow:hidden;">
+    <tr><td style="padding:${tpl.headerPad};border-bottom:${tpl.separator};text-align:${headerAlign};">${logoBlock}</td></tr>
     ${bannerBlock}
-    <tr><td style="padding:24px 28px;font-size:14px;line-height:1.6;font-family:${bodyFontStack};">
-      ${paragraphsHtml}
-      ${discountHtml}
-      ${productsHtml}
-      ${ctaHtml}
+    <tr><td style="padding:${tpl.contentPad};font-size:14px;line-height:1.6;font-family:${bodyFontStack};color:${tpl.bodyColor};">
+      ${sectionBlocks}
       ${avatarHtml}
       ${signatureHtml}
     </td></tr>
-    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:${accent};">
+    <tr><td style="padding:${tpl.footerPad};border-top:${tpl.separator};font-size:11px;color:${accent};text-align:${headerAlign};">
       ${footerLinksBlock}
       <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> ${footerTaglineHtml}
     </td></tr>
@@ -769,6 +971,22 @@ export const WelcomeEmailSection = () => {
     value: WelcomeEmailConfig[K],
   ) => {
     setConfig((c) => ({ ...c, [key]: value }));
+  };
+
+  // Picking a layout template seeds the related individual controls
+  // (font / alignment / divider / button) but admins can still tweak
+  // each control afterwards.
+  const applyLayoutTemplate = (next: WelcomeTemplate) => {
+    const preset = TEMPLATE_OPTIONS.find((o) => o.value === next);
+    if (!preset) return;
+    setConfig((c) => ({
+      ...c,
+      template: preset.value,
+      bodyFont: preset.bodyFont,
+      headerAlign: preset.headerAlign,
+      dividerStyle: preset.dividerStyle,
+      buttonStyle: preset.buttonStyle,
+    }));
   };
 
   const updateProducts = <K extends keyof WelcomeProductsConfig>(
@@ -1199,6 +1417,163 @@ export const WelcomeEmailSection = () => {
               Reply-to is set on Cloudflare via{" "}
               <code className="px-1 rounded bg-muted/40">EMAIL_REPLY_TO</code>.
               When that env var is set, replies land in your Namecheap inbox.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="font-display text-sm uppercase tracking-[0.2em]">
+          Template & layout
+        </h3>
+        <p className="text-[12px] text-muted-foreground">
+          Pick a one-click look, then fine-tune any of the controls below.
+          Templates set sensible defaults for the body font, header alignment,
+          dividers, and buttons — every choice stays editable.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {TEMPLATE_OPTIONS.map((opt) => {
+            const selected = config.template === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => applyLayoutTemplate(opt.value)}
+                aria-pressed={selected}
+                className={`text-left rounded-md border p-3 transition-colors ${
+                  selected
+                    ? "border-foreground/70 ring-1 ring-foreground/30"
+                    : "border-border/60 hover:border-foreground/40"
+                }`}
+              >
+                <div
+                  aria-hidden
+                  className="mb-2 rounded overflow-hidden"
+                  style={{
+                    background: opt.pageBg,
+                    border:
+                      opt.cardBorder !== "none"
+                        ? "1px solid #e5e1d8"
+                        : "1px solid transparent",
+                    height: 76,
+                    padding: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      background: opt.cardBg,
+                      border: opt.cardBorder,
+                      borderRadius: opt.cardRadius || "0",
+                      padding: "8px 10px",
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                      textAlign: opt.headerAlign,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily:
+                          "'EB Garamond',Georgia,'Playfair Display',serif",
+                        fontStyle: "italic",
+                        color: "#c4a86a",
+                        fontSize: 14,
+                      }}
+                    >
+                      Canvas Hub
+                    </span>
+                    <span
+                      style={{
+                        fontFamily:
+                          opt.bodyFont === "inter"
+                            ? "Inter,Helvetica,Arial,sans-serif"
+                            : opt.bodyFont === "playfair"
+                              ? "'Playfair Display',Georgia,serif"
+                              : opt.bodyFont === "garamond"
+                                ? "'EB Garamond',Garamond,Georgia,serif"
+                                : "Georgia,'Times New Roman',serif",
+                        color: opt.bodyColor,
+                        fontSize: 9,
+                        lineHeight: 1.3,
+                        opacity: 0.9,
+                      }}
+                    >
+                      Welcome to the gallery — original Filipino paintings.
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[12px] font-medium">{opt.label}</div>
+                <div className="text-[10px] text-muted-foreground line-clamp-2">
+                  {opt.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="welcome-header-align">Header alignment</Label>
+            <select
+              id="welcome-header-align"
+              value={config.headerAlign}
+              onChange={(e) =>
+                update("headerAlign", e.target.value as WelcomeHeaderAlign)
+              }
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            >
+              {HEADER_ALIGN_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              Logo, header, and footer line.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="welcome-divider-style">Section dividers</Label>
+            <select
+              id="welcome-divider-style"
+              value={config.dividerStyle}
+              onChange={(e) =>
+                update("dividerStyle", e.target.value as WelcomeDividerStyle)
+              }
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            >
+              {DIVIDER_STYLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              {DIVIDER_STYLE_OPTIONS.find(
+                (o) => o.value === config.dividerStyle,
+              )?.description ?? ""}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="welcome-button-style">Button style</Label>
+            <select
+              id="welcome-button-style"
+              value={config.buttonStyle}
+              onChange={(e) =>
+                update("buttonStyle", e.target.value as WelcomeButtonStyle)
+              }
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            >
+              {BUTTON_STYLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              {BUTTON_STYLE_OPTIONS.find((o) => o.value === config.buttonStyle)
+                ?.description ?? ""}
             </p>
           </div>
         </div>
