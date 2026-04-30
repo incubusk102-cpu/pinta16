@@ -494,10 +494,7 @@ const GalleryNav = () => {
               {user && (
                 <div className="px-5 pt-3 pb-3 border-b border-border/30">
                   <button
-                    onClick={() => {
-                      closeMenu();
-                      void logout();
-                    }}
+                    onClick={handleLogout}
                     className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md border border-border/60 bg-card/85 hover:bg-foreground hover:text-background transition-colors text-xs tracking-[0.25em] uppercase"
                   >
                     Sign out
