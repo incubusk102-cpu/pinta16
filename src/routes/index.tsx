@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
-import HeroSection from "@/components/HeroSection";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import GallerySection from "@/components/GallerySection";
@@ -35,8 +34,11 @@ export const Route = createFileRoute("/")({
 
 function HeroOrFallback() {
   const { slides, loading } = useHeroSlides();
-  // While loading, show static hero so the first paint isn't blank.
-  if (loading || slides.length === 0) return <HeroSection />;
+  // No admin-configured slides → render nothing and let the gallery be
+  // the first thing visitors see. The previous static "Canvas Hub" hero
+  // was removed so the homepage doesn't show a placeholder block before
+  // an admin uploads a real hero. Manage slides at /admin → Hero slider.
+  if (loading || slides.length === 0) return null;
   return <HeroSlider />;
 }
 
