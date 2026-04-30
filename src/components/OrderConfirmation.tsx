@@ -40,6 +40,17 @@ const OrderConfirmation = () => {
     }
   }, [lastOrder]);
 
+  // Close on Escape key — defends against the X tap being missed on
+  // small touch targets and gives keyboard users a way out.
+  useEffect(() => {
+    if (!showConfirmation) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowConfirmation(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showConfirmation, setShowConfirmation]);
+
   if (!lastOrder) return null;
 
   const currentStepIdx = ORDER_STEPS.findIndex(
@@ -59,19 +70,23 @@ const OrderConfirmation = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          onClick={() => setShowConfirmation(false)}
           className="fixed inset-0 z-[200] bg-background/90 backdrop-blur-xl flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 30 }}
+            onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border/20 rounded-sm max-w-lg w-full p-8 relative max-h-[90vh] overflow-y-auto"
           >
             <button
+              type="button"
               onClick={() => setShowConfirmation(false)}
-              className="absolute top-4 right-4 p-2 hover:bg-accent rounded-sm transition-colors"
+              aria-label="Close order details"
+              className="absolute top-2 right-2 z-10 p-3 -m-1 rounded-sm text-foreground hover:bg-accent transition-colors touch-manipulation"
             >
-              <X className="w-5 h-5 text-foreground" />
+              <X className="w-5 h-5" />
             </button>
 
             <div className="text-center mb-8">
