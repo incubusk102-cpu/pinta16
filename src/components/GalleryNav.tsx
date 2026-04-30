@@ -541,9 +541,10 @@ const GalleryNav = () => {
           )}
         </div>
 
-        {/* Footer note */}
+        {/* Footer note — brand name lives only on the homepage hero now;
+              the drawer caption is kept short. */}
         <div className="px-5 py-3 border-t border-border/30 text-[10px] tracking-[0.25em] uppercase text-muted-foreground/80 text-center">
-          Canvas Hub · {new Date().getFullYear()}
+          © {new Date().getFullYear()}
         </div>
       </aside>
     </motion.nav>
