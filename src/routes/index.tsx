@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import GalleryNav from "@/components/GalleryNav";
 import HeroSection from "@/components/HeroSection";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
@@ -10,6 +11,7 @@ import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import Ornament from "@/components/decor/Ornament";
+import { useUserAuth } from "@/contexts/UserAuthContext";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -39,8 +41,10 @@ function HeroOrFallback() {
 }
 
 function Index() {
+  const { user } = useUserAuth();
   return (
     <div className="smooth-scroll">
+      {user && <GalleryNav />}
       <HeroOrFallback />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
