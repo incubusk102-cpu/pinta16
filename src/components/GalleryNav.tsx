@@ -243,8 +243,11 @@ const GalleryNav = () => {
           )}
           <button
             onClick={() => (menuOpen ? closeMenu() : openMenu())}
-            onMouseEnter={openMenu}
-            onFocus={openMenu}
+            // Hover-to-open is disabled on the homepage so the drawer
+            // doesn't pop open accidentally while customers are scrolling
+            // the hero / collection. Other routes still get hover-open.
+            onMouseEnter={onIndex ? undefined : openMenu}
+            onFocus={onIndex ? undefined : openMenu}
             className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
