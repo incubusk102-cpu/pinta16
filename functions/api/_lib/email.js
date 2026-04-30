@@ -442,11 +442,144 @@ const buildTemplateVars = (user) => {
   return { name: name || firstName, firstName, email };
 };
 
+const formatPromoDescription = (promo) => {
+  if (!promo) return "";
+  switch (promo.type) {
+    case "percent":
+      return `${promo.value}% off`;
+    case "fixed":
+    case "flat":
+      return `${formatPHP(promo.value)} off`;
+    case "free_shipping":
+      return "Free shipping";
+    default:
+      return "";
+  }
+};
+
+const productThumbnailUrl = (product) => {
+  if (!product) return "";
+  if (Array.isArray(product.images) && product.images[0]?.url) {
+    return String(product.images[0].url);
+  }
+  if (typeof product.image === "string") return product.image;
+  return "";
+};
+
+const buildProductsHtml = (welcome, products) => {
+  const cfg = welcome?.products;
+  if (!cfg || cfg.enabled === false) return "";
+  const list = Array.isArray(products) ? products.slice(0, cfg.count || 4) : [];
+  if (list.length === 0) return "";
+  const baseUrl = String(welcome.ctaUrl || "https://canvhub.com").replace(
+    /\/$/,
+    "",
+  );
+  const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
+  const renderCell = (product) => {
+    if (!product) return `<td style="width:50%;padding:6px;"></td>`;
+    const img = productThumbnailUrl(product);
+    const title = escapeHtml(String(product.title || "Untitled"));
+    const link = `${baseUrl}/product/${encodeURIComponent(product.id || "")}`;
+    const safeImg = isSafeUrl(img)
+      ? `<img src="${img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
+      : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
+    const priceLine = cfg.showPrice
+      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(
+          product.salePrice && product.salePrice > 0
+            ? product.salePrice
+            : product.price,
+        )}</div>`
+      : "";
+    return `<td valign="top" style="padding:6px;width:50%;"><a href="${link}" style="text-decoration:none;color:inherit;display:block;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}</a></td>`;
+  };
+  const rows = [];
+  for (let i = 0; i < list.length; i += 2) {
+    rows.push(`<tr>${renderCell(list[i])}${renderCell(list[i + 1])}</tr>`);
+  }
+  return `
+    <h3 style="margin:32px 0 12px;font-family:Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
+    <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;">
+      ${rows.join("")}
+    </table>
+  `;
+};
+
+const formatExpiryLabel = (iso) => {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const buildDiscountHtml = (welcome, discount) => {
+  if (!discount || !discount.code) return "";
+  const primary = isSafeColor(welcome.primaryColor)
+    ? welcome.primaryColor
+    : "#1c1c1c";
+  const accent = isSafeColor(welcome.accentColor)
+    ? welcome.accentColor
+    : "#7a7468";
+  const headline = escapeHtml(discount.headline || "Your welcome gift");
+  const description = escapeHtml(discount.description || "");
+  const code = escapeHtml(discount.code);
+  const expiry = formatExpiryLabel(discount.expiresAt || "");
+  const expiryLine = expiry
+    ? `<div style="margin-top:6px;font-size:11px;color:${accent};">Use before ${escapeHtml(expiry)}.</div>`
+    : "";
+  return `
+    <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;margin:24px 0;">
+      <tr>
+        <td style="background:${primary};padding:18px 20px;border-radius:6px;color:#ffffff;text-align:center;">
+          <div style="font-family:Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
+          ${description ? `<div style="margin-top:4px;font-size:13px;opacity:0.92;">${description}</div>` : ""}
+          <div style="margin-top:12px;display:inline-block;padding:8px 14px;border:1px dashed rgba(255,255,255,0.55);border-radius:4px;font-family:'Courier New',monospace;font-size:18px;letter-spacing:0.18em;">${code}</div>
+          ${expiryLine}
+        </td>
+      </tr>
+    </table>
+  `;
+};
+
+const formatDiscountText = (discount) => {
+  if (!discount || !discount.code) return "";
+  const lines = [discount.headline || "Your welcome gift"];
+  if (discount.description) lines.push(discount.description);
+  lines.push(`Code: ${discount.code}`);
+  const expiry = formatExpiryLabel(discount.expiresAt || "");
+  if (expiry) lines.push(`Use before ${expiry}.`);
+  return `\n\n${lines.join("\n")}`;
+};
+
+const formatProductsText = (welcome, products) => {
+  const cfg = welcome?.products;
+  if (!cfg || cfg.enabled === false) return "";
+  const list = Array.isArray(products) ? products.slice(0, cfg.count || 4) : [];
+  if (list.length === 0) return "";
+  const lines = [`\n\n${cfg.sectionTitle || "A glimpse of the collection"}:`];
+  for (const product of list) {
+    const price = cfg.showPrice
+      ? ` — ${formatPHP(product.salePrice && product.salePrice > 0 ? product.salePrice : product.price)}`
+      : "";
+    lines.push(`• ${product.title || "Untitled"}${price}`);
+  }
+  return lines.join("\n");
+};
+
 /**
  * Build the welcome email subject/html/text from the admin-edited template.
  * Templates may include {{name}}, {{firstName}}, {{email}} placeholders.
+ *
+ * Optional `context` carries pre-resolved data:
+ *   - products[]: products to render in the "glimpse" grid
+ *   - discount:   { headline, code, description, expiresAt } already resolved
+ *                 from either a linked promo code or the inline draft.
  */
-export const buildWelcomeEmail = (welcome, user) => {
+export const buildWelcomeEmail = (welcome, user, context = {}) => {
   const vars = buildTemplateVars(user);
   const subject = renderTemplateString(welcome.subject, vars).slice(0, 240);
   const bodyText = renderTemplateString(welcome.body, vars);
@@ -466,19 +599,111 @@ export const buildWelcomeEmail = (welcome, user) => {
     ? `<p style="margin:24px 0 0;color:#7a7468;font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
     : "";
 
+  const productsHtml = buildProductsHtml(welcome, context.products);
+  const discountHtml = buildDiscountHtml(welcome, context.discount);
+
   const contentHtml = `
     ${paragraphsHtml}
+    ${discountHtml}
+    ${productsHtml}
     ${ctaButtonHtml(welcome)}
     ${signatureHtml}
   `;
 
-  const text = `${bodyText}${signature ? `\n\n${signature}` : ""}`;
+  const text =
+    `${bodyText}` +
+    formatDiscountText(context.discount) +
+    formatProductsText(welcome, context.products) +
+    (signature ? `\n\n${signature}` : "");
 
   return {
     subject,
     html: wrapWelcomeHtml(welcome, contentHtml),
     text,
   };
+};
+
+/**
+ * Pull the products that should appear in the welcome email based on the
+ * configured mode (`auto` = newest first, `manual` = the explicit id list).
+ * Skips products marked as draft so unfinished listings aren't promoted.
+ */
+export const loadWelcomeEmailProducts = async (welcomeProducts) => {
+  if (!welcomeProducts || welcomeProducts.enabled === false) return [];
+  try {
+    const store = getStore("products");
+    const all = await store.get("all-products", { type: "json" });
+    if (!Array.isArray(all)) return [];
+    const visible = all.filter((p) => p && p.availability !== "draft");
+    const count = Math.max(1, Math.min(8, Number(welcomeProducts.count) || 4));
+    if (welcomeProducts.mode === "manual") {
+      const byId = new Map(visible.map((p) => [p.id, p]));
+      return (welcomeProducts.manualIds || [])
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .slice(0, count);
+    }
+    return [...visible]
+      .sort(
+        (a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0),
+      )
+      .slice(0, count);
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Resolve the welcome-email discount for an outgoing message. Returns null
+ * when nothing should be rendered (disabled, missing data, expired linked
+ * promo, etc.) so the renderer can simply skip the section.
+ */
+export const resolveWelcomeEmailDiscount = async (welcomeDiscount) => {
+  if (!welcomeDiscount || welcomeDiscount.enabled === false) return null;
+  if (welcomeDiscount.source === "inline") {
+    if (!welcomeDiscount.inlineCode) return null;
+    return {
+      headline: welcomeDiscount.inlineHeadline,
+      code: welcomeDiscount.inlineCode,
+      description: welcomeDiscount.inlineDescription,
+      expiresAt: welcomeDiscount.inlineExpiresAt || "",
+    };
+  }
+  // Linked: look up the configured promo code in the storefront-config doc.
+  if (!welcomeDiscount.linkedCode) return null;
+  try {
+    const store = getStore("storefront-config");
+    const raw = await store.get("config", { type: "json" });
+    const promos = Array.isArray(raw?.promoCodes) ? raw.promoCodes : [];
+    const promo = promos.find(
+      (p) =>
+        p &&
+        p.enabled !== false &&
+        String(p.code || "").toUpperCase() ===
+          String(welcomeDiscount.linkedCode).toUpperCase(),
+    );
+    if (!promo) return null;
+    if (promo.expiresAt) {
+      const t = Date.parse(promo.expiresAt);
+      if (Number.isFinite(t) && t < Date.now()) return null;
+    }
+    if (
+      typeof promo.usageLimit === "number" &&
+      promo.usageLimit > 0 &&
+      typeof promo.usageCount === "number" &&
+      promo.usageCount >= promo.usageLimit
+    ) {
+      return null;
+    }
+    return {
+      headline: "Your welcome gift",
+      code: promo.code,
+      description: promo.description || formatPromoDescription(promo),
+      expiresAt: promo.expiresAt || "",
+    };
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -513,7 +738,14 @@ export const sendWelcomeEmail = async ({ welcome, user, override }) => {
   if (!isEmailConfigured()) {
     return { delivered: false, skipped: true, reason: "not configured" };
   }
-  const built = buildWelcomeEmail(welcome, user || { email: recipient });
+  const [products, discount] = await Promise.all([
+    loadWelcomeEmailProducts(welcome.products),
+    resolveWelcomeEmailDiscount(welcome.discount),
+  ]);
+  const built = buildWelcomeEmail(welcome, user || { email: recipient }, {
+    products,
+    discount,
+  });
   if (override?.subjectPrefix) {
     built.subject = `${override.subjectPrefix}${built.subject}`;
   }

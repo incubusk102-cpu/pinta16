@@ -165,6 +165,23 @@ const DEFAULT_WELCOME_EMAIL = {
   ctaUrl: "https://canvhub.com",
   showLogo: true,
   showBanner: false,
+  products: {
+    enabled: true,
+    mode: "auto", // "auto" = newest first | "manual" = explicit picks
+    count: 4,
+    manualIds: [],
+    sectionTitle: "A glimpse of the collection",
+    showPrice: true,
+  },
+  discount: {
+    enabled: false,
+    source: "linked", // "linked" = pull from /admin → Storefront promo codes | "inline" = type it here
+    linkedCode: "",
+    inlineHeadline: "Your welcome gift",
+    inlineCode: "WELCOME10",
+    inlineDescription: "10% off your first painting.",
+    inlineExpiresAt: "",
+  },
 };
 
 const WELCOME_EMAIL_SUBJECT_MAX = 200;
@@ -250,6 +267,70 @@ const sanitizeWelcomeEmail = (raw) => {
     ),
     showLogo: data.showLogo !== false,
     showBanner: Boolean(data.showBanner),
+    products: sanitizeWelcomeProducts(data.products),
+    discount: sanitizeWelcomeDiscount(data.discount),
+  };
+};
+
+const sanitizeWelcomeProducts = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const mode = data.mode === "manual" ? "manual" : "auto";
+  const rawCount = Number(data.count);
+  const count = Number.isFinite(rawCount)
+    ? Math.max(1, Math.min(8, Math.round(rawCount)))
+    : DEFAULT_WELCOME_EMAIL.products.count;
+  const manualIds = Array.isArray(data.manualIds)
+    ? data.manualIds
+        .map((id) => (typeof id === "string" ? id.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 8)
+    : [];
+  return {
+    enabled: data.enabled !== false,
+    mode,
+    count,
+    manualIds,
+    sectionTitle: sanitizeWelcomeEmailString(
+      data.sectionTitle,
+      DEFAULT_WELCOME_EMAIL.products.sectionTitle,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    showPrice: data.showPrice !== false,
+  };
+};
+
+const sanitizeWelcomeDiscount = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const source = data.source === "inline" ? "inline" : "linked";
+  let inlineExpiresAt = "";
+  if (typeof data.inlineExpiresAt === "string" && data.inlineExpiresAt.trim()) {
+    const t = Date.parse(data.inlineExpiresAt);
+    if (Number.isFinite(t)) inlineExpiresAt = new Date(t).toISOString();
+  }
+  return {
+    enabled: Boolean(data.enabled),
+    source,
+    linkedCode: sanitizeWelcomeEmailString(
+      data.linkedCode,
+      "",
+      60,
+    ).toUpperCase(),
+    inlineHeadline: sanitizeWelcomeEmailString(
+      data.inlineHeadline,
+      DEFAULT_WELCOME_EMAIL.discount.inlineHeadline,
+      WELCOME_EMAIL_FIELD_MAX,
+    ),
+    inlineCode: sanitizeWelcomeEmailString(
+      data.inlineCode,
+      DEFAULT_WELCOME_EMAIL.discount.inlineCode,
+      60,
+    ).toUpperCase(),
+    inlineDescription: sanitizeWelcomeEmailString(
+      data.inlineDescription,
+      DEFAULT_WELCOME_EMAIL.discount.inlineDescription,
+      400,
+    ),
+    inlineExpiresAt,
   };
 };
 
