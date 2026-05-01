@@ -3,38 +3,72 @@
 // Three tiers, all operating on the same structured value object so
 // users can mix and match:
 //
-//   1. Search / autocomplete  — Google Places dropdown. Picking a
-//      suggestion fills every structured field below and drops the pin
-//      on the map.
+//   1. Search / autocomplete  — MapTiler Geocoding suggestions in a
+//      dropdown. Picking a suggestion fills every structured field
+//      below and drops the pin on the map.
 //   2. Manual structured fields — line1 / line2 / city / province /
 //      postal code. Always editable. If the customer's address isn't
-//      in Google's index (rural barangays, new subdivisions, informal
+//      in the index (rural barangays, new subdivisions, informal
 //      landmarks) they can just type it in.
-//   3. Map pin — draggable marker on a Google Map. Dragging the marker
-//      reverse-geocodes the point and fills the structured fields.
-//      "Use my location" snaps to the device's GPS reading.
+//   3. Map pin — draggable marker on a MapLibre canvas rendered with
+//      MapTiler vector tiles. Dragging the marker reverse-geocodes
+//      the point and fills the structured fields. "Use my location"
+//      snaps to the device's GPS reading.
 //
 // The component reads its API key from /api/maps-config at runtime
-// (single source of truth: a Cloudflare Pages env var) so we don't have
-// to bake the key into the Vite bundle. When no key is configured the
-// component degrades to manual fields only — no autocomplete, no map.
+// (single source of truth: a Cloudflare Pages env var) so we don't
+// have to bake the key into the Vite bundle. When no key is
+// configured the component degrades to manual fields only — no
+// autocomplete, no map.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  APIProvider,
   Map,
-  AdvancedMarker,
-  ControlPosition,
-  MapControl,
-  useApiIsLoaded,
-  useMap,
-  useMapsLibrary,
-} from "@vis.gl/react-google-maps";
+  Marker,
+  NavigationControl,
+  type MapRef,
+} from "react-map-gl/maplibre";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { Loader2, LocateFixed, MapPin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 }; // Manila
+
+// MapTiler's vector style URL — `streets-v2` is the general-purpose
+// retail-friendly style. We append the API key as a query param. The
+// open-source MapLibre GL renderer happily consumes this.
+const tileStyleUrl = (apiKey: string): string =>
+  `https://api.maptiler.com/maps/streets-v2/style.json?key=${encodeURIComponent(apiKey)}`;
+
+// MapTiler Geocoding API endpoints. Country-restricted to PH by
+// default; configurable via the component's `countryBias` prop.
+const forwardGeocodeUrl = (
+  apiKey: string,
+  query: string,
+  countries: string,
+): string => {
+  const params = new URLSearchParams({
+    key: apiKey,
+    autocomplete: "true",
+    limit: "6",
+    country: countries,
+    language: "en",
+  });
+  return `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${params.toString()}`;
+};
+
+const reverseGeocodeUrl = (
+  apiKey: string,
+  lng: number,
+  lat: number,
+): string => {
+  const params = new URLSearchParams({
+    key: apiKey,
+    language: "en",
+  });
+  return `https://api.maptiler.com/geocoding/${lng},${lat}.json?${params.toString()}`;
+};
 
 export interface AddressValue {
   line1: string;
@@ -56,13 +90,14 @@ export interface AddressInputProps {
   hideMap?: boolean;
   /** Wrapping classes. */
   className?: string;
-  /** Default country code biased into Places autocomplete (ISO 3166-1 alpha-2). Defaults to "ph". */
+  /** Comma-separated ISO 3166-1 alpha-2 codes biased into the geocoder. Defaults to "ph". */
   countryBias?: string;
 }
 
 interface MapsConfigResponse {
   apiKey: string | null;
-  mapId: string | null;
+  // Optional vector style override; default is MapTiler's streets-v2.
+  styleUrl?: string | null;
 }
 
 const fetchMapsConfig = async (): Promise<MapsConfigResponse> => {
@@ -70,97 +105,125 @@ const fetchMapsConfig = async (): Promise<MapsConfigResponse> => {
     const res = await fetch("/api/maps-config", {
       credentials: "same-origin",
     });
-    if (!res.ok) return { apiKey: null, mapId: null };
+    if (!res.ok) return { apiKey: null };
     const data = (await res.json()) as MapsConfigResponse;
     return {
       apiKey: typeof data.apiKey === "string" ? data.apiKey : null,
-      mapId: typeof data.mapId === "string" ? data.mapId : null,
+      styleUrl: typeof data.styleUrl === "string" ? data.styleUrl : null,
     };
   } catch {
-    return { apiKey: null, mapId: null };
+    return { apiKey: null };
   }
 };
 
-// Walk Google's address_components blob and extract our structured
-// fields. Google sends a flat list of {long_name, short_name, types[]}
-// where types tags identify the role (street_number, route,
-// administrative_area_level_2, postal_code, etc.). The mapping below
-// matches what Philippine addresses look like in the Places API.
-const componentsToValue = (
-  place: google.maps.places.PlaceResult,
-  prev: AddressValue,
-): AddressValue => {
-  const components = place.address_components || [];
-  const get = (typeKey: string, useShort = false): string => {
-    const c = components.find((x) => x.types.includes(typeKey));
-    if (!c) return "";
-    return useShort ? c.short_name : c.long_name;
+// MapTiler returns GeoJSON Features. The properties bag carries the
+// structured pieces we need — but the field names vary slightly by
+// place type (a region might use `name` while an address uses
+// `street`). The `context` array holds the parent administrative
+// hierarchy. We walk both to assemble a SavedAddress-shaped value.
+interface MapTilerContextEntry {
+  id?: string;
+  text?: string;
+  language?: string;
+  // The id is namespaced like `country.123`, `region.456`, etc. We
+  // pull the prefix to identify the level.
+}
+
+interface MapTilerFeature {
+  id?: string;
+  type?: string;
+  place_type?: string[];
+  place_name?: string;
+  text?: string;
+  address?: string | number;
+  properties?: {
+    ref?: string;
+    country_code?: string;
+    postcode?: string;
   };
-
-  const streetNumber = get("street_number");
-  const route = get("route");
-  const sublocality =
-    get("sublocality_level_1") ||
-    get("sublocality") ||
-    get("neighborhood") ||
-    "";
-  const locality = get("locality") || get("administrative_area_level_2") || "";
-  const province = get("administrative_area_level_1");
-  const postalCode = get("postal_code");
-  const country = get("country");
-
-  const line1 = [streetNumber, route].filter(Boolean).join(" ").trim();
-
-  return {
-    ...prev,
-    line1: line1 || prev.line1 || place.name || "",
-    line2: sublocality || prev.line2 || "",
-    city: locality || prev.city || "",
-    province: province || prev.province || "",
-    postalCode: postalCode || prev.postalCode || "",
-    country: country || prev.country || "Philippines",
-    latitude: place.geometry?.location?.lat() ?? prev.latitude ?? null,
-    longitude: place.geometry?.location?.lng() ?? prev.longitude ?? null,
-    formatted: place.formatted_address || prev.formatted || "",
-    placeId: place.place_id || prev.placeId,
+  context?: MapTilerContextEntry[];
+  center?: [number, number]; // [lng, lat]
+  geometry?: {
+    type: "Point";
+    coordinates: [number, number];
   };
+}
+
+const contextLevel = (entry: MapTilerContextEntry): string => {
+  const id = entry.id || "";
+  const dot = id.indexOf(".");
+  return dot > 0 ? id.slice(0, dot) : id;
 };
 
-// Same shape as componentsToValue, but for results that come back from
-// the standalone Geocoder (used by the map pin's reverse-geocode).
-const geocodeResultToValue = (
-  result: google.maps.GeocoderResult,
+const featureToValue = (
+  feat: MapTilerFeature,
   prev: AddressValue,
 ): AddressValue => {
-  const components = result.address_components || [];
-  const get = (typeKey: string): string => {
-    const c = components.find((x) => x.types.includes(typeKey));
-    return c ? c.long_name : "";
+  const ctx = feat.context || [];
+  const find = (level: string): string => {
+    const entry = ctx.find((c) => contextLevel(c) === level);
+    return entry?.text || "";
   };
-  const streetNumber = get("street_number");
-  const route = get("route");
-  const sublocality =
-    get("sublocality_level_1") ||
-    get("sublocality") ||
-    get("neighborhood") ||
+  // MapTiler's PH coverage uses these levels:
+  //   country, region, subregion, county, joint_municipality,
+  //   municipality, joint_district, municipal_district, locality,
+  //   neighbourhood, place, postal_code, address, street.
+  const country = find("country");
+  const region = find("region");
+  const subregion = find("subregion");
+  const municipality =
+    find("municipality") ||
+    find("joint_municipality") ||
+    find("municipal_district") ||
+    find("place") ||
     "";
-  const locality = get("locality") || get("administrative_area_level_2") || "";
-  const province = get("administrative_area_level_1");
-  const postalCode = get("postal_code");
-  const country = get("country");
-  const line1 = [streetNumber, route].filter(Boolean).join(" ").trim();
+  const locality = find("locality") || find("neighbourhood") || "";
+  const postcode = feat.properties?.postcode || find("postal_code") || "";
+
+  const placeTypes = feat.place_type || [];
+  let line1 = "";
+  let line2 = "";
+
+  if (placeTypes.includes("address")) {
+    // For an exact address match, feat.address is the house number and
+    // feat.text is the street name.
+    const num =
+      typeof feat.address === "number"
+        ? String(feat.address)
+        : feat.address || "";
+    const street = feat.text || "";
+    line1 =
+      [num, street].filter(Boolean).join(" ").trim() || feat.place_name || "";
+    line2 = locality;
+  } else if (placeTypes.includes("street")) {
+    line1 = feat.text || "";
+    line2 = locality;
+  } else if (
+    placeTypes.includes("neighbourhood") ||
+    placeTypes.includes("locality")
+  ) {
+    line2 = feat.text || "";
+    line1 = prev.line1 || "";
+  } else {
+    line1 = prev.line1 || feat.text || feat.place_name || "";
+    line2 = locality;
+  }
+
+  const lng = feat.center?.[0] ?? feat.geometry?.coordinates?.[0];
+  const lat = feat.center?.[1] ?? feat.geometry?.coordinates?.[1];
+
   return {
     ...prev,
     line1: line1 || prev.line1 || "",
-    line2: sublocality || prev.line2 || "",
-    city: locality || prev.city || "",
-    province: province || prev.province || "",
-    postalCode: postalCode || prev.postalCode || "",
+    line2: line2 || prev.line2 || "",
+    city: municipality || prev.city || "",
+    province: subregion || region || prev.province || "",
+    postalCode: postcode || prev.postalCode || "",
     country: country || prev.country || "Philippines",
-    latitude: result.geometry?.location?.lat() ?? prev.latitude ?? null,
-    longitude: result.geometry?.location?.lng() ?? prev.longitude ?? null,
-    formatted: result.formatted_address || prev.formatted || "",
-    placeId: result.place_id || prev.placeId,
+    latitude: typeof lat === "number" ? lat : (prev.latitude ?? null),
+    longitude: typeof lng === "number" ? lng : (prev.longitude ?? null),
+    formatted: feat.place_name || prev.formatted || "",
+    placeId: feat.id || prev.placeId,
   };
 };
 
@@ -245,53 +308,141 @@ const ManualFields = ({
 const PlacesAutocomplete = ({
   value,
   onChange,
+  apiKey,
   countryBias,
 }: {
   value: AddressValue;
   onChange: (next: AddressValue) => void;
+  apiKey: string;
   countryBias: string;
 }) => {
-  const places = useMapsLibrary("places");
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const acRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const [query, setQuery] = useState<string>(value.formatted || "");
+  const [suggestions, setSuggestions] = useState<MapTilerFeature[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState<number>(-1);
+  const debounceRef = useRef<number | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
+  // Debounce the geocoder calls — typing fast shouldn't fire one
+  // request per keystroke. 200 ms is enough to feel instant while
+  // collapsing bursts.
   useEffect(() => {
-    if (!places || !inputRef.current) return;
-    if (acRef.current) return;
-    const ac = new places.Autocomplete(inputRef.current, {
-      fields: [
-        "address_components",
-        "formatted_address",
-        "geometry.location",
-        "name",
-        "place_id",
-      ],
-      componentRestrictions: { country: [countryBias] },
-    });
-    acRef.current = ac;
-    const listener = ac.addListener("place_changed", () => {
-      const place = ac.getPlace();
-      if (!place) return;
-      onChange(componentsToValue(place, value));
-    });
+    if (!query || query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(forwardGeocodeUrl(apiKey, query, countryBias));
+        if (!res.ok) {
+          setSuggestions([]);
+          return;
+        }
+        const data = (await res.json()) as { features?: MapTilerFeature[] };
+        setSuggestions(data.features || []);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 200);
     return () => {
-      listener.remove();
-      acRef.current = null;
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
+  }, [query, apiKey, countryBias]);
+
+  // Click-outside closes the dropdown.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // Keep the typed value in sync when the parent updates (e.g. after a
+  // pin drag fills `formatted`).
+  useEffect(() => {
+    if (value.formatted && value.formatted !== query) {
+      setQuery(value.formatted);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places, countryBias]);
+  }, [value.formatted]);
+
+  const pick = (feat: MapTilerFeature) => {
+    const next = featureToValue(feat, value);
+    onChange(next);
+    setQuery(feat.place_name || query);
+    setSuggestions([]);
+    setOpen(false);
+    setHighlightIdx(-1);
+  };
+
+  const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (!open || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      if (highlightIdx >= 0 && highlightIdx < suggestions.length) {
+        e.preventDefault();
+        pick(suggestions[highlightIdx]);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
 
   return (
-    <div className="relative">
+    <div ref={wrapperRef} className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
       <Input
-        ref={inputRef}
         type="text"
         placeholder="Search address, landmark, or barangay…"
-        defaultValue={value.formatted || ""}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
         className="pl-9 text-sm"
         autoComplete="off"
       />
+      {loading && (
+        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+      )}
+      {open && suggestions.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-md border border-border/40 bg-background shadow-md">
+          {suggestions.map((s, i) => (
+            <li
+              key={s.id || `${s.place_name}-${i}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(s);
+              }}
+              onMouseEnter={() => setHighlightIdx(i)}
+              className={`px-3 py-2 text-sm cursor-pointer ${
+                i === highlightIdx
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/50"
+              }`}
+            >
+              <p className="font-medium leading-tight">{s.text}</p>
+              <p className="text-xs text-muted-foreground leading-tight truncate">
+                {s.place_name}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };
@@ -299,19 +450,19 @@ const PlacesAutocomplete = ({
 const MapPicker = ({
   value,
   onChange,
-  mapId,
+  apiKey,
+  styleUrl,
 }: {
   value: AddressValue;
   onChange: (next: AddressValue) => void;
-  mapId: string | null;
+  apiKey: string;
+  styleUrl: string;
 }) => {
-  const apiLoaded = useApiIsLoaded();
-  const map = useMap();
-  const geocoding = useMapsLibrary("geocoding");
+  const mapRef = useRef<MapRef | null>(null);
   const [reversing, setReversing] = useState(false);
   const [locating, setLocating] = useState(false);
 
-  const center = useMemo<google.maps.LatLngLiteral>(() => {
+  const center = useMemo(() => {
     if (
       typeof value.latitude === "number" &&
       typeof value.longitude === "number"
@@ -321,41 +472,41 @@ const MapPicker = ({
     return DEFAULT_CENTER;
   }, [value.latitude, value.longitude]);
 
-  // Recenter when the value's lat/lng changes from outside (e.g. an
-  // autocomplete pick or manual edit). Without this, picking a place
-  // updates the marker but the map stays parked at the previous spot.
+  // Recenter the map when the value changes from outside (autocomplete
+  // pick or "Use my location"). Without this, picking a place updates
+  // the marker but the map stays parked at the previous spot.
   useEffect(() => {
+    const map = mapRef.current;
     if (!map) return;
     if (
       typeof value.latitude === "number" &&
       typeof value.longitude === "number"
     ) {
-      map.panTo({ lat: value.latitude, lng: value.longitude });
+      map.flyTo({
+        center: [value.longitude, value.latitude],
+        zoom: 17,
+        duration: 700,
+      });
     }
-  }, [map, value.latitude, value.longitude]);
+  }, [value.latitude, value.longitude]);
 
   const reverseGeocode = useCallback(
     async (lat: number, lng: number) => {
-      if (!geocoding) return;
       setReversing(true);
       try {
-        const geocoder = new geocoding.Geocoder();
-        const { results } = await geocoder.geocode({
-          location: { lat, lng },
-        });
-        const result = results?.[0];
-        if (!result) {
-          // Even if Google has no human address for the point, keep the
-          // pin coordinates — courier APIs care about lat/lng.
+        const res = await fetch(reverseGeocodeUrl(apiKey, lng, lat));
+        if (!res.ok) {
+          onChange({ ...value, latitude: lat, longitude: lng });
+          return;
+        }
+        const data = (await res.json()) as { features?: MapTilerFeature[] };
+        const feat = data.features?.[0];
+        if (!feat) {
           onChange({ ...value, latitude: lat, longitude: lng });
           return;
         }
         onChange(
-          geocodeResultToValue(result, {
-            ...value,
-            latitude: lat,
-            longitude: lng,
-          }),
+          featureToValue(feat, { ...value, latitude: lat, longitude: lng }),
         );
       } catch {
         onChange({ ...value, latitude: lat, longitude: lng });
@@ -363,23 +514,8 @@ const MapPicker = ({
         setReversing(false);
       }
     },
-    [geocoding, onChange, value],
+    [apiKey, onChange, value],
   );
-
-  const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
-    if (!e.latLng) return;
-    const lat = e.latLng.lat();
-    const lng = e.latLng.lng();
-    void reverseGeocode(lat, lng);
-  };
-
-  const handleMapClick = (e: {
-    detail: { latLng: google.maps.LatLngLiteral | null };
-  }) => {
-    const ll = e.detail?.latLng;
-    if (!ll) return;
-    void reverseGeocode(ll.lat, ll.lng);
-  };
 
   const useMyLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
@@ -396,7 +532,7 @@ const MapPicker = ({
     );
   };
 
-  const markerPosition: google.maps.LatLngLiteral | null =
+  const markerPosition: { lat: number; lng: number } | null =
     typeof value.latitude === "number" && typeof value.longitude === "number"
       ? { lat: value.latitude, lng: value.longitude }
       : null;
@@ -412,7 +548,7 @@ const MapPicker = ({
           size="sm"
           variant="ghost"
           onClick={useMyLocation}
-          disabled={!apiLoaded || locating}
+          disabled={locating}
         >
           {locating ? (
             <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
@@ -422,34 +558,41 @@ const MapPicker = ({
           Use my location
         </Button>
       </div>
-      <div className="h-64 w-full overflow-hidden rounded-md border border-border/40">
+      <div className="h-64 w-full overflow-hidden rounded-md border border-border/40 relative">
         <Map
-          defaultCenter={center}
-          defaultZoom={markerPosition ? 17 : 12}
-          mapId={mapId || undefined}
-          gestureHandling="greedy"
-          disableDefaultUI={false}
-          clickableIcons={false}
-          onClick={handleMapClick}
+          ref={mapRef}
+          mapStyle={styleUrl}
+          initialViewState={{
+            longitude: center.lng,
+            latitude: center.lat,
+            zoom: markerPosition ? 17 : 12,
+          }}
+          onClick={(e) => {
+            void reverseGeocode(e.lngLat.lat, e.lngLat.lng);
+          }}
           style={{ width: "100%", height: "100%" }}
         >
+          <NavigationControl position="top-right" />
           {markerPosition && (
-            <AdvancedMarker
-              position={markerPosition}
+            <Marker
+              longitude={markerPosition.lng}
+              latitude={markerPosition.lat}
               draggable
-              onDragEnd={handleMarkerDragEnd}
-              title="Drag to refine"
-            />
-          )}
-          {reversing && (
-            <MapControl position={ControlPosition.TOP_CENTER}>
-              <div className="m-2 inline-flex items-center gap-2 rounded-md bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Reading address…
-              </div>
-            </MapControl>
+              anchor="bottom"
+              onDragEnd={(e) => {
+                void reverseGeocode(e.lngLat.lat, e.lngLat.lng);
+              }}
+            >
+              <MapPin className="w-7 h-7 fill-destructive text-destructive drop-shadow" />
+            </Marker>
           )}
         </Map>
+        {reversing && (
+          <div className="absolute top-2 left-2 inline-flex items-center gap-2 rounded-md bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Reading address…
+          </div>
+        )}
       </div>
       {markerPosition && (
         <p className="text-[10px] text-muted-foreground tabular-nums">
@@ -459,30 +602,6 @@ const MapPicker = ({
     </div>
   );
 };
-
-const PoweredByGoogleApi = ({
-  value,
-  onChange,
-  hideMap,
-  countryBias,
-  mapId,
-}: {
-  value: AddressValue;
-  onChange: (next: AddressValue) => void;
-  hideMap: boolean;
-  countryBias: string;
-  mapId: string | null;
-}) => (
-  <div className="space-y-3">
-    <PlacesAutocomplete
-      value={value}
-      onChange={onChange}
-      countryBias={countryBias}
-    />
-    <ManualFields value={value} onChange={onChange} />
-    {!hideMap && <MapPicker value={value} onChange={onChange} mapId={mapId} />}
-  </div>
-);
 
 export const AddressInput = ({
   value,
@@ -526,17 +645,27 @@ export const AddressInput = ({
     );
   }
 
+  const styleUrl = config.styleUrl || tileStyleUrl(config.apiKey);
+
   return (
     <div className={className}>
-      <APIProvider apiKey={config.apiKey} libraries={["places", "geocoding"]}>
-        <PoweredByGoogleApi
+      <div className="space-y-3">
+        <PlacesAutocomplete
           value={value}
           onChange={onChange}
-          hideMap={hideMap}
+          apiKey={config.apiKey}
           countryBias={countryBias}
-          mapId={config.mapId}
         />
-      </APIProvider>
+        <ManualFields value={value} onChange={onChange} />
+        {!hideMap && (
+          <MapPicker
+            value={value}
+            onChange={onChange}
+            apiKey={config.apiKey}
+            styleUrl={styleUrl}
+          />
+        )}
+      </div>
       <p className="text-[10px] text-muted-foreground mt-2 inline-flex items-center gap-1">
         <MapPin className="w-3 h-3" />
         Type to search, edit fields directly, or drag the pin — any of the three

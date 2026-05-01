@@ -1,19 +1,21 @@
-// /api/maps-config — exposes the public Google Maps JavaScript API key
-// (and an optional vector Map ID) so the storefront can render the
+// /api/maps-config — exposes the public MapTiler API key (and an
+// optional style override URL) so the storefront can render the
 // hybrid shipping address picker without baking the key into the Vite
-// bundle at build time. The key is referrer-restricted in Google Cloud
-// Console, so handing it to any browser hitting our origin is fine —
-// the security boundary is the referrer ACL, not key obscurity.
+// bundle at build time. The key should be domain-restricted in
+// MapTiler Cloud, so handing it to any browser hitting our origin is
+// fine — the security boundary is the domain ACL, not key obscurity.
 //
 // Returns:
-//   { apiKey: string | null, mapId: string | null }
+//   { apiKey: string | null, styleUrl: string | null }
 //
-// Reads from Cloudflare Pages env:
-//   - GOOGLE_MAPS_API_KEY (preferred)
-//   - VITE_GOOGLE_MAPS_API_KEY (fallback so a single env var works in
-//     both Vite dev and the prod worker without renaming)
-//   - GOOGLE_MAPS_MAP_ID (optional — required by AdvancedMarker, the
-//     storefront falls back to a plain Marker when this is missing)
+// Reads from Cloudflare Pages env (in priority order):
+//   - MAPTILER_API_KEY (preferred — purpose-specific)
+//   - VITE_MAPTILER_API_KEY (fallback for shared dev/prod naming)
+//   - MAPS_API_KEY (generic fallback if a single key is reused)
+//
+// Optional:
+//   - MAPTILER_STYLE_URL — full vector style URL (defaults to
+//     streets-v2 baked into the storefront).
 
 import { setCloudflareContext } from "./_lib/context.js";
 import { SECURITY_HEADERS } from "./_lib/security-headers.js";
@@ -34,7 +36,11 @@ export const onRequest = async ({ request, env }) => {
     return json(405, { error: "Method not allowed" });
   }
   const apiKey =
-    (env && (env.GOOGLE_MAPS_API_KEY || env.VITE_GOOGLE_MAPS_API_KEY)) || null;
-  const mapId = (env && env.GOOGLE_MAPS_MAP_ID) || null;
-  return json(200, { apiKey, mapId });
+    (env &&
+      (env.MAPTILER_API_KEY ||
+        env.VITE_MAPTILER_API_KEY ||
+        env.MAPS_API_KEY)) ||
+    null;
+  const styleUrl = (env && env.MAPTILER_STYLE_URL) || null;
+  return json(200, { apiKey, styleUrl });
 };
