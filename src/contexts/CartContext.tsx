@@ -92,6 +92,10 @@ export interface OrderShipment {
   trackingNumber: string;
   trackingUrl?: string;
   notes?: string;
+  // ISO date the parcel was actually handed to the courier. Defaults to
+  // when the admin records the AWB but is editable so a slightly-late
+  // entry still tells the buyer the right date.
+  shippedAt?: string;
   updatedAt: string;
 }
 

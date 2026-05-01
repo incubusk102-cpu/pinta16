@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   Bell,
+  Check,
+  Copy,
   Download,
   ExternalLink,
   Package,
@@ -21,6 +23,28 @@ import { downloadWaybillPdf } from "@/lib/waybill";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
 
+// Group a courier-issued AWB into space-separated runs of four digits
+// so it's easier to read off the screen and into the courier app.
+// Falls back to the raw string for AWBs that aren't all-digits or that
+// already contain spaces / dashes (international shipments, etc.).
+const formatTrackingNumber = (raw: string): string => {
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return trimmed;
+  if (!/^\d+$/.test(trimmed)) return trimmed;
+  return trimmed.replace(/(\d{4})(?=\d)/g, "$1 ");
+};
+
+const formatShippedAt = (iso?: string): string | null => {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return new Date(t).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 // Standalone tracker pulled out of /account so the hamburger drawer can
 // render it in an inline sheet without navigating to /account. Same
 // behaviour as before: accepts an Order ID, looks up via /api/orders
@@ -30,7 +54,23 @@ export default function OrderTracker() {
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<CompletedOrder | null>(null);
   const [searching, setSearching] = useState(false);
+  const [copiedAwb, setCopiedAwb] = useState(false);
   const { orders: localOrders, getOrderReviews } = useCart();
+
+  const copyAwb = (awb: string) => {
+    if (!navigator.clipboard) {
+      toast.error("Clipboard not available in this browser");
+      return;
+    }
+    navigator.clipboard
+      .writeText(awb)
+      .then(() => {
+        setCopiedAwb(true);
+        toast.success("Tracking number copied");
+        window.setTimeout(() => setCopiedAwb(false), 1800);
+      })
+      .catch(() => toast.error("Couldn't copy tracking number"));
+  };
 
   const lookup = async () => {
     const id = orderId.trim().toUpperCase();
@@ -132,7 +172,7 @@ export default function OrderTracker() {
             })}
           </div>
 
-          {order.shipment && (
+          {order.shipment ? (
             <div className="pt-2 border-t border-border/10">
               <div className="flex items-center gap-2 mb-2">
                 <Truck className="w-3.5 h-3.5 text-muted-foreground" />
@@ -155,14 +195,40 @@ export default function OrderTracker() {
                   order.shipment.trackingNumber,
                   order.shipment.trackingUrl,
                 );
+                const shippedOn = formatShippedAt(order.shipment.shippedAt);
+                const formattedAwb = formatTrackingNumber(
+                  order.shipment.trackingNumber,
+                );
                 return (
                   <>
                     <p className="text-sm text-foreground break-words">
-                      {courierLabel} ·{" "}
-                      <span className="font-mono text-xs break-all">
-                        {order.shipment.trackingNumber}
-                      </span>
+                      {shippedOn && (
+                        <span className="text-muted-foreground">
+                          Shipped on {shippedOn} via{" "}
+                        </span>
+                      )}
+                      <span className="font-medium">{courierLabel}</span>
                     </p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="font-mono text-xs break-all text-foreground">
+                        {formattedAwb}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyAwb(order.shipment?.trackingNumber ?? "")
+                        }
+                        aria-label="Copy tracking number"
+                        title="Copy tracking number"
+                        className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {copiedAwb ? (
+                          <Check className="w-3 h-3" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
                     {/* Courier-specific deep-link CTA — wording matches
                         the user spec: "Track on J&T", "Track on LBC",
                         etc. so customers know exactly which carrier
@@ -205,6 +271,20 @@ export default function OrderTracker() {
                 );
               })()}
             </div>
+          ) : (
+            order.status !== "received" && (
+              <div className="pt-2 border-t border-border/10">
+                <div className="flex items-center gap-2 mb-1">
+                  <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Tracking
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Tracking will appear here once Canvas Hub ships your order.
+                </p>
+              </div>
+            )
           )}
 
           {order.notifications && order.notifications.length > 0 && (
