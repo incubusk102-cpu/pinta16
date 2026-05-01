@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingCart, Eye } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
+  type ProductAvailability,
 } from "@/contexts/ProductContext";
 
 interface ArtworkCardProps {
@@ -19,6 +21,7 @@ interface ArtworkCardProps {
   description: string;
   index: number;
   onClick: () => void;
+  availability?: ProductAvailability;
 }
 
 const ArtworkCard = ({
@@ -33,14 +36,17 @@ const ArtworkCard = ({
   description,
   index,
   onClick,
+  availability = "available",
 }: ArtworkCardProps) => {
   const { addToCart } = useCart();
   const [isHovered, setIsHovered] = useState(false);
   const effectivePrice = getEffectivePrice({ price, salePrice });
   const discount = getDiscountPercent({ price, salePrice });
+  const isPurchasable = availability === "available";
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isPurchasable) return;
     addToCart({
       id,
       image,
@@ -97,9 +103,19 @@ const ArtworkCard = ({
         </AnimatePresence>
 
         {/* Discount badge */}
-        {discount > 0 && (
+        {discount > 0 && isPurchasable && (
           <div className="absolute top-3 left-3 z-[1] px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
             {discount}% OFF
+          </div>
+        )}
+        {availability === "sold" && (
+          <div className="absolute top-3 left-3 z-[1] px-2.5 py-1 bg-foreground text-background font-body text-[10px] tracking-[0.25em] uppercase rounded-sm">
+            Sold
+          </div>
+        )}
+        {availability === "reserved" && (
+          <div className="absolute top-3 left-3 z-[1] px-2.5 py-1 bg-amber-500 text-white font-body text-[10px] tracking-[0.25em] uppercase rounded-sm">
+            Reserved
           </div>
         )}
 
@@ -125,12 +141,25 @@ const ArtworkCard = ({
                 <>₱{price.toLocaleString()}</>
               )}
             </span>
-            <button
-              onClick={handleAddToCart}
-              className="p-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors rounded-sm"
-            >
-              <ShoppingCart className="w-4 h-4 text-white" />
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/product/$id"
+                params={{ id }}
+                onClick={(e) => e.stopPropagation()}
+                className="px-2.5 py-1.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors rounded-sm text-[10px] tracking-[0.2em] uppercase text-white"
+              >
+                View
+              </Link>
+              {isPurchasable ? (
+                <button
+                  onClick={handleAddToCart}
+                  aria-label="Add to cart"
+                  className="p-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors rounded-sm"
+                >
+                  <ShoppingCart className="w-4 h-4 text-white" />
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

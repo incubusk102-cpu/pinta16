@@ -25,6 +25,7 @@ import {
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
   type Product,
+  type ProductAvailability,
   type ProductImage,
 } from "@/contexts/ProductContext";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
@@ -43,6 +44,8 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [year, setYear] = useState("");
   const [category, setCategory] = useState<string>(PRODUCT_CATEGORIES[0]);
   const [dimensions, setDimensions] = useState("");
+  const [availability, setAvailability] =
+    useState<ProductAvailability>("available");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -57,6 +60,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     setYear(product.year);
     setCategory(product.category || PRODUCT_CATEGORIES[0]);
     setDimensions(product.dimensions || "");
+    setAvailability(product.availability ?? "available");
     setPrice(String(product.price));
     setSalePrice(product.salePrice ? String(product.salePrice) : "");
     setDiscountPercent(
@@ -98,6 +102,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         description: description.trim(),
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
+        availability,
       });
       toast.success("Product updated");
       onClose();
@@ -188,6 +193,26 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
                 maxLength={60}
               />
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-availability">Availability</Label>
+            <Select
+              value={availability}
+              onValueChange={(v) => setAvailability(v as ProductAvailability)}
+            >
+              <SelectTrigger id="edit-availability">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="reserved">Reserved</SelectItem>
+                <SelectItem value="sold">Sold</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Reserved / Sold pieces stay listed but the buy button is disabled.
+            </p>
           </div>
 
           <div>

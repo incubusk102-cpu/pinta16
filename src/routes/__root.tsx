@@ -1,4 +1,9 @@
-import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
+import {
+  Outlet,
+  Link,
+  createRootRoute,
+  useRouterState,
+} from "@tanstack/react-router";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
@@ -43,6 +48,14 @@ function HeartbeatBridge() {
   return null;
 }
 
+function PublicAnnouncementBar() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return <AnnouncementBar />;
+}
+
 function RootComponent() {
   return (
     <AdminAuthProvider>
@@ -51,7 +64,7 @@ function RootComponent() {
           <ProductProvider>
             <CartProvider>
               <HeartbeatBridge />
-              <AnnouncementBar />
+              <PublicAnnouncementBar />
               <Outlet />
             </CartProvider>
           </ProductProvider>

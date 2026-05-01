@@ -784,7 +784,21 @@ function ProductsSection() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate">{product.title}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-medium truncate">
+                          {product.title}
+                        </h3>
+                        {product.availability === "sold" && (
+                          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-foreground text-background rounded">
+                            Sold
+                          </span>
+                        )}
+                        {product.availability === "reserved" && (
+                          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-amber-500 text-white rounded">
+                            Reserved
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {product.medium} · {product.year}
                         {product.dimensions ? ` · ${product.dimensions}` : ""}

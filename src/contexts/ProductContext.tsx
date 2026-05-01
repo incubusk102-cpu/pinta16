@@ -17,6 +17,8 @@ export interface ProductImage {
 
 export const PRODUCT_MAX_IMAGES = 5;
 
+export type ProductAvailability = "available" | "reserved" | "sold";
+
 export interface Product {
   id: string;
   image: string;
@@ -35,6 +37,9 @@ export interface Product {
   imageBytes?: number;
   mockupFileName?: string;
   mockupBytes?: number;
+  availability?: ProductAvailability;
+  reservedBy?: string;
+  reservedAt?: string;
 }
 
 export const PRODUCT_CATEGORIES = [
