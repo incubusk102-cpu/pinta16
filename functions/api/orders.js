@@ -344,11 +344,33 @@ export const handler = async (event) => {
           : process.env.BREVO_API_KEY
             ? "brevo"
             : null;
+        // Show the actual from address that order emails will use.
+        // sendOrderEmail now resolves from storefront config first
+        // (default: "order@canvhub.com"), then env vars.
+        const envFrom = resolveEmailEnv("FROM", "order") || null;
+        const orderEmailCfg = await (async () => {
+          try {
+            const cfgStore = getStore(CONFIG_STORE_NAME);
+            const cfg = await cfgStore.get(CONFIG_KEY, { type: "json" });
+            return cfg?.orderEmail || null;
+          } catch {
+            return null;
+          }
+        })();
+        const cfgEmail =
+          (orderEmailCfg?.fromEmail || "order@canvhub.com").trim();
+        const cfgName =
+          (orderEmailCfg?.fromName || "Canvas Hub").trim();
+        const effectiveFrom = cfgEmail
+          ? cfgName
+            ? `${cfgName} <${cfgEmail}>`
+            : cfgEmail
+          : envFrom;
         return json(200, {
           email: {
-            configured: isEmailConfigured("order"),
+            configured: Boolean(provider),
             provider,
-            from: resolveEmailEnv("FROM", "order") || null,
+            from: effectiveFrom || envFrom,
             replyTo: resolveEmailEnv("REPLY_TO", "order") || null,
           },
         });
