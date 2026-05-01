@@ -21,18 +21,10 @@
 // configured the component degrades to manual fields only — no
 // autocomplete, no map.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Map,
-  Marker,
-  NavigationControl,
-  type MapRef,
-} from "react-map-gl/maplibre";
-import "maplibre-gl/dist/maplibre-gl.css";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   Loader2,
-  LocateFixed,
   MapPin,
   MapPinned,
   Navigation,
@@ -40,9 +32,19 @@ import {
   TreePine,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import {
+  type AddressValue,
+  type MapTilerFeature,
+  DEFAULT_CENTER,
+  featureToValue,
+} from "@/components/addressInputShared";
 
-const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 }; // Manila
+// Lazy-load the MapLibre-based picker so `react-map-gl/maplibre` and
+// the MapLibre stylesheet (~600 kB gzipped together) only ship when
+// the customer actually opens the address picker. Without this, every
+// route that imports CheckoutForm pulls the WebGL renderer into the
+// initial bundle.
+const AddressMapPicker = lazy(() => import("@/components/AddressMapPicker"));
 
 // MapTiler's vector style URL — `streets-v2` is the general-purpose
 // retail-friendly style. We append the API key as a query param. The
@@ -120,30 +122,7 @@ const forwardGeocodeUrl = (
   return `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${params.toString()}`;
 };
 
-const reverseGeocodeUrl = (
-  apiKey: string,
-  lng: number,
-  lat: number,
-): string => {
-  const params = new URLSearchParams({
-    key: apiKey,
-    language: "en",
-  });
-  return `https://api.maptiler.com/geocoding/${lng},${lat}.json?${params.toString()}`;
-};
-
-export interface AddressValue {
-  line1: string;
-  line2?: string;
-  city: string;
-  province?: string;
-  postalCode?: string;
-  country?: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  formatted?: string;
-  placeId?: string;
-}
+export type { AddressValue } from "@/components/addressInputShared";
 
 export interface AddressInputProps {
   value: AddressValue;
@@ -178,116 +157,10 @@ const fetchMapsConfig = async (): Promise<MapsConfigResponse> => {
   }
 };
 
-// MapTiler returns GeoJSON Features. The properties bag carries the
-// structured pieces we need — but the field names vary slightly by
-// place type (a region might use `name` while an address uses
-// `street`). The `context` array holds the parent administrative
-// hierarchy. We walk both to assemble a SavedAddress-shaped value.
-interface MapTilerContextEntry {
-  id?: string;
-  text?: string;
-  language?: string;
-  // The id is namespaced like `country.123`, `region.456`, etc. We
-  // pull the prefix to identify the level.
-}
-
-interface MapTilerFeature {
-  id?: string;
-  type?: string;
-  place_type?: string[];
-  place_name?: string;
-  text?: string;
-  address?: string | number;
-  properties?: {
-    ref?: string;
-    country_code?: string;
-    postcode?: string;
-  };
-  context?: MapTilerContextEntry[];
-  center?: [number, number]; // [lng, lat]
-  geometry?: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-}
-
-const contextLevel = (entry: MapTilerContextEntry): string => {
-  const id = entry.id || "";
-  const dot = id.indexOf(".");
-  return dot > 0 ? id.slice(0, dot) : id;
-};
-
-const featureToValue = (
-  feat: MapTilerFeature,
-  prev: AddressValue,
-): AddressValue => {
-  const ctx = feat.context || [];
-  const find = (level: string): string => {
-    const entry = ctx.find((c) => contextLevel(c) === level);
-    return entry?.text || "";
-  };
-  // MapTiler's PH coverage uses these levels:
-  //   country, region, subregion, county, joint_municipality,
-  //   municipality, joint_district, municipal_district, locality,
-  //   neighbourhood, place, postal_code, address, street.
-  const country = find("country");
-  const region = find("region");
-  const subregion = find("subregion");
-  const municipality =
-    find("municipality") ||
-    find("joint_municipality") ||
-    find("municipal_district") ||
-    find("place") ||
-    "";
-  const locality = find("locality") || find("neighbourhood") || "";
-  const postcode = feat.properties?.postcode || find("postal_code") || "";
-
-  const placeTypes = feat.place_type || [];
-  let line1 = "";
-  let line2 = "";
-
-  if (placeTypes.includes("address")) {
-    // For an exact address match, feat.address is the house number and
-    // feat.text is the street name.
-    const num =
-      typeof feat.address === "number"
-        ? String(feat.address)
-        : feat.address || "";
-    const street = feat.text || "";
-    line1 =
-      [num, street].filter(Boolean).join(" ").trim() || feat.place_name || "";
-    line2 = locality;
-  } else if (placeTypes.includes("street")) {
-    line1 = feat.text || "";
-    line2 = locality;
-  } else if (
-    placeTypes.includes("neighbourhood") ||
-    placeTypes.includes("locality")
-  ) {
-    line2 = feat.text || "";
-    line1 = prev.line1 || "";
-  } else {
-    line1 = prev.line1 || feat.text || feat.place_name || "";
-    line2 = locality;
-  }
-
-  const lng = feat.center?.[0] ?? feat.geometry?.coordinates?.[0];
-  const lat = feat.center?.[1] ?? feat.geometry?.coordinates?.[1];
-
-  return {
-    ...prev,
-    line1: line1 || prev.line1 || "",
-    line2: line2 || prev.line2 || "",
-    city: municipality || prev.city || "",
-    province: subregion || region || prev.province || "",
-    postalCode: postcode || prev.postalCode || "",
-    country: country || prev.country || "Philippines",
-    latitude: typeof lat === "number" ? lat : (prev.latitude ?? null),
-    longitude: typeof lng === "number" ? lng : (prev.longitude ?? null),
-    formatted: feat.place_name || prev.formatted || "",
-    placeId: feat.id || prev.placeId,
-  };
-};
+// MapTiler returns GeoJSON Features. The geocoding response shape and
+// the helpers that flatten it into our `AddressValue` live in
+// `addressInputShared.ts` so both this file and the lazily-loaded
+// `AddressMapPicker` can use them without forming a circular import.
 
 interface FieldPair {
   key: keyof AddressValue;
@@ -579,162 +452,6 @@ const PlacesAutocomplete = ({
   );
 };
 
-const MapPicker = ({
-  value,
-  onChange,
-  apiKey,
-  styleUrl,
-}: {
-  value: AddressValue;
-  onChange: (next: AddressValue) => void;
-  apiKey: string;
-  styleUrl: string;
-}) => {
-  const mapRef = useRef<MapRef | null>(null);
-  const [reversing, setReversing] = useState(false);
-  const [locating, setLocating] = useState(false);
-
-  const center = useMemo(() => {
-    if (
-      typeof value.latitude === "number" &&
-      typeof value.longitude === "number"
-    ) {
-      return { lat: value.latitude, lng: value.longitude };
-    }
-    return DEFAULT_CENTER;
-  }, [value.latitude, value.longitude]);
-
-  // Recenter the map when the value changes from outside (autocomplete
-  // pick or "Use my location"). Without this, picking a place updates
-  // the marker but the map stays parked at the previous spot.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (
-      typeof value.latitude === "number" &&
-      typeof value.longitude === "number"
-    ) {
-      map.flyTo({
-        center: [value.longitude, value.latitude],
-        zoom: 17,
-        duration: 700,
-      });
-    }
-  }, [value.latitude, value.longitude]);
-
-  const reverseGeocode = useCallback(
-    async (lat: number, lng: number) => {
-      setReversing(true);
-      try {
-        const res = await fetch(reverseGeocodeUrl(apiKey, lng, lat));
-        if (!res.ok) {
-          onChange({ ...value, latitude: lat, longitude: lng });
-          return;
-        }
-        const data = (await res.json()) as { features?: MapTilerFeature[] };
-        const feat = data.features?.[0];
-        if (!feat) {
-          onChange({ ...value, latitude: lat, longitude: lng });
-          return;
-        }
-        onChange(
-          featureToValue(feat, { ...value, latitude: lat, longitude: lng }),
-        );
-      } catch {
-        onChange({ ...value, latitude: lat, longitude: lng });
-      } finally {
-        setReversing(false);
-      }
-    },
-    [apiKey, onChange, value],
-  );
-
-  const useMyLocation = () => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        void reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-      },
-      () => {
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
-    );
-  };
-
-  const markerPosition: { lat: number; lng: number } | null =
-    typeof value.latitude === "number" && typeof value.longitude === "number"
-      ? { lat: value.latitude, lng: value.longitude }
-      : null;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          Drop a pin or drag the marker
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={useMyLocation}
-          disabled={locating}
-        >
-          {locating ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-          ) : (
-            <LocateFixed className="w-3.5 h-3.5 mr-1" />
-          )}
-          Use my location
-        </Button>
-      </div>
-      <div className="h-64 w-full overflow-hidden rounded-md border border-border/40 relative">
-        <Map
-          ref={mapRef}
-          mapStyle={styleUrl}
-          initialViewState={{
-            longitude: center.lng,
-            latitude: center.lat,
-            zoom: markerPosition ? 17 : 12,
-          }}
-          onClick={(e) => {
-            void reverseGeocode(e.lngLat.lat, e.lngLat.lng);
-          }}
-          style={{ width: "100%", height: "100%" }}
-        >
-          <NavigationControl position="top-right" />
-          {markerPosition && (
-            <Marker
-              longitude={markerPosition.lng}
-              latitude={markerPosition.lat}
-              draggable
-              anchor="bottom"
-              onDragEnd={(e) => {
-                void reverseGeocode(e.lngLat.lat, e.lngLat.lng);
-              }}
-            >
-              <MapPin className="w-7 h-7 fill-destructive text-destructive drop-shadow" />
-            </Marker>
-          )}
-        </Map>
-        {reversing && (
-          <div className="absolute top-2 left-2 inline-flex items-center gap-2 rounded-md bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Reading address…
-          </div>
-        )}
-      </div>
-      {markerPosition && (
-        <p className="text-[10px] text-muted-foreground tabular-nums">
-          {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
-        </p>
-      )}
-    </div>
-  );
-};
-
 export const AddressInput = ({
   value,
   onChange,
@@ -790,12 +507,23 @@ export const AddressInput = ({
         />
         <ManualFields value={value} onChange={onChange} />
         {!hideMap && (
-          <MapPicker
-            value={value}
-            onChange={onChange}
-            apiKey={config.apiKey}
-            styleUrl={styleUrl}
-          />
+          <Suspense
+            fallback={
+              <div className="h-64 w-full rounded-md border border-border/40 bg-muted/30 flex items-center justify-center">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Loading map…
+                </span>
+              </div>
+            }
+          >
+            <AddressMapPicker
+              value={value}
+              onChange={onChange}
+              apiKey={config.apiKey}
+              styleUrl={styleUrl}
+            />
+          </Suspense>
         )}
       </div>
       <p className="text-[10px] text-muted-foreground mt-2 inline-flex items-center gap-1">

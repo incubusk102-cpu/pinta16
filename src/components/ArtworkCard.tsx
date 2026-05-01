@@ -226,13 +226,23 @@ const ArtworkCard = ({
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-        <div className="absolute bottom-0 left-0 right-0 p-5 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
+        {/* Bottom-up legibility gradient. Always on for touch viewports
+            so the title + price strip below is readable over the image;
+            hover-only on md+ so desktop visitors see the bare painting
+            until they engage. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-500" />
+        {/* Metadata + add-to-cart strip. On <md it stays anchored at the
+            bottom so touch users can see the title, price, and tap the
+            cart button; on md+ it slides up on hover for a cleaner
+            gallery aesthetic. */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-500">
           <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60 mb-1">
             {medium} · {year}
           </p>
-          <h3 className="font-display text-lg text-white mb-1">{title}</h3>
-          <p className="font-body text-xs text-white/70 mb-3 line-clamp-2">
+          <h3 className="font-display text-base sm:text-lg text-white mb-1 line-clamp-1">
+            {title}
+          </h3>
+          <p className="hidden md:block font-body text-xs text-white/70 mb-3 line-clamp-2">
             {description}
           </p>
           <div className="flex items-center justify-between">

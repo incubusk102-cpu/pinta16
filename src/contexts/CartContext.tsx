@@ -1,7 +1,9 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   ReactNode,
 } from "react";
@@ -227,6 +229,20 @@ const getEstimatedCreationDays = (itemCount: number): string => {
   return "Subject to artist availability — we'll email you with estimated completion";
 };
 
+const mergeReviews = (
+  existing: OrderReview[] | undefined,
+  legacy: OrderReview | undefined,
+  next: OrderReview,
+): OrderReview[] => {
+  const seed: OrderReview[] = existing ? [...existing] : legacy ? [legacy] : [];
+  const idx = seed.findIndex(
+    (r) => (r.productId ?? "") === (next.productId ?? ""),
+  );
+  if (idx >= 0) seed[idx] = next;
+  else seed.push(next);
+  return seed;
+};
+
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { config } = useStorefrontConfig();
   const FREE_SHIPPING_THRESHOLD = config.freeShipping.enabled
@@ -279,14 +295,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     }
   });
 
-  const saveOrders = (newOrders: CompletedOrder[]) => {
+  const saveOrders = useCallback((newOrders: CompletedOrder[]) => {
     setOrders(newOrders);
     if (typeof window !== "undefined") {
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(newOrders));
     }
-  };
+  }, []);
 
-  const addToCart = (item: Omit<CartItem, "quantity">) => {
+  const addToCart = useCallback((item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.id === item.id);
       if (existing) {
@@ -297,75 +313,94 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       return [...prev, { ...item, quantity: 1 }];
     });
     setIsOpen(true);
-  };
+  }, []);
 
-  const removeFromCart = (id: string) =>
-    setItems((prev) => prev.filter((i) => i.id !== id));
+  const removeFromCart = useCallback(
+    (id: string) => setItems((prev) => prev.filter((i) => i.id !== id)),
+    [],
+  );
 
-  const updateQuantity = (id: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(id);
-      return;
-    }
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity } : i)));
-  };
+  const updateQuantity = useCallback(
+    (id: string, quantity: number) => {
+      if (quantity <= 0) {
+        removeFromCart(id);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, quantity } : i)),
+      );
+    },
+    [removeFromCart],
+  );
 
-  const clearCart = () => {
-    setItems([]);
-    removeVoucher();
-  };
-
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-  const isFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD;
-  const amountToFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-
-  const applyVoucher = (code: string) => {
-    const upper = code.toUpperCase().trim();
-    const promo = config.promoCodes.find((p) => p.code === upper);
-    const fail = (error: string) =>
+  const removeVoucher = useCallback(
+    () =>
       setVoucher({
-        code: upper,
+        code: "",
         type: "percent",
         value: 0,
         freeShipping: false,
         applied: false,
-        error,
-      });
-    if (!promo) return fail("Invalid voucher code");
-    if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
-      return fail("This code has expired");
-    }
-    if (subtotal < promo.minSpend) {
-      return fail(
-        `Minimum spend of \u20b1${promo.minSpend.toLocaleString()} required.`,
-      );
-    }
-    setVoucher({
-      code: upper,
-      type: promo.type,
-      value: promo.value,
-      freeShipping:
-        promo.type === "free_shipping" || Boolean(promo.freeShipping),
-      applied: true,
-      error: "",
-    });
-  };
+        error: "",
+      }),
+    [],
+  );
 
-  const removeVoucher = () =>
-    setVoucher({
-      code: "",
-      type: "percent",
-      value: 0,
-      freeShipping: false,
-      applied: false,
-      error: "",
-    });
+  const clearCart = useCallback(() => {
+    setItems([]);
+    removeVoucher();
+  }, [removeVoucher]);
+
+  const subtotal = useMemo(
+    () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+    [items],
+  );
+  const itemCount = useMemo(
+    () => items.reduce((sum, i) => sum + i.quantity, 0),
+    [items],
+  );
+  const isFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD;
+  const amountToFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+
+  const applyVoucher = useCallback(
+    (code: string) => {
+      const upper = code.toUpperCase().trim();
+      const promo = config.promoCodes.find((p) => p.code === upper);
+      const fail = (error: string) =>
+        setVoucher({
+          code: upper,
+          type: "percent",
+          value: 0,
+          freeShipping: false,
+          applied: false,
+          error,
+        });
+      if (!promo) return fail("Invalid voucher code");
+      if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
+        return fail("This code has expired");
+      }
+      if (subtotal < promo.minSpend) {
+        return fail(
+          `Minimum spend of \u20b1${promo.minSpend.toLocaleString()} required.`,
+        );
+      }
+      setVoucher({
+        code: upper,
+        type: promo.type,
+        value: promo.value,
+        freeShipping:
+          promo.type === "free_shipping" || Boolean(promo.freeShipping),
+        applied: true,
+        error: "",
+      });
+    },
+    [config.promoCodes, subtotal],
+  );
 
   const voucherFreeShipping = voucher.applied && voucher.freeShipping;
   const shippingFeeOriginal = SHIPPING_FEE;
   const shippingFee = isFreeShipping || voucherFreeShipping ? 0 : SHIPPING_FEE;
-  const computeVoucherDiscount = (): number => {
+  const discount = useMemo((): number => {
     if (!voucher.applied) return 0;
     if (voucher.type === "percent") {
       return subtotal * (voucher.value / 100);
@@ -379,163 +414,218 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       return 0;
     }
     return Math.min(voucher.value, subtotal);
-  };
-  const discount = computeVoucherDiscount();
+  }, [voucher.applied, voucher.type, voucher.value, subtotal]);
   const total = subtotal - discount + shippingFee;
   const estimatedCreationDays = getEstimatedCreationDays(itemCount);
 
-  const placeOrder = (
-    orderInfo: OrderInfo,
-    payment?: { paymentIntentId?: string; qrCodeImageUrl?: string | null },
-  ): CompletedOrder => {
-    const order: CompletedOrder = {
-      id: `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`,
-      items: [...items],
-      orderInfo,
+  const placeOrder = useCallback(
+    (
+      orderInfo: OrderInfo,
+      payment?: { paymentIntentId?: string; qrCodeImageUrl?: string | null },
+    ): CompletedOrder => {
+      const order: CompletedOrder = {
+        id: `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`,
+        items: [...items],
+        orderInfo,
+        subtotal,
+        shippingFee,
+        discount,
+        total,
+        estimatedCreationDays,
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        paymentIntentId: payment?.paymentIntentId,
+        qrCodeImageUrl: payment?.qrCodeImageUrl ?? undefined,
+        voucherCode: voucher.applied ? voucher.code : undefined,
+        notifications: [],
+      };
+      const newOrders = [order, ...orders];
+      saveOrders(newOrders);
+      setLastOrder(order);
+      clearCart();
+      setIsOpen(false);
+      setShowCheckout(false);
+      setShowConfirmation(true);
+      fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "place", order }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        })
+        .catch((err) => {
+          console.error("Order sync failed:", err);
+          import("sonner").then(({ toast }) =>
+            toast.warning(
+              "Order saved locally but could not sync to server. It will appear in your tracking once connectivity is restored.",
+            ),
+          );
+        });
+      return order;
+    },
+    [
+      items,
       subtotal,
       shippingFee,
       discount,
       total,
       estimatedCreationDays,
-      createdAt: new Date().toISOString(),
-      status: "confirmed",
-      paymentIntentId: payment?.paymentIntentId,
-      qrCodeImageUrl: payment?.qrCodeImageUrl ?? undefined,
-      voucherCode: voucher.applied ? voucher.code : undefined,
-      notifications: [],
-    };
-    const newOrders = [order, ...orders];
-    saveOrders(newOrders);
-    setLastOrder(order);
-    clearCart();
-    setIsOpen(false);
-    setShowCheckout(false);
-    setShowConfirmation(true);
-    fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "place", order }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      })
-      .catch((err) => {
-        console.error("Order sync failed:", err);
-        import("sonner").then(({ toast }) =>
-          toast.warning(
-            "Order saved locally but could not sync to server. It will appear in your tracking once connectivity is restored.",
-          ),
-        );
-      });
-    return order;
-  };
-
-  const updateOrderStatus = (
-    orderId: string,
-    status: CompletedOrder["status"],
-  ) => {
-    const newOrders = orders.map((o) =>
-      o.id === orderId ? { ...o, status } : o,
-    );
-    saveOrders(newOrders);
-  };
-
-  const mergeReviews = (
-    existing: OrderReview[] | undefined,
-    legacy: OrderReview | undefined,
-    next: OrderReview,
-  ): OrderReview[] => {
-    const seed: OrderReview[] = existing
-      ? [...existing]
-      : legacy
-        ? [legacy]
-        : [];
-    const idx = seed.findIndex(
-      (r) => (r.productId ?? "") === (next.productId ?? ""),
-    );
-    if (idx >= 0) seed[idx] = next;
-    else seed.push(next);
-    return seed;
-  };
-
-  const submitOrderReview = (orderId: string, review: OrderReview) => {
-    const newOrders = orders.map((o) => {
-      if (o.id !== orderId) return o;
-      const reviews = mergeReviews(o.reviews, o.review, review);
-      return { ...o, reviews, review };
-    });
-    saveOrders(newOrders);
-    if (lastOrder?.id === orderId) {
-      const reviews = mergeReviews(lastOrder.reviews, lastOrder.review, review);
-      setLastOrder({ ...lastOrder, reviews, review });
-    }
-  };
-
-  const getOrderReviews = (order: CompletedOrder): OrderReview[] => {
-    if (order.reviews && order.reviews.length > 0) return order.reviews;
-    if (order.review) return [order.review];
-    return [];
-  };
-
-  const applyOrderUpdate = (updated: CompletedOrder) => {
-    const newOrders = orders.map((o) =>
-      o.id === updated.id ? { ...o, ...updated } : o,
-    );
-    saveOrders(newOrders);
-    if (lastOrder?.id === updated.id) {
-      setLastOrder({ ...lastOrder, ...updated });
-    }
-  };
-
-  return (
-    <CartContext.Provider
-      value={{
-        items,
-        isOpen,
-        voucher,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        openCart: () => setIsOpen(true),
-        closeCart: () => setIsOpen(false),
-        applyVoucher,
-        removeVoucher,
-        shippingFee,
-        shippingFeeOriginal,
-        subtotal,
-        discount,
-        total,
-        itemCount,
-        freeShippingThreshold: Number.isFinite(FREE_SHIPPING_THRESHOLD)
-          ? FREE_SHIPPING_THRESHOLD
-          : 0,
-        freeShippingEnabled: config.freeShipping.enabled,
-        isFreeShipping,
-        amountToFreeShipping,
-        estimatedCreationDays,
-        orders,
-        placeOrder,
-        updateOrderStatus,
-        submitOrderReview,
-        getOrderReviews,
-        applyOrderUpdate,
-        showCheckout,
-        setShowCheckout,
-        lastOrder,
-        viewOrder: (orderId: string) => {
-          const found = orders.find((o) => o.id === orderId);
-          if (!found) return;
-          setLastOrder(found);
-          setShowConfirmation(true);
-        },
-        showConfirmation,
-        setShowConfirmation,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
+      voucher.applied,
+      voucher.code,
+      orders,
+      saveOrders,
+      clearCart,
+    ],
   );
+
+  const updateOrderStatus = useCallback(
+    (orderId: string, status: CompletedOrder["status"]) => {
+      const newOrders = orders.map((o) =>
+        o.id === orderId ? { ...o, status } : o,
+      );
+      saveOrders(newOrders);
+    },
+    [orders, saveOrders],
+  );
+
+  const submitOrderReview = useCallback(
+    (orderId: string, review: OrderReview) => {
+      const newOrders = orders.map((o) => {
+        if (o.id !== orderId) return o;
+        const reviews = mergeReviews(o.reviews, o.review, review);
+        return { ...o, reviews, review };
+      });
+      saveOrders(newOrders);
+      if (lastOrder?.id === orderId) {
+        const reviews = mergeReviews(
+          lastOrder.reviews,
+          lastOrder.review,
+          review,
+        );
+        setLastOrder({ ...lastOrder, reviews, review });
+      }
+    },
+    [orders, saveOrders, lastOrder],
+  );
+
+  const getOrderReviews = useCallback(
+    (order: CompletedOrder): OrderReview[] => {
+      if (order.reviews && order.reviews.length > 0) return order.reviews;
+      if (order.review) return [order.review];
+      return [];
+    },
+    [],
+  );
+
+  const applyOrderUpdate = useCallback(
+    (updated: CompletedOrder) => {
+      const newOrders = orders.map((o) =>
+        o.id === updated.id ? { ...o, ...updated } : o,
+      );
+      saveOrders(newOrders);
+      if (lastOrder?.id === updated.id) {
+        setLastOrder({ ...lastOrder, ...updated });
+      }
+    },
+    [orders, saveOrders, lastOrder],
+  );
+
+  const openCart = useCallback(() => setIsOpen(true), []);
+  const closeCart = useCallback(() => setIsOpen(false), []);
+  const viewOrder = useCallback(
+    (orderId: string) => {
+      const found = orders.find((o) => o.id === orderId);
+      if (!found) return;
+      setLastOrder(found);
+      setShowConfirmation(true);
+    },
+    [orders],
+  );
+
+  const freeShippingThreshold = Number.isFinite(FREE_SHIPPING_THRESHOLD)
+    ? FREE_SHIPPING_THRESHOLD
+    : 0;
+  const freeShippingEnabled = config.freeShipping.enabled;
+
+  // Memoise the context value so consumers don't re-render every time
+  // a parent provider (e.g. polled storefront config or product list)
+  // re-renders. The value object identity now only changes when one of
+  // these primitives or refs actually changes.
+  const value = useMemo(
+    () => ({
+      items,
+      isOpen,
+      voucher,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      openCart,
+      closeCart,
+      applyVoucher,
+      removeVoucher,
+      shippingFee,
+      shippingFeeOriginal,
+      subtotal,
+      discount,
+      total,
+      itemCount,
+      freeShippingThreshold,
+      freeShippingEnabled,
+      isFreeShipping,
+      amountToFreeShipping,
+      estimatedCreationDays,
+      orders,
+      placeOrder,
+      updateOrderStatus,
+      submitOrderReview,
+      getOrderReviews,
+      applyOrderUpdate,
+      showCheckout,
+      setShowCheckout,
+      lastOrder,
+      viewOrder,
+      showConfirmation,
+      setShowConfirmation,
+    }),
+    [
+      items,
+      isOpen,
+      voucher,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      openCart,
+      closeCart,
+      applyVoucher,
+      removeVoucher,
+      shippingFee,
+      shippingFeeOriginal,
+      subtotal,
+      discount,
+      total,
+      itemCount,
+      freeShippingThreshold,
+      freeShippingEnabled,
+      isFreeShipping,
+      amountToFreeShipping,
+      estimatedCreationDays,
+      orders,
+      placeOrder,
+      updateOrderStatus,
+      submitOrderReview,
+      getOrderReviews,
+      applyOrderUpdate,
+      showCheckout,
+      lastOrder,
+      viewOrder,
+      showConfirmation,
+    ],
+  );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 };
 
 export const useCart = () => {
