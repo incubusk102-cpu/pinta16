@@ -1000,6 +1000,12 @@ const sanitizeConfig = (raw) => {
             typeof p.expiresAt === "string" && p.expiresAt ? p.expiresAt : null,
           enabled: p.enabled !== false,
           description: String(p.description ?? "").slice(0, 200),
+          // `personal: true` marks per-user reward codes minted by the
+          // birthday/anniversary/referral flow. They live in the same
+          // promoCodes array so checkout validation works, but they
+          // must not leak into publicView() (would expose other
+          // customers' codes to every visitor).
+          personal: p.personal === true,
         };
       })
       .filter(Boolean),
@@ -1079,6 +1085,7 @@ const publicView = (config) => ({
   siteCopy: config.siteCopy,
   promoCodes: config.promoCodes
     .filter((p) => p.enabled)
+    .filter((p) => p.personal !== true)
     .filter((p) => p.usageLimit === null || p.usageCount < p.usageLimit)
     .filter(
       (p) => !p.expiresAt || new Date(p.expiresAt).getTime() >= Date.now(),

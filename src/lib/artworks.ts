@@ -44,7 +44,22 @@ export interface DisplayArtwork {
   images: ProductImage[];
   availability: Availability;
   isCustom: boolean;
+  embargoUntil?: string;
 }
+
+export const isEmbargoed = (
+  product:
+    | { embargoUntil?: string }
+    | { embargoUntil?: string | undefined }
+    | DisplayArtwork,
+  now: Date = new Date(),
+): boolean => {
+  const raw = (product as { embargoUntil?: string }).embargoUntil;
+  if (!raw) return false;
+  const t = new Date(raw).getTime();
+  if (Number.isNaN(t)) return false;
+  return t > now.getTime();
+};
 
 const defaultArtworksRaw: Array<
   Omit<
@@ -244,6 +259,7 @@ export const productToDisplay = (product: Product): DisplayArtwork => {
     images: images.length > 0 ? images : [{ url: product.image }],
     availability: getAvailability(product),
     isCustom: true,
+    embargoUntil: product.embargoUntil,
   };
 };
 
@@ -277,8 +293,13 @@ export const findDefaultArtwork = (id: string): DisplayArtwork | undefined =>
 
 export const getStorefrontArtworks = (
   products: Product[],
+  options: { vipEarlyAccess?: boolean } = {},
 ): DisplayArtwork[] => {
-  return getAllArtworks(products).filter((art) => art.availability !== "draft");
+  const all = getAllArtworks(products).filter(
+    (art) => art.availability !== "draft",
+  );
+  if (options.vipEarlyAccess) return all;
+  return all.filter((art) => !isEmbargoed(art));
 };
 
 export const findArtworkById = (

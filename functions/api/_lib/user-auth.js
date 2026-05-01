@@ -149,10 +149,69 @@ export const publicUser = (user) => {
     addresses: Array.isArray(user.addresses) ? user.addresses : [],
     defaultAddressId: user.defaultAddressId || null,
     updatedAt: user.updatedAt || user.createdAt,
+    birthday: user.birthday || "",
+    firstOrderAt: user.firstOrderAt || "",
+    referralCode: user.referralCode || "",
+    referredBy: user.referredBy || "",
+    vipEarlyAccess: user.vipEarlyAccess === true,
   };
   if (user.picture) out.picture = user.picture;
   if (user.provider) out.provider = user.provider;
   return out;
+};
+
+// "MM-DD" — visitor's birthday with no year (we don't need to know the
+// age, only the calendar day). Empty string allowed = no birthday set.
+export const sanitizeBirthday = (raw) => {
+  if (raw == null) return "";
+  const value = String(raw).trim();
+  if (!value) return "";
+  // Accept "YYYY-MM-DD" or "MM-DD"; normalize to "MM-DD".
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (isoMatch) {
+    return `${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const shortMatch = /^(\d{2})-(\d{2})$/.exec(value);
+  if (shortMatch) {
+    const m = Number(shortMatch[1]);
+    const d = Number(shortMatch[2]);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return value;
+  }
+  return null; // invalid
+};
+
+// Stable, lowercase-friendly referral code. Avoids ambiguous chars.
+const REFERRAL_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const generateReferralCode = (name) => {
+  const cleanName = String(name || "")
+    .trim()
+    .replace(/[^a-zA-Z]/g, "")
+    .toUpperCase()
+    .slice(0, 6);
+  const prefix = cleanName || "FRIEND";
+  let suffix = "";
+  for (let i = 0; i < 4; i++) {
+    suffix += REFERRAL_ALPHABET.charAt(
+      Math.floor(Math.random() * REFERRAL_ALPHABET.length),
+    );
+  }
+  return `${prefix}-${suffix}`;
+};
+
+export const ensureReferralCode = (user) => {
+  if (user.referralCode) return user.referralCode;
+  const code = generateReferralCode(user.name || user.email);
+  user.referralCode = code;
+  return code;
+};
+
+export const findUserByReferralCode = (users, code) => {
+  if (!code) return null;
+  const upper = String(code).trim().toUpperCase();
+  for (const value of Object.values(users)) {
+    if (value && value.referralCode === upper) return value;
+  }
+  return null;
 };
 
 export const findUserById = (users, id) => {

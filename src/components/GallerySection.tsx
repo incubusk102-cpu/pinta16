@@ -117,8 +117,11 @@ const GallerySection = () => {
   const isLoggedIn = Boolean(user);
 
   const allArtworks = useMemo(
-    () => getStorefrontArtworks(products),
-    [products],
+    () =>
+      getStorefrontArtworks(products, {
+        vipEarlyAccess: user?.vipEarlyAccess === true,
+      }),
+    [products, user?.vipEarlyAccess],
   );
 
   const availableCategories = useMemo(() => {

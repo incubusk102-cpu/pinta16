@@ -51,6 +51,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [description, setDescription] = useState("");
   const [availability, setAvailability] =
     useState<ProductAvailability>("available");
+  const [embargoUntil, setEmbargoUntil] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -76,6 +77,13 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     );
     setDescription(product.description ?? "");
     setAvailability(getAvailability(product));
+    // <input type="datetime-local"> wants `YYYY-MM-DDTHH:mm` (no tz),
+    // not the ISO string we store, so trim trailing seconds + Z.
+    setEmbargoUntil(
+      product.embargoUntil
+        ? product.embargoUntil.replace(/(:\d{2})?\.\d+Z?$/, "").slice(0, 16)
+        : "",
+    );
   }, [product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,6 +101,11 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
       const effectiveSalePrice =
         salePriceNum > 0 && salePriceNum < priceNum ? salePriceNum : undefined;
 
+      let embargoIso: string | undefined;
+      if (embargoUntil) {
+        const d = new Date(embargoUntil);
+        if (!Number.isNaN(d.getTime())) embargoIso = d.toISOString();
+      }
       await onSave(product.id, {
         ...buildImageFields(images),
         title: title.trim(),
@@ -104,6 +117,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
         availability,
+        embargoUntil: embargoIso,
       });
       toast.success("Product updated");
       onClose();
@@ -290,6 +304,21 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
             </Select>
             <p className="mt-1 text-[11px] text-muted-foreground">
               Draft hides the painting from the public storefront.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-embargo">VIP early-access embargo</Label>
+            <Input
+              id="edit-embargo"
+              type="datetime-local"
+              value={embargoUntil}
+              onChange={(e) => setEmbargoUntil(e.target.value)}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              While set, only customers on the VIP early-access list can see
+              this piece. After the time, it goes public automatically. Leave
+              blank to disable.
             </p>
           </div>
 
