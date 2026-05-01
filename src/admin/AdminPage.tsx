@@ -36,6 +36,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { StockListingsSection } from "@/components/admin/StockListingsSection";
@@ -69,6 +74,7 @@ import {
   Mail,
   Menu,
   MessageSquare,
+  MessageSquarePlus,
   Package,
   Palmtree,
   Pencil,
@@ -752,6 +758,8 @@ function AdminDashboard() {
             <DashboardSection
               onOpenOrders={() => navigate("orders")}
               onOpenStorefront={() => navigate("storefront")}
+              onOpenMessages={() => navigate("messages")}
+              onOpenReviews={() => navigate("reviews")}
             />
           )}
           {section === "products" && <ProductsSection />}
@@ -1371,6 +1379,7 @@ interface OrdersSummary {
   refundPendingCount: number;
   refundSucceededCount: number;
   refundFailedCount: number;
+  reviewsWaitingReplyCount: number;
 }
 
 const formatPHP = (n: number) =>
@@ -1428,9 +1437,13 @@ interface ActivityEntry {
 function DashboardSection({
   onOpenOrders,
   onOpenStorefront,
+  onOpenMessages,
+  onOpenReviews,
 }: {
   onOpenOrders: () => void;
   onOpenStorefront: () => void;
+  onOpenMessages: () => void;
+  onOpenReviews: () => void;
 }) {
   const {
     config: { vacationMode },
@@ -1441,19 +1454,27 @@ function DashboardSection({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityEntry[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   const refresh = async (days: number = analyticsDays) => {
     setLoading(true);
     setError(null);
     try {
       const token = getAdminToken();
-      const [summaryRes, analyticsRes] = await Promise.all([
+      const [summaryRes, analyticsRes, chatRes] = await Promise.all([
         fetch("/api/orders?metrics=summary", {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`/api/orders?metrics=analytics&days=${days}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
+        // Threads list is small (last 100 entries) and the dashboard's
+        // "Today's tasks" widget needs an unread-chats count. Failing
+        // softly: if chat is down, dashboard still renders without that
+        // count.
+        fetch("/api/chat?action=list", {
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => null),
       ]);
       if (!summaryRes.ok) throw new Error(`HTTP ${summaryRes.status}`);
       const summaryData = await summaryRes.json();
@@ -1462,6 +1483,16 @@ function DashboardSection({
       if (analyticsRes.ok) {
         const analyticsData = await analyticsRes.json();
         setAnalytics(analyticsData.analytics as AnalyticsData);
+      }
+      if (chatRes && chatRes.ok) {
+        const chatData = await chatRes.json();
+        const threads = Array.isArray(chatData.threads) ? chatData.threads : [];
+        const unread = threads.filter((t: ChatThreadIndexEntry) =>
+          isThreadUnread(t),
+        ).length;
+        setUnreadChatCount(unread);
+      } else {
+        setUnreadChatCount(0);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load metrics");
@@ -1517,6 +1548,18 @@ function DashboardSection({
             </p>
           </div>
         </button>
+      )}
+
+      {summary && (
+        <TodayTasksWidget
+          pendingShipOut={summary.pendingShipOutCount}
+          refundsPending={summary.refundPendingCount}
+          unreadChats={unreadChatCount}
+          reviewsWaitingReply={summary.reviewsWaitingReplyCount}
+          onOpenOrders={onOpenOrders}
+          onOpenMessages={onOpenMessages}
+          onOpenReviews={onOpenReviews}
+        />
       )}
 
       {error && (
@@ -1913,6 +1956,116 @@ function DashCard({
       <p className="font-display text-2xl mt-2">{value}</p>
       {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
     </button>
+  );
+}
+
+// Today's tasks — drives the "what do I need to do right now" widget at
+// the top of the dashboard. Each row is one click straight to the
+// matching admin section. When all four are zero we render a friendly
+// "all caught up" state so the widget never disappears (admins build
+// muscle memory around its position on the page).
+function TodayTasksWidget({
+  pendingShipOut,
+  refundsPending,
+  unreadChats,
+  reviewsWaitingReply,
+  onOpenOrders,
+  onOpenMessages,
+  onOpenReviews,
+}: {
+  pendingShipOut: number;
+  refundsPending: number;
+  unreadChats: number;
+  reviewsWaitingReply: number;
+  onOpenOrders: () => void;
+  onOpenMessages: () => void;
+  onOpenReviews: () => void;
+}) {
+  const tasks: Array<{
+    icon: React.ReactNode;
+    count: number;
+    label: string;
+    onClick: () => void;
+  }> = [
+    {
+      icon: <Truck className="w-4 h-4" />,
+      count: pendingShipOut,
+      label: pendingShipOut === 1 ? "order to ship" : "orders to ship out",
+      onClick: onOpenOrders,
+    },
+    {
+      icon: <Wallet className="w-4 h-4" />,
+      count: refundsPending,
+      label: refundsPending === 1 ? "refund waiting" : "refunds waiting",
+      onClick: onOpenOrders,
+    },
+    {
+      icon: <MessageSquare className="w-4 h-4" />,
+      count: unreadChats,
+      label:
+        unreadChats === 1 ? "unread buyer message" : "unread buyer messages",
+      onClick: onOpenMessages,
+    },
+    {
+      icon: <Star className="w-4 h-4" />,
+      count: reviewsWaitingReply,
+      label:
+        reviewsWaitingReply === 1
+          ? "review waiting for your reply"
+          : "reviews waiting for your reply",
+      onClick: onOpenReviews,
+    },
+  ];
+  const totalTasks = tasks.reduce((sum, t) => sum + t.count, 0);
+
+  return (
+    <section className="border border-border/60 rounded-lg bg-card/40 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-border/40 bg-muted/20 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CheckSquare className="w-3.5 h-3.5 text-primary" />
+          <h3 className="font-display text-sm">Today's tasks</h3>
+        </div>
+        <span className="text-[11px] text-muted-foreground">
+          {totalTasks === 0
+            ? "All caught up"
+            : `${totalTasks} item${totalTasks === 1 ? "" : "s"}`}
+        </span>
+      </div>
+      {totalTasks === 0 ? (
+        <div className="p-6 text-center">
+          <p className="font-display text-sm">Nothing to do right now ✨</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            All orders are shipped, refunds are processed, messages are read,
+            and reviews are answered.
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-border/40">
+          {tasks
+            .filter((t) => t.count > 0)
+            .map((t, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={t.onClick}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+                >
+                  <span className="flex-none w-7 h-7 grid place-items-center rounded-md bg-primary/10 text-primary">
+                    {t.icon}
+                  </span>
+                  <span className="flex-1 text-sm">
+                    <strong className="font-display tabular-nums">
+                      {t.count}
+                    </strong>{" "}
+                    {t.label}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </li>
+            ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -3965,6 +4118,12 @@ const isThreadUnread = (t: ChatThreadIndexEntry) => {
   return Date.parse(t.customerLastMessageAt) > Date.parse(t.lastReadByAdminAt);
 };
 
+interface SavedReply {
+  id: string;
+  label: string;
+  body: string;
+}
+
 function MessagesSection() {
   const [threads, setThreads] = useState<ChatThreadIndexEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -3974,7 +4133,56 @@ function MessagesSection() {
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
+  const [repliesPopoverOpen, setRepliesPopoverOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const loadSavedReplies = async () => {
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/storefront-config?admin=1", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = Array.isArray(data?.config?.savedReplies)
+        ? (data.config.savedReplies as SavedReply[])
+        : [];
+      setSavedReplies(list);
+    } catch {
+      // Non-blocking — admin can still send replies manually.
+    }
+  };
+
+  useEffect(() => {
+    void loadSavedReplies();
+  }, []);
+
+  const insertSavedReply = (reply: SavedReply) => {
+    // Insert at the cursor position (or append if textarea isn't focused).
+    // Doesn't replace the existing draft so admin can stack templates or
+    // tweak the body before sending.
+    const ta = draftRef.current;
+    if (!ta) {
+      setDraft((d) => (d ? `${d}\n\n${reply.body}` : reply.body));
+    } else {
+      const start = ta.selectionStart ?? draft.length;
+      const end = ta.selectionEnd ?? draft.length;
+      const before = draft.slice(0, start);
+      const after = draft.slice(end);
+      const sep = before && !before.endsWith("\n") ? "\n\n" : "";
+      const next = `${before}${sep}${reply.body}${after}`;
+      setDraft(next);
+      requestAnimationFrame(() => {
+        ta.focus();
+        const cursor = before.length + sep.length + reply.body.length;
+        ta.setSelectionRange(cursor, cursor);
+      });
+    }
+    setRepliesPopoverOpen(false);
+  };
 
   const refreshThreads = async () => {
     setLoading(true);
@@ -4312,6 +4520,7 @@ function MessagesSection() {
               ) : (
                 <div className="border-t border-border/60 px-3 py-2 flex items-end gap-2">
                   <Textarea
+                    ref={draftRef}
                     value={draft}
                     onChange={(e) => {
                       const next = e.target.value;
@@ -4328,6 +4537,65 @@ function MessagesSection() {
                     className="resize-none min-h-[44px] max-h-[120px] text-sm"
                     maxLength={2000}
                   />
+                  <Popover
+                    open={repliesPopoverOpen}
+                    onOpenChange={setRepliesPopoverOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Insert a saved reply"
+                      >
+                        <MessageSquarePlus className="w-4 h-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      className="w-80 p-0 overflow-hidden"
+                    >
+                      <div className="px-3 py-2 border-b border-border/40 flex items-center justify-between">
+                        <p className="text-xs font-medium tracking-wider uppercase text-muted-foreground">
+                          Saved replies
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRepliesPopoverOpen(false);
+                            setManageOpen(true);
+                          }}
+                          className="text-[11px] text-primary hover:underline"
+                        >
+                          Manage
+                        </button>
+                      </div>
+                      {savedReplies.length === 0 ? (
+                        <div className="p-4 text-xs text-muted-foreground text-center">
+                          No saved replies yet. Click <strong>Manage</strong> to
+                          add one.
+                        </div>
+                      ) : (
+                        <ul className="max-h-72 overflow-y-auto divide-y divide-border/40">
+                          {savedReplies.map((r) => (
+                            <li key={r.id}>
+                              <button
+                                type="button"
+                                onClick={() => insertSavedReply(r)}
+                                className="w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors"
+                              >
+                                <p className="text-sm font-medium truncate">
+                                  {r.label}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground line-clamp-2">
+                                  {r.body}
+                                </p>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     onClick={() => void sendReply()}
                     disabled={sending || !draft.trim()}
@@ -4344,7 +4612,182 @@ function MessagesSection() {
           )}
         </div>
       </div>
+      <SavedRepliesManager
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        replies={savedReplies}
+        onSaved={(next) => setSavedReplies(next)}
+      />
     </div>
+  );
+}
+
+function SavedRepliesManager({
+  open,
+  onClose,
+  replies,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  replies: SavedReply[];
+  onSaved: (next: SavedReply[]) => void;
+}) {
+  const [draft, setDraft] = useState<SavedReply[]>(replies);
+  const [saving, setSaving] = useState(false);
+
+  // Re-sync the editor when the parent's replies change (e.g. another
+  // admin tab saved). We only do this when the drawer opens to avoid
+  // wiping unsaved edits while admin is mid-typing.
+  useEffect(() => {
+    if (open) setDraft(replies);
+  }, [open, replies]);
+
+  const updateAt = (idx: number, patch: Partial<SavedReply>) => {
+    setDraft((d) => d.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
+
+  const removeAt = (idx: number) => {
+    setDraft((d) => d.filter((_, i) => i !== idx));
+  };
+
+  const addNew = () => {
+    setDraft((d) => [
+      ...d,
+      {
+        id: `reply-${Date.now().toString(36)}`,
+        label: "",
+        body: "",
+      },
+    ]);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Drop entries that are still empty so admin doesn't accidentally
+      // ship a blank template.
+      const cleaned = draft
+        .map((r) => ({
+          id: r.id,
+          label: r.label.trim(),
+          body: r.body.trim(),
+        }))
+        .filter((r) => r.label && r.body);
+      const token = getAdminToken();
+      const res = await fetch("/api/storefront-config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: "update-saved-replies",
+          savedReplies: cleaned,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const nextList = Array.isArray(data?.config?.savedReplies)
+        ? (data.config.savedReplies as SavedReply[])
+        : cleaned;
+      onSaved(nextList);
+      toast.success("Saved replies updated");
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-lg flex flex-col p-0"
+      >
+        <SheetHeader className="px-6 py-4 border-b border-border/60">
+          <SheetTitle>Manage saved replies</SheetTitle>
+          <p className="text-xs text-muted-foreground">
+            Templates you can drop into a chat reply with one click. Up to 30
+            templates · 2,000 characters each.
+          </p>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {draft.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              No saved replies yet — click "Add reply" below to create one.
+            </p>
+          ) : (
+            draft.map((r, idx) => (
+              <div
+                key={r.id}
+                className="rounded-lg border border-border/60 bg-card/40 p-3 space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={r.label}
+                    onChange={(e) => updateAt(idx, { label: e.target.value })}
+                    placeholder="Label (e.g. Order shipped)"
+                    maxLength={80}
+                    className="font-medium"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeAt(idx)}
+                    title="Delete reply"
+                  >
+                    <Trash2 className="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                </div>
+                <Textarea
+                  value={r.body}
+                  onChange={(e) => updateAt(idx, { body: e.target.value })}
+                  placeholder="Body — what the customer will see when you insert this reply."
+                  rows={4}
+                  maxLength={2000}
+                  className="resize-none text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground text-right">
+                  {r.body.length}/2,000
+                </p>
+              </div>
+            ))
+          )}
+          <Button
+            variant="outline"
+            onClick={addNew}
+            disabled={draft.length >= 30}
+            className="w-full"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {draft.length >= 30 ? "Limit reached (30)" : "Add reply"}
+          </Button>
+        </div>
+        <div className="px-6 py-3 border-t border-border/60 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

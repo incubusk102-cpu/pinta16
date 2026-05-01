@@ -694,6 +694,27 @@ export const handler = async (event) => {
             if (o.refund?.status === "pending") acc.refundPendingCount += 1;
             if (o.refund?.status === "succeeded") acc.refundSucceededCount += 1;
             if (o.refund?.status === "failed") acc.refundFailedCount += 1;
+            // Reviews waiting for an admin reply — drives the "Today's
+            // tasks" widget on the dashboard. We only count reviews
+            // submitted within the last 30 days to avoid hassling admin
+            // about ancient untouched reviews.
+            const reviewsList = Array.isArray(o.reviews)
+              ? o.reviews
+              : o.review
+                ? [o.review]
+                : [];
+            for (const r of reviewsList) {
+              if (r.adminReply && r.adminReply.text) continue;
+              const submittedAt = r.submittedAt
+                ? new Date(r.submittedAt).getTime()
+                : 0;
+              if (
+                submittedAt > 0 &&
+                Date.now() - submittedAt <= 30 * 24 * 60 * 60 * 1000
+              ) {
+                acc.reviewsWaitingReplyCount += 1;
+              }
+            }
             return acc;
           },
           {
@@ -709,6 +730,7 @@ export const handler = async (event) => {
             refundPendingCount: 0,
             refundSucceededCount: 0,
             refundFailedCount: 0,
+            reviewsWaitingReplyCount: 0,
           },
         );
         // Recent activity: collect activity log entries from all orders
