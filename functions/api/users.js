@@ -7,6 +7,7 @@ import {
   extractToken,
   findUserById,
   findUserByReferralCode,
+  getCurrentUserFromSession,
   getUsersStore,
   hashPassword,
   INACTIVE_DAYS,
@@ -122,15 +123,12 @@ const sanitizeAddress = (raw) => {
   return { ok: true, value: out };
 };
 
-const getCurrentUser = async (event, store) => {
-  const token = extractToken(event);
-  if (!token) return null;
-  const secret = await ensureSessionSecret(store);
-  const payload = verifyTokenWithSecret(token, secret);
-  if (!payload?.sub) return null;
-  const users = await readUsers(store);
-  return findUserById(users, payload.sub);
-};
+// Thin local wrapper around the shared session resolver — keeps the
+// existing `getCurrentUser(event, store)` call sites in this file
+// unchanged while delegating actual token verification to
+// `_lib/user-auth.js` so other handlers (e.g. orders.js) can share it.
+const getCurrentUser = async (event, store) =>
+  getCurrentUserFromSession(event, store);
 
 export const handler = async (event) => {
   try {

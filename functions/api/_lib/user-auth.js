@@ -221,6 +221,24 @@ export const findUserById = (users, id) => {
   return null;
 };
 
+// Resolve the signed-in customer from the session bearer token. Used by
+// every endpoint that needs to authenticate a regular (non-admin) user.
+// Returns null when the token is missing, malformed, expired, or
+// references a user that no longer exists.
+//
+// Pass either an existing `usersStore` (if the caller already opened
+// one) or omit it and we'll open the default users store.
+export const getCurrentUserFromSession = async (event, usersStore) => {
+  const token = extractToken(event);
+  if (!token) return null;
+  const store = usersStore || getUsersStore();
+  const secret = await ensureSessionSecret(store);
+  const payload = verifyTokenWithSecret(token, secret);
+  if (!payload?.sub) return null;
+  const users = await readUsers(store);
+  return findUserById(users, payload.sub);
+};
+
 const escapeHtml = (input) =>
   String(input ?? "")
     .replace(/&/g, "&amp;")

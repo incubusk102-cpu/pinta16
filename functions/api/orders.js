@@ -14,6 +14,7 @@ import {
 } from "./_lib/email.js";
 import {
   findUserByReferralCode,
+  getCurrentUserFromSession,
   getUsersStore,
   normalizeEmail,
   readUsers,
@@ -641,6 +642,34 @@ export const handler = async (event) => {
           summary,
           recentActivity: recentActivity.slice(0, 15),
         });
+      }
+
+      // Customer-facing: list every order belonging to the *signed-in*
+      // user, scoped strictly by the email on their session token. This
+      // is what powers `/account → My Orders`. Without it the customer
+      // page falls back to localStorage, which is shared across every
+      // Google account that ever signed in on the same browser — so
+      // signing out and signing back in with a second Google account
+      // would leak the first account's order history into the second.
+      // Email match is normalized to handle case differences between
+      // the Google profile email and what the customer typed at
+      // checkout.
+      if (params.mine === "1" || params.action === "mine") {
+        const user = await getCurrentUserFromSession(event);
+        if (!user) {
+          return json(401, { error: "Not signed in" });
+        }
+        const userEmail = normalizeEmail(user.email);
+        if (!userEmail) {
+          return json(200, { orders: [] });
+        }
+        const all = await readOrders(store);
+        const mine = all
+          .filter((o) => normalizeEmail(o?.orderInfo?.email) === userEmail)
+          .sort((a, b) =>
+            String(b.createdAt || "").localeCompare(String(a.createdAt || "")),
+          );
+        return json(200, { orders: mine });
       }
 
       if (!(await isAuthenticated(event))) {
