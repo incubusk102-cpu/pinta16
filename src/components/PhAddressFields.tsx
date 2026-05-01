@@ -1,19 +1,25 @@
-// PH cascading address picker.
+// PH address picker (region as a strict select; province / city /
+// barangay as type-or-pick combobox inputs).
 //
-// Checkout's primary address input: Region → Province → City/Municipality
-// → Barangay → Street + Landmark + Postal code. All four geographic
-// levels are real cascading dropdowns now — region/province come from
-// the static `ph-regions.ts` list, while city + barangay are sourced
-// from the official PSA/PSGC dataset under `src/data/ph-psgc.json`.
-// That JSON is dynamically imported the first time this component
-// mounts, so it lands in its own Vite chunk (~190 KB gzipped) and
-// doesn't bloat the initial page bundle.
+// Region stays a real `<Select>` because it directly drives the
+// courier zone (Metro Manila / Luzon / Visayas / Mindanao) which the
+// shipping-fee calculation depends on — we want exactly one of the 17
+// canonical region IDs there, not a free-typed string.
 //
-// Region drives courier zone (Metro Manila / Luzon / Visayas /
-// Mindanao) which auto-fills shipping fee at checkout. City + barangay
-// have hundreds of entries each (Manila has 897 barangays alone) so we
-// use a Popover + cmdk Combobox with type-ahead instead of a plain
-// `<Select>`.
+// Province / city / barangay each render an `AddressTypeahead`: a
+// plain text input where the buyer can either type their place freely
+// or click a matching suggestion from the dropdown. PSGC suggestions
+// (sourced from `src/data/ph-psgc.json`) are *help, not a gate* — if a
+// barangay is missing, misspelled in PSGC, or just not in the list at
+// all (think remote sitios), the buyer types it themselves and moves
+// on. Cascade resets only fire when the user explicitly *picks* a
+// different parent value; free-typed edits leave dependent fields
+// alone so a typo in the middle of "Cebu" doesn't wipe a city the
+// buyer already filled in.
+//
+// The PSGC JSON is dynamically imported on first mount so it lands in
+// its own Vite chunk (~190 KB gzipped) and stays out of the initial
+// page bundle.
 //
 // Returns a single structured value object the parent can persist
 // alongside the address book entry / order info.
@@ -42,7 +48,7 @@ import {
   getBarangaysForCity,
   type PhPsgcData,
 } from "@/lib/ph-psgc";
-import { AddressCombobox } from "@/components/AddressCombobox";
+import { AddressTypeahead } from "@/components/AddressTypeahead";
 
 export interface PhAddressValue {
   region: string;
@@ -139,14 +145,23 @@ export function PhAddressFields({
     });
   };
 
-  const updateProvince = (province: string) => {
-    // Province changed → reset dependent fields.
-    onChange({ ...value, province, city: "", barangay: "" });
+  // Cascade reset only when the buyer explicitly picks a different
+  // parent value (`picked=true`). Free-typed edits keep dependent
+  // fields intact so mid-keystroke typos don't blow them away.
+  const updateProvince = (province: string, picked = false) => {
+    if (picked) {
+      onChange({ ...value, province, city: "", barangay: "" });
+    } else {
+      onChange({ ...value, province });
+    }
   };
 
-  const updateCity = (city: string) => {
-    // City changed → reset barangay (was tied to old city).
-    onChange({ ...value, city, barangay: "" });
+  const updateCity = (city: string, picked = false) => {
+    if (picked) {
+      onChange({ ...value, city, barangay: "" });
+    } else {
+      onChange({ ...value, city });
+    }
   };
 
   const updateBarangay = (barangay: string) => {
@@ -196,53 +211,30 @@ export function PhAddressFields({
             <Building className="w-3.5 h-3.5" />
             Province
           </Label>
-          <Select
+          <AddressTypeahead
             value={value.province}
-            onValueChange={updateProvince}
-            disabled={disabled || provinceOptions.length === 0}
-          >
-            <SelectTrigger className="h-10 text-sm">
-              <SelectValue
-                placeholder={
-                  provinceOptions.length === 0
-                    ? "Select region first"
-                    : "Select province"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {provinceOptions.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={updateProvince}
+            options={provinceOptions}
+            disabled={disabled}
+            placeholder="Type your province (suggestions below)"
+          />
         </div>
       </div>
 
-      {/* City + Barangay (cascading searchable dropdowns) */}
+      {/* City + Barangay (free-text with PSGC suggestions) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
             <Building className="w-3.5 h-3.5" />
             City / Municipality
           </Label>
-          <AddressCombobox
+          <AddressTypeahead
             value={value.city}
             onChange={updateCity}
             options={cityOptions}
             loading={!psgc}
-            disabled={disabled || !value.province}
-            placeholder={
-              !value.province
-                ? "Select province first"
-                : "Select city / municipality"
-            }
-            searchPlaceholder="Search city / municipality…"
-            emptyHint={
-              !value.province ? "Pick a province first." : "No matching city."
-            }
+            disabled={disabled}
+            placeholder="Type your city / municipality"
           />
         </div>
         <div className="space-y-1.5">
@@ -250,17 +242,13 @@ export function PhAddressFields({
             <Pin className="w-3.5 h-3.5" />
             Barangay
           </Label>
-          <AddressCombobox
+          <AddressTypeahead
             value={value.barangay}
             onChange={updateBarangay}
             options={barangayOptions}
             loading={!psgc}
-            disabled={disabled || !value.city}
-            placeholder={!value.city ? "Select city first" : "Select barangay"}
-            searchPlaceholder="Search barangay…"
-            emptyHint={
-              !value.city ? "Pick a city first." : "No matching barangay."
-            }
+            disabled={disabled}
+            placeholder="Type your barangay"
           />
         </div>
       </div>
