@@ -12,6 +12,8 @@ import {
   sanitizeChatFaqs,
   type ChatFaqItem,
 } from "@/lib/chat-faqs";
+import { DEFAULT_SHIPPING_RATES, type ShippingRate } from "@/lib/shipment";
+import type { ShippingZone } from "@/lib/ph-regions";
 
 export type AnnouncementSize = "compact" | "normal" | "large";
 export type AnnouncementAnimation =
@@ -148,6 +150,7 @@ export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
+  shippingRates: ShippingRate[];
   promoCodes: PromoCodePublic[];
   chat: ChatConfig;
   siteCopy: SiteCopy;
@@ -181,6 +184,7 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     threshold: 8000,
     shippingFee: 500,
   },
+  shippingRates: DEFAULT_SHIPPING_RATES,
   promoCodes: [],
   chat: {
     enabled: true,
@@ -224,6 +228,48 @@ const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
     headline: String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline),
     body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body),
   };
+};
+
+const SHIPPING_ZONE_KEYS: ShippingZone[] = [
+  "metro_manila",
+  "luzon",
+  "visayas",
+  "mindanao",
+];
+
+const sanitizeShippingRates = (raw: unknown): ShippingRate[] => {
+  if (!Array.isArray(raw)) return DEFAULT_SHIPPING_RATES;
+  const out: ShippingRate[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as {
+      courierId?: unknown;
+      courierLabel?: unknown;
+      fees?: unknown;
+    };
+    const courierId = String(e.courierId ?? "").trim();
+    if (!courierId) continue;
+    const key = courierId.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const courierLabel = String(e.courierLabel ?? courierId);
+    const feesRaw =
+      e.fees && typeof e.fees === "object"
+        ? (e.fees as Record<string, unknown>)
+        : {};
+    const fees = SHIPPING_ZONE_KEYS.reduce(
+      (acc, z) => {
+        const n = Math.floor(Number(feesRaw[z]) || 0);
+        acc[z] = n < 0 ? 0 : n;
+        return acc;
+      },
+      {} as Record<ShippingZone, number>,
+    );
+    out.push({ courierId, courierLabel, fees });
+  }
+  // If admin saved an empty list, respect that — don't silently re-seed.
+  return out;
 };
 
 const mergeSiteCopy = (raw: unknown): SiteCopy => {
@@ -282,6 +328,7 @@ export const StorefrontConfigProvider = ({
             ...DEFAULT_CONFIG.freeShipping,
             ...data.config.freeShipping,
           },
+          shippingRates: sanitizeShippingRates(data.config.shippingRates),
           promoCodes: Array.isArray(data.config.promoCodes)
             ? data.config.promoCodes
             : [],

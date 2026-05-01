@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Bell, Package, Search, Star, Truck } from "lucide-react";
+import {
+  Bell,
+  Download,
+  ExternalLink,
+  Package,
+  Search,
+  Star,
+  Truck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +16,8 @@ import {
   ORDER_STEPS,
   type CompletedOrder,
 } from "@/contexts/CartContext";
-import { buildTrackingUrl } from "@/lib/shipment";
+import { buildTrackingUrl, findCourierById, COURIERS } from "@/lib/shipment";
+import { downloadWaybillPdf } from "@/lib/waybill";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
 
@@ -131,28 +140,69 @@ export default function OrderTracker() {
                   In transit
                 </span>
               </div>
-              <p className="text-sm text-foreground break-words">
-                {order.shipment.courier} ·{" "}
-                <span className="font-mono text-xs break-all">
-                  {order.shipment.trackingNumber}
-                </span>
-              </p>
               {(() => {
+                const courierId = order.shipment.courier?.toLowerCase() || "";
+                const courierLabel =
+                  findCourierById(courierId)?.label ||
+                  COURIERS.find(
+                    (c) =>
+                      c.label.toLowerCase() ===
+                      (order.shipment?.courier || "").toLowerCase(),
+                  )?.label ||
+                  order.shipment.courier;
                 const url = buildTrackingUrl(
                   order.shipment.courier,
                   order.shipment.trackingNumber,
                   order.shipment.trackingUrl,
                 );
-                return url ? (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-foreground underline mt-1"
-                  >
-                    Track shipment ↗
-                  </a>
-                ) : null;
+                return (
+                  <>
+                    <p className="text-sm text-foreground break-words">
+                      {courierLabel} ·{" "}
+                      <span className="font-mono text-xs break-all">
+                        {order.shipment.trackingNumber}
+                      </span>
+                    </p>
+                    {/* Courier-specific deep-link CTA — wording matches
+                        the user spec: "Track on J&T", "Track on LBC",
+                        etc. so customers know exactly which carrier
+                        site they're heading to. */}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {url && (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border/40 rounded-md hover:bg-foreground/5 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Track on {courierLabel}
+                        </a>
+                      )}
+                      {/* Customer-facing "Download waybill" — only
+                          surfaces once admin has set the tracking
+                          number, matching the user spec. */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            downloadWaybillPdf(order);
+                          } catch (err) {
+                            toast.error(
+                              err instanceof Error
+                                ? err.message
+                                : "Could not generate waybill",
+                            );
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border/40 rounded-md hover:bg-foreground/5 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download waybill
+                      </button>
+                    </div>
+                  </>
+                );
               })()}
             </div>
           )}

@@ -11,6 +11,8 @@ import {
   useStorefrontConfig,
   type PromoCodeType,
 } from "@/contexts/StorefrontConfigContext";
+import { getShippingFee } from "@/lib/shipment";
+import type { ShippingZone } from "@/lib/ph-regions";
 
 export interface CartItem {
   id: string;
@@ -41,6 +43,14 @@ export interface OrderInfo {
   longitude?: number | null;
   formattedAddress?: string;
   placeId?: string;
+  // PH-specific fields collected from the cascading address picker.
+  region?: string;
+  barangay?: string;
+  landmark?: string;
+  // Courier the customer chose at checkout (used to charge the
+  // per-courier × per-zone fee). May be empty for legacy orders.
+  courier?: string;
+  shippingZone?: string;
 }
 
 export interface OrderNotification {
@@ -213,6 +223,15 @@ interface CartContextType {
   showConfirmation: boolean;
   setShowConfirmation: (show: boolean) => void;
   viewOrder: (orderId: string) => void;
+  // Customer's checkout courier/zone selection. CheckoutForm calls
+  // `setCheckoutShipping` so the cart total reflects the fee from the
+  // shipping rates table.
+  checkoutCourier: string;
+  checkoutZone: ShippingZone | null;
+  setCheckoutShipping: (next: {
+    courier: string;
+    zone: ShippingZone | null;
+  }) => void;
 }
 
 const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
@@ -294,6 +313,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       return [];
     }
   });
+
+  // Customer's checkout shipping selection — used to look up the
+  // per-courier × per-zone fee in the shipping rates table. CheckoutForm
+  // calls `setCheckoutShipping` whenever the courier or region changes
+  // so the cart total stays in sync.
+  const [checkoutShipping, setCheckoutShipping] = useState<{
+    courier: string;
+    zone: ShippingZone | null;
+  }>({ courier: "", zone: null });
 
   const saveOrders = useCallback((newOrders: CompletedOrder[]) => {
     setOrders(newOrders);
@@ -398,8 +426,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const voucherFreeShipping = voucher.applied && voucher.freeShipping;
-  const shippingFeeOriginal = SHIPPING_FEE;
-  const shippingFee = isFreeShipping || voucherFreeShipping ? 0 : SHIPPING_FEE;
+  // Per-courier × per-zone fee from the storefront config takes
+  // precedence when the customer has picked a courier and we know the
+  // delivery region's zone. Falls back to the legacy flat fee otherwise.
+  const courierFee = getShippingFee(
+    config.shippingRates,
+    checkoutShipping.courier,
+    checkoutShipping.zone,
+  );
+  const baseShippingFee = courierFee != null ? courierFee : SHIPPING_FEE;
+  const shippingFeeOriginal = baseShippingFee;
+  const shippingFee =
+    isFreeShipping || voucherFreeShipping ? 0 : baseShippingFee;
   const discount = useMemo((): number => {
     if (!voucher.applied) return 0;
     if (voucher.type === "percent") {
@@ -588,6 +626,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       viewOrder,
       showConfirmation,
       setShowConfirmation,
+      checkoutCourier: checkoutShipping.courier,
+      checkoutZone: checkoutShipping.zone,
+      setCheckoutShipping,
     }),
     [
       items,
@@ -622,6 +663,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       lastOrder,
       viewOrder,
       showConfirmation,
+      checkoutShipping.courier,
+      checkoutShipping.zone,
     ],
   );
 

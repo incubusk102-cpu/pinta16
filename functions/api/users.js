@@ -88,6 +88,12 @@ const ADDRESS_FIELDS = [
   "province",
   "postalCode",
   "country",
+  // PH cascading-picker fields. All optional from the server's
+  // perspective so legacy clients don't break, but the checkout form
+  // now collects them.
+  "region",
+  "barangay",
+  "landmark",
 ];
 
 const sanitizeAddress = (raw) => {

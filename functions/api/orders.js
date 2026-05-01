@@ -740,6 +740,51 @@ export const handler = async (event) => {
             address: String(info.address).slice(0, 500),
             city: String(info.city).slice(0, 200),
             notes: String(info.notes || "").slice(0, 1000),
+            // PH-specific fields collected from the cascading picker.
+            // All optional — legacy clients that don't supply them
+            // round-trip the same way as before.
+            ...(typeof info.addressLine1 === "string"
+              ? { addressLine1: info.addressLine1.slice(0, 300) }
+              : {}),
+            ...(typeof info.addressLine2 === "string"
+              ? { addressLine2: info.addressLine2.slice(0, 300) }
+              : {}),
+            ...(typeof info.region === "string"
+              ? { region: info.region.slice(0, 60) }
+              : {}),
+            ...(typeof info.province === "string"
+              ? { province: info.province.slice(0, 120) }
+              : {}),
+            ...(typeof info.barangay === "string"
+              ? { barangay: info.barangay.slice(0, 120) }
+              : {}),
+            ...(typeof info.landmark === "string"
+              ? { landmark: info.landmark.slice(0, 240) }
+              : {}),
+            ...(typeof info.postalCode === "string"
+              ? { postalCode: info.postalCode.slice(0, 20) }
+              : {}),
+            ...(typeof info.country === "string"
+              ? { country: info.country.slice(0, 80) }
+              : {}),
+            ...(typeof info.courier === "string"
+              ? { courier: info.courier.slice(0, 60) }
+              : {}),
+            ...(typeof info.shippingZone === "string"
+              ? { shippingZone: info.shippingZone.slice(0, 40) }
+              : {}),
+            ...(typeof info.formattedAddress === "string"
+              ? { formattedAddress: info.formattedAddress.slice(0, 500) }
+              : {}),
+            ...(typeof info.placeId === "string"
+              ? { placeId: info.placeId.slice(0, 200) }
+              : {}),
+            ...(typeof info.latitude === "number"
+              ? { latitude: info.latitude }
+              : {}),
+            ...(typeof info.longitude === "number"
+              ? { longitude: info.longitude }
+              : {}),
           },
           subtotal: clientSubtotal,
           shippingFee: Number(order.shippingFee) || 0,
