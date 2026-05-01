@@ -773,12 +773,27 @@ const DEFAULT_NEW_USER_MODAL = {
   },
   timeSeconds: 8,
   scrollPercent: 30,
-  voucherCode: "",
+  voucherCode: "WELCOME10",
   emailCaptureEnabled: false,
   headline: "Welcome to Canvas Hub",
   body:
     "First time here? Sign up with Google to keep your favourites, " +
     "or grab your welcome discount before you browse.",
+};
+
+// Default WELCOME10 promo seeded on first read. Idempotent — only added
+// if no WELCOME10 already exists in the admin's promo list.
+const WELCOME10_PROMO_DEFAULT = {
+  code: "WELCOME10",
+  type: "percent",
+  value: 10,
+  freeShipping: false,
+  minSpend: 0,
+  usageLimit: null,
+  usageCount: 0,
+  expiresAt: null,
+  enabled: true,
+  description: "Welcome offer for new visitors",
 };
 
 const DEFAULT_CONFIG = {
@@ -989,12 +1004,47 @@ const sanitizeConfig = (raw) => {
       })
       .filter(Boolean),
     newUserModal: sanitizeNewUserModal(data.newUserModal),
+    // Persisted internal map of one-time migrations applied to this
+    // config — not exposed publicly. Keys here mark a migration as done
+    // so we don't re-run it on every read.
+    _seedMigrations:
+      data._seedMigrations && typeof data._seedMigrations === "object"
+        ? { ...data._seedMigrations }
+        : {},
   };
 };
 
 const readConfig = async (store) => {
   const raw = await store.get(CONFIG_KEY, { type: "json" });
   return sanitizeConfig(raw || DEFAULT_CONFIG);
+};
+
+// One-shot bootstrap so the new-user modal pops with a working voucher
+// the very first time it's served on an existing config. Adds WELCOME10
+// to promo codes if missing, attaches it to the modal if no other
+// voucher is set, and stamps `_seedMigrations.welcome10v1` so this only
+// runs once. Safe to call on every read — no-ops once the flag is set.
+const ensureWelcome10Bootstrap = async (store, config) => {
+  if (config._seedMigrations?.welcome10v1) return config;
+  const code = WELCOME10_PROMO_DEFAULT.code;
+  const hasWelcome10 = config.promoCodes.some((p) => p.code === code);
+  const promoCodes = hasWelcome10
+    ? config.promoCodes
+    : [...config.promoCodes, WELCOME10_PROMO_DEFAULT];
+  const voucherCode = config.newUserModal.voucherCode || code;
+  const next = sanitizeConfig({
+    ...config,
+    promoCodes,
+    newUserModal: { ...config.newUserModal, voucherCode },
+    _seedMigrations: { ...config._seedMigrations, welcome10v1: true },
+  });
+  try {
+    await store.setJSON(CONFIG_KEY, next);
+  } catch {
+    // If the write fails (rare KV edge case), still return the seeded
+    // shape so this request renders correctly — next read will retry.
+  }
+  return next;
 };
 
 // Strip out everything but the bits the public /preview/<id> landing page
@@ -1068,7 +1118,8 @@ const handle = async ({ request, env }) => {
   try {
     if (method === "GET") {
       const params = event.queryStringParameters || {};
-      const config = await readConfig(store);
+      const initial = await readConfig(store);
+      const config = await ensureWelcome10Bootstrap(store, initial);
       if (params.admin === "1") {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });

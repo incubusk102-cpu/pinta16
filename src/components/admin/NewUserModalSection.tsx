@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Eye,
   Loader2,
   MousePointerClick,
   Save,
@@ -22,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { PREVIEW_EVENT } from "@/components/NewUserModal";
 import {
   DEFAULT_NEW_USER_MODAL,
   useStorefrontConfig,
@@ -84,7 +86,9 @@ export function NewUserModalSection() {
     if (Array.isArray(data.config?.promoCodes)) {
       setPromos(data.config.promoCodes);
     }
-    void refresh();
+    // Await so the modal's StorefrontConfigContext sees the new
+    // voucher / triggers / copy before "Save & preview" pops it open.
+    await refresh();
     return data;
   };
 
@@ -136,6 +140,16 @@ export function NewUserModalSection() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePreview = () => {
+    // Persist whatever the admin has tweaked locally before showing the
+    // preview — otherwise the modal renders against the last-saved
+    // config and the admin's unsaved copy / voucher / toggles wouldn't
+    // be visible. Done as a non-blocking save: the toast confirms it.
+    handleSave().then(() => {
+      window.dispatchEvent(new CustomEvent(PREVIEW_EVENT));
+    });
   };
 
   const handleAutoCreateWelcome10 = async () => {
@@ -406,6 +420,16 @@ export function NewUserModalSection() {
             <Save className="w-4 h-4 mr-2" />
           )}
           Save new-user modal
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handlePreview}
+          disabled={saving}
+          title="Save and pop the modal open right now—bypasses one-shot localStorage gate."
+        >
+          <Eye className="w-4 h-4 mr-2" />
+          Save & preview
         </Button>
       </div>
     </div>
