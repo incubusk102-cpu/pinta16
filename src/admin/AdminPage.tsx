@@ -1439,7 +1439,26 @@ function OrdersSection() {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? (updated ?? { ...o, status }) : o)),
       );
-      toast.success("Status updated");
+      const note = data.notification as
+        | {
+            delivered?: boolean;
+            skipped?: boolean;
+            skipReason?: string;
+            error?: string;
+          }
+        | null
+        | undefined;
+      if (note?.delivered) {
+        toast.success("Status updated · Email sent to customer");
+      } else if (note?.skipped) {
+        toast.message(
+          `Status updated · Email skipped: ${note.skipReason || "not configured"}`,
+        );
+      } else if (note?.error) {
+        toast.error(`Status updated · Email failed: ${note.error}`);
+      } else {
+        toast.success("Status updated");
+      }
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Could not update status",
