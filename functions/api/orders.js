@@ -12,6 +12,15 @@ import {
   isEmailConfigured,
   resolveEmailEnv,
 } from "./_lib/email.js";
+import {
+  findUserByReferralCode,
+  getCurrentUserFromSession,
+  getUsersStore,
+  normalizeEmail,
+  readUsers,
+  writeUsers,
+} from "./_lib/user-auth.js";
+import { ensurePersonalReward } from "./_lib/personal-rewards.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -189,6 +198,51 @@ const incrementPromoUsage = async (event, code) => {
   } catch (err) {
     console.error("incrementPromoUsage failed:", err);
   }
+};
+
+// On a successful order, mark the customer's first-order date so we can
+// fire anniversary rewards a year later. If the customer was referred by
+// another user, mint reciprocal ₱200 codes for both parties — but only
+// once, on the customer's true first paid order (avoids re-triggering
+// when somebody re-uses the same email later).
+const applyFirstOrderRewards = async ({ allOrders, order }) => {
+  const email = normalizeEmail(order.orderInfo?.email);
+  if (!email) return;
+  const usersStore = getUsersStore();
+  const users = await readUsers(usersStore);
+  const customer = users[email];
+  if (!customer) return;
+  const isFirst =
+    !customer.firstOrderAt &&
+    allOrders.filter((o) => normalizeEmail(o.orderInfo?.email) === email)
+      .length === 1;
+  if (!isFirst) return;
+  customer.firstOrderAt = order.createdAt;
+  // If the customer applied a referral code at signup, mint a reward
+  // for both inviter and invitee. We key on the customer's id to keep
+  // it idempotent — re-running this hook won't duplicate codes.
+  let inviter = null;
+  if (customer.referredBy) {
+    inviter = findUserByReferralCode(users, customer.referredBy);
+  }
+  await writeUsers(usersStore, users);
+  if (!inviter) return;
+  const periodKey = String(customer.id || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+  await ensurePersonalReward({
+    user: inviter,
+    kind: "referral-give",
+    periodKey,
+    description: `Thanks for referring ${customer.name || "a friend"} — ₱200 off your next order`,
+  });
+  await ensurePersonalReward({
+    user: customer,
+    kind: "referral-get",
+    periodKey,
+    description: `Welcome gift from a friend — ₱200 off your next order`,
+  });
 };
 
 const readStorefrontConfigDirect = async (event) => {
@@ -676,6 +730,34 @@ export const handler = async (event) => {
         });
       }
 
+      // Customer-facing: list every order belonging to the *signed-in*
+      // user, scoped strictly by the email on their session token. This
+      // is what powers `/account → My Orders`. Without it the customer
+      // page falls back to localStorage, which is shared across every
+      // Google account that ever signed in on the same browser — so
+      // signing out and signing back in with a second Google account
+      // would leak the first account's order history into the second.
+      // Email match is normalized to handle case differences between
+      // the Google profile email and what the customer typed at
+      // checkout.
+      if (params.mine === "1" || params.action === "mine") {
+        const user = await getCurrentUserFromSession(event);
+        if (!user) {
+          return json(401, { error: "Not signed in" });
+        }
+        const userEmail = normalizeEmail(user.email);
+        if (!userEmail) {
+          return json(200, { orders: [] });
+        }
+        const all = await readOrders(store);
+        const mine = all
+          .filter((o) => normalizeEmail(o?.orderInfo?.email) === userEmail)
+          .sort((a, b) =>
+            String(b.createdAt || "").localeCompare(String(a.createdAt || "")),
+          );
+        return json(200, { orders: mine });
+      }
+
       if (!(await isAuthenticated(event))) {
         return json(401, { error: "Not authenticated" });
       }
@@ -773,6 +855,51 @@ export const handler = async (event) => {
             address: String(info.address).slice(0, 500),
             city: String(info.city).slice(0, 200),
             notes: String(info.notes || "").slice(0, 1000),
+            // PH-specific fields collected from the cascading picker.
+            // All optional — legacy clients that don't supply them
+            // round-trip the same way as before.
+            ...(typeof info.addressLine1 === "string"
+              ? { addressLine1: info.addressLine1.slice(0, 300) }
+              : {}),
+            ...(typeof info.addressLine2 === "string"
+              ? { addressLine2: info.addressLine2.slice(0, 300) }
+              : {}),
+            ...(typeof info.region === "string"
+              ? { region: info.region.slice(0, 60) }
+              : {}),
+            ...(typeof info.province === "string"
+              ? { province: info.province.slice(0, 120) }
+              : {}),
+            ...(typeof info.barangay === "string"
+              ? { barangay: info.barangay.slice(0, 120) }
+              : {}),
+            ...(typeof info.landmark === "string"
+              ? { landmark: info.landmark.slice(0, 240) }
+              : {}),
+            ...(typeof info.postalCode === "string"
+              ? { postalCode: info.postalCode.slice(0, 20) }
+              : {}),
+            ...(typeof info.country === "string"
+              ? { country: info.country.slice(0, 80) }
+              : {}),
+            ...(typeof info.courier === "string"
+              ? { courier: info.courier.slice(0, 60) }
+              : {}),
+            ...(typeof info.shippingZone === "string"
+              ? { shippingZone: info.shippingZone.slice(0, 40) }
+              : {}),
+            ...(typeof info.formattedAddress === "string"
+              ? { formattedAddress: info.formattedAddress.slice(0, 500) }
+              : {}),
+            ...(typeof info.placeId === "string"
+              ? { placeId: info.placeId.slice(0, 200) }
+              : {}),
+            ...(typeof info.latitude === "number"
+              ? { latitude: info.latitude }
+              : {}),
+            ...(typeof info.longitude === "number"
+              ? { longitude: info.longitude }
+              : {}),
           },
           subtotal: clientSubtotal,
           shippingFee: Number(order.shippingFee) || 0,
@@ -831,6 +958,14 @@ export const handler = async (event) => {
         await store.setJSON(ORDERS_KEY, next);
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
+        }
+        try {
+          await applyFirstOrderRewards({
+            allOrders: next,
+            order: safeOrder,
+          });
+        } catch (err) {
+          console.warn("first-order rewards hook failed:", err);
         }
         await appendAuditEvent(event, {
           type: "order.placed",

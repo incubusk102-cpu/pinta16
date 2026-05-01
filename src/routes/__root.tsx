@@ -27,6 +27,8 @@ import { LocaleProvider } from "@/contexts/LocaleContext";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
 import { useGoogleAuthHash } from "@/hooks/useGoogleAuthHash";
+import { useEffect } from "react";
+import { captureReferralFromUrl } from "@/lib/referral";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -61,6 +63,13 @@ export const Route = createRootRoute({
 function HeartbeatBridge() {
   useVisitorHeartbeat();
   useUserHeartbeat();
+  return null;
+}
+
+function ReferralCaptureBridge() {
+  useEffect(() => {
+    captureReferralFromUrl();
+  }, []);
   return null;
 }
 
@@ -128,6 +137,7 @@ function RootComponent() {
                     <ProductProvider>
                       <CartProvider>
                         <HeartbeatBridge />
+                        <ReferralCaptureBridge />
                         <GoogleAuthHashBridge />
                         <ConditionalAnnouncementBar />
                         <Outlet />

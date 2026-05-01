@@ -2,9 +2,12 @@ import { wrapHandler } from "./_lib/handler-wrapper.js";
 import crypto from "node:crypto";
 import { isAuthenticated as isAdmin } from "./_lib/admin-auth.js";
 import {
+  ensureReferralCode,
   ensureSessionSecret,
   extractToken,
   findUserById,
+  findUserByReferralCode,
+  getCurrentUserFromSession,
   getUsersStore,
   hashPassword,
   INACTIVE_DAYS,
@@ -15,10 +18,15 @@ import {
   publicUser,
   readUsers,
   runInactiveUserCleanup,
+  sanitizeBirthday,
   verifyPassword,
   verifyTokenWithSecret,
   writeUsers,
 } from "./_lib/user-auth.js";
+import {
+  computeActiveRewards,
+  ensurePersonalReward,
+} from "./_lib/personal-rewards.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
@@ -81,6 +89,12 @@ const ADDRESS_FIELDS = [
   "province",
   "postalCode",
   "country",
+  // PH cascading-picker fields. All optional from the server's
+  // perspective so legacy clients don't break, but the checkout form
+  // now collects them.
+  "region",
+  "barangay",
+  "landmark",
 ];
 
 const sanitizeAddress = (raw) => {
@@ -109,15 +123,12 @@ const sanitizeAddress = (raw) => {
   return { ok: true, value: out };
 };
 
-const getCurrentUser = async (event, store) => {
-  const token = extractToken(event);
-  if (!token) return null;
-  const secret = await ensureSessionSecret(store);
-  const payload = verifyTokenWithSecret(token, secret);
-  if (!payload?.sub) return null;
-  const users = await readUsers(store);
-  return findUserById(users, payload.sub);
-};
+// Thin local wrapper around the shared session resolver — keeps the
+// existing `getCurrentUser(event, store)` call sites in this file
+// unchanged while delegating actual token verification to
+// `_lib/user-auth.js` so other handlers (e.g. orders.js) can share it.
+const getCurrentUser = async (event, store) =>
+  getCurrentUserFromSession(event, store);
 
 export const handler = async (event) => {
   try {
@@ -183,6 +194,12 @@ export const handler = async (event) => {
         }
       } else {
         isNewUser = true;
+        const referralInput = String(body.referredBy || "")
+          .trim()
+          .toUpperCase();
+        const inviter = referralInput
+          ? findUserByReferralCode(users, referralInput)
+          : null;
         user = {
           id: crypto.randomUUID(),
           email,
@@ -191,8 +208,11 @@ export const handler = async (event) => {
           provider: "google",
           createdAt: now,
           lastSeenAt: now,
+          referredBy: inviter ? inviter.referralCode : "",
+          vipEarlyAccess: false,
         };
       }
+      ensureReferralCode(user);
       users[email] = user;
       await writeUsers(store, users);
 
@@ -236,11 +256,29 @@ export const handler = async (event) => {
         });
       }
 
+      const birthday = sanitizeBirthday(body.birthday);
+      if (birthday === null) {
+        return json(400, { error: "Birthday must be MM-DD or YYYY-MM-DD" });
+      }
+      const referralInput = String(body.referredBy || "")
+        .trim()
+        .toUpperCase();
+
       const users = await readUsers(store);
       if (users[email]) {
         return json(409, {
           error: "An account with that email already exists",
         });
+      }
+
+      // Validate the optional referral code before creating the
+      // account so the inviter relationship is recorded atomically.
+      let inviter = null;
+      if (referralInput) {
+        inviter = findUserByReferralCode(users, referralInput);
+        if (!inviter) {
+          return json(400, { error: "Unknown referral code" });
+        }
       }
 
       const { salt, hash } = hashPassword(password);
@@ -253,7 +291,11 @@ export const handler = async (event) => {
         hash,
         createdAt: now,
         lastSeenAt: now,
+        birthday: birthday || "",
+        referredBy: inviter ? inviter.referralCode : "",
+        vipEarlyAccess: false,
       };
+      ensureReferralCode(user);
       users[email] = user;
       await writeUsers(store, users);
 
@@ -330,7 +372,62 @@ export const handler = async (event) => {
     if (event.httpMethod === "GET" && action === "me") {
       const user = await getCurrentUser(event, store);
       if (!user) return json(401, { error: "Not authenticated" });
-      return json(200, { user: publicUser(user) });
+      // Backfill referral code lazily — older accounts predating the
+      // referral feature won't have one yet.
+      if (!user.referralCode) {
+        const users = await readUsers(store);
+        const stored = users[normalizeEmail(user.email)];
+        if (stored) {
+          ensureReferralCode(stored);
+          await writeUsers(store, users);
+        }
+      }
+      // Auto-mint birthday / anniversary rewards on view so the
+      // customer sees their gift as soon as they open /account.
+      const active = computeActiveRewards(user);
+      const rewards = [];
+      for (const a of active) {
+        const reward = await ensurePersonalReward({
+          user,
+          kind: a.kind,
+          periodKey: a.periodKey,
+        });
+        if (reward) {
+          rewards.push({
+            kind: a.kind,
+            code: reward.code,
+            type: reward.promo.type,
+            value: reward.promo.value,
+            description: reward.promo.description,
+            expiresAt: reward.promo.expiresAt,
+            usageLimit: reward.promo.usageLimit,
+            usageCount: reward.promo.usageCount || 0,
+          });
+        }
+      }
+      return json(200, { user: publicUser(user), rewards });
+    }
+
+    if (event.httpMethod === "POST" && action === "update-prefs") {
+      const user = await getCurrentUser(event, store);
+      if (!user) return json(401, { error: "Not authenticated" });
+      const body = parseBody(event.body);
+      const users = await readUsers(store);
+      const stored = users[normalizeEmail(user.email)];
+      if (!stored) return json(404, { error: "User not found" });
+      if (body.birthday !== undefined) {
+        const bd = sanitizeBirthday(body.birthday);
+        if (bd === null) {
+          return json(400, { error: "Birthday must be MM-DD or YYYY-MM-DD" });
+        }
+        stored.birthday = bd;
+      }
+      if (typeof body.vipEarlyAccess === "boolean") {
+        stored.vipEarlyAccess = body.vipEarlyAccess;
+      }
+      stored.updatedAt = new Date().toISOString();
+      await writeUsers(store, users);
+      return json(200, { user: publicUser(stored) });
     }
 
     if (event.httpMethod === "POST" && action === "update-profile") {

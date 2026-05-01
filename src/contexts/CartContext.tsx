@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   ReactNode,
 } from "react";
@@ -11,6 +12,9 @@ import {
   useStorefrontConfig,
   type PromoCodeType,
 } from "@/contexts/StorefrontConfigContext";
+import { useUserAuth } from "@/contexts/UserAuthContext";
+import { getShippingFee } from "@/lib/shipment";
+import type { ShippingZone } from "@/lib/ph-regions";
 
 export interface CartItem {
   id: string;
@@ -41,6 +45,14 @@ export interface OrderInfo {
   longitude?: number | null;
   formattedAddress?: string;
   placeId?: string;
+  // PH-specific fields collected from the cascading address picker.
+  region?: string;
+  barangay?: string;
+  landmark?: string;
+  // Courier the customer chose at checkout (used to charge the
+  // per-courier × per-zone fee). May be empty for legacy orders.
+  courier?: string;
+  shippingZone?: string;
 }
 
 export interface OrderNotification {
@@ -213,13 +225,84 @@ interface CartContextType {
   showConfirmation: boolean;
   setShowConfirmation: (show: boolean) => void;
   viewOrder: (orderId: string) => void;
+  // Customer's checkout courier/zone selection. CheckoutForm calls
+  // `setCheckoutShipping` so the cart total reflects the fee from the
+  // shipping rates table.
+  checkoutCourier: string;
+  checkoutZone: ShippingZone | null;
+  setCheckoutShipping: (next: {
+    courier: string;
+    zone: ShippingZone | null;
+  }) => void;
 }
 
 const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
 const DEFAULT_SHIPPING_FEE = 500;
 
-const ORDERS_STORAGE_KEY = "canvhub_orders";
+// Orders are now scoped to whoever is signed in (or `guest` for
+// signed-out shoppers). The legacy `canvhub_orders` key was a single
+// browser-shared bucket — that meant if customer A placed an order,
+// signed out, and customer B signed in on the same browser, customer
+// B's `/account → My Orders` would still show customer A's order.
+// We migrate any legacy entry into the guest bucket on first load and
+// then forget the old key forever.
+const LEGACY_ORDERS_STORAGE_KEY = "canvhub_orders";
+const ORDERS_STORAGE_PREFIX = "canvhub_orders__";
+const GUEST_ORDERS_STORAGE_KEY = `${ORDERS_STORAGE_PREFIX}guest`;
 const CART_STORAGE_KEY = "canvhub_cart";
+
+const normalizeUserEmail = (email: string | null | undefined): string | null =>
+  email && email.trim() ? email.trim().toLowerCase() : null;
+
+const ordersStorageKeyFor = (userEmail: string | null): string =>
+  userEmail ? `${ORDERS_STORAGE_PREFIX}${userEmail}` : GUEST_ORDERS_STORAGE_KEY;
+
+const readOrdersFromStorage = (userEmail: string | null): CompletedOrder[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(ordersStorageKeyFor(userEmail));
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeOrdersToStorage = (
+  userEmail: string | null,
+  orders: CompletedOrder[],
+): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      ordersStorageKeyFor(userEmail),
+      JSON.stringify(orders),
+    );
+  } catch {
+    /* ignore quota errors */
+  }
+};
+
+// One-shot migration: collapse the legacy single-bucket key into the
+// guest bucket so we don't lose offline guest order history, then
+// remove the legacy key so it never bleeds into a signed-in account
+// again. Safe to call multiple times — does nothing once the legacy
+// key is gone.
+const migrateLegacyOrdersStorage = (): void => {
+  if (typeof window === "undefined") return;
+  try {
+    const legacy = localStorage.getItem(LEGACY_ORDERS_STORAGE_KEY);
+    if (legacy === null) return;
+    const guestExisting = localStorage.getItem(GUEST_ORDERS_STORAGE_KEY);
+    if (guestExisting === null) {
+      localStorage.setItem(GUEST_ORDERS_STORAGE_KEY, legacy);
+    }
+    localStorage.removeItem(LEGACY_ORDERS_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+};
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
@@ -245,6 +328,8 @@ const mergeReviews = (
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { config } = useStorefrontConfig();
+  const { user, token } = useUserAuth();
+  const userEmail = normalizeUserEmail(user?.email);
   const FREE_SHIPPING_THRESHOLD = config.freeShipping.enabled
     ? (config.freeShipping.threshold ?? DEFAULT_FREE_SHIPPING_THRESHOLD)
     : Number.POSITIVE_INFINITY;
@@ -285,22 +370,78 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     applied: false,
     error: "",
   });
+  // Initial orders are read from the *current* user's scoped bucket so
+  // signing in as a different Google account on the same browser never
+  // shows the previous account's orders, even before the server
+  // refresh below resolves. The legacy unscoped `canvhub_orders` key
+  // is collapsed into the guest bucket on first load.
   const [orders, setOrders] = useState<CompletedOrder[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(ORDERS_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    migrateLegacyOrdersStorage();
+    return readOrdersFromStorage(userEmail);
   });
+  // Track which user the in-memory orders state belongs to so the
+  // user-change effect can persist the previous user's state to its
+  // own bucket before swapping to the new user's cache.
+  const ordersOwnerRef = useRef<string | null>(userEmail);
 
-  const saveOrders = useCallback((newOrders: CompletedOrder[]) => {
-    setOrders(newOrders);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(newOrders));
+  // Customer's checkout shipping selection — used to look up the
+  // per-courier × per-zone fee in the shipping rates table. CheckoutForm
+  // calls `setCheckoutShipping` whenever the courier or region changes
+  // so the cart total stays in sync.
+  const [checkoutShipping, setCheckoutShipping] = useState<{
+    courier: string;
+    zone: ShippingZone | null;
+  }>({ courier: "", zone: null });
+
+  const saveOrders = useCallback(
+    (newOrders: CompletedOrder[]) => {
+      setOrders(newOrders);
+      writeOrdersToStorage(userEmail, newOrders);
+      ordersOwnerRef.current = userEmail;
+    },
+    [userEmail],
+  );
+
+  // Keep `/account → My Orders` honest across login / logout / Google
+  // account-switch on the same browser:
+  //   - Sign-in: replace local state with whatever the server has for
+  //     the signed-in email. Token-authenticated, so a malicious
+  //     client can't spoof another user's history.
+  //   - Sign-out / account-switch: drop the previous user's orders
+  //     from memory and surface the new user's cached bucket while we
+  //     wait for the server fetch (or, for guests, just the guest
+  //     bucket).
+  // Server-fetched orders are written back to localStorage so the
+  // next reload can paint instantly without waiting for the network.
+  useEffect(() => {
+    if (ordersOwnerRef.current !== userEmail) {
+      ordersOwnerRef.current = userEmail;
+      setOrders(readOrdersFromStorage(userEmail));
     }
-  }, []);
+    if (!userEmail || !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/orders?action=mine", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          orders?: CompletedOrder[];
+        };
+        if (cancelled) return;
+        if (ordersOwnerRef.current !== userEmail) return;
+        const next = Array.isArray(data?.orders) ? data.orders : [];
+        setOrders(next);
+        writeOrdersToStorage(userEmail, next);
+      } catch {
+        /* network blip — keep cached orders */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userEmail, token]);
 
   const addToCart = useCallback((item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {
@@ -398,8 +539,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const voucherFreeShipping = voucher.applied && voucher.freeShipping;
-  const shippingFeeOriginal = SHIPPING_FEE;
-  const shippingFee = isFreeShipping || voucherFreeShipping ? 0 : SHIPPING_FEE;
+  // Per-courier × per-zone fee from the storefront config takes
+  // precedence when the customer has picked a courier and we know the
+  // delivery region's zone. Falls back to the legacy flat fee otherwise.
+  const courierFee = getShippingFee(
+    config.shippingRates,
+    checkoutShipping.courier,
+    checkoutShipping.zone,
+  );
+  const baseShippingFee = courierFee != null ? courierFee : SHIPPING_FEE;
+  const shippingFeeOriginal = baseShippingFee;
+  const shippingFee =
+    isFreeShipping || voucherFreeShipping ? 0 : baseShippingFee;
   const discount = useMemo((): number => {
     if (!voucher.applied) return 0;
     if (voucher.type === "percent") {
@@ -588,6 +739,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       viewOrder,
       showConfirmation,
       setShowConfirmation,
+      checkoutCourier: checkoutShipping.courier,
+      checkoutZone: checkoutShipping.zone,
+      setCheckoutShipping,
     }),
     [
       items,
@@ -622,6 +776,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       lastOrder,
       viewOrder,
       showConfirmation,
+      checkoutShipping.courier,
+      checkoutShipping.zone,
     ],
   );
 

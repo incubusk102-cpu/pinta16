@@ -33,6 +33,7 @@ import RefundBanner from "@/components/RefundBanner";
 import ProfileEditor from "@/components/account/ProfileEditor";
 import AddressBook from "@/components/account/AddressBook";
 import MyOrders from "@/components/account/MyOrders";
+import AppreciationSection from "@/components/account/AppreciationSection";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -470,6 +471,8 @@ function AccountPage() {
         <div id="account-profile" className="scroll-mt-28">
           <ProfileEditor />
         </div>
+
+        <AppreciationSection />
 
         <div id="account-orders" className="scroll-mt-28">
           <MyOrders />

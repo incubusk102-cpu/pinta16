@@ -45,6 +45,12 @@ export interface Product {
    * reverted by deleting this product.
    */
   replacesDefaultId?: string;
+  /**
+   * VIP-only embargo: ISO timestamp until which only customers with
+   * `vipEarlyAccess` see this product. After the deadline the artwork
+   * is visible to everyone like a normal listing.
+   */
+  embargoUntil?: string;
 }
 
 export const PRODUCT_CATEGORIES = [

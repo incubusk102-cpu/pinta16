@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { readStoredReferral } from "@/lib/referral";
 
 const STORAGE_KEY = "canvhub_user_token";
 const USER_KEY = "canvhub_user";
@@ -23,9 +24,14 @@ export interface SavedAddress {
   province: string;
   postalCode: string;
   country: string;
+  // PH cascading-picker fields. Optional so legacy addresses keep
+  // round-tripping; new orders will fill these.
+  region?: string;
+  barangay?: string;
+  landmark?: string;
   // Optional pin location set by the hybrid address picker
-  // (Google Places / draggable map marker). Couriers can use this
-  // when the human-readable address is ambiguous.
+  // (MapTiler autocomplete / draggable map marker). Couriers can use
+  // this when the human-readable address is ambiguous.
   latitude?: number | null;
   longitude?: number | null;
   formatted?: string;
@@ -47,17 +53,38 @@ export interface PublicUser {
   updatedAt?: string;
   addresses?: SavedAddress[];
   defaultAddressId?: string | null;
+  birthday?: string;
+  firstOrderAt?: string;
+  referralCode?: string;
+  referredBy?: string;
+  vipEarlyAccess?: boolean;
+}
+
+export interface UserReward {
+  kind: "birthday" | "anniversary" | "referral-give" | "referral-get";
+  code: string;
+  type: "fixed" | "flat" | "percent" | "free_shipping";
+  value: number;
+  description: string;
+  expiresAt: string;
+  usageLimit: number;
+  usageCount: number;
 }
 
 interface UserAuthContextValue {
   token: string | null;
   user: PublicUser | null;
+  rewards: UserReward[];
   loading: boolean;
   googleLogin: (credential: string) => Promise<void>;
   applySession: (token: string, user: PublicUser) => void;
   logout: () => void;
   refresh: () => Promise<void>;
   updateProfile: (patch: { name?: string; picture?: string }) => Promise<void>;
+  updatePrefs: (patch: {
+    birthday?: string;
+    vipEarlyAccess?: boolean;
+  }) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   addAddress: (address: AddressInput) => Promise<void>;
   updateAddress: (id: string, address: AddressInput) => Promise<void>;
@@ -115,6 +142,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<PublicUser | null>(() =>
     readStored<PublicUser>(USER_KEY),
   );
+  const [rewards, setRewards] = useState<UserReward[]>([]);
   const [loading, setLoading] = useState(false);
 
   const apply = useCallback(
@@ -141,6 +169,11 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
         if (data?.user) {
           apply(token, data.user as PublicUser);
         }
+        if (Array.isArray(data?.rewards)) {
+          setRewards(data.rewards as UserReward[]);
+        } else {
+          setRewards([]);
+        }
       }
     } catch {
       /* network blip — keep existing */
@@ -158,7 +191,11 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch(`${API}?action=google-login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "google-login", credential }),
+          body: JSON.stringify({
+            action: "google-login",
+            credential,
+            referredBy: readStoredReferral(),
+          }),
         });
         if (!response.ok) {
           throw new Error(
@@ -222,6 +259,23 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       if (data?.user) apply(token, data.user);
     },
     [callAction, apply, token],
+  );
+
+  const updatePrefs = useCallback(
+    async (patch: { birthday?: string; vipEarlyAccess?: boolean }) => {
+      const data = (await callAction(
+        "update-prefs",
+        patch,
+        "Could not update preferences",
+      )) as { user: PublicUser };
+      if (data?.user) {
+        apply(token, data.user);
+        // Re-pull /me so any newly-eligible reward (e.g. setting a
+        // birthday that's today) gets surfaced immediately.
+        void refresh();
+      }
+    },
+    [callAction, apply, token, refresh],
   );
 
   const changePassword = useCallback(
@@ -302,12 +356,14 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       token,
       user,
+      rewards,
       loading,
       googleLogin,
       applySession,
       logout,
       refresh,
       updateProfile,
+      updatePrefs,
       changePassword,
       addAddress,
       updateAddress,
@@ -318,12 +374,14 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     [
       token,
       user,
+      rewards,
       loading,
       googleLogin,
       applySession,
       logout,
       refresh,
       updateProfile,
+      updatePrefs,
       changePassword,
       addAddress,
       updateAddress,

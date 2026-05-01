@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -11,6 +11,7 @@ import {
   Loader2,
   UserPlus,
   ChevronDown,
+  Truck,
 } from "lucide-react";
 import { useCart, type OrderInfo } from "@/contexts/CartContext";
 import {
@@ -18,6 +19,7 @@ import {
   type PublicUser,
   type SavedAddress,
 } from "@/contexts/UserAuthContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
   sanitizeText,
   isValidEmail,
@@ -26,12 +28,31 @@ import {
   formatPhPhone,
 } from "@/lib/sanitize";
 import {
+  COURIERS,
+  SHIPPABLE_COURIER_IDS,
+  hasShippingRates,
+  getShippingFee,
+} from "@/lib/shipment";
+import { zoneForRegion, zoneLabel, isValidPhMobile } from "@/lib/ph-regions";
+import {
+  PhAddressFields,
+  composePhAddressLine,
+  isValidPhPostal,
+  type PhAddressValue,
+} from "@/components/PhAddressFields";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   GOOGLE_CALLBACK_PATH,
   cancelGoogleOneTap,
   renderGoogleButton,
 } from "@/lib/google-signin";
 import PaymentModal from "./PaymentModal";
-import { AddressInput, type AddressValue } from "@/components/AddressInput";
 import { createPayment } from "@/utils/payment.functions";
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
@@ -115,7 +136,7 @@ const buildSignedInForm = (
     email: prev.email || user?.email || "",
     phone: prev.phone || addr?.phone || "",
     address: prev.address || addressLine,
-    city: prev.city || cityLine,
+    city: prev.city || addr?.city || "",
     notes: prev.notes,
     addressLine1: prev.addressLine1 || addr?.line1 || "",
     addressLine2: prev.addressLine2 || addr?.line2 || "",
@@ -124,8 +145,13 @@ const buildSignedInForm = (
     country: prev.country || addr?.country || "Philippines",
     latitude: prev.latitude ?? addr?.latitude ?? null,
     longitude: prev.longitude ?? addr?.longitude ?? null,
-    formattedAddress: prev.formattedAddress || addr?.formatted || "",
+    formattedAddress: prev.formattedAddress || addr?.formatted || cityLine,
     placeId: prev.placeId || addr?.placeId,
+    region: prev.region || addr?.region || "",
+    barangay: prev.barangay || addr?.barangay || "",
+    landmark: prev.landmark || addr?.landmark || "",
+    courier: prev.courier || "",
+    shippingZone: prev.shippingZone || "",
   };
 };
 
@@ -143,8 +169,10 @@ const CheckoutForm = () => {
     isFreeShipping,
     shippingFeeOriginal,
     voucher,
+    setCheckoutShipping,
   } = useCart();
-  const { user, token } = useUserAuth();
+  const { config: storefrontConfig } = useStorefrontConfig();
+  const { user, token, addAddress, updateAddress } = useUserAuth();
   const isSignedIn = Boolean(token && user);
   // Initialize from auth state so signed-in users land on the form
   // immediately — no flash of the "Continue as Guest / Sign in" choice.
@@ -185,6 +213,61 @@ const CheckoutForm = () => {
   const [touched, setTouched] = useState<
     Partial<Record<keyof OrderInfo, true>>
   >({});
+  // Derived PH address picker value. The cascading picker writes back
+  // through `onPhAddressChange` which fans the value out to the flat
+  // OrderInfo fields the rest of the system expects.
+  const phAddress: PhAddressValue = useMemo(
+    () => ({
+      region: form.region || "",
+      province: form.province || "",
+      city:
+        form.city && form.city.includes(",")
+          ? form.city.split(",")[0].trim()
+          : form.city || "",
+      barangay: form.barangay || "",
+      line1: form.addressLine1 || form.address || "",
+      landmark: form.landmark || "",
+      postalCode: form.postalCode || "",
+      country: form.country || "Philippines",
+      zone: zoneForRegion(form.region || ""),
+    }),
+    [
+      form.region,
+      form.province,
+      form.city,
+      form.barangay,
+      form.addressLine1,
+      form.address,
+      form.landmark,
+      form.postalCode,
+      form.country,
+    ],
+  );
+  const ratesConfigured = hasShippingRates(storefrontConfig.shippingRates);
+  // Storefront couriers eligible to ship at checkout. We narrow the
+  // full COURIERS list to (a) those marked "shippable" by id and
+  // (b) those that actually have at least one configured rate when the
+  // admin has set up rates. If no rates are configured, we still expose
+  // the shippable couriers but the cart falls back to the legacy fee.
+  const courierOptions = useMemo(() => {
+    const baseline = COURIERS.filter((c) =>
+      SHIPPABLE_COURIER_IDS.includes(c.id),
+    );
+    if (!ratesConfigured) return baseline;
+    return baseline.filter((c) =>
+      storefrontConfig.shippingRates.some(
+        (r) => r.courierId.toLowerCase() === c.id.toLowerCase(),
+      ),
+    );
+  }, [storefrontConfig.shippingRates, ratesConfigured]);
+  // Push the customer's courier+zone selection into CartContext so the
+  // running total reflects the per-courier × per-zone fee.
+  useEffect(() => {
+    setCheckoutShipping({
+      courier: form.courier || "",
+      zone: zoneForRegion(form.region || ""),
+    });
+  }, [form.courier, form.region, setCheckoutShipping]);
   // Mobile-only collapse state for the order summary so the form fields
   // aren't pushed below the fold on small screens. Defaults to expanded
   // on first render; the visitor can collapse with a tap.
@@ -319,12 +402,34 @@ const CheckoutForm = () => {
           return "";
         case "phone":
           if (!value.trim()) return "Phone number is required";
+          // Two-tier check: bail out fast on garbage chars, then run the
+          // PH-specific validator so couriers won't reject the order on
+          // pickup. We accept a foreign +CC number too (couriers will
+          // ring it through the carrier's gateway).
           if (!isValidPhone(value)) return "Invalid phone number";
+          if (!isValidPhMobile(value) && !value.trim().startsWith("+")) {
+            return "Use a PH mobile (09XX XXX XXXX) or +63 9XX XXX XXXX";
+          }
           return "";
+        case "region":
+          return value.trim() ? "" : "Region is required";
+        case "province":
+          return value.trim() ? "" : "Province is required";
+        case "city":
+          return value.trim() ? "" : "City / municipality is required";
+        case "barangay":
+          return value.trim() ? "" : "Barangay is required";
+        case "addressLine1":
+          return value.trim() ? "" : "Street address is required";
+        case "postalCode":
+          return isValidPhPostal(value) ? "" : "PH postal code is 4 digits";
         case "address":
           return value.trim() ? "" : "Address is required";
-        case "city":
-          return value.trim() ? "" : "City is required";
+        case "courier":
+          // Only require a courier when the storefront has rates set up.
+          // Otherwise the legacy flat fee applies and the field is
+          // optional.
+          return "";
         default:
           return "";
       }
@@ -335,11 +440,24 @@ const CheckoutForm = () => {
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof OrderInfo, string>> = {};
     (
-      ["fullName", "email", "phone", "address", "city"] as (keyof OrderInfo)[]
+      [
+        "fullName",
+        "email",
+        "phone",
+        "region",
+        "province",
+        "city",
+        "barangay",
+        "addressLine1",
+        "postalCode",
+      ] as (keyof OrderInfo)[]
     ).forEach((key) => {
       const err = validateField(key, (form[key] as string) || "");
       if (err) newErrors[key] = err;
     });
+    if (ratesConfigured && !(form.courier || "").trim()) {
+      newErrors.courier = "Pick a courier";
+    }
     setErrors(newErrors);
     // Mark all required fields touched on submit so errors render even
     // for fields the visitor never focused (e.g. tapped Pay immediately).
@@ -347,8 +465,13 @@ const CheckoutForm = () => {
       fullName: true,
       email: true,
       phone: true,
-      address: true,
+      region: true,
+      province: true,
       city: true,
+      barangay: true,
+      addressLine1: true,
+      postalCode: true,
+      courier: true,
     });
     return Object.keys(newErrors).length === 0;
   };
@@ -407,11 +530,17 @@ const CheckoutForm = () => {
 
   const handlePaymentSuccess = () => {
     setShowPayment(false);
+    // Compose the legacy `address` (single string) from the structured
+    // fields so admin tools / waybill PDFs / SMS copy that haven't
+    // migrated yet still get a useful one-liner.
+    const composedAddress = composePhAddressLine(phAddress);
     const sanitizedForm: OrderInfo = {
       fullName: sanitizeText(enforceMaxLength(form.fullName, 100)),
       email: sanitizeText(enforceMaxLength(form.email, 254)),
       phone: sanitizeText(enforceMaxLength(form.phone, 20)),
-      address: sanitizeText(enforceMaxLength(form.address, 300)),
+      address: sanitizeText(
+        enforceMaxLength(composedAddress || form.address, 500),
+      ),
       city: sanitizeText(enforceMaxLength(form.city, 100)),
       notes: sanitizeText(enforceMaxLength(form.notes, 500)),
       addressLine1: sanitizeText(
@@ -426,9 +555,19 @@ const CheckoutForm = () => {
       latitude: form.latitude ?? null,
       longitude: form.longitude ?? null,
       formattedAddress: sanitizeText(
-        enforceMaxLength(form.formattedAddress || "", 400),
+        enforceMaxLength(form.formattedAddress || composedAddress, 500),
       ),
       placeId: form.placeId,
+      // PH cascading-picker fields persisted alongside the order so
+      // admin can render the full structured address on the dashboard
+      // and the waybill PDF can format each line individually.
+      region: sanitizeText(enforceMaxLength(form.region || "", 60)),
+      barangay: sanitizeText(enforceMaxLength(form.barangay || "", 120)),
+      landmark: sanitizeText(enforceMaxLength(form.landmark || "", 240)),
+      courier: sanitizeText(enforceMaxLength(form.courier || "", 60)),
+      shippingZone: sanitizeText(
+        enforceMaxLength(zoneForRegion(form.region || "") || "", 40),
+      ),
     };
     placeOrder(sanitizedForm, {
       paymentIntentId: paymentIntentId ?? undefined,
@@ -445,6 +584,36 @@ const CheckoutForm = () => {
     });
     setTouched({});
     setErrors({});
+    // Persist the structured address to the signed-in user's address
+    // book so they don't have to retype it next time. We update the
+    // existing default if there is one, otherwise we add a new entry.
+    if (isSignedIn && user) {
+      const existing = pickDefaultAddress(user);
+      const payload = {
+        label: existing?.label || "Home",
+        fullName: sanitizedForm.fullName,
+        phone: sanitizedForm.phone,
+        line1: sanitizedForm.addressLine1 || "",
+        line2: sanitizedForm.addressLine2 || "",
+        city: sanitizedForm.city || "",
+        province: sanitizedForm.province || "",
+        postalCode: sanitizedForm.postalCode || "",
+        country: sanitizedForm.country || "Philippines",
+        region: sanitizedForm.region || "",
+        barangay: sanitizedForm.barangay || "",
+        landmark: sanitizedForm.landmark || "",
+        latitude: sanitizedForm.latitude ?? null,
+        longitude: sanitizedForm.longitude ?? null,
+        formatted: sanitizedForm.formattedAddress || "",
+        placeId: sanitizedForm.placeId,
+      };
+      const op = existing
+        ? updateAddress(existing.id, payload)
+        : addAddress(payload);
+      void op.catch(() => {
+        /* swallow — order already placed; next time we'll try again */
+      });
+    }
     // Order is now placed — drop the draft so future visits to this tab
     // don't pre-fill someone else's information.
     clearCheckoutDraft();
@@ -489,44 +658,48 @@ const CheckoutForm = () => {
     },
   ];
 
-  const addressValue: AddressValue = {
-    line1: form.addressLine1 || form.address || "",
-    line2: form.addressLine2 || "",
-    city:
-      form.city && form.city.includes(",")
-        ? form.city.split(",")[0].trim()
-        : form.city || "",
-    province:
-      form.province ||
-      (form.city && form.city.includes(",")
-        ? form.city.split(",").slice(1).join(",").trim()
-        : ""),
-    postalCode: form.postalCode || "",
-    country: form.country || "Philippines",
-    latitude: form.latitude ?? null,
-    longitude: form.longitude ?? null,
-    formatted: form.formattedAddress || "",
-    placeId: form.placeId,
-  };
-
-  const onAddressChange = (next: AddressValue): void => {
-    const flatAddress = [next.line1, next.line2].filter(Boolean).join(", ");
-    const flatCity = [next.city, next.province].filter(Boolean).join(", ");
+  const onPhAddressChange = (next: PhAddressValue): void => {
+    const flatAddress = composePhAddressLine(next);
     setForm((prev) => ({
       ...prev,
       address: flatAddress,
-      city: flatCity,
+      city: next.city,
       addressLine1: next.line1,
-      addressLine2: next.line2 || "",
-      province: next.province || "",
+      addressLine2: prev.addressLine2 || "",
+      province: next.province,
       postalCode: next.postalCode || "",
       country: next.country || prev.country || "Philippines",
-      latitude: next.latitude ?? null,
-      longitude: next.longitude ?? null,
-      formattedAddress: next.formatted || "",
-      placeId: next.placeId,
+      formattedAddress: flatAddress,
+      region: next.region,
+      barangay: next.barangay,
+      landmark: next.landmark || "",
+      shippingZone: next.zone || "",
+    }));
+    // Live-clear errors as the user fills the cascading picker so red
+    // hints disappear the moment a field becomes valid.
+    setErrors((prev) => ({
+      ...prev,
+      region: next.region ? undefined : prev.region,
+      province: next.province ? undefined : prev.province,
+      city: next.city ? undefined : prev.city,
+      barangay: next.barangay ? undefined : prev.barangay,
+      addressLine1: next.line1 ? undefined : prev.addressLine1,
+      postalCode: isValidPhPostal(next.postalCode || "")
+        ? undefined
+        : prev.postalCode,
     }));
   };
+  // Preview of what the picked courier × region combo will charge,
+  // shown next to the selector so the customer sees the impact of
+  // their choice before they commit.
+  const previewedFee =
+    form.courier && form.region
+      ? getShippingFee(
+          storefrontConfig.shippingRates,
+          form.courier,
+          zoneForRegion(form.region),
+        )
+      : null;
 
   return (
     <>
@@ -716,31 +889,104 @@ const CheckoutForm = () => {
                           idx,
                         ) => (
                           <div key={String(key)}>
-                            {/* Inject the hybrid address picker right
-                                before the notes field so it sits with
-                                the rest of the delivery details. */}
+                            {/* Inject the cascading PH address picker
+                                + courier selector right before the
+                                notes field so they sit with the rest
+                                of the delivery details. */}
                             {key === "notes" && (
-                              <div className="mb-4">
-                                <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
-                                  <MapPin className="w-3.5 h-3.5" />
-                                  Delivery Address{" "}
-                                  <span className="text-destructive">*</span>
-                                </label>
-                                <fieldset
-                                  disabled={formLocked}
-                                  className="contents"
-                                >
-                                  <AddressInput
-                                    value={addressValue}
-                                    onChange={onAddressChange}
-                                  />
-                                </fieldset>
-                                {(touched.address && errors.address) ||
-                                (touched.city && errors.city) ? (
-                                  <p className="font-body text-[10px] text-destructive mt-1">
-                                    {errors.address || errors.city}
-                                  </p>
-                                ) : null}
+                              <div className="mb-4 space-y-4">
+                                <div>
+                                  <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
+                                    <MapPin className="w-3.5 h-3.5" />
+                                    Delivery Address{" "}
+                                    <span className="text-destructive">*</span>
+                                  </label>
+                                  <fieldset
+                                    disabled={formLocked}
+                                    className="contents"
+                                  >
+                                    <PhAddressFields
+                                      value={phAddress}
+                                      onChange={onPhAddressChange}
+                                      disabled={formLocked}
+                                    />
+                                  </fieldset>
+                                  {[
+                                    touched.region && errors.region,
+                                    touched.province && errors.province,
+                                    touched.city && errors.city,
+                                    touched.barangay && errors.barangay,
+                                    touched.addressLine1 && errors.addressLine1,
+                                    touched.postalCode && errors.postalCode,
+                                  ]
+                                    .filter(Boolean)
+                                    .slice(0, 1)
+                                    .map((msg, i) => (
+                                      <p
+                                        key={i}
+                                        className="font-body text-[10px] text-destructive mt-2"
+                                      >
+                                        {msg}
+                                      </p>
+                                    ))}
+                                </div>
+                                {/* Courier selector — drives the
+                                    per-courier × per-zone fee. Hidden
+                                    when no shippable couriers are
+                                    available so the legacy flat rate
+                                    just applies. */}
+                                {courierOptions.length > 0 && (
+                                  <div>
+                                    <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
+                                      <Truck className="w-3.5 h-3.5" />
+                                      Courier{" "}
+                                      {ratesConfigured && (
+                                        <span className="text-destructive">
+                                          *
+                                        </span>
+                                      )}
+                                    </label>
+                                    <Select
+                                      value={form.courier || ""}
+                                      onValueChange={(courier) => {
+                                        setForm((prev) => ({
+                                          ...prev,
+                                          courier,
+                                        }));
+                                        setErrors((prev) => ({
+                                          ...prev,
+                                          courier: courier
+                                            ? undefined
+                                            : prev.courier,
+                                        }));
+                                      }}
+                                      disabled={formLocked}
+                                    >
+                                      <SelectTrigger className="h-10 text-sm">
+                                        <SelectValue placeholder="Pick a courier" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {courierOptions.map((c) => (
+                                          <SelectItem key={c.id} value={c.id}>
+                                            {c.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {form.courier && form.region && (
+                                      <p className="font-body text-[11px] text-muted-foreground mt-1.5">
+                                        {previewedFee != null
+                                          ? `Estimated fee: \u20b1${previewedFee.toLocaleString()} (${zoneLabel(zoneForRegion(form.region))})`
+                                          : "Fee not configured for this region — flat rate will apply."}
+                                      </p>
+                                    )}
+                                    {touched.courier && errors.courier && (
+                                      <p className="font-body text-[10px] text-destructive mt-1">
+                                        {errors.courier}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                             <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">

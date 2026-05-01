@@ -31,6 +31,7 @@ import {
   type WelcomeButtonStyle,
   type WelcomeFooterLink,
   type WelcomeFooterLinkKind,
+  renderDefaultBrandLogoHtml,
 } from "@/components/admin/WelcomeEmailSection";
 
 // Mirrors functions/api/_lib/email.js ORDER_EMAIL_KINDS — kept in sync by
@@ -374,9 +375,7 @@ const buildPreviewHtml = (
       )}" style="max-height:48px;max-width:200px;display:${
         align === "center" ? "inline-block" : "block"
       };" />`
-    : `<div style="font-family:'EB Garamond',Georgia,serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${escapeHtml(
-        config.fromName,
-      )}</div>`;
+    : renderDefaultBrandLogoHtml(config.fromName || "Canvas Hub", tpl, align);
 
   const showBanner = config.showBanner && config.bannerUrl;
   const bannerHtml = showBanner
