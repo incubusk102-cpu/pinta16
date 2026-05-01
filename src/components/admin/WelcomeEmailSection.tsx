@@ -607,6 +607,57 @@ const escapeHtml = (s: string): string =>
 const isSafeColor = (value: string): boolean =>
   /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
 
+// Mirrors `isDarkEmailBg` in functions/api/_lib/email.js so the admin
+// preview picks the same dark/light logo variant as the actual sent
+// email.
+const isDarkEmailBg = (color: string | undefined): boolean => {
+  const hex = String(color || "")
+    .replace("#", "")
+    .trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return false;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+  return luminance < 0.5;
+};
+
+// Mirrors `defaultBrandLogoHtml` in functions/api/_lib/email.js. The
+// medallion + wordmark colors auto-flip based on the template's card
+// background so the baked-in default logo always has contrast against
+// the email surface (gold "C" on dark frame for light bgs, gold tile
+// with dark "C" for the dark "gallery" template). Keep this
+// byte-identical to the server renderer or the in-browser preview will
+// drift from the sent email.
+export const renderDefaultBrandLogoHtml = (
+  fromName: string,
+  tpl: { pageBg: string; cardBg: string },
+  headerAlign: "left" | "center",
+): string => {
+  const isDark = isDarkEmailBg(tpl?.cardBg) || isDarkEmailBg(tpl?.pageBg);
+  const wordmarkColor = "#c4a86a";
+  const taglineColor = isDark ? "#a39676" : "#7a7468";
+  const medallionBg = isDark ? "#c4a86a" : "#181613";
+  const medallionLetter = isDark ? "#181613" : "#c4a86a";
+  const tableAlign = headerAlign === "center" ? "center" : "left";
+  const tableMargin = headerAlign === "center" ? "0 auto" : "0";
+  const safeName = escapeHtml(fromName || "Canvas Hub");
+  return `
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
+          <tr>
+            <td style="padding:0 14px 0 0;vertical-align:middle;">
+              <div style="width:48px;height:48px;background:${medallionBg};border-radius:50%;text-align:center;line-height:48px;mso-line-height-rule:exactly;">
+                <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:32px;line-height:48px;color:${medallionLetter};">C</span>
+              </div>
+            </td>
+            <td style="vertical-align:middle;">
+              <div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:26px;letter-spacing:0.02em;color:${wordmarkColor};line-height:1.1;">${safeName}</div>
+              <div style="font-family:Inter,Helvetica,Arial,sans-serif;font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:${taglineColor};margin-top:6px;">EST. 2026</div>
+            </td>
+          </tr>
+        </table>`;
+};
+
 interface ResolvedDiscount {
   headline: string;
   code: string;
@@ -806,9 +857,19 @@ const renderPreviewHtml = (
       : "";
 
   const headerAlign = config.headerAlign === "center" ? "center" : "left";
+  // Resolve the template tokens up-front so the default logo can pick
+  // its dark/light variant against the card background. Mirrors
+  // functions/api/_lib/email.js so the admin preview matches the
+  // actual sent email pixel-for-pixel.
+  const tplForLogo = resolveTemplate(config.template);
+  const defaultLogoInner = renderDefaultBrandLogoHtml(
+    config.fromName || "Canvas Hub",
+    tplForLogo,
+    headerAlign,
+  );
   const logoInner = showLogo
     ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
-    : `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
+    : defaultLogoInner;
   const logoBlock =
     headerAlign === "center"
       ? `<div style="text-align:center;">${logoInner}</div>`
@@ -852,7 +913,7 @@ const renderPreviewHtml = (
     ? `&mdash; ${escapeHtml(footerTagline)}`
     : "";
 
-  const tpl = resolveTemplate(config.template);
+  const tpl = tplForLogo;
 
   // Brush divider art mirrored from functions/api/_lib/email.js so the
   // admin preview matches the rendered email exactly. Inline SVG works
@@ -1699,7 +1760,7 @@ export const WelcomeEmailSection = () => {
 
         <ImageUploader
           label="Logo"
-          description="Optional. Leave empty to use the gold italic 'Canvas Hub' wordmark. Recommended ~200×48 px on a transparent or white background."
+          description="Optional. Leave empty to use the built-in Canvas Hub mark — gold medallion + italic wordmark — which automatically inverts to stay visible on dark or light email templates. Recommended override size ~200×48 px on a transparent background."
           value={config.logoUrl}
           show={config.showLogo}
           onShowChange={(v) => update("showLogo", v)}
