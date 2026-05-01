@@ -57,6 +57,43 @@ function OrderTracker() {
   const [searching, setSearching] = useState(false);
   const { orders: localOrders, getOrderReviews } = useCart();
 
+  // Auto-lookup when the page is opened with `?track=ORD-XYZ`. The
+  // confirmation overlay deep-links here so a guest can go from
+  // "Order Confirmed!" → fully populated tracker in one tap, no manual
+  // ID retyping. Reads from the live URL (not router search — the route
+  // doesn't define validateSearch) so the param is decoupled from the
+  // route's typed schema.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const trackId = params.get("track");
+    if (!trackId) return;
+    setOrderId(trackId);
+    void (async () => {
+      const id = trackId.trim().toUpperCase();
+      if (!id) return;
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/orders?id=${encodeURIComponent(id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOrder(data.order);
+          return;
+        }
+      } catch {
+        /* fall through to local */
+      } finally {
+        setSearching(false);
+      }
+      const local = localOrders.find((o) => o.id === id);
+      if (local) setOrder(local);
+    })();
+    // localOrders is intentionally excluded — we only want the
+    // auto-lookup to run once on mount, not whenever the cart context
+    // re-renders the orders array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const lookup = async () => {
     const id = orderId.trim().toUpperCase();
     if (!id) return;

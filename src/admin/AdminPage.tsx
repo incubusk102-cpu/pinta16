@@ -1955,7 +1955,51 @@ function OrdersSection() {
     setEditingNoteId(null);
   };
 
-  const fetchOrders = async () => {
+  // Tracks the order IDs we've already shown the admin so the auto-poll
+  // below can detect new orders by set-difference instead of comparing
+  // full snapshots. Seeded on first load with whatever the initial fetch
+  // returns so pre-existing orders don't trigger a "new!" alert.
+  const seenOrderIdsRef = useRef<Set<string> | null>(null);
+  // Holds the WebAudio context across re-renders so we can play a quick
+  // chime on new-order arrivals without stacking up audio nodes.
+  const newOrderAudioRef = useRef<AudioContext | null>(null);
+
+  const playNewOrderChime = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!Ctx) return;
+      let ctx = newOrderAudioRef.current;
+      if (!ctx || ctx.state === "closed") {
+        ctx = new Ctx();
+        newOrderAudioRef.current = ctx;
+      }
+      // Two short blips an octave apart — calm enough to not startle in
+      // an open office, distinctive enough to cut through the rest of
+      // the dashboard's audio noise (toasts have no sound by default).
+      const now = ctx.currentTime;
+      [880, 1175].forEach((freq, i) => {
+        const osc = ctx!.createOscillator();
+        const gain = ctx!.createGain();
+        osc.frequency.value = freq;
+        osc.type = "sine";
+        gain.gain.setValueAtTime(0.0001, now + i * 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + i * 0.18 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.18 + 0.16);
+        osc.connect(gain).connect(ctx!.destination);
+        osc.start(now + i * 0.18);
+        osc.stop(now + i * 0.18 + 0.18);
+      });
+    } catch {
+      /* AudioContext not available / denied — silently skip */
+    }
+  };
+
+  const fetchOrders = async (opts: { silent?: boolean } = {}) => {
+    const { silent = false } = opts;
     try {
       const token = getAdminToken();
       const res = await fetch("/api/orders", {
@@ -1963,11 +2007,38 @@ function OrdersSection() {
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setOrders(data.orders || []);
+      const incoming = (data.orders || []) as CompletedOrder[];
+
+      // Compare against the seen-set to surface freshly placed orders.
+      // We only alert *after* the initial seed so first-load doesn't
+      // light up with toasts for every existing order.
+      const seen = seenOrderIdsRef.current;
+      if (seen && silent) {
+        const fresh = incoming.filter((o) => !seen.has(o.id));
+        if (fresh.length > 0) {
+          fresh.slice(0, 3).forEach((o) => {
+            const who = o.orderInfo?.fullName?.trim() || "guest";
+            toast.success(`New order ${o.id} — ${who}`, {
+              description: `\u20b1${o.total.toLocaleString()} \u00b7 ${o.items.length} item${o.items.length === 1 ? "" : "s"}`,
+            });
+          });
+          if (fresh.length > 3) {
+            toast.message(`+${fresh.length - 3} more new orders`);
+          }
+          playNewOrderChime();
+        }
+      }
+      // Always refresh the seen-set with the latest snapshot.
+      seenOrderIdsRef.current = new Set(incoming.map((o) => o.id));
+
+      setOrders(incoming);
     } catch {
-      toast.error("Could not load orders");
+      // Silent polls swallow errors — the admin doesn't need a toast
+      // every 30 seconds when their wifi blips. The next successful
+      // poll restores the list.
+      if (!silent) toast.error("Could not load orders");
     } finally {
-      setLoadingOrders(false);
+      if (!silent) setLoadingOrders(false);
     }
   };
 
@@ -1987,6 +2058,32 @@ function OrdersSection() {
         /* ignore */
       }
     })();
+  }, []);
+
+  // Auto-poll for new orders every 30s. The interval mirrors the existing
+  // refund poll cadence and gives admins near-real-time awareness without
+  // needing SSE / Durable Objects. Pauses while the tab is hidden so we
+  // don't burn KV reads (and quota) on a backgrounded dashboard, then
+  // does a catch-up fetch the moment the tab is foregrounded again.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      void fetchOrders({ silent: true });
+    };
+    const id = window.setInterval(tick, 30_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+    // fetchOrders is defined in this component and has no closure deps
+    // beyond the seen-set ref (which is intentionally not in the dep
+    // array — we want the effect to run once on mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleStatusUpdate = async (

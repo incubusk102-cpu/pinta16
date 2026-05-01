@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -10,6 +10,7 @@ import {
   FileText,
   Loader2,
   UserPlus,
+  ChevronDown,
 } from "lucide-react";
 import { useCart, type OrderInfo } from "@/contexts/CartContext";
 import {
@@ -22,6 +23,7 @@ import {
   isValidEmail,
   isValidPhone,
   enforceMaxLength,
+  formatPhPhone,
 } from "@/lib/sanitize";
 import {
   GOOGLE_CALLBACK_PATH,
@@ -33,6 +35,58 @@ import { AddressInput, type AddressValue } from "@/components/AddressInput";
 import { createPayment } from "@/utils/payment.functions";
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
+// Per-tab draft of the guest checkout form. We persist on every change
+// so that closing the drawer, navigating back to the cart, or even an
+// accidental tab refresh doesn't wipe what the visitor already typed.
+// sessionStorage scope (vs. localStorage) because the draft is
+// disposable — it should not survive the browser tab. Stripped of
+// lat/lng to keep it small.
+const CHECKOUT_DRAFT_KEY = "canvhub_checkout_draft_v1";
+
+const loadCheckoutDraft = (): Partial<OrderInfo> | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Partial<OrderInfo>)
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveCheckoutDraft = (form: OrderInfo): void => {
+  if (typeof window === "undefined") return;
+  try {
+    // Skip persistence when the form is fully empty so we don't leave
+    // a stale-but-empty key around once the visitor places their order.
+    const meaningful =
+      form.fullName ||
+      form.email ||
+      form.phone ||
+      form.address ||
+      form.city ||
+      form.notes;
+    if (!meaningful) {
+      sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+      return;
+    }
+    sessionStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(form));
+  } catch {
+    /* sessionStorage full / disabled — silently ignore */
+  }
+};
+
+const clearCheckoutDraft = (): void => {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+};
 
 const pickDefaultAddress = (
   user: PublicUser | null,
@@ -97,29 +151,44 @@ const CheckoutForm = () => {
   const [checkoutMode, setCheckoutMode] = useState<
     "choose" | "guest" | "signed_in"
   >(() => (isSignedIn ? "signed_in" : "choose"));
-  const [form, setForm] = useState<OrderInfo>(() =>
-    isSignedIn
-      ? buildSignedInForm(user, {
-          fullName: "",
-          email: "",
-          phone: "",
-          address: "",
-          city: "",
-          notes: "",
-        })
-      : {
-          fullName: "",
-          email: "",
-          phone: "",
-          address: "",
-          city: "",
-          notes: "",
-          country: "Philippines",
-        },
-  );
+  const [form, setForm] = useState<OrderInfo>(() => {
+    const blankGuest: OrderInfo = {
+      fullName: "",
+      email: "",
+      phone: "",
+      address: "",
+      city: "",
+      notes: "",
+      country: "Philippines",
+    };
+    if (isSignedIn) {
+      return buildSignedInForm(user, {
+        fullName: "",
+        email: "",
+        phone: "",
+        address: "",
+        city: "",
+        notes: "",
+      });
+    }
+    // Guest path: hydrate from any persisted draft so a refresh / tab
+    // close / back-to-cart doesn't wipe the visitor's typing.
+    const draft = loadCheckoutDraft();
+    return draft ? { ...blankGuest, ...draft } : blankGuest;
+  });
   const [errors, setErrors] = useState<
     Partial<Record<keyof OrderInfo, string>>
   >({});
+  // Track which fields the visitor has actually interacted with so we
+  // only surface validation errors after blur — not on initial focus,
+  // and not for fields they haven't reached yet.
+  const [touched, setTouched] = useState<
+    Partial<Record<keyof OrderInfo, true>>
+  >({});
+  // Mobile-only collapse state for the order summary so the form fields
+  // aren't pushed below the fold on small screens. Defaults to expanded
+  // on first render; the visitor can collapse with a tap.
+  const [summaryExpanded, setSummaryExpanded] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
   const [isCreatingPayment, setIsCreatingPayment] = useState(false);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
@@ -236,20 +305,67 @@ const CheckoutForm = () => {
     };
   }, [isSignedIn, showCheckout, checkoutMode]);
 
+  // Validate a single field. Returns the error message, or "" if valid.
+  // Centralised so both onBlur and the final submit-time validate() can
+  // share the same rules without drifting.
+  const validateField = useCallback(
+    (key: keyof OrderInfo, value: string): string => {
+      switch (key) {
+        case "fullName":
+          return value.trim() ? "" : "Full name is required";
+        case "email":
+          if (!value.trim()) return "Email is required";
+          if (!isValidEmail(value)) return "Invalid email address";
+          return "";
+        case "phone":
+          if (!value.trim()) return "Phone number is required";
+          if (!isValidPhone(value)) return "Invalid phone number";
+          return "";
+        case "address":
+          return value.trim() ? "" : "Address is required";
+        case "city":
+          return value.trim() ? "" : "City is required";
+        default:
+          return "";
+      }
+    },
+    [],
+  );
+
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof OrderInfo, string>> = {};
-    if (!form.fullName.trim()) newErrors.fullName = "Full name is required";
-    if (!form.email.trim()) newErrors.email = "Email is required";
-    else if (!isValidEmail(form.email))
-      newErrors.email = "Invalid email address";
-    if (!form.phone.trim()) newErrors.phone = "Phone number is required";
-    else if (!isValidPhone(form.phone))
-      newErrors.phone = "Invalid phone number";
-    if (!form.address.trim()) newErrors.address = "Address is required";
-    if (!form.city.trim()) newErrors.city = "City is required";
+    (
+      ["fullName", "email", "phone", "address", "city"] as (keyof OrderInfo)[]
+    ).forEach((key) => {
+      const err = validateField(key, (form[key] as string) || "");
+      if (err) newErrors[key] = err;
+    });
     setErrors(newErrors);
+    // Mark all required fields touched on submit so errors render even
+    // for fields the visitor never focused (e.g. tapped Pay immediately).
+    setTouched({
+      fullName: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+    });
     return Object.keys(newErrors).length === 0;
   };
+
+  const handleFieldBlur = (key: keyof OrderInfo): void => {
+    setTouched((prev) => ({ ...prev, [key]: true }));
+    const err = validateField(key, (form[key] as string) || "");
+    setErrors((prev) => ({ ...prev, [key]: err || undefined }));
+  };
+
+  // Persist guest form on every change so closing the drawer, switching
+  // tabs, or hitting back doesn't wipe what they typed. Skip when the
+  // visitor is signed-in — their data already lives on their account.
+  useEffect(() => {
+    if (isSignedIn) return;
+    saveCheckoutDraft(form);
+  }, [form, isSignedIn]);
 
   const handlePayWithQR = async () => {
     if (!validate()) return;
@@ -282,6 +398,12 @@ const CheckoutForm = () => {
       setIsCreatingPayment(false);
     }
   };
+
+  // Whole-form lockout while we're either creating the payment intent
+  // or the PaymentModal is open. Guards against the visitor editing
+  // their address / email mid-payment, which would create a mismatch
+  // between what PayMongo charged and what the order record carries.
+  const formLocked = isCreatingPayment || showPayment;
 
   const handlePaymentSuccess = () => {
     setShowPayment(false);
@@ -321,6 +443,11 @@ const CheckoutForm = () => {
       notes: "",
       country: "Philippines",
     });
+    setTouched({});
+    setErrors({});
+    // Order is now placed — drop the draft so future visits to this tab
+    // don't pre-fill someone else's information.
+    clearCheckoutDraft();
   };
 
   const fields: {
@@ -479,66 +606,96 @@ const CheckoutForm = () => {
                 {(isSignedIn || checkoutMode !== "choose") && (
                   <>
                     <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
-                      <p className="font-body text-xs tracking-wider uppercase text-muted-foreground mb-3">
-                        Order Summary
-                      </p>
-                      {items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex justify-between font-body text-xs text-foreground mb-1"
-                        >
-                          <span>
-                            {item.title} × {item.quantity}
-                          </span>
-                          <span>
-                            ₱{(item.price * item.quantity).toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
-                      <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
-                        <div className="flex justify-between font-body text-xs text-muted-foreground">
-                          <span>Subtotal</span>
-                          <span>₱{subtotal.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between font-body text-xs text-muted-foreground">
-                          <span>Shipping</span>
-                          {shippingFee === 0 ? (
-                            <span>
-                              <span className="line-through mr-1">
-                                ₱{shippingFeeOriginal.toLocaleString()}
-                              </span>
-                              <span className="text-foreground">FREE</span>
-                            </span>
-                          ) : (
-                            <span>₱{shippingFee.toLocaleString()}</span>
-                          )}
-                        </div>
-                        {discount > 0 && (
-                          <div className="flex justify-between font-body text-xs text-foreground">
-                            <span>
-                              Discount (
-                              {voucher.type === "percent"
-                                ? `${voucher.value}%`
-                                : voucher.type === "flat"
-                                  ? `flat \u20b1${voucher.value.toLocaleString()}`
-                                  : `\u20b1${voucher.value.toLocaleString()} off`}
-                              )
-                            </span>
-                            <span>-₱{discount.toLocaleString()}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
-                          <span>Total</span>
-                          <span className="font-semibold">
+                      {/* Header doubles as a collapse toggle on mobile.
+                          Tap on <md to hide the line items — keeps the
+                          form fields above the fold on small screens.
+                          Always-expanded on md+ where vertical space is
+                          plentiful, so the chevron renders hidden there. */}
+                      <button
+                        type="button"
+                        onClick={() => setSummaryExpanded((prev) => !prev)}
+                        className="w-full flex items-center justify-between md:cursor-default md:pointer-events-none mb-3"
+                        aria-expanded={summaryExpanded}
+                        aria-controls="checkout-order-summary-body"
+                      >
+                        <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                          Order Summary
+                        </p>
+                        <span className="flex items-center gap-2 md:hidden">
+                          <span className="font-body text-xs font-semibold text-foreground">
                             ₱{total.toLocaleString()}
                           </span>
+                          <ChevronDown
+                            className={`w-4 h-4 text-muted-foreground transition-transform ${
+                              summaryExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </span>
+                      </button>
+                      <div
+                        id="checkout-order-summary-body"
+                        className={`${
+                          summaryExpanded ? "block" : "hidden md:block"
+                        }`}
+                      >
+                        {items.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between font-body text-xs text-foreground mb-1"
+                          >
+                            <span>
+                              {item.title} × {item.quantity}
+                            </span>
+                            <span>
+                              ₱{(item.price * item.quantity).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
+                          <div className="flex justify-between font-body text-xs text-muted-foreground">
+                            <span>Subtotal</span>
+                            <span>₱{subtotal.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between font-body text-xs text-muted-foreground">
+                            <span>Shipping</span>
+                            {shippingFee === 0 ? (
+                              <span>
+                                <span className="line-through mr-1">
+                                  ₱{shippingFeeOriginal.toLocaleString()}
+                                </span>
+                                <span className="text-foreground">FREE</span>
+                              </span>
+                            ) : (
+                              <span>₱{shippingFee.toLocaleString()}</span>
+                            )}
+                          </div>
+                          {discount > 0 && (
+                            <div className="flex justify-between font-body text-xs text-foreground">
+                              <span>
+                                Discount (
+                                {voucher.type === "percent"
+                                  ? `${voucher.value}%`
+                                  : voucher.type === "flat"
+                                    ? `flat \u20b1${voucher.value.toLocaleString()}`
+                                    : `\u20b1${voucher.value.toLocaleString()} off`}
+                                )
+                              </span>
+                              <span>-₱{discount.toLocaleString()}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
+                            <span>Total</span>
+                            <span className="font-semibold">
+                              ₱{total.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
+                        {estimatedCreationDays && (
+                          <p className="font-body text-[10px] text-muted-foreground mt-2">
+                            Est. creation: {estimatedCreationDays}
+                          </p>
+                        )}
                       </div>
-                      {estimatedCreationDays && (
-                        <p className="font-body text-[10px] text-muted-foreground mt-2">
-                          Est. creation: {estimatedCreationDays}
-                        </p>
-                      )}
                     </div>
 
                     {/* Form */}
@@ -569,15 +726,21 @@ const CheckoutForm = () => {
                                   Delivery Address{" "}
                                   <span className="text-destructive">*</span>
                                 </label>
-                                <AddressInput
-                                  value={addressValue}
-                                  onChange={onAddressChange}
-                                />
-                                {(errors.address || errors.city) && (
+                                <fieldset
+                                  disabled={formLocked}
+                                  className="contents"
+                                >
+                                  <AddressInput
+                                    value={addressValue}
+                                    onChange={onAddressChange}
+                                  />
+                                </fieldset>
+                                {(touched.address && errors.address) ||
+                                (touched.city && errors.city) ? (
                                   <p className="font-body text-[10px] text-destructive mt-1">
                                     {errors.address || errors.city}
                                   </p>
-                                )}
+                                ) : null}
                               </div>
                             )}
                             <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
@@ -598,23 +761,60 @@ const CheckoutForm = () => {
                                 }
                                 placeholder={placeholder}
                                 rows={3}
-                                className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none"
+                                disabled={formLocked}
+                                className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                               />
                             ) : (
                               <input
                                 type={type || "text"}
-                                value={(form[key] as string) || ""}
-                                onChange={(e) =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    [key]: e.target.value,
-                                  }))
+                                inputMode={
+                                  key === "phone"
+                                    ? "tel"
+                                    : key === "email"
+                                      ? "email"
+                                      : undefined
                                 }
+                                autoComplete={
+                                  key === "fullName"
+                                    ? "name"
+                                    : key === "email"
+                                      ? "email"
+                                      : key === "phone"
+                                        ? "tel"
+                                        : undefined
+                                }
+                                value={(form[key] as string) || ""}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  const next =
+                                    key === "phone" ? formatPhPhone(raw) : raw;
+                                  setForm((prev) => ({ ...prev, [key]: next }));
+                                  // Live-clear an existing error as soon as
+                                  // the field becomes valid — keeps the red
+                                  // hint from lingering after the visitor
+                                  // fixes their typo.
+                                  if (touched[key]) {
+                                    const err = validateField(key, next);
+                                    setErrors((prev) => ({
+                                      ...prev,
+                                      [key]: err || undefined,
+                                    }));
+                                  }
+                                }}
+                                onBlur={() => handleFieldBlur(key)}
                                 placeholder={placeholder}
-                                className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm"
+                                disabled={formLocked}
+                                aria-invalid={
+                                  touched[key] && Boolean(errors[key])
+                                }
+                                className={`w-full px-3 py-2 bg-background border ${
+                                  touched[key] && errors[key]
+                                    ? "border-destructive/60"
+                                    : "border-border/30"
+                                } text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm disabled:opacity-60 disabled:cursor-not-allowed`}
                               />
                             )}
-                            {errors[key] && (
+                            {touched[key] && errors[key] && (
                               <p className="font-body text-[10px] text-destructive mt-1">
                                 {errors[key]}
                               </p>

@@ -576,6 +576,11 @@ const DEFAULT_ORDER_EMAIL = {
   fromName: "Canvas Hub",
   fromEmail: "order@canvhub.com",
   replyTo: "order@canvhub.com",
+  // Optional: when set, the server fires a separate "new order" alert
+  // to this address every time a guest places an order. Empty string
+  // disables the alert. Falls back to the ADMIN_ORDER_RECIPIENT env var
+  // when blank in config.
+  adminRecipient: "",
   primaryColor: "#1c1c1c",
   accentColor: "#7a7468",
   logoUrl: "",
@@ -654,6 +659,11 @@ const sanitizeOrderEmail = (raw) => {
     replyTo: sanitizeWelcomeEmailString(
       data.replyTo,
       DEFAULT_ORDER_EMAIL.replyTo,
+      ORDER_EMAIL_FIELD_MAX,
+    ),
+    adminRecipient: sanitizeWelcomeEmailString(
+      data.adminRecipient,
+      DEFAULT_ORDER_EMAIL.adminRecipient,
       ORDER_EMAIL_FIELD_MAX,
     ),
     primaryColor: sanitizeWelcomeEmailString(

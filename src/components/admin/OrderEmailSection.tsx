@@ -95,6 +95,7 @@ interface OrderEmailConfig {
   fromName: string;
   fromEmail: string;
   replyTo: string;
+  adminRecipient: string;
   primaryColor: string;
   accentColor: string;
   logoUrl: string;
@@ -174,6 +175,7 @@ const DEFAULTS: OrderEmailConfig = {
   fromName: "Canvas Hub",
   fromEmail: "order@canvhub.com",
   replyTo: "order@canvhub.com",
+  adminRecipient: "",
   primaryColor: "#1c1c1c",
   accentColor: "#7a7468",
   logoUrl: "",
@@ -884,6 +886,25 @@ export const OrderEmailSection = () => {
                   value={config.replyTo}
                   onChange={(e) => update("replyTo", e.target.value)}
                 />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="order-admin-recipient">
+                  New-order alerts to (admin)
+                </Label>
+                <Input
+                  id="order-admin-recipient"
+                  type="email"
+                  placeholder="orders-team@example.com"
+                  value={config.adminRecipient}
+                  onChange={(e) => update("adminRecipient", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  When set, the server fires a separate, concise alert to this
+                  address every time a guest places an order. Leave blank to
+                  fall back to the <code>EMAIL_BCC_ORDER</code> /{" "}
+                  <code>EMAIL_ADMIN_RECIPIENT_ORDER</code> env vars or disable
+                  the alert entirely.
+                </p>
               </div>
             </div>
           </section>

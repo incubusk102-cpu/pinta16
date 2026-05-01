@@ -706,6 +706,84 @@ export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
   });
 };
 
+/**
+ * Fire a concise "new order" alert to the storefront operator. Separate
+ * from the customer-facing confirmation so admins get a phone-push from
+ * Gmail/Outlook the moment an order lands, even when they're not staring
+ * at the dashboard.
+ *
+ * Recipient resolution:
+ *   1. orderEmail.adminRecipient (admin-editable in the dashboard)
+ *   2. ADMIN_ORDER_RECIPIENT env var (deploy-time fallback)
+ *   3. EMAIL_BCC_ORDER env var (legacy fallback)
+ *
+ * Skips silently when no recipient is configured — the customer
+ * confirmation is the source of truth, this is purely operator nice-to-have.
+ */
+export const sendNewOrderAdminAlert = async ({ order }) => {
+  const orderEmail = await loadOrderEmailConfig();
+  const recipient =
+    String(orderEmail?.adminRecipient || "").trim() ||
+    String(resolveEmailEnv("ADMIN_RECIPIENT", "order") || "").trim() ||
+    String(resolveEmailEnv("BCC", "order") || "").trim();
+  if (!recipient) {
+    return { delivered: false, skipped: true, reason: "no admin recipient" };
+  }
+  if (!isEmailConfigured("order")) {
+    return { delivered: false, skipped: true, reason: "not configured" };
+  }
+  const id = String(order?.id || "");
+  const customer =
+    String(order?.orderInfo?.fullName || "").trim() || "Anonymous guest";
+  const customerEmail = String(order?.orderInfo?.email || "").trim();
+  const customerPhone = String(order?.orderInfo?.phone || "").trim();
+  const total = formatPHP(order?.total);
+  const itemCount = Array.isArray(order?.items) ? order.items.length : 0;
+  const itemPlural = itemCount === 1 ? "" : "s";
+  const itemRows = (order?.items || [])
+    .slice(0, 20)
+    .map(
+      (it) =>
+        `<tr><td style="padding:6px 8px;border-bottom:1px solid #efece4;">${escapeHtml(
+          it.title || "Item",
+        )} &times; ${Number(it.quantity) || 1}</td><td style="padding:6px 8px;border-bottom:1px solid #efece4;text-align:right;">${formatPHP(
+          (Number(it.price) || 0) * (Number(it.quantity) || 1),
+        )}</td></tr>`,
+    )
+    .join("");
+  const subject = `New order ${id} — ${total}`;
+  const heading = `New order received`;
+  const adminLink = `https://canvhub.com/admin?order=${encodeURIComponent(id)}`;
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">A new order just came in.</p>
+    <p style="margin:0 0 4px;"><strong>Order:</strong> <code style="background:#f5f3ee;padding:2px 6px;border-radius:3px;">${escapeHtml(id)}</code></p>
+    <p style="margin:0 0 4px;"><strong>Customer:</strong> ${escapeHtml(customer)}</p>
+    ${customerEmail ? `<p style="margin:0 0 4px;"><strong>Email:</strong> <a href="mailto:${escapeHtml(customerEmail)}">${escapeHtml(customerEmail)}</a></p>` : ""}
+    ${customerPhone ? `<p style="margin:0 0 4px;"><strong>Phone:</strong> ${escapeHtml(customerPhone)}</p>` : ""}
+    <p style="margin:0 0 12px;"><strong>Items:</strong> ${itemCount} item${itemPlural} &middot; <strong>Total:</strong> ${total}</p>
+    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;color:#1c1c1c;margin:0 0 16px;">
+      ${itemRows}
+    </table>
+    <p style="margin:16px 0;">
+      <a href="${adminLink}" style="display:inline-block;background:#1c1c1c;color:#ffffff;padding:10px 18px;border-radius:4px;text-decoration:none;font-size:13px;">Open in admin</a>
+    </p>
+  `;
+  return await sendEmail({
+    to: recipient,
+    subject,
+    html: wrapHtml(heading, bodyHtml),
+    text:
+      `New order ${id}\n\n` +
+      `Customer: ${customer}\n` +
+      (customerEmail ? `Email: ${customerEmail}\n` : "") +
+      (customerPhone ? `Phone: ${customerPhone}\n` : "") +
+      `Items: ${itemCount}\n` +
+      `Total: ${total}\n\n` +
+      `Open: ${adminLink}\n`,
+    purpose: "order",
+  });
+};
+
 const renderTemplateString = (template, vars) =>
   String(template ?? "").replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
     const v = vars[key];
