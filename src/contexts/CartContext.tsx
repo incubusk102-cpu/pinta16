@@ -131,7 +131,7 @@ export interface CompletedOrder {
   activityLog?: OrderActivityEntry[];
 }
 
-export const REVIEW_MIN_CHARS = 500;
+export const REVIEW_MIN_CHARS = 0;
 export const REVIEW_MAX_IMAGES = 5;
 
 export const ORDER_STEPS: {
