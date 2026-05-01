@@ -1,19 +1,24 @@
 // PH cascading address picker.
 //
 // Checkout's primary address input: Region → Province → City/Municipality
-// → Barangay → Street + Landmark + Postal code. Region is a dropdown
-// because we need it to compute the courier zone (Metro Manila / Luzon /
-// Visayas / Mindanao). Province is a dropdown filtered by region.
-// City/Municipality and Barangay are free-text (the PSGC has 1.6k
-// cities and 42k barangays — we don't want to ship that bundle).
+// → Barangay → Street + Landmark + Postal code. All four geographic
+// levels are real cascading dropdowns now — region/province come from
+// the static `ph-regions.ts` list, while city + barangay are sourced
+// from the official PSA/PSGC dataset under `src/data/ph-psgc.json`.
+// That JSON is dynamically imported the first time this component
+// mounts, so it lands in its own Vite chunk (~190 KB gzipped) and
+// doesn't bloat the initial page bundle.
+//
+// Region drives courier zone (Metro Manila / Luzon / Visayas /
+// Mindanao) which auto-fills shipping fee at checkout. City + barangay
+// have hundreds of entries each (Manila has 897 barangays alone) so we
+// use a Popover + cmdk Combobox with type-ahead instead of a plain
+// `<Select>`.
 //
 // Returns a single structured value object the parent can persist
 // alongside the address book entry / order info.
-//
-// Designed to be a drop-in alongside the existing AddressInput map
-// picker — that one stays available for an optional "set pin location"
-// step but isn't required to checkout.
 
+import * as React from "react";
 import { Building, Home, Hash, MapPin, Pin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +35,14 @@ import {
   zoneForRegion,
   type ShippingZone,
 } from "@/lib/ph-regions";
+import {
+  loadPhPsgcData,
+  getCachedPhPsgcData,
+  getCitiesForProvince,
+  getBarangaysForCity,
+  type PhPsgcData,
+} from "@/lib/ph-psgc";
+import { AddressCombobox } from "@/components/AddressCombobox";
 
 export interface PhAddressValue {
   region: string;
@@ -77,6 +90,37 @@ export function PhAddressFields({
 }: PhAddressFieldsProps) {
   const provinceOptions = provincesForRegion(value.region);
 
+  // Lazy-load PSGC data on mount; cached across instances so the
+  // dynamic import only fires once per page load.
+  const [psgc, setPsgc] = React.useState<PhPsgcData | null>(
+    getCachedPhPsgcData(),
+  );
+  React.useEffect(() => {
+    if (psgc) return;
+    let cancelled = false;
+    loadPhPsgcData()
+      .then((data) => {
+        if (!cancelled) setPsgc(data);
+      })
+      .catch(() => {
+        // If the chunk fails to load (offline, CDN hiccup) we leave
+        // psgc null — Combobox falls back to placeholder + the user's
+        // saved value still renders, so they aren't blocked.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [psgc]);
+
+  const cityOptions = React.useMemo(
+    () => getCitiesForProvince(psgc, value.province),
+    [psgc, value.province],
+  );
+  const barangayOptions = React.useMemo(
+    () => getBarangaysForCity(psgc, value.province, value.city),
+    [psgc, value.province, value.city],
+  );
+
   const updateRegion = (regionId: string) => {
     const zone = zoneForRegion(regionId);
     const provinces = provincesForRegion(regionId);
@@ -88,12 +132,25 @@ export function PhAddressFields({
       ...value,
       region: regionId,
       province: nextProvince,
+      // Province changed → city + barangay are now stale.
+      city: "",
+      barangay: "",
       zone,
     });
   };
 
   const updateProvince = (province: string) => {
-    onChange({ ...value, province });
+    // Province changed → reset dependent fields.
+    onChange({ ...value, province, city: "", barangay: "" });
+  };
+
+  const updateCity = (city: string) => {
+    // City changed → reset barangay (was tied to old city).
+    onChange({ ...value, city, barangay: "" });
+  };
+
+  const updateBarangay = (barangay: string) => {
+    onChange({ ...value, barangay });
   };
 
   return (
@@ -164,19 +221,28 @@ export function PhAddressFields({
         </div>
       </div>
 
-      {/* City + Barangay */}
+      {/* City + Barangay (cascading searchable dropdowns) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
             <Building className="w-3.5 h-3.5" />
             City / Municipality
           </Label>
-          <Input
+          <AddressCombobox
             value={value.city}
-            onChange={(e) => onChange({ ...value, city: e.target.value })}
-            placeholder="e.g. Quezon City"
-            disabled={disabled}
-            className="h-10 text-sm"
+            onChange={updateCity}
+            options={cityOptions}
+            loading={!psgc}
+            disabled={disabled || !value.province}
+            placeholder={
+              !value.province
+                ? "Select province first"
+                : "Select city / municipality"
+            }
+            searchPlaceholder="Search city / municipality…"
+            emptyHint={
+              !value.province ? "Pick a province first." : "No matching city."
+            }
           />
         </div>
         <div className="space-y-1.5">
@@ -184,12 +250,17 @@ export function PhAddressFields({
             <Pin className="w-3.5 h-3.5" />
             Barangay
           </Label>
-          <Input
+          <AddressCombobox
             value={value.barangay}
-            onChange={(e) => onChange({ ...value, barangay: e.target.value })}
-            placeholder="e.g. Barangay Bagong Pag-asa"
-            disabled={disabled}
-            className="h-10 text-sm"
+            onChange={updateBarangay}
+            options={barangayOptions}
+            loading={!psgc}
+            disabled={disabled || !value.city}
+            placeholder={!value.city ? "Select city first" : "Select barangay"}
+            searchPlaceholder="Search barangay…"
+            emptyHint={
+              !value.city ? "Pick a city first." : "No matching barangay."
+            }
           />
         </div>
       </div>
