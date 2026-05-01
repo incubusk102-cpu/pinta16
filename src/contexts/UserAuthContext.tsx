@@ -23,6 +23,13 @@ export interface SavedAddress {
   province: string;
   postalCode: string;
   country: string;
+  // Optional pin location set by the hybrid address picker
+  // (Google Places / draggable map marker). Couriers can use this
+  // when the human-readable address is ambiguous.
+  latitude?: number | null;
+  longitude?: number | null;
+  formatted?: string;
+  placeId?: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -29,6 +29,7 @@ import {
   renderGoogleButton,
 } from "@/lib/google-signin";
 import PaymentModal from "./PaymentModal";
+import { AddressInput, type AddressValue } from "@/components/AddressInput";
 import { createPayment } from "@/utils/payment.functions";
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
@@ -62,6 +63,15 @@ const buildSignedInForm = (
     address: prev.address || addressLine,
     city: prev.city || cityLine,
     notes: prev.notes,
+    addressLine1: prev.addressLine1 || addr?.line1 || "",
+    addressLine2: prev.addressLine2 || addr?.line2 || "",
+    province: prev.province || addr?.province || "",
+    postalCode: prev.postalCode || addr?.postalCode || "",
+    country: prev.country || addr?.country || "Philippines",
+    latitude: prev.latitude ?? addr?.latitude ?? null,
+    longitude: prev.longitude ?? addr?.longitude ?? null,
+    formattedAddress: prev.formattedAddress || addr?.formatted || "",
+    placeId: prev.placeId || addr?.placeId,
   };
 };
 
@@ -104,6 +114,7 @@ const CheckoutForm = () => {
           address: "",
           city: "",
           notes: "",
+          country: "Philippines",
         },
   );
   const [errors, setErrors] = useState<
@@ -281,6 +292,21 @@ const CheckoutForm = () => {
       address: sanitizeText(enforceMaxLength(form.address, 300)),
       city: sanitizeText(enforceMaxLength(form.city, 100)),
       notes: sanitizeText(enforceMaxLength(form.notes, 500)),
+      addressLine1: sanitizeText(
+        enforceMaxLength(form.addressLine1 || "", 200),
+      ),
+      addressLine2: sanitizeText(
+        enforceMaxLength(form.addressLine2 || "", 200),
+      ),
+      province: sanitizeText(enforceMaxLength(form.province || "", 100)),
+      postalCode: sanitizeText(enforceMaxLength(form.postalCode || "", 20)),
+      country: sanitizeText(enforceMaxLength(form.country || "", 100)),
+      latitude: form.latitude ?? null,
+      longitude: form.longitude ?? null,
+      formattedAddress: sanitizeText(
+        enforceMaxLength(form.formattedAddress || "", 400),
+      ),
+      placeId: form.placeId,
     };
     placeOrder(sanitizedForm, {
       paymentIntentId: paymentIntentId ?? undefined,
@@ -293,6 +319,7 @@ const CheckoutForm = () => {
       address: "",
       city: "",
       notes: "",
+      country: "Philippines",
     });
   };
 
@@ -328,26 +355,51 @@ const CheckoutForm = () => {
       required: true,
     },
     {
-      key: "address",
-      label: "Delivery Address",
-      icon: MapPin,
-      placeholder: "Street, Barangay, Building",
-      required: true,
-    },
-    {
-      key: "city",
-      label: "City / Province",
-      icon: MapPin,
-      placeholder: "Manila, Metro Manila",
-      required: true,
-    },
-    {
       key: "notes",
       label: "Order Notes (Optional)",
       icon: FileText,
       placeholder: "Any special instructions...",
     },
   ];
+
+  const addressValue: AddressValue = {
+    line1: form.addressLine1 || form.address || "",
+    line2: form.addressLine2 || "",
+    city:
+      form.city && form.city.includes(",")
+        ? form.city.split(",")[0].trim()
+        : form.city || "",
+    province:
+      form.province ||
+      (form.city && form.city.includes(",")
+        ? form.city.split(",").slice(1).join(",").trim()
+        : ""),
+    postalCode: form.postalCode || "",
+    country: form.country || "Philippines",
+    latitude: form.latitude ?? null,
+    longitude: form.longitude ?? null,
+    formatted: form.formattedAddress || "",
+    placeId: form.placeId,
+  };
+
+  const onAddressChange = (next: AddressValue): void => {
+    const flatAddress = [next.line1, next.line2].filter(Boolean).join(", ");
+    const flatCity = [next.city, next.province].filter(Boolean).join(", ");
+    setForm((prev) => ({
+      ...prev,
+      address: flatAddress,
+      city: flatCity,
+      addressLine1: next.line1,
+      addressLine2: next.line2 || "",
+      province: next.province || "",
+      postalCode: next.postalCode || "",
+      country: next.country || prev.country || "Philippines",
+      latitude: next.latitude ?? null,
+      longitude: next.longitude ?? null,
+      formattedAddress: next.formatted || "",
+      placeId: next.placeId,
+    }));
+  };
 
   return (
     <>
@@ -495,15 +547,39 @@ const CheckoutForm = () => {
                         Your Information
                       </p>
                       {fields.map(
-                        ({
-                          key,
-                          label,
-                          icon: Icon,
-                          type,
-                          placeholder,
-                          required,
-                        }) => (
+                        (
+                          {
+                            key,
+                            label,
+                            icon: Icon,
+                            type,
+                            placeholder,
+                            required,
+                          },
+                          idx,
+                        ) => (
                           <div key={String(key)}>
+                            {/* Inject the hybrid address picker right
+                                before the notes field so it sits with
+                                the rest of the delivery details. */}
+                            {key === "notes" && (
+                              <div className="mb-4">
+                                <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                                  <MapPin className="w-3.5 h-3.5" />
+                                  Delivery Address{" "}
+                                  <span className="text-destructive">*</span>
+                                </label>
+                                <AddressInput
+                                  value={addressValue}
+                                  onChange={onAddressChange}
+                                />
+                                {(errors.address || errors.city) && (
+                                  <p className="font-body text-[10px] text-destructive mt-1">
+                                    {errors.address || errors.city}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                             <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
                               <Icon className="w-3.5 h-3.5" />
                               {label}{" "}
@@ -527,7 +603,7 @@ const CheckoutForm = () => {
                             ) : (
                               <input
                                 type={type || "text"}
-                                value={form[key]}
+                                value={(form[key] as string) || ""}
                                 onChange={(e) =>
                                   setForm((prev) => ({
                                     ...prev,
@@ -543,6 +619,8 @@ const CheckoutForm = () => {
                                 {errors[key]}
                               </p>
                             )}
+                            {/* TS quiet — idx unused but kept for parity */}
+                            {idx < 0 && null}
                           </div>
                         ),
                       )}

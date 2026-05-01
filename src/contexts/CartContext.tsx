@@ -27,6 +27,18 @@ export interface OrderInfo {
   address: string;
   city: string;
   notes: string;
+  // Optional structured fields populated by the hybrid address picker.
+  // Server still reads `address` + `city` so legacy orders keep
+  // working; these augment for couriers + future use.
+  addressLine1?: string;
+  addressLine2?: string;
+  province?: string;
+  postalCode?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  formattedAddress?: string;
+  placeId?: string;
 }
 
 export interface OrderNotification {
