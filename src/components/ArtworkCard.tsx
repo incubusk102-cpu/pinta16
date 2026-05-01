@@ -9,6 +9,7 @@ import {
 import { ShoppingCart, Eye, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import {
   getEffectivePrice,
@@ -57,6 +58,9 @@ const ArtworkCard = ({
   onClick,
 }: ArtworkCardProps) => {
   const { addToCart } = useCart();
+  const {
+    config: { vacationMode },
+  } = useStorefrontConfig();
   const wishlist = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -90,7 +94,10 @@ const ArtworkCard = ({
   };
   const effectivePrice = getEffectivePrice({ price, salePrice });
   const discount = getDiscountPercent({ price, salePrice });
-  const purchasable = isPurchasable(availability);
+  // Vacation mode soft-blocks add-to-cart from every product card —
+  // wishlisting still works because that's how buyers tell us what to
+  // reach out about when the shop reopens.
+  const purchasable = isPurchasable(availability) && !vacationMode.enabled;
   const inWishlist = wishlist.has(id);
 
   const handleToggleWishlist = (e: React.MouseEvent) => {
@@ -264,7 +271,9 @@ const ArtworkCard = ({
               aria-label={
                 purchasable
                   ? "Add to cart"
-                  : `${AVAILABILITY_LABEL[availability]} — not available`
+                  : vacationMode.enabled
+                    ? "Shop paused — add-to-cart disabled"
+                    : `${AVAILABILITY_LABEL[availability]} — not available`
               }
               className={`p-2.5 rounded-sm transition-colors ${
                 purchasable

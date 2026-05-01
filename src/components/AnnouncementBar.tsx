@@ -51,12 +51,33 @@ const fingerprint = (a: AnnouncementConfig, lines: string[]): string => {
   return `${a.animation}_${hash}`;
 };
 
+// Format a YYYY-MM-DD date as "May 5" for the vacation banner. Falls
+// back to the raw string if Date parsing yields NaN.
+const formatVacationDate = (iso: string): string => {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+};
+
 const AnnouncementBar = () => {
   const { config } = useStorefrontConfig();
-  const { announcement, freeShipping, promoCodes } = config;
+  const { announcement, freeShipping, promoCodes, vacationMode } = config;
 
   const messages = useMemo(() => {
     const out: string[] = [];
+    // Vacation mode preempts every other line: when the shop is paused
+    // it's the most important thing for a buyer to read, and stacking
+    // promo / free-shipping copy underneath would be confusing ("the
+    // shop is paused but here's a discount?").
+    if (vacationMode.enabled) {
+      const friendlyDate = formatVacationDate(vacationMode.returnDate);
+      const fallback = friendlyDate
+        ? `Canvas Hub is on a research trip — back ${friendlyDate}. Bookmark a piece, I'll reach out when I'm back.`
+        : "Canvas Hub is briefly paused — bookmark a piece, I'll reach out when I'm back.";
+      out.push(vacationMode.message.trim() || fallback);
+      return out;
+    }
     const main = announcement.message.trim();
     if (main) out.push(main);
     if (
@@ -78,7 +99,7 @@ const AnnouncementBar = () => {
       }
     }
     return out;
-  }, [announcement, freeShipping, promoCodes]);
+  }, [announcement, freeShipping, promoCodes, vacationMode]);
 
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -140,8 +161,19 @@ const AnnouncementBar = () => {
     bumpDismissTick();
   };
 
-  if (!announcement.enabled || messages.length === 0) return null;
-  if (announcement.dismissable && dismissed) return null;
+  // Vacation mode forces the bar visible even if the regular announcement
+  // is disabled — the buyer needs to know the shop is paused before they
+  // get to the cart.
+  if (
+    !vacationMode.enabled &&
+    (!announcement.enabled || messages.length === 0)
+  ) {
+    return null;
+  }
+  if (messages.length === 0) return null;
+  if (!vacationMode.enabled && announcement.dismissable && dismissed) {
+    return null;
+  }
 
   const sizeCls = sizeClasses[announcement.size] || sizeClasses.normal;
   const weightCls = announcement.bold ? "font-semibold" : "font-medium";
