@@ -1,4 +1,3 @@
-import type { ReactElement } from "react";
 import { Link } from "@tanstack/react-router";
 import { Facebook, Instagram, Mail, MapPin, Phone } from "lucide-react";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -24,113 +23,24 @@ const SLUG_LABEL_KEYS: Record<
   privacy: "footer.privacy",
 };
 
-const PAYMENT_METHODS: { name: string; svg: ReactElement }[] = [
-  {
-    name: "GCash",
-    svg: (
-      <text
-        x="50%"
-        y="64%"
-        textAnchor="middle"
-        fontFamily="Inter, sans-serif"
-        fontWeight="700"
-        fontSize="14"
-        fill="currentColor"
-      >
-        GCash
-      </text>
-    ),
-  },
-  {
-    name: "Maya",
-    svg: (
-      <text
-        x="50%"
-        y="64%"
-        textAnchor="middle"
-        fontFamily="Inter, sans-serif"
-        fontWeight="700"
-        fontSize="14"
-        fill="currentColor"
-      >
-        Maya
-      </text>
-    ),
-  },
-  {
-    name: "BPI",
-    svg: (
-      <text
-        x="50%"
-        y="64%"
-        textAnchor="middle"
-        fontFamily="Inter, sans-serif"
-        fontWeight="700"
-        fontSize="14"
-        fill="currentColor"
-      >
-        BPI
-      </text>
-    ),
-  },
-  {
-    name: "BDO",
-    svg: (
-      <text
-        x="50%"
-        y="64%"
-        textAnchor="middle"
-        fontFamily="Inter, sans-serif"
-        fontWeight="700"
-        fontSize="14"
-        fill="currentColor"
-      >
-        BDO
-      </text>
-    ),
-  },
-  {
-    name: "Visa",
-    svg: (
-      <text
-        x="50%"
-        y="64%"
-        textAnchor="middle"
-        fontFamily="Inter, sans-serif"
-        fontWeight="700"
-        fontSize="14"
-        fontStyle="italic"
-        fill="currentColor"
-      >
-        VISA
-      </text>
-    ),
-  },
-  {
-    name: "Mastercard",
-    svg: (
-      <g>
-        <circle cx="22" cy="20" r="10" fill="currentColor" opacity="0.85" />
-        <circle cx="38" cy="20" r="10" fill="currentColor" opacity="0.5" />
-      </g>
-    ),
-  },
-];
-
-const PaymentBadge = ({
-  name,
-  children,
-}: {
-  name: string;
-  children: ReactElement;
-}) => (
+const QrPhBadge = () => (
   <span
-    aria-label={name}
-    title={name}
-    className="inline-flex items-center justify-center h-8 w-14 rounded border border-border/40 bg-card/60 text-foreground/80"
+    aria-label="QR Ph"
+    title="QR Ph"
+    className="inline-flex items-center justify-center h-8 px-3 rounded border border-border/40 bg-card/60 text-foreground/80"
   >
-    <svg viewBox="0 0 60 40" className="w-12 h-7">
-      {children}
+    <svg viewBox="0 0 80 40" className="w-16 h-7">
+      <text
+        x="50%"
+        y="64%"
+        textAnchor="middle"
+        fontFamily="Inter, sans-serif"
+        fontWeight="700"
+        fontSize="14"
+        fill="currentColor"
+      >
+        QR Ph
+      </text>
     </svg>
   </span>
 );
@@ -232,11 +142,7 @@ const SiteFooter = () => {
           {t("footer.weAccept")}
         </p>
         <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-          {PAYMENT_METHODS.map((m) => (
-            <PaymentBadge key={m.name} name={m.name}>
-              {m.svg}
-            </PaymentBadge>
-          ))}
+          <QrPhBadge />
         </div>
       </div>
 
