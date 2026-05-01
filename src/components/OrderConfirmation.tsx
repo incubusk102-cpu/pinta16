@@ -348,10 +348,8 @@ const OrderConfirmation = () => {
                   </div>
                   <ol className="font-body text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
                     <li>
-                      You will receive a confirmation email at{" "}
-                      <span className="text-foreground">
-                        {lastOrder.orderInfo.email}
-                      </span>
+                      You will receive a confirmation email from{" "}
+                      <span className="text-foreground">order@canvhub.com</span>
                     </li>
                     <li>
                       The artist will begin working on your painting — you can
