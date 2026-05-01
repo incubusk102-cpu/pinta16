@@ -13,6 +13,7 @@ import GoogleNavSignIn from "@/components/GoogleNavSignIn";
 import { useHeroSlides, type HeroSlide } from "@/contexts/HeroSlidesContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+import { startWelcomeBonus } from "@/lib/welcomeBonus";
 
 // localStorage key — once the visitor closes / accepts the modal we
 // don't show it again on subsequent visits. Bumping the suffix here
@@ -196,6 +197,13 @@ export default function NewUserModal() {
       return;
     }
     markSeen();
+    if (modal.voucherCode) {
+      // Kick off the 24h welcome-bonus countdown the moment the modal
+      // closes for real (not from an admin preview). The countdown
+      // widget reads the same localStorage key and auto-applies the
+      // code in cart later.
+      startWelcomeBonus(modal.voucherCode);
+    }
   };
 
   // Esc to close

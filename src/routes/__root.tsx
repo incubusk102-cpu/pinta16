@@ -17,6 +17,8 @@ import OrderConfirmation from "@/components/OrderConfirmation";
 import PwaPrompts from "@/components/PwaPrompts";
 import PassportTracker from "@/components/PassportTracker";
 import WelcomeBackToast from "@/components/WelcomeBackToast";
+import WelcomeBonusCountdown from "@/components/WelcomeBonusCountdown";
+import ArtistThankYou from "@/components/ArtistThankYou";
 import SiteFooter from "@/components/SiteFooter";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
@@ -107,6 +109,8 @@ function ConditionalVisitorDelight() {
     <>
       <PassportTracker />
       <WelcomeBackToast />
+      <WelcomeBonusCountdown />
+      <ArtistThankYou />
     </>
   );
 }
