@@ -1189,11 +1189,30 @@ export const handler = async (event) => {
             error: "Tracking URL must start with http(s)://",
           });
         }
+        // Optional shippedAt — admin can backfill the actual drop-off
+        // date (e.g. "I shipped it yesterday but only typed the AWB
+        // in now"). Defaults to the existing shippedAt on update, or
+        // "now" on first set.
+        const shippedAtRaw =
+          typeof shipment.shippedAt === "string"
+            ? shipment.shippedAt.trim()
+            : "";
+        let shippedAt;
+        if (shippedAtRaw) {
+          const t = new Date(shippedAtRaw).getTime();
+          if (Number.isNaN(t)) {
+            return json(400, { error: "Invalid shippedAt date" });
+          }
+          shippedAt = new Date(t).toISOString();
+        } else {
+          shippedAt = existing.shipment?.shippedAt || new Date().toISOString();
+        }
         const safeShipment = {
           courier,
           trackingNumber,
           ...(trackingUrlRaw ? { trackingUrl: trackingUrlRaw } : {}),
           ...(notes ? { notes } : {}),
+          shippedAt,
           updatedAt: new Date().toISOString(),
         };
         const isNew =
@@ -1235,8 +1254,36 @@ export const handler = async (event) => {
             ...meta,
           });
         }
+        // When the AWB is set on an order that's still in the
+        // confirmed / in-progress phase, auto-bump status to
+        // out_for_delivery so admin doesn't have to remember the
+        // separate Mark-Shipped click. We deliberately DON'T fire the
+        // status-change customer email here — the shipment-set email
+        // above (with courier + AWB) already covers it, and we don't
+        // want the buyer to receive two emails for one shipping event.
+        let nextStatus = existing.status;
+        if (
+          isNew &&
+          (existing.status === "confirmed" || existing.status === "in_progress")
+        ) {
+          nextStatus = "out_for_delivery";
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "status:out_for_delivery",
+            actor: "admin-auto",
+            ...meta,
+          });
+          await appendAuditEvent(event, {
+            type: "order.status",
+            outcome: "out_for_delivery",
+            subject: orderId,
+            detail: "Auto-bumped via shipment set",
+            ...meta,
+          });
+        }
         orders[idx] = {
           ...existing,
+          status: nextStatus,
           shipment: safeShipment,
           notifications,
           activityLog,

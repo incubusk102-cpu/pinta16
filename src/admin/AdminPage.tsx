@@ -2221,7 +2221,12 @@ function OrdersSection() {
 
   const handleSaveShipment = async (
     orderId: string,
-    shipment: { courier: string; trackingNumber: string; trackingUrl?: string },
+    shipment: {
+      courier: string;
+      trackingNumber: string;
+      trackingUrl?: string;
+      shippedAt?: string;
+    },
   ) => {
     setUpdatingId(orderId);
     try {
@@ -3397,6 +3402,25 @@ function OrdersSection() {
   );
 }
 
+// Convert an ISO timestamp into the YYYY-MM-DD shape the native date
+// input expects, in the viewer's local timezone (so "shipped today"
+// renders as today even on the other side of the dateline).
+const toDateInputValue = (iso?: string): string => {
+  if (!iso) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, "0");
+  const d = String(t.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 function ShipmentEditor({
   order,
   busy,
@@ -3409,6 +3433,7 @@ function ShipmentEditor({
     courier: string;
     trackingNumber: string;
     trackingUrl?: string;
+    shippedAt?: string;
   }) => void;
   onClear: () => void;
 }) {
@@ -3420,18 +3445,29 @@ function ShipmentEditor({
   const [trackingUrl, setTrackingUrl] = useState<string>(
     existing?.trackingUrl ?? "",
   );
+  const [shippedAt, setShippedAt] = useState<string>(
+    toDateInputValue(existing?.shippedAt),
+  );
 
   useEffect(() => {
     setCourier(existing?.courier ?? "");
     setTrackingNumber(existing?.trackingNumber ?? "");
     setTrackingUrl(existing?.trackingUrl ?? "");
-  }, [existing?.courier, existing?.trackingNumber, existing?.trackingUrl]);
+    setShippedAt(toDateInputValue(existing?.shippedAt));
+  }, [
+    existing?.courier,
+    existing?.trackingNumber,
+    existing?.trackingUrl,
+    existing?.shippedAt,
+  ]);
 
   const previewUrl = buildTrackingUrl(courier, trackingNumber, trackingUrl);
+  const existingShippedAtInput = toDateInputValue(existing?.shippedAt);
   const dirty =
     (existing?.courier ?? "") !== courier ||
     (existing?.trackingNumber ?? "") !== trackingNumber ||
-    (existing?.trackingUrl ?? "") !== trackingUrl;
+    (existing?.trackingUrl ?? "") !== trackingUrl ||
+    existingShippedAtInput !== shippedAt;
   const canSave = courier.trim() && trackingNumber.trim() && dirty;
 
   return (
@@ -3479,6 +3515,21 @@ function ShipmentEditor({
       </div>
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Ship date
+        </Label>
+        <Input
+          type="date"
+          value={shippedAt}
+          onChange={(e) => setShippedAt(e.target.value)}
+          className="h-8 text-xs"
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Defaults to today. Edit if you typed the AWB in late so the buyer sees
+          the actual drop-off date.
+        </p>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
           Custom tracking URL (optional)
         </Label>
         <Input
@@ -3508,6 +3559,9 @@ function ShipmentEditor({
               courier: courier.trim(),
               trackingNumber: trackingNumber.trim(),
               trackingUrl: trackingUrl.trim() || undefined,
+              shippedAt: shippedAt
+                ? new Date(`${shippedAt}T00:00:00`).toISOString()
+                : undefined,
             })
           }
         >
