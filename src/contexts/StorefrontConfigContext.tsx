@@ -111,12 +111,47 @@ export const DEFAULT_SITE_COPY: SiteCopy = {
   },
 };
 
+export interface NewUserModalTriggers {
+  time: boolean;
+  scroll: boolean;
+  exitIntent: boolean;
+}
+
+export interface NewUserModalConfig {
+  enabled: boolean;
+  triggers: NewUserModalTriggers;
+  timeSeconds: number;
+  scrollPercent: number;
+  voucherCode: string;
+  emailCaptureEnabled: boolean;
+  headline: string;
+  body: string;
+}
+
+export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
+  enabled: true,
+  triggers: {
+    time: true,
+    scroll: true,
+    exitIntent: true,
+  },
+  timeSeconds: 8,
+  scrollPercent: 30,
+  voucherCode: "",
+  emailCaptureEnabled: false,
+  headline: "Welcome to Canvas Hub",
+  body:
+    "First time here? Sign up with Google to keep your favourites, " +
+    "or grab your welcome discount before you browse.",
+};
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
   promoCodes: PromoCodePublic[];
   chat: ChatConfig;
   siteCopy: SiteCopy;
+  newUserModal: NewUserModalConfig;
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -154,6 +189,41 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     faqs: DEFAULT_CHAT_FAQS,
   },
   siteCopy: DEFAULT_SITE_COPY,
+  newUserModal: DEFAULT_NEW_USER_MODAL,
+};
+
+const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
+  const data = (raw && typeof raw === "object" ? raw : {}) as Partial<{
+    enabled: boolean;
+    triggers: Partial<NewUserModalTriggers>;
+    timeSeconds: number;
+    scrollPercent: number;
+    voucherCode: string;
+    emailCaptureEnabled: boolean;
+    headline: string;
+    body: string;
+  }>;
+  const triggersRaw = (data.triggers ?? {}) as Partial<NewUserModalTriggers>;
+  return {
+    enabled: data.enabled !== false,
+    triggers: {
+      time: triggersRaw.time !== false,
+      scroll: triggersRaw.scroll !== false,
+      exitIntent: triggersRaw.exitIntent !== false,
+    },
+    timeSeconds: Number.isFinite(data.timeSeconds)
+      ? Math.min(120, Math.max(1, Math.floor(Number(data.timeSeconds))))
+      : DEFAULT_NEW_USER_MODAL.timeSeconds,
+    scrollPercent: Number.isFinite(data.scrollPercent)
+      ? Math.min(95, Math.max(5, Math.floor(Number(data.scrollPercent))))
+      : DEFAULT_NEW_USER_MODAL.scrollPercent,
+    voucherCode: String(data.voucherCode ?? "")
+      .trim()
+      .toUpperCase(),
+    emailCaptureEnabled: data.emailCaptureEnabled === true,
+    headline: String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline),
+    body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body),
+  };
 };
 
 const mergeSiteCopy = (raw: unknown): SiteCopy => {
@@ -225,6 +295,7 @@ export const StorefrontConfigProvider = ({
             faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
           },
           siteCopy: mergeSiteCopy(data.config.siteCopy),
+          newUserModal: mergeNewUserModal(data.config.newUserModal),
         });
       }
     } catch {
