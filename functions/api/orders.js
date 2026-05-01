@@ -789,7 +789,12 @@ export const handler = async (event) => {
         }
         orders[idx] = { ...existing, status, notifications, activityLog };
         await store.setJSON(ORDERS_KEY, orders);
-        return json(200, { order: orders[idx] });
+        // Return the latest notification so the admin UI can show email
+        // delivery feedback (delivered / skipped / error).
+        const latestNote = statusChanged
+          ? notifications[notifications.length - 1]
+          : null;
+        return json(200, { order: orders[idx], notification: latestNote });
       }
 
       if (action === "resend-email") {
