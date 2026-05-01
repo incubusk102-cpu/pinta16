@@ -1045,13 +1045,61 @@ const buildFooterLinksHtml = (welcome, accent) => {
         </table>`;
 };
 
+// Treat any hex color whose perceptual luminance falls below 0.5 as a
+// dark template background. Used to flip the baked-in default logo
+// between its dark-frame variant (for light backgrounds) and its
+// gold-on-dark variant (for the dark "gallery" template) so it never
+// disappears the way a single static logo would on the wrong canvas.
+const isDarkEmailBg = (color) => {
+  const hex = String(color || "")
+    .replace("#", "")
+    .trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return false;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+  return luminance < 0.5;
+};
+
 /**
- * Render the default Canvas Hub wordmark when no custom logo has been
- * uploaded. Just the italic gold wordmark — the brand "C" lives in the
- * Gmail sender profile picture (Gravatar), not inside the email body.
+ * Render the baked-in default Canvas Hub identity used when no custom
+ * logo has been uploaded. We render the brand "C" medallion + italic
+ * "Canvas Hub" wordmark inline, in pure HTML+CSS, so it survives every
+ * mainstream email client (Gmail mobile strips inline SVG; Outlook
+ * strips border-radius but still shows a square gold tile, which still
+ * reads as "Canvas Hub"). The medallion + wordmark colors auto-flip
+ * based on the template's page/card background so the logo always has
+ * contrast with whatever surface it sits on. Mirrored verbatim by the
+ * admin email-section previews so the editor matches the sent email.
  */
-const defaultBrandLogoHtml = (fromName) =>
-  `<div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:28px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</div>`;
+const defaultBrandLogoHtml = (fromName, tpl, headerAlign) => {
+  const isDark = isDarkEmailBg(tpl?.cardBg) || isDarkEmailBg(tpl?.pageBg);
+  // Gold reads on both light + dark surfaces; we keep the wordmark
+  // gold across both variants and only flip the medallion's frame +
+  // letter so the silhouette inverts cleanly.
+  const wordmarkColor = "#c4a86a";
+  const taglineColor = isDark ? "#a39676" : "#7a7468";
+  const medallionBg = isDark ? "#c4a86a" : "#181613";
+  const medallionLetter = isDark ? "#181613" : "#c4a86a";
+  const tableAlign = headerAlign === "center" ? "center" : "left";
+  const tableMargin = headerAlign === "center" ? "0 auto" : "0";
+  const safeName = escapeHtml(fromName || "Canvas Hub");
+  return `
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
+          <tr>
+            <td style="padding:0 14px 0 0;vertical-align:middle;">
+              <div style="width:48px;height:48px;background:${medallionBg};border-radius:50%;text-align:center;line-height:48px;mso-line-height-rule:exactly;">
+                <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:32px;line-height:48px;color:${medallionLetter};">C</span>
+              </div>
+            </td>
+            <td style="vertical-align:middle;">
+              <div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:26px;letter-spacing:0.02em;color:${wordmarkColor};line-height:1.1;">${safeName}</div>
+              <div style="font-family:Inter,Helvetica,Arial,sans-serif;font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:${taglineColor};margin-top:6px;">EST. 2026</div>
+            </td>
+          </tr>
+        </table>`;
+};
 
 const wrapWelcomeHtml = (welcome, contentHtml) => {
   const accent = isSafeColor(welcome.accentColor)
@@ -1073,7 +1121,7 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
       : "";
   const logoInner = logoSrc
     ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
-    : defaultBrandLogoHtml(fromName);
+    : defaultBrandLogoHtml(fromName, tpl, headerAlign);
   const logoHtml =
     headerAlign === "center"
       ? `<div style="text-align:center;">${logoInner}</div>`
