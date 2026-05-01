@@ -313,6 +313,40 @@ export const handler = async (event) => {
         return json(200, { reviews });
       }
 
+      if (params.recent === "sold") {
+        // Public-facing "last sold" feed for the homepage social-proof
+        // ticker. Only returns confirmed/paid orders that haven't been
+        // refunded. No PII, only first name + city + product title +
+        // timestamp. Capped at 20 items.
+        const orders = await readOrders(store);
+        const limit = Math.min(Math.max(Number(params.limit) || 8, 1), 20);
+        const eligible = orders.filter((o) => {
+          if (!o.status || o.status === "cancelled") return false;
+          if (o.refund?.status === "succeeded") return false;
+          if (!Array.isArray(o.items) || o.items.length === 0) return false;
+          return true;
+        });
+        eligible.sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime(),
+        );
+        const sales = eligible.slice(0, limit).map((o) => {
+          const firstName =
+            (o.orderInfo?.fullName || "").trim().split(/\s+/)[0] || "Someone";
+          const item = o.items[0] || {};
+          return {
+            firstName,
+            city: o.orderInfo?.city || "",
+            productTitle: String(item.title || "").slice(0, 200),
+            productImage: typeof item.image === "string" ? item.image : "",
+            productId: String(item.id || ""),
+            soldAt: o.createdAt,
+          };
+        });
+        return json(200, { sales });
+      }
+
       if (params.id) {
         const orders = await readOrders(store);
         const order = orders.find((o) => o.id === params.id);

@@ -15,6 +15,8 @@ import ChatWidget from "@/components/ChatWidget";
 import NewUserModal from "@/components/NewUserModal";
 import OrderConfirmation from "@/components/OrderConfirmation";
 import PwaPrompts from "@/components/PwaPrompts";
+import PassportTracker from "@/components/PassportTracker";
+import WelcomeBackToast from "@/components/WelcomeBackToast";
 import SiteFooter from "@/components/SiteFooter";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
@@ -96,6 +98,19 @@ function ConditionalOrderConfirmation() {
   return <OrderConfirmation />;
 }
 
+function ConditionalVisitorDelight() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return (
+    <>
+      <PassportTracker />
+      <WelcomeBackToast />
+    </>
+  );
+}
+
 function RootComponent() {
   return (
     <ThemeProvider>
@@ -117,6 +132,7 @@ function RootComponent() {
                         <ChatWidget />
                         <NewUserModal />
                         <PwaPrompts />
+                        <ConditionalVisitorDelight />
                         <Toaster richColors position="top-right" />
                       </CartProvider>
                     </ProductProvider>
