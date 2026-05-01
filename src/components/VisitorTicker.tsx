@@ -74,8 +74,12 @@ const VisitorTicker = () => {
   }, []);
 
   const messages: Array<{ key: string; node: React.ReactNode }> = [];
-  if (live != null && live > 0) {
-    const others = Math.max(live - 1, 0);
+  // Only narrate the live-visitor count when there's actually a crowd —
+  // someone reading "you're the first visitor" learns the room is empty,
+  // which is the opposite of social proof. Silence reads better than
+  // loneliness here.
+  if (live != null && live > 1) {
+    const others = live - 1;
     messages.push({
       key: "live",
       node: (
@@ -83,16 +87,12 @@ const VisitorTicker = () => {
           <Eye className="w-3.5 h-3.5 text-emerald-500" />
           <span>
             <span className="text-foreground font-semibold">
-              {others === 0
-                ? "You're the first visitor"
-                : `${live} viewing now`}
+              {live} viewing now
             </span>
-            {others > 0 && (
-              <span className="text-muted-foreground ml-1">
-                · join {others} other{others === 1 ? "" : "s"} exploring the
-                gallery
-              </span>
-            )}
+            <span className="text-muted-foreground ml-1">
+              · join {others} other{others === 1 ? "" : "s"} exploring the
+              gallery
+            </span>
           </span>
         </span>
       ),
