@@ -19,6 +19,7 @@ import RelatedProducts from "@/components/RelatedProducts";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import ZoomableImage from "@/components/ZoomableImage";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
+import { addStamp } from "@/lib/passport";
 import {
   getDiscountPercent,
   getEffectivePrice,
@@ -96,6 +97,7 @@ function ProductPage() {
   useEffect(() => {
     if (artwork && artwork.availability !== "draft") {
       pushRecentlyViewed(artwork.id);
+      addStamp(artwork.id);
     }
   }, [artwork]);
 

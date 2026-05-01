@@ -863,6 +863,80 @@ const DEFAULT_CONFIG = {
   newUserModal: DEFAULT_NEW_USER_MODAL,
 };
 
+const DEFAULT_DAILY_FEATURE = {
+  enabled: false,
+  productId: "",
+  percent: 5,
+  headline: "Piece of the day",
+};
+
+const sanitizeDailyFeature = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const percent = Number(data.percent);
+  return {
+    enabled: data.enabled === true,
+    productId: String(data.productId ?? "").slice(0, 100),
+    percent: Number.isFinite(percent)
+      ? Math.min(50, Math.max(1, Math.floor(percent)))
+      : DEFAULT_DAILY_FEATURE.percent,
+    headline:
+      typeof data.headline === "string" && data.headline.trim()
+        ? data.headline.trim().slice(0, 80)
+        : DEFAULT_DAILY_FEATURE.headline,
+  };
+};
+
+const DEFAULT_THANK_YOU = {
+  enabled: false,
+  assetUrl: "",
+  assetType: "image",
+  message: "Thank you for being one of the first to support Canvas Hub.",
+};
+
+const sanitizeThankYou = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const url = String(data.assetUrl ?? "").slice(0, 4000);
+  // Reject obvious javascript: / data: tricks; allow http(s)/relative.
+  const safeUrl = /^javascript:|^data:/i.test(url.trim()) ? "" : url;
+  return {
+    enabled: data.enabled === true,
+    assetUrl: safeUrl,
+    assetType: data.assetType === "video" ? "video" : "image",
+    message:
+      typeof data.message === "string" && data.message.trim()
+        ? String(data.message).slice(0, 600)
+        : DEFAULT_THANK_YOU.message,
+  };
+};
+
+/** Build today's daily-feature promo derived from config + UTC date. */
+const buildDailyToday = (dailyFeature) => {
+  if (!dailyFeature.enabled || !dailyFeature.productId) return null;
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const stamp = `${yyyy}${mm}${dd}`;
+  const code = `DAILY${stamp}`;
+  // Expires at end of UTC day.
+  const expires = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      23,
+      59,
+      59,
+    ),
+  );
+  return {
+    code,
+    productId: dailyFeature.productId,
+    percent: dailyFeature.percent,
+    expiresAt: expires.toISOString(),
+  };
+};
+
 const sanitizeNewUserModal = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
   const triggersRaw =
@@ -1069,6 +1143,8 @@ const sanitizeConfig = (raw) => {
       })
       .filter(Boolean),
     newUserModal: sanitizeNewUserModal(data.newUserModal),
+    dailyFeature: sanitizeDailyFeature(data.dailyFeature),
+    thankYou: sanitizeThankYou(data.thankYou),
     // Persisted internal map of one-time migrations applied to this
     // config — not exposed publicly. Keys here mark a migration as done
     // so we don't re-run it on every read.
@@ -1138,14 +1214,9 @@ const publicWelcomePreview = (welcome) => {
   };
 };
 
-const publicView = (config) => ({
-  announcement: config.announcement,
-  freeShipping: config.freeShipping,
-  shippingRates: Array.isArray(config.shippingRates)
-    ? config.shippingRates
-    : [],
-  siteCopy: config.siteCopy,
-  promoCodes: config.promoCodes
+const publicView = (config) => {
+  const today = buildDailyToday(config.dailyFeature);
+  const livePromos = config.promoCodes
     .filter((p) => p.enabled)
     .filter((p) => p.personal !== true)
     .filter((p) => p.usageLimit === null || p.usageCount < p.usageLimit)
@@ -1160,20 +1231,57 @@ const publicView = (config) => ({
       minSpend: p.minSpend,
       expiresAt: p.expiresAt,
       description: p.description,
-    })),
-  chat: config.chat,
-  welcomeEmailPreview: publicWelcomePreview(config.welcomeEmail),
-  newUserModal: {
-    enabled: config.newUserModal.enabled,
-    triggers: { ...config.newUserModal.triggers },
-    timeSeconds: config.newUserModal.timeSeconds,
-    scrollPercent: config.newUserModal.scrollPercent,
-    voucherCode: config.newUserModal.voucherCode,
-    emailCaptureEnabled: config.newUserModal.emailCaptureEnabled,
-    headline: config.newUserModal.headline,
-    body: config.newUserModal.body,
-  },
-});
+    }));
+  // Append today's auto-generated daily-feature promo (if any) so
+  // validation paths that read from the public promoCodes list (cart
+  // sanity, server-side recompute) recognise it without persisting a
+  // new code per day.
+  if (today && !livePromos.some((p) => p.code === today.code)) {
+    livePromos.push({
+      code: today.code,
+      type: "percent",
+      value: today.percent,
+      freeShipping: false,
+      minSpend: 0,
+      expiresAt: today.expiresAt,
+      description: `Today's daily piece — ${today.percent}% off, expires at midnight UTC`,
+    });
+  }
+  return {
+    announcement: config.announcement,
+    freeShipping: config.freeShipping,
+    shippingRates: Array.isArray(config.shippingRates)
+      ? config.shippingRates
+      : [],
+    siteCopy: config.siteCopy,
+    promoCodes: livePromos,
+    chat: config.chat,
+    welcomeEmailPreview: publicWelcomePreview(config.welcomeEmail),
+    newUserModal: {
+      enabled: config.newUserModal.enabled,
+      triggers: { ...config.newUserModal.triggers },
+      timeSeconds: config.newUserModal.timeSeconds,
+      scrollPercent: config.newUserModal.scrollPercent,
+      voucherCode: config.newUserModal.voucherCode,
+      emailCaptureEnabled: config.newUserModal.emailCaptureEnabled,
+      headline: config.newUserModal.headline,
+      body: config.newUserModal.body,
+    },
+    dailyFeature: {
+      enabled: config.dailyFeature.enabled,
+      productId: config.dailyFeature.productId,
+      percent: config.dailyFeature.percent,
+      headline: config.dailyFeature.headline,
+    },
+    dailyFeatureToday: today,
+    thankYou: {
+      enabled: config.thankYou.enabled,
+      assetUrl: config.thankYou.assetUrl,
+      assetType: config.thankYou.assetType,
+      message: config.thankYou.message,
+    },
+  };
+};
 
 const handle = async ({ request, env }) => {
   setCloudflareContext(env);
@@ -1219,6 +1327,24 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           chat: { ...existing.chat, ...body.chat },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-daily-feature") {
+        const next = sanitizeConfig({
+          ...existing,
+          dailyFeature: { ...existing.dailyFeature, ...body.dailyFeature },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-thank-you") {
+        const next = sanitizeConfig({
+          ...existing,
+          thankYou: { ...existing.thankYou, ...body.thankYou },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });

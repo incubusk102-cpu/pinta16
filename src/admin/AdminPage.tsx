@@ -50,6 +50,7 @@ import { SiteCopySection } from "@/components/admin/SiteCopySection";
 import { WelcomeEmailSection } from "@/components/admin/WelcomeEmailSection";
 import { OrderEmailSection } from "@/components/admin/OrderEmailSection";
 import { NewUserModalSection } from "@/components/admin/NewUserModalSection";
+import { AppreciationSection } from "@/components/admin/AppreciationSection";
 import ExportPanel from "@/admin/ExportPanel";
 import {
   ArrowLeft,
@@ -119,6 +120,7 @@ type AdminSection =
   | "welcomeEmail"
   | "orderEmail"
   | "newUserModal"
+  | "appreciation"
   | "policies"
   | "exports"
   | "security"
@@ -140,6 +142,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   welcomeEmail: "Welcome email",
   orderEmail: "Order email",
   newUserModal: "New-user modal",
+  appreciation: "Appreciation",
   policies: "Policies",
   exports: "Exports",
   security: "Security",
@@ -357,6 +360,11 @@ const NAV_GROUPS: {
         key: "newUserModal",
         icon: <Users className="w-4 h-4" />,
         hint: "First-visit popup",
+      },
+      {
+        key: "appreciation",
+        icon: <Star className="w-4 h-4" />,
+        hint: "Daily piece + thank-you",
       },
       { key: "policies", icon: <FileText className="w-4 h-4" /> },
     ],
@@ -755,6 +763,7 @@ function AdminDashboard() {
           {section === "welcomeEmail" && <WelcomeEmailSection />}
           {section === "orderEmail" && <OrderEmailSection />}
           {section === "newUserModal" && <NewUserModalSection />}
+          {section === "appreciation" && <AppreciationSection />}
           {section === "policies" && <PoliciesSection />}
           {section === "exports" && <ExportsSection />}
           {section === "security" && <SecuritySection />}

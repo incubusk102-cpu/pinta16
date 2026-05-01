@@ -10,6 +10,10 @@ import ContactSection from "@/components/ContactSection";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import RecentlyViewed from "@/components/RecentlyViewed";
+import RecommendedRow from "@/components/RecommendedRow";
+import VisitorTicker from "@/components/VisitorTicker";
+import ThankYouWall from "@/components/ThankYouWall";
+import DailyFeature from "@/components/DailyFeature";
 import Ornament from "@/components/decor/Ornament";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -53,8 +57,11 @@ function Index() {
     <div className="smooth-scroll">
       {user && <GalleryNav />}
       {!user && <HeroOrFallback />}
+      <VisitorTicker />
+      <DailyFeature />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
+        <RecommendedRow />
         <RecentlyViewed />
       </section>
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
@@ -64,6 +71,7 @@ function Index() {
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
         <Ornament label="Voices" />
       </div>
+      <ThankYouWall />
       <ReviewsSection />
       <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
         <Ornament label="Stay in touch" />

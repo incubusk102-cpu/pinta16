@@ -68,12 +68,60 @@ const ORDERS_KEY = "all-orders";
 const CONFIG_STORE_NAME = "storefront-config";
 const CONFIG_KEY = "config";
 
+// Build the auto-rotating "daily feature" promo for the current UTC day.
+// Mirrors buildDailyToday() in storefront-config.js; kept inline here so
+// place-order validation accepts today's code without persisting it.
+const buildTodaysDailyPromo = (config) => {
+  const df =
+    config && typeof config.dailyFeature === "object"
+      ? config.dailyFeature
+      : null;
+  if (!df || df.enabled !== true || !df.productId) return null;
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const code = `DAILY${yyyy}${mm}${dd}`;
+  const expires = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      23,
+      59,
+      59,
+    ),
+  );
+  const percent = Math.min(
+    50,
+    Math.max(1, Math.floor(Number(df.percent) || 5)),
+  );
+  return {
+    code,
+    type: "percent",
+    value: percent,
+    freeShipping: false,
+    minSpend: 0,
+    usageLimit: null,
+    usageCount: 0,
+    enabled: true,
+    expiresAt: expires.toISOString(),
+    description: "Daily feature — today only",
+    _virtual: true,
+  };
+};
+
 const findEligiblePromo = (config, code) => {
-  if (!config || !Array.isArray(config.promoCodes)) return null;
+  if (!config) return null;
   const upper = String(code || "")
     .trim()
     .toUpperCase();
   if (!upper) return null;
+  // Today's daily-feature code is virtual and not persisted in promoCodes,
+  // so check it before falling back to the stored list.
+  const daily = buildTodaysDailyPromo(config);
+  if (daily && daily.code === upper) return daily;
+  if (!Array.isArray(config.promoCodes)) return null;
   const promo = config.promoCodes.find((p) => p.code === upper);
   if (!promo) return null;
   if (promo.enabled === false) return null;
@@ -132,7 +180,11 @@ const incrementPromoUsage = async (event, code) => {
       if (!config || !Array.isArray(config.promoCodes)) return;
       const promo = findEligiblePromo(config, upper);
       if (!promo) return; // no longer eligible — silently skip
+      // Virtual / daily-feature codes are not persisted, so there's
+      // nothing to bump.
+      if (promo._virtual) return;
       const idx = config.promoCodes.findIndex((p) => p.code === upper);
+      if (idx === -1) return;
       const next = { ...config };
       next.promoCodes = config.promoCodes.map((p, i) =>
         i === idx ? { ...p, usageCount: (p.usageCount || 0) + 1 } : p,
@@ -365,6 +417,40 @@ export const handler = async (event) => {
             new Date(a.submittedAt).getTime(),
         );
         return json(200, { reviews });
+      }
+
+      if (params.recent === "sold") {
+        // Public-facing "last sold" feed for the homepage social-proof
+        // ticker. Only returns confirmed/paid orders that haven't been
+        // refunded. No PII, only first name + city + product title +
+        // timestamp. Capped at 20 items.
+        const orders = await readOrders(store);
+        const limit = Math.min(Math.max(Number(params.limit) || 8, 1), 20);
+        const eligible = orders.filter((o) => {
+          if (!o.status || o.status === "cancelled") return false;
+          if (o.refund?.status === "succeeded") return false;
+          if (!Array.isArray(o.items) || o.items.length === 0) return false;
+          return true;
+        });
+        eligible.sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime(),
+        );
+        const sales = eligible.slice(0, limit).map((o) => {
+          const firstName =
+            (o.orderInfo?.fullName || "").trim().split(/\s+/)[0] || "Someone";
+          const item = o.items[0] || {};
+          return {
+            firstName,
+            city: o.orderInfo?.city || "",
+            productTitle: String(item.title || "").slice(0, 200),
+            productImage: typeof item.image === "string" ? item.image : "",
+            productId: String(item.id || ""),
+            soldAt: o.createdAt,
+          };
+        });
+        return json(200, { sales });
       }
 
       if (params.id) {
