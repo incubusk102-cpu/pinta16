@@ -227,7 +227,14 @@ const parseAddress = (raw) => {
   return { email: raw.trim() };
 };
 
-export const sendEmail = async ({ to, subject, html, text, purpose, from: fromOverride }) => {
+export const sendEmail = async ({
+  to,
+  subject,
+  html,
+  text,
+  purpose,
+  from: fromOverride,
+}) => {
   if (!to || !subject) {
     return { delivered: false, skipped: true, reason: "missing fields" };
   }
@@ -526,22 +533,39 @@ export const buildOrderEmail = (kind, order, extra = {}, orderEmail = null) => {
     }`,
   );
 
-  // When orderEmail config is present, render through the shared branded
-  // chrome (logo / banner / palette / template / footer links). Otherwise
-  // fall back to the original minimal wrapHtml so existing deployments
-  // without admin customisation see exactly what they saw before.
-  const html = orderEmail
-    ? wrapWelcomeHtml(
-        {
-          ...orderEmail,
-          // Route order-channel uploads through dedicated asset slots so
-          // they don't collide with welcome's logo/banner.
-          _logoSlot: "order-logo",
-          _bannerSlot: "order-banner",
-        },
-        bodyHtml,
-      )
-    : wrapHtml(heading, bodyHtml);
+  // Always render through the shared branded chrome (logo / banner /
+  // palette / template / footer links). When no admin config is saved we
+  // use sensible defaults so order emails look professional out of the
+  // box — never fall back to the plain-text wrapper.
+  const effectiveConfig = orderEmail || {
+    fromName: "Canvas Hub",
+    fromEmail: "order@canvhub.com",
+    primaryColor: "#1c1c1c",
+    accentColor: "#7a7468",
+    logoUrl: "",
+    bannerUrl: "",
+    showLogo: true,
+    showBanner: false,
+    bodyFont: "inter",
+    template: "classic",
+    headerAlign: "left",
+    dividerStyle: "line",
+    buttonStyle: "filled",
+    footerTagline: "original Filipino paintings",
+    footerLinks: [],
+    trackButtonText: "Track shipment",
+    reviewButtonText: "Write a review",
+  };
+  const html = wrapWelcomeHtml(
+    {
+      ...effectiveConfig,
+      // Route order-channel uploads through dedicated asset slots so
+      // they don't collide with welcome's logo/banner.
+      _logoSlot: "order-logo",
+      _bannerSlot: "order-banner",
+    },
+    bodyHtml,
+  );
 
   return { subject, html, text };
 };
@@ -589,10 +613,8 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
   // which we format as "Name <email>". This lets the admin set
   // "order@canvhub.com" in the dashboard without needing a separate
   // EMAIL_FROM_ORDER Cloudflare env var.
-  const cfgEmail =
-    (orderEmail?.fromEmail || "order@canvhub.com").trim();
-  const cfgName =
-    (orderEmail?.fromName || "Canvas Hub").trim();
+  const cfgEmail = (orderEmail?.fromEmail || "order@canvhub.com").trim();
+  const cfgName = (orderEmail?.fromName || "Canvas Hub").trim();
   const configFrom = cfgEmail
     ? cfgName
       ? `${cfgName} <${cfgEmail}>`
@@ -667,10 +689,8 @@ export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
     fakeExtra,
     previewOrderEmail,
   );
-  const cfgEmail =
-    (orderEmail?.fromEmail || "order@canvhub.com").trim();
-  const cfgName =
-    (orderEmail?.fromName || "Canvas Hub").trim();
+  const cfgEmail = (orderEmail?.fromEmail || "order@canvhub.com").trim();
+  const cfgName = (orderEmail?.fromName || "Canvas Hub").trim();
   const configFrom = cfgEmail
     ? cfgName
       ? `${cfgName} <${cfgEmail}>`
