@@ -756,6 +756,31 @@ const sanitizeSiteCopy = (raw) => {
   };
 };
 
+// New-user modal defaults. All three triggers ship enabled so the
+// modal pops up on first visit; admins can mute any individually
+// from /admin → New-user modal. `voucherCode` is the promo (managed
+// in Storefront → Promo codes / Marketing) the modal advertises;
+// when blank the modal still opens but with no code attached.
+// `emailCaptureEnabled` is OFF by default so launching the modal
+// doesn't accidentally start a newsletter list — admins flip it on
+// once they're ready to collect emails for the voucher.
+const DEFAULT_NEW_USER_MODAL = {
+  enabled: true,
+  triggers: {
+    time: true,
+    scroll: true,
+    exitIntent: true,
+  },
+  timeSeconds: 8,
+  scrollPercent: 30,
+  voucherCode: "",
+  emailCaptureEnabled: false,
+  headline: "Welcome to Canvas Hub",
+  body:
+    "First time here? Sign up with Google to keep your favourites, " +
+    "or grab your welcome discount before you browse.",
+};
+
 const DEFAULT_CONFIG = {
   announcement: {
     enabled: false,
@@ -793,6 +818,49 @@ const DEFAULT_CONFIG = {
   siteCopy: SITE_COPY_DEFAULTS,
   welcomeEmail: DEFAULT_WELCOME_EMAIL,
   orderEmail: DEFAULT_ORDER_EMAIL,
+  newUserModal: DEFAULT_NEW_USER_MODAL,
+};
+
+const sanitizeNewUserModal = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const triggersRaw =
+    data.triggers && typeof data.triggers === "object" ? data.triggers : {};
+  return {
+    enabled: data.enabled !== false,
+    triggers: {
+      time: triggersRaw.time !== false,
+      scroll: triggersRaw.scroll !== false,
+      exitIntent: triggersRaw.exitIntent !== false,
+    },
+    timeSeconds: Math.min(
+      120,
+      Math.max(
+        1,
+        Math.floor(
+          Number(data.timeSeconds) || DEFAULT_NEW_USER_MODAL.timeSeconds,
+        ),
+      ),
+    ),
+    scrollPercent: Math.min(
+      95,
+      Math.max(
+        5,
+        Math.floor(
+          Number(data.scrollPercent) || DEFAULT_NEW_USER_MODAL.scrollPercent,
+        ),
+      ),
+    ),
+    voucherCode: String(data.voucherCode ?? "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 30),
+    emailCaptureEnabled: data.emailCaptureEnabled === true,
+    headline: String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline).slice(
+      0,
+      120,
+    ),
+    body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body).slice(0, 400),
+  };
 };
 
 const sanitizeConfig = (raw) => {
@@ -920,6 +988,7 @@ const sanitizeConfig = (raw) => {
         };
       })
       .filter(Boolean),
+    newUserModal: sanitizeNewUserModal(data.newUserModal),
   };
 };
 
@@ -975,6 +1044,16 @@ const publicView = (config) => ({
     })),
   chat: config.chat,
   welcomeEmailPreview: publicWelcomePreview(config.welcomeEmail),
+  newUserModal: {
+    enabled: config.newUserModal.enabled,
+    triggers: { ...config.newUserModal.triggers },
+    timeSeconds: config.newUserModal.timeSeconds,
+    scrollPercent: config.newUserModal.scrollPercent,
+    voucherCode: config.newUserModal.voucherCode,
+    emailCaptureEnabled: config.newUserModal.emailCaptureEnabled,
+    headline: config.newUserModal.headline,
+    body: config.newUserModal.body,
+  },
 });
 
 const handle = async ({ request, env }) => {
@@ -1245,6 +1324,65 @@ const handle = async ({ request, env }) => {
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });
+      }
+
+      if (action === "update-newuser-modal") {
+        const incoming =
+          body.newUserModal && typeof body.newUserModal === "object"
+            ? body.newUserModal
+            : {};
+        const merged = {
+          ...existing.newUserModal,
+          ...incoming,
+          triggers: {
+            ...existing.newUserModal.triggers,
+            ...(incoming.triggers && typeof incoming.triggers === "object"
+              ? incoming.triggers
+              : {}),
+          },
+        };
+        const next = sanitizeConfig({
+          ...existing,
+          newUserModal: merged,
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "auto-create-welcome10") {
+        // One-shot helper for the New-user modal admin page: idempotently
+        // creates the WELCOME10 promo (10% off, no min spend) and attaches
+        // it to the modal. If WELCOME10 already exists, only the modal's
+        // `voucherCode` is updated — we don't touch the promo's existing
+        // discount / limits in case the admin tuned them.
+        const code = "WELCOME10";
+        const previous =
+          existing.promoCodes.find((p) => p.code === code) || null;
+        const merged = previous
+          ? previous
+          : {
+              code,
+              type: "percent",
+              value: 10,
+              freeShipping: false,
+              minSpend: 0,
+              usageLimit: null,
+              usageCount: 0,
+              expiresAt: null,
+              enabled: true,
+              description: "Welcome offer for new visitors",
+            };
+        const others = existing.promoCodes.filter((p) => p.code !== code);
+        const next = sanitizeConfig({
+          ...existing,
+          promoCodes: [...others, merged],
+          newUserModal: {
+            ...existing.newUserModal,
+            voucherCode: code,
+          },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next, created: !previous });
       }
 
       if (action === "increment-usage") {

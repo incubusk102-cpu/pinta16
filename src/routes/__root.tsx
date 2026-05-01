@@ -12,6 +12,7 @@ import { PoliciesProvider } from "@/contexts/PoliciesContext";
 import { HeroSlidesProvider } from "@/contexts/HeroSlidesContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import ChatWidget from "@/components/ChatWidget";
+import NewUserModal from "@/components/NewUserModal";
 import OrderConfirmation from "@/components/OrderConfirmation";
 import PwaPrompts from "@/components/PwaPrompts";
 import SiteFooter from "@/components/SiteFooter";
@@ -114,6 +115,7 @@ function RootComponent() {
                         <ConditionalSiteFooter />
                         <ConditionalOrderConfirmation />
                         <ChatWidget />
+                        <NewUserModal />
                         <PwaPrompts />
                         <Toaster richColors position="top-right" />
                       </CartProvider>

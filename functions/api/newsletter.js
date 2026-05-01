@@ -9,6 +9,7 @@ import { setCloudflareContext } from "./_lib/context.js";
 import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
+import { isEmailConfigured, sendEmail } from "./_lib/email.js";
 
 const LIST_KEY = "subscribers";
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -88,6 +89,57 @@ const forwardToProvider = async (entry, env) => {
   return { provider: null, skipped: true };
 };
 
+const escapeHtml = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+// Transactional voucher delivery used by the new-user modal: we email
+// the visitor the promo code they unlocked. We don't roll back the
+// subscribe if the email fails — the entry is still stored and the
+// failure reason is surfaced to the caller so the admin can see it.
+const sendVoucherEmail = async (to, voucherCode) => {
+  if (!isEmailConfigured()) {
+    return { delivered: false, skipped: true, reason: "not configured" };
+  }
+  const code = String(voucherCode || "")
+    .trim()
+    .toUpperCase();
+  if (!code) {
+    return { delivered: false, skipped: true, reason: "no voucher code" };
+  }
+  const safeCode = escapeHtml(code);
+  const subject = `Your Canvas Hub welcome code: ${code}`;
+  const html = `
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:24px;background:#f5f3ee;font-family:Inter,Helvetica,Arial,sans-serif;color:#1c1c1c;">
+  <table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;">
+    <tr><td style="padding:24px 28px;border-bottom:1px solid #efece4;">
+      <div style="font-family:'Playfair Display',Georgia,serif;font-size:22px;letter-spacing:0.02em;color:#1c1c1c;">Canvas Hub</div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:#7a7468;margin-top:4px;">Your welcome code</div>
+    </td></tr>
+    <tr><td style="padding:24px 28px;font-size:14px;line-height:1.6;color:#1c1c1c;">
+      <p style="margin:0 0 16px;">Thanks for subscribing — here's your welcome code:</p>
+      <div style="text-align:center;margin:20px 0 24px;">
+        <code style="display:inline-block;font-family:'Courier New',monospace;font-size:22px;letter-spacing:0.18em;padding:12px 24px;background:#f5f3ee;border:1px dashed #c4a86a;border-radius:4px;color:#1c1c1c;">${safeCode}</code>
+      </div>
+      <p style="margin:0 0 12px;">Apply it at checkout to claim your discount.</p>
+      <p style="margin:0;color:#7a7468;font-size:12px;">If you didn't request this, you can safely ignore this email.</p>
+    </td></tr>
+    <tr><td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:#7a7468;">
+      Canvas Hub &mdash; original Filipino paintings.
+    </td></tr>
+  </table>
+</body></html>`.trim();
+  const text = `Thanks for subscribing — here's your welcome code: ${code}\n\nApply it at checkout to claim your discount.`;
+  return await sendEmail({ to, subject, html, text });
+};
+
 const handle = async ({ request, env }) => {
   setCloudflareContext(env);
   if (!env.NEWSLETTER) {
@@ -123,21 +175,44 @@ const handle = async ({ request, env }) => {
         .toLowerCase();
       const name = String(body?.name || "").trim();
       const source = String(body?.source || "").trim();
+      const voucherCode = String(body?.voucherCode || "")
+        .trim()
+        .toUpperCase()
+        .slice(0, 30);
 
       if (!isValidEmail(email)) {
         return json(400, { error: "invalid_email" });
       }
 
+      // Voucher delivery is best-effort — fire it whether or not the
+      // visitor was already on the list (they're asking for the code,
+      // not just a list signup), but only when a code was actually
+      // requested. Skipped/failed sends don't roll back the subscribe.
+      const voucherDelivery = voucherCode
+        ? await sendVoucherEmail(email, voucherCode)
+        : null;
+
       const subs = await readSubscribers(store);
       const existing = subs.find((s) => s.email === email);
       if (existing) {
-        return json(200, { ok: true, already: true });
+        return json(200, {
+          ok: true,
+          already: true,
+          voucher: voucherDelivery
+            ? {
+                sent: voucherDelivery.delivered === true,
+                provider: voucherDelivery.provider || null,
+                error: voucherDelivery.error || voucherDelivery.reason || null,
+              }
+            : null,
+        });
       }
 
       const entry = {
         email,
         name: name || undefined,
         source: source || undefined,
+        voucherCode: voucherCode || undefined,
         ip:
           event.headers?.["cf-connecting-ip"] ||
           event.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() ||
@@ -152,11 +227,26 @@ const handle = async ({ request, env }) => {
         provider: forward.provider || undefined,
         forwardError: forward.error || undefined,
         forwardSkipped: forward.skipped || undefined,
+        voucherSent: voucherDelivery?.delivered === true ? true : undefined,
+        voucherError:
+          voucherDelivery && voucherDelivery.delivered !== true
+            ? voucherDelivery.error || voucherDelivery.reason
+            : undefined,
       };
 
       const next = [stored, ...subs];
       await store.setJSON(LIST_KEY, next);
-      return json(200, { ok: true, already: false });
+      return json(200, {
+        ok: true,
+        already: false,
+        voucher: voucherDelivery
+          ? {
+              sent: voucherDelivery.delivered === true,
+              provider: voucherDelivery.provider || null,
+              error: voucherDelivery.error || voucherDelivery.reason || null,
+            }
+          : null,
+      });
     }
 
     if (method === "DELETE") {
