@@ -20,6 +20,48 @@ import { useUserAuth } from "@/contexts/UserAuthContext";
 const SEEN_KEY = "canvhub:newuser-modal:seen-v1";
 const CAROUSEL_INTERVAL_MS = 5000;
 const SWIPE_THRESHOLD_PX = 40;
+// Custom event admins fire from /admin → New-user modal → "Preview" so
+// they can pop the modal open from the admin UI regardless of
+// localStorage / signed-in / route filters.
+export const PREVIEW_EVENT = "canvhub:preview-newuser-modal";
+
+// Built-in fallback slides for the modal carousel when the admin
+// hasn't uploaded any Hero Slides yet. Pulls from the product
+// placeholder set already shipped under public/images/ so the modal
+// always pops with imagery instead of a flat gradient. Once the admin
+// adds real Hero Slides under Admin → Hero slider, those take over.
+const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
+  {
+    id: "_default-1",
+    image: "/images/1.png",
+    eyebrow: "Canvas Hub",
+    headline: "Affordable Art, Authentic Stories",
+    subtext: "",
+    ctaLabel: "",
+    ctaHref: "",
+    align: "center",
+  },
+  {
+    id: "_default-2",
+    image: "/images/2.png",
+    eyebrow: "Hand-curated",
+    headline: "Limited prints, ready to ship",
+    subtext: "",
+    ctaLabel: "",
+    ctaHref: "",
+    align: "center",
+  },
+  {
+    id: "_default-3",
+    image: "/images/4.png",
+    eyebrow: "New here?",
+    headline: "Welcome — your discount is waiting",
+    subtext: "",
+    ctaLabel: "",
+    ctaHref: "",
+    align: "center",
+  },
+];
 
 const isAdminRoute = () =>
   typeof window !== "undefined" &&
@@ -49,6 +91,7 @@ export default function NewUserModal() {
   const { slides } = useHeroSlides();
   const modal = config.newUserModal;
   const [open, setOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -65,6 +108,24 @@ export default function NewUserModal() {
     !user && // signed-in users have nothing new to gain
     !isAdminRoute() &&
     !wasSeen();
+
+  // Preview trigger — admin clicks "Preview modal" in /admin → New-user
+  // modal. Bypasses every gating rule (localStorage seen, signed-in,
+  // /admin route filter) and explicitly does NOT mark the modal as seen
+  // on close, so the admin can preview repeatedly without clearing
+  // localStorage.
+  useEffect(() => {
+    const handler = () => {
+      setShowEmailForm(false);
+      setSubmitted(false);
+      setEmail("");
+      setCopied(false);
+      setPreviewMode(true);
+      setOpen(true);
+    };
+    window.addEventListener(PREVIEW_EVENT, handler);
+    return () => window.removeEventListener(PREVIEW_EVENT, handler);
+  }, []);
 
   // Time-based trigger
   useEffect(() => {
@@ -126,6 +187,14 @@ export default function NewUserModal() {
 
   const close = () => {
     setOpen(false);
+    if (previewMode) {
+      // Don't burn the visitor's seen-flag from a preview — admin needs
+      // to be able to re-open it. Reset the trigger latch too so a
+      // second preview after a real trigger still works.
+      setPreviewMode(false);
+      triggeredRef.current = false;
+      return;
+    }
     markSeen();
   };
 
@@ -218,6 +287,12 @@ export default function NewUserModal() {
         >
           <X className="w-4 h-4" />
         </button>
+
+        {previewMode && (
+          <div className="absolute top-3 left-3 z-20 px-2 py-1 rounded-sm bg-foreground/85 text-background text-[10px] uppercase tracking-[0.2em] font-medium">
+            Preview
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 max-h-[85vh] overflow-y-auto md:overflow-hidden">
           <ModalHeroCarousel slides={slides} headline={modal.headline} />
@@ -372,7 +447,8 @@ const ModalHeroCarousel = ({
   const [paused, setPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
-  const usable = slides.filter((s) => Boolean(s?.image));
+  const adminSlides = slides.filter((s) => Boolean(s?.image));
+  const usable = adminSlides.length > 0 ? adminSlides : DEFAULT_FALLBACK_SLIDES;
   const total = usable.length;
 
   useEffect(() => {
@@ -405,22 +481,10 @@ const ModalHeroCarousel = ({
     touchStartX.current = null;
   };
 
-  // Empty-state: tonal gradient with the headline. We don't show a CTA
-  // here because the right-hand pane is already the action surface.
-  if (total === 0) {
-    return (
-      <div className="relative aspect-[5/4] md:aspect-auto md:min-h-[480px] bg-gradient-to-br from-foreground/5 via-muted/40 to-foreground/10 flex items-center justify-center overflow-hidden">
-        <div className="text-center px-8">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-            Canvas Hub
-          </p>
-          <p className="mt-3 font-display text-2xl md:text-3xl text-foreground/80">
-            {headline}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // `usable` always has at least the built-in fallback slides, so we
+  // never need an empty-state branch — the carousel always renders
+  // imagery. Headline is unused here because slide captions take over.
+  void headline;
 
   return (
     <div
