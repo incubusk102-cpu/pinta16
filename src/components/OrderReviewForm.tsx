@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Star, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  REVIEW_MIN_CHARS,
   REVIEW_MAX_IMAGES,
   type CartItem,
   type OrderReview,
@@ -18,8 +17,6 @@ interface OrderReviewFormProps {
   onSubmitted?: (review: OrderReview) => void;
 }
 
-// Pre-compression cap. Original photos can be up to 30 MB; compressImage
-// downscales + JPEG-encodes them to ~600 KB before they go in the review.
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
 const REVIEW_TARGET_BYTES = 600 * 1024;
 
@@ -57,15 +54,8 @@ const OrderReviewForm = ({
     }
   }, [reviewableItems, productId]);
 
-  const charCount = text.length;
-  const charsLeft = Math.max(0, REVIEW_MIN_CHARS - charCount);
   const selectedItem = reviewableItems.find((i) => i.id === productId);
-  const canSubmit =
-    !!selectedItem &&
-    rating >= 1 &&
-    rating <= 5 &&
-    charCount >= REVIEW_MIN_CHARS &&
-    !submitting;
+  const canSubmit = !!selectedItem && rating >= 1 && rating <= 5 && !submitting;
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -147,7 +137,7 @@ const OrderReviewForm = ({
       <div className="flex items-center gap-2">
         <Star className="w-4 h-4 text-muted-foreground" />
         <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
-          Share your experience
+          Rate your experience
         </p>
       </div>
       {customerEmail && (
@@ -199,62 +189,54 @@ const OrderReviewForm = ({
       </div>
 
       {/* Stars */}
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((n) => {
-          const filled = (hoverRating || rating) >= n;
-          return (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setRating(n)}
-              onMouseEnter={() => setHoverRating(n)}
-              onMouseLeave={() => setHoverRating(0)}
-              aria-label={`${n} star${n > 1 ? "s" : ""}`}
-              className="p-1 transition-transform hover:scale-110"
-            >
-              <Star
-                className={`w-6 h-6 ${
-                  filled
-                    ? "fill-yellow-400 text-yellow-400"
-                    : "text-muted-foreground"
-                }`}
-              />
-            </button>
-          );
-        })}
-        <span className="ml-2 font-body text-xs text-muted-foreground">
-          {rating > 0 ? `${rating}/5` : "Tap to rate"}
-        </span>
-      </div>
-
-      {/* Textarea */}
       <div>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value.slice(0, 5000))}
-          rows={6}
-          placeholder={`Tell us about your painting, the artist's craftsmanship, packaging and delivery experience. Minimum ${REVIEW_MIN_CHARS} characters.`}
-          className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none"
-        />
-        <div className="flex justify-between mt-1">
-          <p
-            className={`font-body text-[10px] ${
-              charCount >= REVIEW_MIN_CHARS
-                ? "text-muted-foreground"
-                : "text-destructive"
-            }`}
-          >
-            {charsLeft > 0
-              ? `${charsLeft} more character${charsLeft === 1 ? "" : "s"} needed`
-              : "Minimum length reached"}
-          </p>
-          <p className="font-body text-[10px] text-muted-foreground">
-            {charCount}/{REVIEW_MIN_CHARS}+
-          </p>
+        <p className="font-body text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1">
+          Your rating
+        </p>
+        <div className="flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((n) => {
+            const filled = (hoverRating || rating) >= n;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setRating(n)}
+                onMouseEnter={() => setHoverRating(n)}
+                onMouseLeave={() => setHoverRating(0)}
+                aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                className="p-1 transition-transform hover:scale-110"
+              >
+                <Star
+                  className={`w-7 h-7 ${
+                    filled
+                      ? "fill-yellow-400 text-yellow-400"
+                      : "text-muted-foreground"
+                  }`}
+                />
+              </button>
+            );
+          })}
+          <span className="ml-2 font-body text-xs text-muted-foreground">
+            {rating > 0 ? `${rating}/5` : "Tap to rate"}
+          </span>
         </div>
       </div>
 
-      {/* Images */}
+      {/* Comment (optional) */}
+      <div>
+        <label className="font-body text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+          Comment (optional)
+        </label>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value.slice(0, 5000))}
+          rows={3}
+          placeholder="Share your thoughts about the painting, packaging, delivery..."
+          className="mt-1 w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none"
+        />
+      </div>
+
+      {/* Images (optional) */}
       <div>
         <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
           <Upload className="w-3.5 h-3.5" /> Photos (optional, up to{" "}
@@ -304,9 +286,6 @@ const OrderReviewForm = ({
             </label>
           )}
         </div>
-        <p className="font-body text-[10px] text-muted-foreground mt-1">
-          Up to 30 MB each, JPG/PNG/WEBP/GIF — auto-compressed
-        </p>
       </div>
 
       <button
@@ -320,7 +299,7 @@ const OrderReviewForm = ({
             <Loader2 className="w-4 h-4 animate-spin" /> Submitting...
           </>
         ) : (
-          `Submit review${reviewableItems.length > 1 ? " for this painting" : ""}`
+          `Submit rating${reviewableItems.length > 1 ? " for this painting" : ""}`
         )}
       </button>
     </div>

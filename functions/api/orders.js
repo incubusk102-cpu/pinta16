@@ -955,12 +955,7 @@ export const handler = async (event) => {
         if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
           return json(400, { error: "Rating must be between 1 and 5" });
         }
-        const text = typeof review.text === "string" ? review.text : "";
-        if (text.trim().length < 500) {
-          return json(400, {
-            error: "Review text must be at least 500 characters",
-          });
-        }
+        const text = typeof review.text === "string" ? review.text.trim() : "";
         if (text.length > 5000) {
           return json(400, { error: "Review text too long" });
         }
