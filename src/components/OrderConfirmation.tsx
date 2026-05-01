@@ -9,7 +9,9 @@ import {
   Copy,
   Bell,
   Star,
+  Search,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
 import { buildTrackingUrl } from "@/lib/shipment";
 import { toast } from "sonner";
@@ -98,16 +100,37 @@ const OrderConfirmation = () => {
                 <h2 className="font-display text-2xl text-foreground mb-2">
                   Order Confirmed!
                 </h2>
-                <p className="font-body text-sm text-muted-foreground">
+                <p className="font-body text-sm text-muted-foreground mb-4">
                   Thank you for your purchase
                 </p>
-                <button
-                  onClick={copyOrderId}
-                  className="inline-flex items-center gap-1.5 mt-1 font-body text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Order ID: {lastOrder.id}
-                  <Copy className="w-3 h-3" />
-                </button>
+                {/* Order ID hero. The ID is the only handle a guest has
+                    on their order — we surface it big, mono-spaced, and
+                    one-tap copyable so they can save it before closing
+                    the overlay. The deep link below jumps straight into
+                    the tracker pre-populated with this ID. */}
+                <div className="mx-auto inline-flex flex-col items-stretch gap-2 p-4 bg-muted/40 border border-border/30 rounded-sm max-w-xs w-full">
+                  <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
+                    Your Order ID
+                  </p>
+                  <button
+                    onClick={copyOrderId}
+                    className="font-mono text-base sm:text-lg text-foreground tracking-wider hover:bg-accent/40 px-2 py-1 rounded transition-colors flex items-center justify-center gap-2"
+                    aria-label="Copy order ID"
+                  >
+                    {lastOrder.id}
+                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                  <Link
+                    to="/account"
+                    search={{ track: lastOrder.id }}
+                    hash="account-tracker"
+                    onClick={closeConfirmation}
+                    className="flex items-center justify-center gap-1.5 font-body text-xs text-foreground hover:underline"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    Track this order
+                  </Link>
+                </div>
               </div>
 
               <div className="space-y-4">

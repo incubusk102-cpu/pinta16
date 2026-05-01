@@ -8,6 +8,7 @@ import { appendAuditEvent } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import {
   sendOrderEmail,
+  sendNewOrderAdminAlert,
   isEmailConfigured,
   resolveEmailEnv,
 } from "./_lib/email.js";
@@ -357,10 +358,10 @@ export const handler = async (event) => {
             return null;
           }
         })();
-        const cfgEmail =
-          (orderEmailCfg?.fromEmail || "order@canvhub.com").trim();
-        const cfgName =
-          (orderEmailCfg?.fromName || "Canvas Hub").trim();
+        const cfgEmail = (
+          orderEmailCfg?.fromEmail || "order@canvhub.com"
+        ).trim();
+        const cfgName = (orderEmailCfg?.fromName || "Canvas Hub").trim();
         const effectiveFrom = cfgEmail
           ? cfgName
             ? `${cfgName} <${cfgEmail}>`
@@ -583,7 +584,10 @@ export const handler = async (event) => {
           }
         }
         recentActivity.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-        return json(200, { summary, recentActivity: recentActivity.slice(0, 15) });
+        return json(200, {
+          summary,
+          recentActivity: recentActivity.slice(0, 15),
+        });
       }
 
       if (!(await isAuthenticated(event))) {
@@ -728,6 +732,15 @@ export const handler = async (event) => {
         // notification entry. We persist after the email to capture the
         // provider id / error.
         await recordEmail(safeOrder, safeOrder.notifications[0]);
+        // Fire a separate "new order" alert to the admin so they get a
+        // phone-push from Gmail/Outlook the moment an order lands. Best
+        // effort — a delivery failure here must not block order
+        // persistence (the customer has already paid by this point).
+        try {
+          await sendNewOrderAdminAlert({ order: safeOrder });
+        } catch (err) {
+          console.warn("admin order alert failed:", err);
+        }
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
