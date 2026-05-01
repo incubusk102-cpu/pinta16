@@ -55,6 +55,8 @@ import {
   Activity,
   Bell,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileText,
   KeyRound,
@@ -243,215 +245,310 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   );
 }
 
+// Grouped nav structure for the sidebar
+const NAV_GROUPS: {
+  label: string;
+  items: {
+    key: AdminSection;
+    icon: React.ReactNode;
+    hint?: string;
+  }[];
+}[] = [
+  {
+    label: "Overview",
+    items: [
+      {
+        key: "dashboard",
+        icon: <LayoutDashboard className="w-4 h-4" />,
+        hint: "Revenue & metrics",
+      },
+      { key: "products", icon: <Upload className="w-4 h-4" /> },
+      {
+        key: "orders",
+        icon: <Package className="w-4 h-4" />,
+        hint: "Track & update",
+      },
+    ],
+  },
+  {
+    label: "Customers",
+    items: [
+      {
+        key: "messages",
+        icon: <MessageSquare className="w-4 h-4" />,
+        hint: "Chat threads",
+      },
+      { key: "reviews", icon: <Star className="w-4 h-4" /> },
+      {
+        key: "visitors",
+        icon: <Activity className="w-4 h-4" />,
+        hint: "Live + 24h",
+      },
+      { key: "users", icon: <Users className="w-4 h-4" /> },
+      {
+        key: "customers",
+        icon: <Wallet className="w-4 h-4" />,
+        hint: "LTV & segments",
+      },
+    ],
+  },
+  {
+    label: "Customize",
+    items: [
+      { key: "marketing", icon: <TrendingUp className="w-4 h-4" /> },
+      {
+        key: "storefront",
+        icon: <Activity className="w-4 h-4" />,
+        hint: "Promos & shipping",
+      },
+      {
+        key: "hero",
+        icon: <Images className="w-4 h-4" />,
+        hint: "Homepage slides",
+      },
+      { key: "siteCopy", icon: <Type className="w-4 h-4" /> },
+      { key: "welcomeEmail", icon: <Mail className="w-4 h-4" /> },
+      { key: "orderEmail", icon: <Package className="w-4 h-4" /> },
+      { key: "policies", icon: <FileText className="w-4 h-4" /> },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { key: "exports", icon: <Download className="w-4 h-4" /> },
+      {
+        key: "security",
+        icon: <Shield className="w-4 h-4" />,
+        hint: "Audit log",
+      },
+      { key: "settings", icon: <Settings className="w-4 h-4" /> },
+    ],
+  },
+];
+
+function SidebarNav({
+  section,
+  navigate,
+  collapsed,
+}: {
+  section: AdminSection;
+  navigate: (s: AdminSection) => void;
+  collapsed?: boolean;
+}) {
+  return (
+    <nav className="flex flex-col gap-4">
+      {NAV_GROUPS.map((group) => (
+        <div key={group.label}>
+          {!collapsed && (
+            <div className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+              {group.label}
+            </div>
+          )}
+          <div className="flex flex-col gap-0.5">
+            {group.items.map((item) => (
+              <NavLink
+                key={item.key}
+                icon={item.icon}
+                label={collapsed ? "" : SECTION_LABELS[item.key]}
+                active={section === item.key}
+                onClick={() => navigate(item.key)}
+                hint={collapsed ? "" : item.hint}
+                collapsed={collapsed}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 function AdminDashboard() {
   const { logout } = useAdminAuth();
   const { products } = useProducts();
-  const [section, setSection] = useState<AdminSection>("products");
+  const [section, setSection] = useState<AdminSection>("dashboard");
   const [navOpen, setNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const navigate = (next: AdminSection) => {
     setSection(next);
     setNavOpen(false);
   };
 
+  // Keyboard shortcut: Ctrl+B to toggle sidebar
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "b") {
+        e.preventDefault();
+        setSidebarCollapsed((c) => !c);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border/50 bg-card/30 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setNavOpen(true)}
-            aria-label="Open menu"
-          >
-            <Menu className="w-5 h-5" />
-          </Button>
-          <h1 className="font-display text-lg sm:text-xl flex-1 truncate">
-            Admin · {SECTION_LABELS[section]}
-          </h1>
-          {section === "products" && (
-            <span className="hidden sm:inline text-xs text-muted-foreground">
-              {products.length} uploaded
-            </span>
+    <div className="min-h-screen bg-background flex">
+      {/* Desktop persistent sidebar */}
+      <aside
+        className={`hidden lg:flex flex-col border-r border-border/40 bg-card/30 backdrop-blur-sm sticky top-0 h-screen transition-all duration-300 ${
+          sidebarCollapsed ? "w-16" : "w-60"
+        }`}
+      >
+        <div
+          className={`flex items-center gap-2 border-b border-border/40 ${
+            sidebarCollapsed ? "px-2 py-4 justify-center" : "px-4 py-4"
+          }`}
+        >
+          {!sidebarCollapsed && (
+            <h1 className="font-display text-base flex-1 truncate">
+              Canvas Hub
+            </h1>
           )}
           <Button
             variant="ghost"
-            size="sm"
-            onClick={logout}
-            className="text-xs"
+            size="icon"
+            className="w-7 h-7 shrink-0"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            title={
+              sidebarCollapsed
+                ? "Expand sidebar (Ctrl+B)"
+                : "Collapse sidebar (Ctrl+B)"
+            }
           >
-            <LogOut className="w-3 h-3 mr-1" />
-            <span className="hidden sm:inline">Sign out</span>
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
           </Button>
         </div>
-      </header>
-
-      <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent side="left" className="w-72">
-          <SheetHeader>
-            <SheetTitle className="font-display">Admin · Canvas Hub</SheetTitle>
-          </SheetHeader>
-          <nav className="mt-6 flex flex-col gap-1">
-            <NavLink
-              icon={<LayoutDashboard className="w-4 h-4" />}
-              label="Dashboard"
-              active={section === "dashboard"}
-              onClick={() => navigate("dashboard")}
-              hint="Revenue, ship-out, complete"
-            />
-            <NavLink
-              icon={<Upload className="w-4 h-4" />}
-              label="Products"
-              active={section === "products"}
-              onClick={() => navigate("products")}
-              hint={`${products.length} uploaded`}
-            />
-            <NavLink
-              icon={<Package className="w-4 h-4" />}
-              label="Orders"
-              active={section === "orders"}
-              onClick={() => navigate("orders")}
-              hint="Track & update"
-            />
-            <NavLink
-              icon={<MessageSquare className="w-4 h-4" />}
-              label="Messages"
-              active={section === "messages"}
-              onClick={() => navigate("messages")}
-              hint="Customer chat threads"
-            />
-            <NavLink
-              icon={<Star className="w-4 h-4" />}
-              label="Reviews"
-              active={section === "reviews"}
-              onClick={() => navigate("reviews")}
-              hint="Edit, delete, publish customer reviews"
-            />
-            <NavLink
-              icon={<Activity className="w-4 h-4" />}
-              label="Visitors"
-              active={section === "visitors"}
-              onClick={() => navigate("visitors")}
-              hint="Live + 24h chart"
-            />
-            <NavLink
-              icon={<Users className="w-4 h-4" />}
-              label="Users"
-              active={section === "users"}
-              onClick={() => navigate("users")}
-              hint="Sign-ups + 30-day cleanup"
-            />
-            <NavLink
-              icon={<Wallet className="w-4 h-4" />}
-              label="Customers"
-              active={section === "customers"}
-              onClick={() => navigate("customers")}
-              hint="LTV, segments, notes & tags"
-            />
-            <NavLink
-              icon={<TrendingUp className="w-4 h-4" />}
-              label="Marketing"
-              active={section === "marketing"}
-              onClick={() => navigate("marketing")}
-              hint="Promo code performance"
-            />
-            <NavLink
-              icon={<Activity className="w-4 h-4" />}
-              label="Storefront"
-              active={section === "storefront"}
-              onClick={() => navigate("storefront")}
-              hint="Announcement, shipping, promo codes"
-            />
-            <NavLink
-              icon={<Images className="w-4 h-4" />}
-              label="Hero slider"
-              active={section === "hero"}
-              onClick={() => navigate("hero")}
-              hint="Upload + manage homepage slides"
-            />
-            <NavLink
-              icon={<Type className="w-4 h-4" />}
-              label="Site copy"
-              active={section === "siteCopy"}
-              onClick={() => navigate("siteCopy")}
-              hint="Edit Collection / About / Reviews / Contact text"
-            />
-            <NavLink
-              icon={<Mail className="w-4 h-4" />}
-              label="Welcome email"
-              active={section === "welcomeEmail"}
-              onClick={() => navigate("welcomeEmail")}
-              hint="Auto-reply on signup + first Google login"
-            />
-            <NavLink
-              icon={<Package className="w-4 h-4" />}
-              label="Order email"
-              active={section === "orderEmail"}
-              onClick={() => navigate("orderEmail")}
-              hint="Customise confirmed / shipped / delivered / refund mail"
-            />
-            <NavLink
-              icon={<FileText className="w-4 h-4" />}
-              label="Policies"
-              active={section === "policies"}
-              onClick={() => navigate("policies")}
-              hint="Terms, refund, shipping, privacy"
-            />
-            <NavLink
-              icon={<Download className="w-4 h-4" />}
-              label="Exports"
-              active={section === "exports"}
-              onClick={() => navigate("exports")}
-              hint="Download orders / customers / newsletter"
-            />
-            <NavLink
-              icon={<Shield className="w-4 h-4" />}
-              label="Security"
-              active={section === "security"}
-              onClick={() => navigate("security")}
-              hint="Login + activity audit log"
-            />
-            <NavLink
-              icon={<Settings className="w-4 h-4" />}
-              label="Settings"
-              active={section === "settings"}
-              onClick={() => navigate("settings")}
-              hint="Change password"
-            />
-          </nav>
-          <div className="mt-8 pt-6 border-t border-border/60 text-xs text-muted-foreground space-y-2">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1 hover:text-foreground"
+        <div className="flex-1 overflow-y-auto py-3 px-2">
+          <SidebarNav
+            section={section}
+            navigate={navigate}
+            collapsed={sidebarCollapsed}
+          />
+        </div>
+        <div
+          className={`border-t border-border/40 p-2 ${
+            sidebarCollapsed ? "flex justify-center" : ""
+          }`}
+        >
+          {sidebarCollapsed ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-7 h-7"
+              onClick={logout}
+              title="Sign out"
             >
-              <ArrowLeft className="w-3 h-3" /> Back to public site
-            </Link>
-          </div>
-        </SheetContent>
-      </Sheet>
+              <LogOut className="w-3.5 h-3.5" />
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2 px-2">
+              <Link
+                to="/"
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1 flex-1"
+              >
+                <ArrowLeft className="w-3 h-3" /> Public site
+              </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={logout}
+                className="text-xs h-7 px-2"
+              >
+                <LogOut className="w-3 h-3 mr-1" />
+                Sign out
+              </Button>
+            </div>
+          )}
+        </div>
+      </aside>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        {section === "dashboard" && (
-          <DashboardSection onOpenOrders={() => navigate("orders")} />
-        )}
-        {section === "products" && <ProductsSection />}
-        {section === "orders" && <OrdersSection />}
-        {section === "messages" && <MessagesSection />}
-        {section === "reviews" && <ReviewsSection />}
-        {section === "visitors" && <VisitorsSection />}
-        {section === "users" && <UsersSection />}
-        {section === "customers" && <CustomersSection />}
-        {section === "marketing" && <MarketingSection />}
-        {section === "storefront" && <StorefrontSection />}
-        {section === "hero" && <HeroSlidesSection />}
-        {section === "siteCopy" && <SiteCopySection />}
-        {section === "welcomeEmail" && <WelcomeEmailSection />}
-        {section === "orderEmail" && <OrderEmailSection />}
-        {section === "policies" && <PoliciesSection />}
-        {section === "exports" && <ExportsSection />}
-        {section === "security" && <SecuritySection />}
-        {section === "settings" && <SettingsSection />}
-      </main>
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="border-b border-border/50 bg-card/30 backdrop-blur-sm sticky top-0 z-10">
+          <div className="px-4 sm:px-6 py-3 flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open menu"
+              className="lg:hidden"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-display text-lg truncate">
+                {SECTION_LABELS[section]}
+              </h1>
+            </div>
+            {section === "products" && (
+              <span className="hidden sm:inline text-xs text-muted-foreground">
+                {products.length} uploaded
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="text-xs lg:hidden"
+            >
+              <LogOut className="w-3 h-3 mr-1" />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
+          </div>
+        </header>
+
+        {/* Mobile drawer nav */}
+        <Sheet open={navOpen} onOpenChange={setNavOpen}>
+          <SheetContent side="left" className="w-72">
+            <SheetHeader>
+              <SheetTitle className="font-display">Canvas Hub</SheetTitle>
+            </SheetHeader>
+            <div className="mt-6 overflow-y-auto">
+              <SidebarNav section={section} navigate={navigate} />
+            </div>
+            <div className="mt-8 pt-6 border-t border-border/60 text-xs text-muted-foreground space-y-2">
+              <Link
+                to="/"
+                className="inline-flex items-center gap-1 hover:text-foreground"
+              >
+                <ArrowLeft className="w-3 h-3" /> Back to public site
+              </Link>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Main content with fade-in animation */}
+        <main
+          key={section}
+          className="flex-1 px-4 sm:px-6 py-8 max-w-6xl w-full mx-auto animate-in fade-in duration-200"
+        >
+          {section === "dashboard" && (
+            <DashboardSection onOpenOrders={() => navigate("orders")} />
+          )}
+          {section === "products" && <ProductsSection />}
+          {section === "orders" && <OrdersSection />}
+          {section === "messages" && <MessagesSection />}
+          {section === "reviews" && <ReviewsSection />}
+          {section === "visitors" && <VisitorsSection />}
+          {section === "users" && <UsersSection />}
+          {section === "customers" && <CustomersSection />}
+          {section === "marketing" && <MarketingSection />}
+          {section === "storefront" && <StorefrontSection />}
+          {section === "hero" && <HeroSlidesSection />}
+          {section === "siteCopy" && <SiteCopySection />}
+          {section === "welcomeEmail" && <WelcomeEmailSection />}
+          {section === "orderEmail" && <OrderEmailSection />}
+          {section === "policies" && <PoliciesSection />}
+          {section === "exports" && <ExportsSection />}
+          {section === "security" && <SecuritySection />}
+          {section === "settings" && <SettingsSection />}
+        </main>
+      </div>
     </div>
   );
 }
@@ -462,25 +559,30 @@ function NavLink({
   active,
   onClick,
   hint,
+  collapsed,
 }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
   hint?: string;
+  collapsed?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+      title={collapsed ? `${label}${hint ? ` — ${hint}` : ""}` : undefined}
+      className={`flex items-center gap-3 rounded-lg text-left transition-all duration-150 ${
+        collapsed ? "px-0 py-2 justify-center" : "px-3 py-2"
+      } ${
         active
-          ? "bg-primary/10 text-foreground"
+          ? "bg-primary/10 text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground hover:bg-card/60"
       }`}
     >
       <span
-        className={`flex-shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
+        className={`flex-shrink-0 transition-colors ${active ? "text-primary" : "text-muted-foreground"}`}
       >
         {icon}
       </span>
@@ -1068,12 +1170,36 @@ const ANALYTICS_RANGES: { days: number; label: string }[] = [
   { days: 90, label: "90d" },
 ];
 
+function getTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+interface ActivityEntry {
+  orderId: string;
+  customerName: string;
+  at: string;
+  type: string;
+  actor?: string;
+}
+
 function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
   const [summary, setSummary] = useState<OrdersSummary | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recentActivity, setRecentActivity] = useState<ActivityEntry[]>([]);
 
   const refresh = async (days: number = analyticsDays) => {
     setLoading(true);
@@ -1091,6 +1217,7 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
       if (!summaryRes.ok) throw new Error(`HTTP ${summaryRes.status}`);
       const summaryData = await summaryRes.json();
       setSummary(summaryData.summary as OrdersSummary);
+      setRecentActivity((summaryData.recentActivity as ActivityEntry[]) || []);
       if (analyticsRes.ok) {
         const analyticsData = await analyticsRes.json();
         setAnalytics(analyticsData.analytics as AnalyticsData);
@@ -1255,6 +1382,76 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
         onChangeDays={setAnalyticsDays}
         loading={loading}
       />
+
+      {/* Recent activity feed */}
+      {recentActivity.length > 0 && (
+        <div className="border border-border/40 rounded-lg p-4 bg-card/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Bell className="w-3 h-3" />
+              Recent activity
+            </div>
+            <button
+              type="button"
+              onClick={onOpenOrders}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              View all orders
+            </button>
+          </div>
+          <div className="space-y-0">
+            {recentActivity.map((entry, idx) => {
+              const typeLabels: Record<string, string> = {
+                placed: "Order placed",
+                "status:confirmed": "Confirmed",
+                "status:in_progress": "Processing",
+                "status:out_for_delivery": "Shipped",
+                "status:received": "Delivered",
+                "shipment:cleared": "Shipment cleared",
+                "email:resent": "Email resent",
+                "refund:initiated": "Refund initiated",
+                "refund:succeeded": "Refund completed",
+              };
+              const typeIcons: Record<string, string> = {
+                placed: "bg-emerald-500",
+                "status:confirmed": "bg-amber-400",
+                "status:in_progress": "bg-blue-400",
+                "status:out_for_delivery": "bg-purple-400",
+                "status:received": "bg-emerald-500",
+                "refund:initiated": "bg-red-400",
+                "refund:succeeded": "bg-red-500",
+              };
+              const ago = getTimeAgo(entry.at);
+              return (
+                <div
+                  key={`${entry.orderId}-${idx}`}
+                  className="flex items-start gap-3 py-2 border-b border-border/20 last:border-0"
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                      typeIcons[entry.type] || "bg-muted-foreground"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs">
+                      <span className="font-medium">
+                        {typeLabels[entry.type] || entry.type}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {entry.customerName}
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {entry.orderId} · {ago}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1894,6 +2091,19 @@ function OrdersSection() {
     return sorted;
   }, [orders, statusFilter, searchQuery, sortKey]);
 
+  const ORDERS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ORDERS_PER_PAGE;
+    return filteredOrders.slice(start, start + ORDERS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchQuery, sortKey]);
+
   if (loadingOrders) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -2014,18 +2224,44 @@ function OrdersSection() {
         </div>
       )}
 
-      {filteredOrders.map((order) => {
+      {paginatedOrders.map((order) => {
         const currentStepIdx = ORDER_STEPS.findIndex(
           (s) => s.key === order.status,
         );
+        const statusColors: Record<string, string> = {
+          confirmed:
+            "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+          in_progress:
+            "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+          out_for_delivery:
+            "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
+          received:
+            "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+        };
+        const statusLabels: Record<string, string> = {
+          confirmed: "Confirmed",
+          in_progress: "In progress",
+          out_for_delivery: "Shipping",
+          received: "Received",
+        };
         return (
           <div
             key={order.id}
-            className="border border-border/40 rounded-lg p-5 space-y-4"
+            className="border border-border/40 rounded-lg p-5 space-y-4 transition-all hover:border-border/70 hover:shadow-sm"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-body text-sm font-semibold">{order.id}</p>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-body text-sm font-semibold">{order.id}</p>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                      statusColors[order.status] ||
+                      "bg-muted text-muted-foreground border-border"
+                    }`}
+                  >
+                    {statusLabels[order.status] || order.status}
+                  </span>
+                </div>
                 <p className="font-body text-xs text-muted-foreground">
                   {formatDate(order.createdAt)} ·{" "}
                   {order.orderInfo?.fullName ?? "—"} ·{" "}
@@ -2440,6 +2676,68 @@ function OrdersSection() {
           </div>
         );
       })}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="w-3 h-3 mr-1" />
+              Prev
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(
+                (p) =>
+                  p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1,
+              )
+              .reduce<(number | "ellipsis")[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1)
+                  acc.push("ellipsis");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, idx) =>
+                p === "ellipsis" ? (
+                  <span
+                    key={`e-${idx}`}
+                    className="px-1 text-xs text-muted-foreground"
+                  >
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={currentPage === p ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 w-8 p-0 text-xs"
+                    onClick={() => setCurrentPage(p)}
+                  >
+                    {p}
+                  </Button>
+                ),
+              )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+              <ChevronRight className="w-3 h-3 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm refund dialog */}
       {confirmRefundFor && (

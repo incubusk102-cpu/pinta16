@@ -560,7 +560,30 @@ export const handler = async (event) => {
             refundFailedCount: 0,
           },
         );
-        return json(200, { summary });
+        // Recent activity: collect activity log entries from all orders
+        const recentActivity = [];
+        for (const o of orders) {
+          const log = Array.isArray(o.activityLog) ? o.activityLog : [];
+          for (const entry of log) {
+            recentActivity.push({
+              orderId: o.id,
+              customerName: o.orderInfo?.fullName || "Unknown",
+              ...entry,
+            });
+          }
+          // Also add a "placed" event from createdAt if no activityLog entry
+          if (log.length === 0 && o.createdAt) {
+            recentActivity.push({
+              orderId: o.id,
+              customerName: o.orderInfo?.fullName || "Unknown",
+              at: o.createdAt,
+              type: "placed",
+              actor: "customer",
+            });
+          }
+        }
+        recentActivity.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+        return json(200, { summary, recentActivity: recentActivity.slice(0, 15) });
       }
 
       if (!(await isAuthenticated(event))) {
