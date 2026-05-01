@@ -139,6 +139,38 @@ const SECTION_LABELS: Record<AdminSection, string> = {
 
 const MIN_PASSWORD_LENGTH = 8;
 
+function GoldenCMark({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      width={size}
+      height={size}
+      className="shrink-0"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient id="gold-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#e8d48b" />
+          <stop offset="50%" stopColor="#c4a86a" />
+          <stop offset="100%" stopColor="#a08542" />
+        </linearGradient>
+      </defs>
+      <text
+        x="20"
+        y="31"
+        textAnchor="middle"
+        fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
+        fontSize="34"
+        fontStyle="italic"
+        fontWeight={600}
+        fill="url(#gold-grad)"
+      >
+        C
+      </text>
+    </svg>
+  );
+}
+
 function AdminPage() {
   const { token, initialized, loading } = useAdminAuth();
 
@@ -198,7 +230,10 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-8 space-y-6">
         <div className="space-y-2 text-center">
-          <h1 className="font-display text-2xl">Admin · Canvas Hub</h1>
+          <div className="flex items-center justify-center gap-2">
+            <GoldenCMark size={36} />
+            <h1 className="font-logo text-2xl">Canvas Hub</h1>
+          </div>
           <p className="text-sm text-muted-foreground">
             {isInitMode
               ? "First time setup — choose a password to protect this admin."
@@ -400,10 +435,9 @@ function AdminDashboard() {
             sidebarCollapsed ? "px-2 py-4 justify-center" : "px-4 py-4"
           }`}
         >
+          <GoldenCMark size={sidebarCollapsed ? 28 : 32} />
           {!sidebarCollapsed && (
-            <h1 className="font-display text-base flex-1 truncate">
-              Canvas Hub
-            </h1>
+            <h1 className="font-logo text-lg flex-1 truncate">Canvas Hub</h1>
           )}
           <Button
             variant="ghost"
@@ -506,7 +540,10 @@ function AdminDashboard() {
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
           <SheetContent side="left" className="w-72">
             <SheetHeader>
-              <SheetTitle className="font-display">Canvas Hub</SheetTitle>
+              <SheetTitle className="font-logo text-xl flex items-center gap-2">
+                <GoldenCMark size={32} />
+                Canvas Hub
+              </SheetTitle>
             </SheetHeader>
             <div className="mt-6 overflow-y-auto">
               <SidebarNav section={section} navigate={navigate} />
