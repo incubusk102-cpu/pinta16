@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
@@ -1171,7 +1171,80 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
               value={formatPHP(summary.refundedAmount)}
               hint="Successfully credited back to customers"
             />
+            <DashCard
+              icon={<Activity className="w-4 h-4" />}
+              label="Avg order value"
+              value={formatPHP(
+                summary.totalOrders > 0
+                  ? summary.grossRevenue / summary.totalOrders
+                  : 0,
+              )}
+              hint={`Across ${summary.totalOrders} order${summary.totalOrders === 1 ? "" : "s"}`}
+            />
           </div>
+
+          {/* Status breakdown bar */}
+          {summary.totalOrders > 0 && (
+            <div className="border border-border/40 rounded-lg p-4 bg-card/40 space-y-3">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Order status breakdown
+              </div>
+              <div className="flex rounded-full overflow-hidden h-3">
+                {[
+                  {
+                    count: summary.confirmedCount,
+                    color: "bg-amber-400",
+                    label: "Confirmed",
+                  },
+                  {
+                    count: summary.inProgressCount,
+                    color: "bg-blue-400",
+                    label: "In progress",
+                  },
+                  {
+                    count: summary.outForDeliveryCount,
+                    color: "bg-purple-400",
+                    label: "Out for delivery",
+                  },
+                  {
+                    count: summary.completedCount,
+                    color: "bg-emerald-500",
+                    label: "Received",
+                  },
+                ].map(
+                  (seg) =>
+                    seg.count > 0 && (
+                      <div
+                        key={seg.label}
+                        className={`${seg.color} transition-all`}
+                        style={{
+                          width: `${(seg.count / summary.totalOrders) * 100}%`,
+                        }}
+                        title={`${seg.label}: ${seg.count}`}
+                      />
+                    ),
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1" />
+                  Confirmed {summary.confirmedCount}
+                </span>
+                <span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1" />
+                  In progress {summary.inProgressCount}
+                </span>
+                <span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-purple-400 mr-1" />
+                  Shipping {summary.outForDeliveryCount}
+                </span>
+                <span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" />
+                  Received {summary.completedCount}
+                </span>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -1366,11 +1439,17 @@ function DashCard({
   );
 }
 
+type OrderSortKey = "newest" | "oldest" | "highest" | "lowest";
+type OrderStatusFilter = "all" | CompletedOrder["status"] | "refunded";
+
 function OrdersSection() {
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>("all");
+  const [sortKey, setSortKey] = useState<OrderSortKey>("newest");
   const [resendingKey, setResendingKey] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<{
     configured: boolean;
@@ -1738,6 +1817,71 @@ function OrdersSection() {
     });
   };
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: orders.length,
+      confirmed: 0,
+      in_progress: 0,
+      out_for_delivery: 0,
+      received: 0,
+      refunded: 0,
+    };
+    for (const o of orders) {
+      if (o.refund?.status === "succeeded") counts.refunded++;
+      if (o.status && counts[o.status] !== undefined) counts[o.status]++;
+    }
+    return counts;
+  }, [orders]);
+
+  const filteredOrders = useMemo(() => {
+    let result = orders;
+    if (statusFilter !== "all") {
+      result = result.filter((o) =>
+        statusFilter === "refunded"
+          ? o.refund?.status === "succeeded"
+          : o.status === statusFilter,
+      );
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((o) => {
+        const haystack = [
+          o.id,
+          o.orderInfo?.fullName,
+          o.orderInfo?.email,
+          o.orderInfo?.phone,
+          o.status,
+          ...(o.items?.map((i: { title?: string }) => i.title) || []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    const sorted = [...result];
+    switch (sortKey) {
+      case "oldest":
+        sorted.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        break;
+      case "highest":
+        sorted.sort((a, b) => (b.total || 0) - (a.total || 0));
+        break;
+      case "lowest":
+        sorted.sort((a, b) => (a.total || 0) - (b.total || 0));
+        break;
+      default:
+        sorted.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+    }
+    return sorted;
+  }, [orders, statusFilter, searchQuery, sortKey]);
+
   if (loadingOrders) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1757,11 +1901,70 @@ function OrdersSection() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl">Orders ({orders.length})</h2>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="font-display text-xl">
+          Orders ({filteredOrders.length}
+          {filteredOrders.length !== orders.length
+            ? ` of ${orders.length}`
+            : ""}
+          )
+        </h2>
         <Button variant="ghost" size="sm" onClick={() => void fetchOrders()}>
+          <RefreshCw
+            className={`w-3.5 h-3.5 mr-1 ${loadingOrders ? "animate-spin" : ""}`}
+          />
           Refresh
         </Button>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search order ID, name, email, product…"
+          className="h-9 w-64"
+        />
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as OrderStatusFilter)}
+        >
+          <SelectTrigger className="h-9 w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(
+              [
+                { value: "all", label: "All statuses" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "in_progress", label: "In progress" },
+                { value: "out_for_delivery", label: "Out for delivery" },
+                { value: "received", label: "Received" },
+                { value: "refunded", label: "Refunded" },
+              ] as const
+            ).map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}{" "}
+                <span className="text-muted-foreground ml-1">
+                  ({statusCounts[opt.value] ?? 0})
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={sortKey}
+          onValueChange={(v) => setSortKey(v as OrderSortKey)}
+        >
+          <SelectTrigger className="h-9 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+            <SelectItem value="highest">Highest total</SelectItem>
+            <SelectItem value="lowest">Lowest total</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {emailStatus && (
@@ -1791,7 +1994,15 @@ function OrdersSection() {
         </div>
       )}
 
-      {orders.map((order) => {
+      {filteredOrders.length === 0 && (
+        <div className="text-center py-8">
+          <p className="text-sm text-muted-foreground">
+            No orders match your filters
+          </p>
+        </div>
+      )}
+
+      {filteredOrders.map((order) => {
         const currentStepIdx = ORDER_STEPS.findIndex(
           (s) => s.key === order.status,
         );
