@@ -53,7 +53,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   },
   {
     id: "_default-3",
-    image: "/images/3.png",
+    image: "/images/4.png",
     eyebrow: "New here?",
     headline: "Welcome — your discount is waiting",
     subtext: "",
