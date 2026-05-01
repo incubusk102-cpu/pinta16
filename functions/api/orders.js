@@ -865,6 +865,20 @@ export const handler = async (event) => {
         return json(200, { order: orders[orderIdx], notification: target });
       }
 
+      if (action === "admin-note") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, note } = body;
+        if (!orderId) return json(400, { error: "orderId required" });
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        orders[idx] = { ...orders[idx], adminNote: note || "" };
+        await store.setJSON(ORDERS_KEY, orders);
+        return json(200, { order: orders[idx] });
+      }
+
       if (action === "update-shipment") {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });

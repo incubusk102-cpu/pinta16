@@ -82,6 +82,11 @@ import {
   TrendingUp,
   Truck,
   Type,
+  Search,
+  Clock,
+  StickyNote,
+  CheckSquare,
+  Square,
   Undo2,
   Upload,
   Users,
@@ -398,6 +403,115 @@ function SidebarNav({
   );
 }
 
+function CommandPalette({
+  open,
+  onClose,
+  onNavigate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onNavigate: (s: AdminSection) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  const allItems: { key: AdminSection; label: string; group: string }[] =
+    NAV_GROUPS.flatMap((g) =>
+      g.items.map((item) => ({
+        key: item.key,
+        label: SECTION_LABELS[item.key],
+        group: g.label,
+      })),
+    );
+
+  const filtered = query.trim()
+    ? allItems.filter(
+        (i) =>
+          i.label.toLowerCase().includes(query.toLowerCase()) ||
+          i.group.toLowerCase().includes(query.toLowerCase()),
+      )
+    : allItems;
+
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]"
+      onClick={onClose}
+    >
+      <div className="fixed inset-0 bg-background/60 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-md bg-card border border-border/60 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
+          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search sections… (Ctrl+K)"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onClose();
+              if (e.key === "Enter" && filtered.length > 0) {
+                onNavigate(filtered[0].key);
+                onClose();
+              }
+            }}
+          />
+          <kbd className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+            ESC
+          </kbd>
+        </div>
+        <div className="max-h-64 overflow-y-auto py-1">
+          {filtered.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              No results
+            </p>
+          )}
+          {filtered.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent/50 transition-colors text-left"
+              onClick={() => {
+                onNavigate(item.key);
+                onClose();
+              }}
+            >
+              <span className="flex-1">{item.label}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {item.group}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="border-t border-border/40 px-4 py-2 flex gap-3 text-[10px] text-muted-foreground">
+          <span>
+            <kbd className="bg-muted px-1 rounded">G</kbd> then{" "}
+            <kbd className="bg-muted px-1 rounded">D</kbd> Dashboard
+          </span>
+          <span>
+            <kbd className="bg-muted px-1 rounded">G</kbd>{" "}
+            <kbd className="bg-muted px-1 rounded">O</kbd> Orders
+          </span>
+          <span>
+            <kbd className="bg-muted px-1 rounded">G</kbd>{" "}
+            <kbd className="bg-muted px-1 rounded">P</kbd> Products
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminDashboard() {
   const { logout } = useAdminAuth();
   const { products } = useProducts();
@@ -410,16 +524,56 @@ function AdminDashboard() {
     setNavOpen(false);
   };
 
-  // Keyboard shortcut: Ctrl+B to toggle sidebar
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+
+  // Keyboard shortcuts
   useEffect(() => {
+    let gPressed = false;
+    let gTimer: ReturnType<typeof setTimeout> | null = null;
+    const NAV_KEYS: Record<string, AdminSection> = {
+      d: "dashboard",
+      o: "orders",
+      p: "products",
+      m: "messages",
+      r: "reviews",
+      s: "settings",
+      u: "users",
+    };
     const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
       if (e.ctrlKey && e.key === "b") {
         e.preventDefault();
         setSidebarCollapsed((c) => !c);
+        return;
       }
+      if (e.ctrlKey && e.key === "k") {
+        e.preventDefault();
+        setCmdPaletteOpen((o) => !o);
+        return;
+      }
+      if (isInput) return;
+      if (e.key === "g" && !gPressed) {
+        gPressed = true;
+        gTimer = setTimeout(() => {
+          gPressed = false;
+        }, 500);
+        return;
+      }
+      if (gPressed && NAV_KEYS[e.key]) {
+        e.preventDefault();
+        navigate(NAV_KEYS[e.key]);
+        gPressed = false;
+        if (gTimer) clearTimeout(gTimer);
+        return;
+      }
+      gPressed = false;
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      if (gTimer) clearTimeout(gTimer);
+    };
   }, []);
 
   return (
@@ -524,6 +678,17 @@ function AdminDashboard() {
                 {products.length} uploaded
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setCmdPaletteOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/40 rounded-md hover:bg-muted/60 transition-colors"
+            >
+              <Search className="w-3 h-3" />
+              Search…
+              <kbd className="text-[10px] bg-background/60 px-1 rounded">
+                ⌘K
+              </kbd>
+            </button>
             <Button
               variant="ghost"
               size="sm"
@@ -586,6 +751,12 @@ function AdminDashboard() {
           {section === "settings" && <SettingsSection />}
         </main>
       </div>
+
+      <CommandPalette
+        open={cmdPaletteOpen}
+        onClose={() => setCmdPaletteOpen(false)}
+        onNavigate={navigate}
+      />
     </div>
   );
 }
@@ -1705,6 +1876,84 @@ function OrdersSection() {
   } | null>(null);
   const [confirmRefundFor, setConfirmRefundFor] =
     useState<CompletedOrder | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteInput, setNoteInput] = useState("");
+  const [expandedTimeline, setExpandedTimeline] = useState<string | null>(null);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => {
+    if (selectedIds.size === paginatedOrders.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedOrders.map((o) => o.id)));
+    }
+  };
+  const handleBulkStatus = async (status: CompletedOrder["status"]) => {
+    if (selectedIds.size === 0) return;
+    setBulkUpdating(true);
+    const token = getAdminToken();
+    let successCount = 0;
+    for (const orderId of selectedIds) {
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action: "update-status", orderId, status }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const updated = data.order as CompletedOrder | undefined;
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId ? (updated ?? { ...o, status }) : o,
+            ),
+          );
+          successCount++;
+        }
+      } catch {
+        // continue with next
+      }
+    }
+    toast.success(`Updated ${successCount} of ${selectedIds.size} orders`);
+    setSelectedIds(new Set());
+    setBulkUpdating(false);
+  };
+
+  const saveAdminNote = async (orderId: string, note: string) => {
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "admin-note", orderId, note }),
+      });
+      if (res.ok) {
+        setAdminNotes((prev) => ({ ...prev, [orderId]: note }));
+        toast.success("Note saved");
+      } else {
+        toast.error("Could not save note");
+      }
+    } catch {
+      toast.error("Could not save note");
+    }
+    setEditingNoteId(null);
+  };
 
   const fetchOrders = async () => {
     try {
@@ -2253,6 +2502,50 @@ function OrdersSection() {
         </div>
       )}
 
+      {/* Bulk actions bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in duration-150">
+          <button
+            type="button"
+            onClick={selectAll}
+            className="text-xs text-primary font-medium hover:underline"
+          >
+            {selectedIds.size === paginatedOrders.length
+              ? "Deselect all"
+              : "Select all on page"}
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex-1" />
+          <Select
+            onValueChange={(v) =>
+              void handleBulkStatus(v as CompletedOrder["status"])
+            }
+          >
+            <SelectTrigger className="h-7 w-40 text-xs" disabled={bulkUpdating}>
+              <SelectValue
+                placeholder={bulkUpdating ? "Updating…" : "Batch update status"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="in_progress">In progress</SelectItem>
+              <SelectItem value="out_for_delivery">Out for delivery</SelectItem>
+              <SelectItem value="received">Received</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
+
       {filteredOrders.length === 0 && (
         <div className="text-center py-8">
           <p className="text-sm text-muted-foreground">
@@ -2289,6 +2582,18 @@ function OrdersSection() {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleSelect(order.id)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    title={selectedIds.has(order.id) ? "Deselect" : "Select"}
+                  >
+                    {selectedIds.has(order.id) ? (
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
                   <p className="font-body text-sm font-semibold">{order.id}</p>
                   <span
                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
@@ -2708,6 +3013,155 @@ function OrdersSection() {
                 >
                   <Undo2 className="w-3 h-3 mr-1" /> Manual refund
                 </Button>
+              )}
+            </div>
+
+            {/* Admin notes */}
+            <div className="pt-2 border-t border-border/30">
+              {editingNoteId === order.id ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    placeholder="Add internal note…"
+                    className="h-8 text-xs flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        void saveAdminNote(order.id, noteInput);
+                      if (e.key === "Escape") setEditingNoteId(null);
+                    }}
+                    autoFocus
+                  />
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => void saveAdminNote(order.id, noteInput)}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setEditingNoteId(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <StickyNote className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
+                  {adminNotes[order.id] ||
+                  (order as unknown as Record<string, unknown>).adminNote ? (
+                    <p className="text-xs text-muted-foreground flex-1">
+                      {adminNotes[order.id] ||
+                        String(
+                          (order as unknown as Record<string, unknown>)
+                            .adminNote ?? "",
+                        )}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/50 italic flex-1">
+                      No admin notes
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteInput(
+                        adminNotes[order.id] ||
+                          String(
+                            (order as unknown as Record<string, unknown>)
+                              .adminNote ?? "",
+                          ),
+                      );
+                      setEditingNoteId(order.id);
+                    }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Order timeline */}
+            <div className="pt-2 border-t border-border/30">
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedTimeline(
+                    expandedTimeline === order.id ? null : order.id,
+                  )
+                }
+                className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Clock className="w-3 h-3" />
+                {expandedTimeline === order.id
+                  ? "Hide timeline"
+                  : "View timeline"}
+              </button>
+              {expandedTimeline === order.id && (
+                <div className="mt-2 ml-1 space-y-0 border-l-2 border-border/30 pl-4">
+                  {(() => {
+                    const log = Array.isArray(
+                      (order as unknown as Record<string, unknown>).activityLog,
+                    )
+                      ? ((order as unknown as Record<string, unknown>)
+                          .activityLog as {
+                          at: string;
+                          type: string;
+                          actor?: string;
+                        }[])
+                      : [];
+                    const events =
+                      log.length > 0
+                        ? [...log].sort((a, b) =>
+                            (b.at || "").localeCompare(a.at || ""),
+                          )
+                        : [
+                            {
+                              at: order.createdAt,
+                              type: "placed",
+                              actor: "customer",
+                            },
+                          ];
+                    const labels: Record<string, string> = {
+                      placed: "Order placed",
+                      "status:confirmed": "Status → Confirmed",
+                      "status:in_progress": "Status → In progress",
+                      "status:out_for_delivery": "Status → Shipped",
+                      "status:received": "Status → Delivered",
+                      "shipment:cleared": "Shipment cleared",
+                      "email:resent": "Email resent",
+                      "refund:initiated": "Refund initiated",
+                      "refund:succeeded": "Refund completed",
+                    };
+                    return events.map((evt, i) => (
+                      <div
+                        key={i}
+                        className="relative flex items-start gap-2 py-1.5"
+                      >
+                        <div className="absolute -left-[21px] top-2.5 w-2 h-2 rounded-full bg-border" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium">
+                            {labels[evt.type] || evt.type}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(evt.at).toLocaleString("en-PH", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                            {evt.actor ? ` · ${evt.actor}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               )}
             </div>
           </div>
