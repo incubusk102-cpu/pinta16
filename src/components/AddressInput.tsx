@@ -29,7 +29,16 @@ import {
   type MapRef,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Loader2, LocateFixed, MapPin, Search } from "lucide-react";
+import {
+  Building2,
+  Loader2,
+  LocateFixed,
+  MapPin,
+  MapPinned,
+  Navigation,
+  Search,
+  TreePine,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -41,20 +50,73 @@ const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 }; // Manila
 const tileStyleUrl = (apiKey: string): string =>
   `https://api.maptiler.com/maps/streets-v2/style.json?key=${encodeURIComponent(apiKey)}`;
 
+// Philippines bounding box — constrains autocomplete results to PH.
+const PH_BBOX = "116.95,4.59,126.6,21.12";
+
+// Place-type filter options exposed to the user.
+type PlaceTypeFilter = "all" | "address" | "street" | "poi" | "neighbourhood";
+
+const PLACE_FILTERS: { value: PlaceTypeFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "address", label: "Address" },
+  { value: "street", label: "Street" },
+  { value: "poi", label: "Place / POI" },
+  { value: "neighbourhood", label: "Barangay" },
+];
+
+const typeIcon = (types: string[] | undefined) => {
+  if (!types?.length) return MapPinned;
+  if (types.includes("poi")) return TreePine;
+  if (types.includes("address")) return MapPin;
+  if (types.includes("street")) return Navigation;
+  if (
+    types.includes("neighbourhood") ||
+    types.includes("locality") ||
+    types.includes("municipality")
+  )
+    return Building2;
+  return MapPinned;
+};
+
+const typeLabel = (types: string[] | undefined): string => {
+  if (!types?.length) return "place";
+  if (types.includes("poi")) return "poi";
+  if (types.includes("address")) return "address";
+  if (types.includes("street")) return "street";
+  if (types.includes("neighbourhood")) return "barangay";
+  if (types.includes("locality")) return "locality";
+  if (types.includes("municipality")) return "city";
+  if (types.includes("region") || types.includes("subregion")) return "region";
+  return types[0] || "place";
+};
+
 // MapTiler Geocoding API endpoints. Country-restricted to PH by
 // default; configurable via the component's `countryBias` prop.
+// Enhanced with proximity bias, bbox, and type filtering.
 const forwardGeocodeUrl = (
   apiKey: string,
   query: string,
   countries: string,
+  opts?: {
+    proximity?: { lng: number; lat: number };
+    types?: PlaceTypeFilter;
+  },
 ): string => {
   const params = new URLSearchParams({
     key: apiKey,
     autocomplete: "true",
-    limit: "6",
+    fuzzyMatch: "true",
+    limit: "10",
     country: countries,
     language: "en",
+    bbox: PH_BBOX,
   });
+  if (opts?.proximity) {
+    params.set("proximity", `${opts.proximity.lng},${opts.proximity.lat}`);
+  }
+  if (opts?.types && opts.types !== "all") {
+    params.set("types", opts.types);
+  }
   return `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${params.toString()}`;
 };
 
@@ -321,22 +383,38 @@ const PlacesAutocomplete = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState<number>(-1);
+  const [typeFilter, setTypeFilter] = useState<PlaceTypeFilter>("all");
+  const [searched, setSearched] = useState(false);
   const debounceRef = useRef<number | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Debounce the geocoder calls — typing fast shouldn't fire one
-  // request per keystroke. 200 ms is enough to feel instant while
-  // collapsing bursts.
+  const proximity = useMemo(() => {
+    if (
+      typeof value.latitude === "number" &&
+      typeof value.longitude === "number"
+    ) {
+      return { lat: value.latitude, lng: value.longitude };
+    }
+    return DEFAULT_CENTER;
+  }, [value.latitude, value.longitude]);
+
   useEffect(() => {
     if (!query || query.length < 3) {
       setSuggestions([]);
+      setSearched(false);
       return;
     }
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(async () => {
       setLoading(true);
+      setSearched(false);
       try {
-        const res = await fetch(forwardGeocodeUrl(apiKey, query, countryBias));
+        const res = await fetch(
+          forwardGeocodeUrl(apiKey, query, countryBias, {
+            proximity,
+            types: typeFilter,
+          }),
+        );
         if (!res.ok) {
           setSuggestions([]);
           return;
@@ -347,14 +425,14 @@ const PlacesAutocomplete = ({
         setSuggestions([]);
       } finally {
         setLoading(false);
+        setSearched(true);
       }
     }, 200);
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [query, apiKey, countryBias]);
+  }, [query, apiKey, countryBias, proximity, typeFilter]);
 
-  // Click-outside closes the dropdown.
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (!wrapperRef.current) return;
@@ -364,8 +442,6 @@ const PlacesAutocomplete = ({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  // Keep the typed value in sync when the parent updates (e.g. after a
-  // pin drag fills `formatted`).
   useEffect(() => {
     if (value.formatted && value.formatted !== query) {
       setQuery(value.formatted);
@@ -401,48 +477,104 @@ const PlacesAutocomplete = ({
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-      <Input
-        type="text"
-        placeholder="Search address, landmark, or barangay…"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        className="pl-9 text-sm"
-        autoComplete="off"
-      />
-      {loading && (
-        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
-      )}
+    <div ref={wrapperRef} className="relative space-y-1.5">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <Input
+          type="text"
+          placeholder="Search address, landmark, or barangay…"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          className="pl-9 text-sm"
+          autoComplete="off"
+        />
+        {loading && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+        )}
+      </div>
+
+      {/* Type filter chips */}
+      <div className="flex flex-wrap gap-1">
+        {PLACE_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setTypeFilter(f.value);
+              if (query.length >= 3) setOpen(true);
+            }}
+            className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+              typeFilter === f.value
+                ? "bg-foreground text-background border-foreground"
+                : "bg-transparent text-muted-foreground border-border/50 hover:border-foreground/30"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Suggestions dropdown */}
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-md border border-border/40 bg-background shadow-md">
-          {suggestions.map((s, i) => (
-            <li
-              key={s.id || `${s.place_name}-${i}`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pick(s);
-              }}
-              onMouseEnter={() => setHighlightIdx(i)}
-              className={`px-3 py-2 text-sm cursor-pointer ${
-                i === highlightIdx
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent/50"
-              }`}
-            >
-              <p className="font-medium leading-tight">{s.text}</p>
-              <p className="text-xs text-muted-foreground leading-tight truncate">
-                {s.place_name}
-              </p>
-            </li>
-          ))}
+        <ul className="absolute z-50 mt-1 w-full max-h-80 overflow-y-auto rounded-md border border-border/40 bg-background shadow-md">
+          {suggestions.map((s, i) => {
+            const Icon = typeIcon(s.place_type);
+            const badge = typeLabel(s.place_type);
+            return (
+              <li
+                key={s.id || `${s.place_name}-${i}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(s);
+                }}
+                onMouseEnter={() => setHighlightIdx(i)}
+                className={`flex items-start gap-2.5 px-3 py-2 text-sm cursor-pointer ${
+                  i === highlightIdx
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/50"
+                }`}
+              >
+                <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-medium leading-tight truncate">
+                      {s.text}
+                    </p>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {badge}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-tight truncate">
+                    {s.place_name}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      {/* No results message */}
+      {open &&
+        searched &&
+        !loading &&
+        suggestions.length === 0 &&
+        query.length >= 3 && (
+          <div className="absolute z-50 mt-1 w-full rounded-md border border-border/40 bg-background shadow-md px-3 py-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              No results found for &ldquo;{query}&rdquo;
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Try a different spelling or use the fields below
+            </p>
+          </div>
+        )}
     </div>
   );
 };
