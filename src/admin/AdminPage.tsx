@@ -73,6 +73,7 @@ import {
   Shield,
   Eye,
   EyeOff,
+  Image as ImageIcon,
   Images,
   Star,
   Trash2,
@@ -1258,6 +1259,27 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
   );
 }
 
+function TopProductThumb({ src }: { src: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) {
+    return (
+      <div className="w-9 h-9 rounded-sm bg-muted flex items-center justify-center shrink-0">
+        <ImageIcon className="w-4 h-4 text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      className="w-9 h-9 object-cover rounded-sm border border-border/40 shrink-0"
+      loading="lazy"
+      decoding="async"
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
 function AnalyticsPanel({
   analytics,
   days,
@@ -1378,17 +1400,7 @@ function AnalyticsPanel({
                     <span className="w-5 text-xs text-muted-foreground">
                       #{i + 1}
                     </span>
-                    {p.image ? (
-                      <img
-                        src={p.image}
-                        alt=""
-                        className="w-9 h-9 object-cover rounded-sm border border-border/40"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-sm bg-muted" />
-                    )}
+                    <TopProductThumb src={p.image} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-foreground">{p.title}</p>
                       <p className="text-[11px] text-muted-foreground">
