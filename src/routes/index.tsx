@@ -13,6 +13,7 @@ import RecentlyViewed from "@/components/RecentlyViewed";
 import RecommendedRow from "@/components/RecommendedRow";
 import VisitorTicker from "@/components/VisitorTicker";
 import ThankYouWall from "@/components/ThankYouWall";
+import DailyFeature from "@/components/DailyFeature";
 import Ornament from "@/components/decor/Ornament";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -57,6 +58,7 @@ function Index() {
       {user && <GalleryNav />}
       {!user && <HeroOrFallback />}
       <VisitorTicker />
+      <DailyFeature />
       <GallerySection />
       <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
         <RecommendedRow />

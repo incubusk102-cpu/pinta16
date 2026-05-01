@@ -145,6 +145,48 @@ export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
     "or grab your welcome discount before you browse.",
 };
 
+export interface DailyFeatureConfig {
+  enabled: boolean;
+  productId: string;
+  percent: number;
+  headline: string;
+}
+
+export const DEFAULT_DAILY_FEATURE: DailyFeatureConfig = {
+  enabled: false,
+  productId: "",
+  percent: 5,
+  headline: "Piece of the day",
+};
+
+/**
+ * Today's auto-generated daily-feature promo. Derived server-side based on
+ * the active dailyFeature config + UTC date so customers see the same code
+ * worldwide for the same calendar day.
+ */
+export interface DailyFeatureToday {
+  code: string;
+  productId: string;
+  percent: number;
+  expiresAt: string;
+}
+
+export type ThankYouAssetType = "image" | "video";
+
+export interface ThankYouConfig {
+  enabled: boolean;
+  assetUrl: string;
+  assetType: ThankYouAssetType;
+  message: string;
+}
+
+export const DEFAULT_THANK_YOU: ThankYouConfig = {
+  enabled: false,
+  assetUrl: "",
+  assetType: "image",
+  message: "Thank you for being one of the first to support Canvas Hub.",
+};
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
@@ -152,6 +194,9 @@ export interface StorefrontConfig {
   chat: ChatConfig;
   siteCopy: SiteCopy;
   newUserModal: NewUserModalConfig;
+  dailyFeature: DailyFeatureConfig;
+  dailyFeatureToday: DailyFeatureToday | null;
+  thankYou: ThankYouConfig;
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -190,6 +235,53 @@ const DEFAULT_CONFIG: StorefrontConfig = {
   },
   siteCopy: DEFAULT_SITE_COPY,
   newUserModal: DEFAULT_NEW_USER_MODAL,
+  dailyFeature: DEFAULT_DAILY_FEATURE,
+  dailyFeatureToday: null,
+  thankYou: DEFAULT_THANK_YOU,
+};
+
+const mergeDailyFeature = (raw: unknown): DailyFeatureConfig => {
+  const data = (
+    raw && typeof raw === "object" ? raw : {}
+  ) as Partial<DailyFeatureConfig>;
+  return {
+    enabled: data.enabled === true,
+    productId: typeof data.productId === "string" ? data.productId : "",
+    percent: Number.isFinite(data.percent)
+      ? Math.min(50, Math.max(1, Math.floor(Number(data.percent))))
+      : DEFAULT_DAILY_FEATURE.percent,
+    headline:
+      typeof data.headline === "string" && data.headline.trim()
+        ? data.headline.trim().slice(0, 80)
+        : DEFAULT_DAILY_FEATURE.headline,
+  };
+};
+
+const mergeDailyFeatureToday = (raw: unknown): DailyFeatureToday | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Partial<DailyFeatureToday>;
+  if (!data.code || !data.productId || !data.expiresAt) return null;
+  return {
+    code: String(data.code),
+    productId: String(data.productId),
+    percent: Number(data.percent) || 0,
+    expiresAt: String(data.expiresAt),
+  };
+};
+
+const mergeThankYou = (raw: unknown): ThankYouConfig => {
+  const data = (
+    raw && typeof raw === "object" ? raw : {}
+  ) as Partial<ThankYouConfig>;
+  return {
+    enabled: data.enabled === true,
+    assetUrl: typeof data.assetUrl === "string" ? data.assetUrl : "",
+    assetType: data.assetType === "video" ? "video" : "image",
+    message:
+      typeof data.message === "string" && data.message.trim()
+        ? data.message.slice(0, 600)
+        : DEFAULT_THANK_YOU.message,
+  };
 };
 
 const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
@@ -296,6 +388,11 @@ export const StorefrontConfigProvider = ({
           },
           siteCopy: mergeSiteCopy(data.config.siteCopy),
           newUserModal: mergeNewUserModal(data.config.newUserModal),
+          dailyFeature: mergeDailyFeature(data.config.dailyFeature),
+          dailyFeatureToday: mergeDailyFeatureToday(
+            data.config.dailyFeatureToday,
+          ),
+          thankYou: mergeThankYou(data.config.thankYou),
         });
       }
     } catch {

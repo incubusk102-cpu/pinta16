@@ -59,12 +59,60 @@ const ORDERS_KEY = "all-orders";
 const CONFIG_STORE_NAME = "storefront-config";
 const CONFIG_KEY = "config";
 
+// Build the auto-rotating "daily feature" promo for the current UTC day.
+// Mirrors buildDailyToday() in storefront-config.js; kept inline here so
+// place-order validation accepts today's code without persisting it.
+const buildTodaysDailyPromo = (config) => {
+  const df =
+    config && typeof config.dailyFeature === "object"
+      ? config.dailyFeature
+      : null;
+  if (!df || df.enabled !== true || !df.productId) return null;
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const code = `DAILY${yyyy}${mm}${dd}`;
+  const expires = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      23,
+      59,
+      59,
+    ),
+  );
+  const percent = Math.min(
+    50,
+    Math.max(1, Math.floor(Number(df.percent) || 5)),
+  );
+  return {
+    code,
+    type: "percent",
+    value: percent,
+    freeShipping: false,
+    minSpend: 0,
+    usageLimit: null,
+    usageCount: 0,
+    enabled: true,
+    expiresAt: expires.toISOString(),
+    description: "Daily feature — today only",
+    _virtual: true,
+  };
+};
+
 const findEligiblePromo = (config, code) => {
-  if (!config || !Array.isArray(config.promoCodes)) return null;
+  if (!config) return null;
   const upper = String(code || "")
     .trim()
     .toUpperCase();
   if (!upper) return null;
+  // Today's daily-feature code is virtual and not persisted in promoCodes,
+  // so check it before falling back to the stored list.
+  const daily = buildTodaysDailyPromo(config);
+  if (daily && daily.code === upper) return daily;
+  if (!Array.isArray(config.promoCodes)) return null;
   const promo = config.promoCodes.find((p) => p.code === upper);
   if (!promo) return null;
   if (promo.enabled === false) return null;
@@ -123,7 +171,11 @@ const incrementPromoUsage = async (event, code) => {
       if (!config || !Array.isArray(config.promoCodes)) return;
       const promo = findEligiblePromo(config, upper);
       if (!promo) return; // no longer eligible — silently skip
+      // Virtual / daily-feature codes are not persisted, so there's
+      // nothing to bump.
+      if (promo._virtual) return;
       const idx = config.promoCodes.findIndex((p) => p.code === upper);
+      if (idx === -1) return;
       const next = { ...config };
       next.promoCodes = config.promoCodes.map((p, i) =>
         i === idx ? { ...p, usageCount: (p.usageCount || 0) + 1 } : p,
