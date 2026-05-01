@@ -3,30 +3,27 @@ import { Eye, ShoppingBag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface RecentSale {
-  firstName: string;
-  city?: string;
   productTitle: string;
   productImage?: string;
   productId?: string;
   soldAt?: string;
 }
 
-const formatRelative = (iso?: string): string => {
-  if (!iso) return "recently";
+// Drop the timestamp once a sale is older than this — better silence
+// than a strip that reads "sold 2 weeks ago".
+const RECENT_TIMESTAMP_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+const formatRelative = (iso?: string): string | null => {
+  if (!iso) return null;
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "recently";
+  if (Number.isNaN(t)) return null;
   const diff = Date.now() - t;
+  if (diff > RECENT_TIMESTAMP_WINDOW_MS) return null;
   const min = Math.round(diff / 60000);
   if (min < 1) return "just now";
   if (min < 60) return `${min}m ago`;
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const d = Math.round(hr / 24);
-  if (d < 14) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  return `${hr}h ago`;
 };
 
 /**
@@ -102,21 +99,18 @@ const VisitorTicker = () => {
     });
   }
   for (const s of sales) {
-    const place = s.city ? ` in ${s.city}` : "";
+    const when = formatRelative(s.soldAt);
     messages.push({
-      key: `sale-${s.soldAt || s.productId}-${s.firstName}`,
+      key: `sale-${s.soldAt || s.productId}`,
       node: (
         <span className="inline-flex items-center gap-2">
           <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
           <span>
-            <span className="text-foreground font-semibold">{s.firstName}</span>
-            {place} bought{" "}
+            <span className="text-foreground font-semibold">Just sold:</span>{" "}
             <span className="text-foreground font-semibold">
               "{s.productTitle}"
-            </span>{" "}
-            <span className="text-muted-foreground">
-              {formatRelative(s.soldAt)}
             </span>
+            {when && <span className="text-muted-foreground"> · {when}</span>}
           </span>
         </span>
       ),
