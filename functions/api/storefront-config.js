@@ -909,6 +909,34 @@ const sanitizeThankYou = (raw) => {
   };
 };
 
+const DEFAULT_VACATION_MODE = {
+  enabled: false,
+  returnDate: "",
+  message: "",
+  pauseCheckout: true,
+};
+
+const sanitizeVacationMode = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const dateRaw = String(data.returnDate ?? "").trim();
+  // Accept ISO YYYY-MM-DD only; reject anything else so the storefront
+  // banner doesn't render NaN dates from a fat-fingered admin entry.
+  const returnDate = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : "";
+  return {
+    enabled: data.enabled === true,
+    returnDate,
+    message:
+      typeof data.message === "string"
+        ? String(data.message).trim().slice(0, 280)
+        : "",
+    // Default ON when vacation mode is enabled — buyers seeing the banner
+    // shouldn't be able to slip through to checkout. Admin can flip this
+    // off to keep the shop accepting orders during a soft-pause (e.g.
+    // "I'm slow to ship this week" but still want to take orders).
+    pauseCheckout: data.pauseCheckout !== false,
+  };
+};
+
 /** Build today's daily-feature promo derived from config + UTC date. */
 const buildDailyToday = (dailyFeature) => {
   if (!dailyFeature.enabled || !dailyFeature.productId) return null;
@@ -1145,6 +1173,7 @@ const sanitizeConfig = (raw) => {
     newUserModal: sanitizeNewUserModal(data.newUserModal),
     dailyFeature: sanitizeDailyFeature(data.dailyFeature),
     thankYou: sanitizeThankYou(data.thankYou),
+    vacationMode: sanitizeVacationMode(data.vacationMode),
     // Persisted internal map of one-time migrations applied to this
     // config — not exposed publicly. Keys here mark a migration as done
     // so we don't re-run it on every read.
@@ -1279,6 +1308,14 @@ const publicView = (config) => {
       assetUrl: config.thankYou.assetUrl,
       assetType: config.thankYou.assetType,
       message: config.thankYou.message,
+    },
+    // Public read of vacation mode — buyers need this to know the shop
+    // is paused; the only field we don't expose is whether checkout is
+    // hard-blocked (the API enforces that server-side anyway).
+    vacationMode: {
+      enabled: config.vacationMode.enabled,
+      returnDate: config.vacationMode.returnDate,
+      message: config.vacationMode.message,
     },
   };
 };
@@ -1510,6 +1547,18 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           freeShipping: { ...existing.freeShipping, ...body.freeShipping },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-vacation-mode") {
+        const next = sanitizeConfig({
+          ...existing,
+          vacationMode: {
+            ...(existing.vacationMode || DEFAULT_VACATION_MODE),
+            ...(body.vacationMode || {}),
+          },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });

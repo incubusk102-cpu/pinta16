@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Minus, Plus, Trash2, Tag, Truck } from "lucide-react";
 import { useState } from "react";
 import { useCart } from "@/contexts/CartContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 const CartDrawer = () => {
   const {
@@ -24,6 +25,9 @@ const CartDrawer = () => {
     removeVoucher,
     setShowCheckout,
   } = useCart();
+  const {
+    config: { vacationMode },
+  } = useStorefrontConfig();
   const [voucherInput, setVoucherInput] = useState("");
 
   return (
@@ -225,15 +229,38 @@ const CartDrawer = () => {
                       ₱{total.toLocaleString()}
                     </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      closeCart();
-                      setShowCheckout(true);
-                    }}
-                    className="w-full mt-4 py-4 bg-foreground text-background font-body text-xs tracking-[0.3em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm"
-                  >
-                    Proceed to Checkout
-                  </button>
+                  {vacationMode.enabled ? (
+                    <div className="mt-4 space-y-2">
+                      <button
+                        disabled
+                        className="w-full py-4 bg-muted text-muted-foreground font-body text-xs tracking-[0.3em] uppercase rounded-sm cursor-not-allowed"
+                      >
+                        Shop paused
+                      </button>
+                      <p className="text-[11px] text-muted-foreground leading-snug px-1">
+                        Canvas Hub is briefly paused
+                        {vacationMode.returnDate
+                          ? ` — back on ${new Date(
+                              `${vacationMode.returnDate}T00:00:00`,
+                            ).toLocaleDateString(undefined, {
+                              month: "long",
+                              day: "numeric",
+                            })}`
+                          : ""}
+                        . Your cart will still be here when checkout reopens.
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        closeCart();
+                        setShowCheckout(true);
+                      }}
+                      className="w-full mt-4 py-4 bg-foreground text-background font-body text-xs tracking-[0.3em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm"
+                    >
+                      Proceed to Checkout
+                    </button>
+                  )}
                 </div>
               </>
             )}

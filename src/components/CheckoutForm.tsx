@@ -741,359 +741,400 @@ const CheckoutForm = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-6">
-                {/* Guest vs Sign-in choice — only for signed-out visitors. */}
-                {!isSignedIn && checkoutMode === "choose" && (
-                  <div className="mb-6 space-y-3">
-                    <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
-                      How would you like to checkout?
+                {/* Vacation mode replaces the entire checkout body with a
+                    friendly explanation. The cart is preserved so the
+                    buyer can come back when the shop reopens. */}
+                {storefrontConfig.vacationMode.enabled && (
+                  <div className="space-y-4 text-center py-12">
+                    <div className="text-5xl">🌴</div>
+                    <h3 className="font-display text-xl text-foreground">
+                      Canvas Hub is briefly paused
+                    </h3>
+                    <p className="font-body text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
+                      {storefrontConfig.vacationMode.message?.trim() ||
+                        (storefrontConfig.vacationMode.returnDate
+                          ? `New orders resume on ${new Date(
+                              `${storefrontConfig.vacationMode.returnDate}T00:00:00`,
+                            ).toLocaleDateString(undefined, {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })}. Your cart will still be here. Bookmark a piece and I'll reach out when I'm back.`
+                          : "New orders resume soon. Your cart will still be here. Bookmark a piece and I'll reach out when I'm back.")}
                     </p>
                     <button
-                      onClick={() => setCheckoutMode("guest")}
-                      className="w-full flex items-center gap-3 p-4 border border-border/30 rounded-sm hover:bg-accent/50 transition-colors text-left"
+                      onClick={() => setShowCheckout(false)}
+                      className="inline-flex items-center gap-2 px-6 py-3 mt-4 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all duration-300 rounded-sm"
                     >
-                      <UserPlus className="w-5 h-5 text-muted-foreground shrink-0" />
-                      <div>
-                        <p className="font-body text-sm font-medium text-foreground">
-                          Continue as Guest
-                        </p>
-                        <p className="font-body text-xs text-muted-foreground">
-                          No account needed
-                        </p>
-                      </div>
+                      Keep browsing
                     </button>
-                    <div className="w-full flex flex-col items-center gap-2 p-4 border border-border/30 rounded-sm">
-                      <div
-                        ref={googleBtnRef}
-                        className="w-full flex justify-center"
-                        aria-label="Continue with Google"
-                      />
-                      <p className="font-body text-xs text-muted-foreground text-center">
-                        Track your order &amp; save your info
-                      </p>
-                    </div>
                   </div>
                 )}
+                {/* Guest vs Sign-in choice — only for signed-out visitors. */}
+                {!storefrontConfig.vacationMode.enabled &&
+                  !isSignedIn &&
+                  checkoutMode === "choose" && (
+                    <div className="mb-6 space-y-3">
+                      <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                        How would you like to checkout?
+                      </p>
+                      <button
+                        onClick={() => setCheckoutMode("guest")}
+                        className="w-full flex items-center gap-3 p-4 border border-border/30 rounded-sm hover:bg-accent/50 transition-colors text-left"
+                      >
+                        <UserPlus className="w-5 h-5 text-muted-foreground shrink-0" />
+                        <div>
+                          <p className="font-body text-sm font-medium text-foreground">
+                            Continue as Guest
+                          </p>
+                          <p className="font-body text-xs text-muted-foreground">
+                            No account needed
+                          </p>
+                        </div>
+                      </button>
+                      <div className="w-full flex flex-col items-center gap-2 p-4 border border-border/30 rounded-sm">
+                        <div
+                          ref={googleBtnRef}
+                          className="w-full flex justify-center"
+                          aria-label="Continue with Google"
+                        />
+                        <p className="font-body text-xs text-muted-foreground text-center">
+                          Track your order &amp; save your info
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Order Summary + Form. Always shown to signed-in users —
-                    never the "Continue as Guest / Sign in with Google" prompt. */}
-                {(isSignedIn || checkoutMode !== "choose") && (
-                  <>
-                    <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
-                      {/* Header doubles as a collapse toggle on mobile.
+                    never the "Continue as Guest / Sign in with Google" prompt.
+                    Suppressed entirely when vacation mode is on. */}
+                {!storefrontConfig.vacationMode.enabled &&
+                  (isSignedIn || checkoutMode !== "choose") && (
+                    <>
+                      <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
+                        {/* Header doubles as a collapse toggle on mobile.
                           Tap on <md to hide the line items — keeps the
                           form fields above the fold on small screens.
                           Always-expanded on md+ where vertical space is
                           plentiful, so the chevron renders hidden there. */}
-                      <button
-                        type="button"
-                        onClick={() => setSummaryExpanded((prev) => !prev)}
-                        className="w-full flex items-center justify-between md:cursor-default md:pointer-events-none mb-3"
-                        aria-expanded={summaryExpanded}
-                        aria-controls="checkout-order-summary-body"
-                      >
-                        <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
-                          Order Summary
-                        </p>
-                        <span className="flex items-center gap-2 md:hidden">
-                          <span className="font-body text-xs font-semibold text-foreground">
-                            ₱{total.toLocaleString()}
-                          </span>
-                          <ChevronDown
-                            className={`w-4 h-4 text-muted-foreground transition-transform ${
-                              summaryExpanded ? "rotate-180" : ""
-                            }`}
-                          />
-                        </span>
-                      </button>
-                      <div
-                        id="checkout-order-summary-body"
-                        className={`${
-                          summaryExpanded ? "block" : "hidden md:block"
-                        }`}
-                      >
-                        {items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex justify-between font-body text-xs text-foreground mb-1"
-                          >
-                            <span>
-                              {item.title} × {item.quantity}
-                            </span>
-                            <span>
-                              ₱{(item.price * item.quantity).toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                        <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
-                          <div className="flex justify-between font-body text-xs text-muted-foreground">
-                            <span>Subtotal</span>
-                            <span>₱{subtotal.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between font-body text-xs text-muted-foreground">
-                            <span>Shipping</span>
-                            {shippingFee === 0 ? (
-                              <span>
-                                <span className="line-through mr-1">
-                                  ₱{shippingFeeOriginal.toLocaleString()}
-                                </span>
-                                <span className="text-foreground">FREE</span>
-                              </span>
-                            ) : (
-                              <span>₱{shippingFee.toLocaleString()}</span>
-                            )}
-                          </div>
-                          {discount > 0 && (
-                            <div className="flex justify-between font-body text-xs text-foreground">
-                              <span>
-                                Discount (
-                                {voucher.type === "percent"
-                                  ? `${voucher.value}%`
-                                  : voucher.type === "flat"
-                                    ? `flat \u20b1${voucher.value.toLocaleString()}`
-                                    : `\u20b1${voucher.value.toLocaleString()} off`}
-                                )
-                              </span>
-                              <span>-₱{discount.toLocaleString()}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
-                            <span>Total</span>
-                            <span className="font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setSummaryExpanded((prev) => !prev)}
+                          className="w-full flex items-center justify-between md:cursor-default md:pointer-events-none mb-3"
+                          aria-expanded={summaryExpanded}
+                          aria-controls="checkout-order-summary-body"
+                        >
+                          <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                            Order Summary
+                          </p>
+                          <span className="flex items-center gap-2 md:hidden">
+                            <span className="font-body text-xs font-semibold text-foreground">
                               ₱{total.toLocaleString()}
                             </span>
+                            <ChevronDown
+                              className={`w-4 h-4 text-muted-foreground transition-transform ${
+                                summaryExpanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          </span>
+                        </button>
+                        <div
+                          id="checkout-order-summary-body"
+                          className={`${
+                            summaryExpanded ? "block" : "hidden md:block"
+                          }`}
+                        >
+                          {items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex justify-between font-body text-xs text-foreground mb-1"
+                            >
+                              <span>
+                                {item.title} × {item.quantity}
+                              </span>
+                              <span>
+                                ₱{(item.price * item.quantity).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
+                            <div className="flex justify-between font-body text-xs text-muted-foreground">
+                              <span>Subtotal</span>
+                              <span>₱{subtotal.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between font-body text-xs text-muted-foreground">
+                              <span>Shipping</span>
+                              {shippingFee === 0 ? (
+                                <span>
+                                  <span className="line-through mr-1">
+                                    ₱{shippingFeeOriginal.toLocaleString()}
+                                  </span>
+                                  <span className="text-foreground">FREE</span>
+                                </span>
+                              ) : (
+                                <span>₱{shippingFee.toLocaleString()}</span>
+                              )}
+                            </div>
+                            {discount > 0 && (
+                              <div className="flex justify-between font-body text-xs text-foreground">
+                                <span>
+                                  Discount (
+                                  {voucher.type === "percent"
+                                    ? `${voucher.value}%`
+                                    : voucher.type === "flat"
+                                      ? `flat \u20b1${voucher.value.toLocaleString()}`
+                                      : `\u20b1${voucher.value.toLocaleString()} off`}
+                                  )
+                                </span>
+                                <span>-₱{discount.toLocaleString()}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
+                              <span>Total</span>
+                              <span className="font-semibold">
+                                ₱{total.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
+                          {estimatedCreationDays && (
+                            <p className="font-body text-[10px] text-muted-foreground mt-2">
+                              Est. creation: {estimatedCreationDays}
+                            </p>
+                          )}
                         </div>
-                        {estimatedCreationDays && (
-                          <p className="font-body text-[10px] text-muted-foreground mt-2">
-                            Est. creation: {estimatedCreationDays}
-                          </p>
-                        )}
                       </div>
-                    </div>
 
-                    {/* Form */}
-                    <div className="space-y-4">
-                      <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
-                        Your Information
-                      </p>
-                      {fields.map(
-                        (
-                          {
-                            key,
-                            label,
-                            icon: Icon,
-                            type,
-                            placeholder,
-                            required,
-                          },
-                          idx,
-                        ) => (
-                          <div key={String(key)}>
-                            {/* Inject the cascading PH address picker
+                      {/* Form */}
+                      <div className="space-y-4">
+                        <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                          Your Information
+                        </p>
+                        {fields.map(
+                          (
+                            {
+                              key,
+                              label,
+                              icon: Icon,
+                              type,
+                              placeholder,
+                              required,
+                            },
+                            idx,
+                          ) => (
+                            <div key={String(key)}>
+                              {/* Inject the cascading PH address picker
                                 + courier selector right before the
                                 notes field so they sit with the rest
                                 of the delivery details. */}
-                            {key === "notes" && (
-                              <div className="mb-4 space-y-4">
-                                <div>
-                                  <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
-                                    <MapPin className="w-3.5 h-3.5" />
-                                    Delivery Address{" "}
-                                    <span className="text-destructive">*</span>
-                                  </label>
-                                  <fieldset
-                                    disabled={formLocked}
-                                    className="contents"
-                                  >
-                                    <PhAddressFields
-                                      value={phAddress}
-                                      onChange={onPhAddressChange}
+                              {key === "notes" && (
+                                <div className="mb-4 space-y-4">
+                                  <div>
+                                    <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
+                                      <MapPin className="w-3.5 h-3.5" />
+                                      Delivery Address{" "}
+                                      <span className="text-destructive">
+                                        *
+                                      </span>
+                                    </label>
+                                    <fieldset
                                       disabled={formLocked}
-                                    />
-                                  </fieldset>
-                                  {[
-                                    touched.region && errors.region,
-                                    touched.province && errors.province,
-                                    touched.city && errors.city,
-                                    touched.barangay && errors.barangay,
-                                    touched.addressLine1 && errors.addressLine1,
-                                    touched.postalCode && errors.postalCode,
-                                  ]
-                                    .filter(Boolean)
-                                    .slice(0, 1)
-                                    .map((msg, i) => (
-                                      <p
-                                        key={i}
-                                        className="font-body text-[10px] text-destructive mt-2"
-                                      >
-                                        {msg}
-                                      </p>
-                                    ))}
-                                </div>
-                                {/* Courier selector — drives the
+                                      className="contents"
+                                    >
+                                      <PhAddressFields
+                                        value={phAddress}
+                                        onChange={onPhAddressChange}
+                                        disabled={formLocked}
+                                      />
+                                    </fieldset>
+                                    {[
+                                      touched.region && errors.region,
+                                      touched.province && errors.province,
+                                      touched.city && errors.city,
+                                      touched.barangay && errors.barangay,
+                                      touched.addressLine1 &&
+                                        errors.addressLine1,
+                                      touched.postalCode && errors.postalCode,
+                                    ]
+                                      .filter(Boolean)
+                                      .slice(0, 1)
+                                      .map((msg, i) => (
+                                        <p
+                                          key={i}
+                                          className="font-body text-[10px] text-destructive mt-2"
+                                        >
+                                          {msg}
+                                        </p>
+                                      ))}
+                                  </div>
+                                  {/* Courier selector — drives the
                                     per-courier × per-zone fee. Hidden
                                     when no shippable couriers are
                                     available so the legacy flat rate
                                     just applies. */}
-                                {courierOptions.length > 0 && (
-                                  <div>
-                                    <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
-                                      <Truck className="w-3.5 h-3.5" />
-                                      Courier{" "}
-                                      {ratesConfigured && (
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
+                                  {courierOptions.length > 0 && (
+                                    <div>
+                                      <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
+                                        <Truck className="w-3.5 h-3.5" />
+                                        Courier{" "}
+                                        {ratesConfigured && (
+                                          <span className="text-destructive">
+                                            *
+                                          </span>
+                                        )}
+                                      </label>
+                                      <Select
+                                        value={form.courier || ""}
+                                        onValueChange={(courier) => {
+                                          setForm((prev) => ({
+                                            ...prev,
+                                            courier,
+                                          }));
+                                          setErrors((prev) => ({
+                                            ...prev,
+                                            courier: courier
+                                              ? undefined
+                                              : prev.courier,
+                                          }));
+                                        }}
+                                        disabled={formLocked}
+                                      >
+                                        <SelectTrigger className="h-10 text-sm">
+                                          <SelectValue placeholder="Pick a courier" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {courierOptions.map((c) => (
+                                            <SelectItem key={c.id} value={c.id}>
+                                              {c.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      {form.courier && form.region && (
+                                        <p className="font-body text-[11px] text-muted-foreground mt-1.5">
+                                          {previewedFee != null
+                                            ? `Estimated fee: \u20b1${previewedFee.toLocaleString()} (${zoneLabel(zoneForRegion(form.region))})`
+                                            : "Fee not configured for this region — flat rate will apply."}
+                                        </p>
                                       )}
-                                    </label>
-                                    <Select
-                                      value={form.courier || ""}
-                                      onValueChange={(courier) => {
-                                        setForm((prev) => ({
-                                          ...prev,
-                                          courier,
-                                        }));
-                                        setErrors((prev) => ({
-                                          ...prev,
-                                          courier: courier
-                                            ? undefined
-                                            : prev.courier,
-                                        }));
-                                      }}
-                                      disabled={formLocked}
-                                    >
-                                      <SelectTrigger className="h-10 text-sm">
-                                        <SelectValue placeholder="Pick a courier" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {courierOptions.map((c) => (
-                                          <SelectItem key={c.id} value={c.id}>
-                                            {c.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    {form.courier && form.region && (
-                                      <p className="font-body text-[11px] text-muted-foreground mt-1.5">
-                                        {previewedFee != null
-                                          ? `Estimated fee: \u20b1${previewedFee.toLocaleString()} (${zoneLabel(zoneForRegion(form.region))})`
-                                          : "Fee not configured for this region — flat rate will apply."}
-                                      </p>
-                                    )}
-                                    {touched.courier && errors.courier && (
-                                      <p className="font-body text-[10px] text-destructive mt-1">
-                                        {errors.courier}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
-                              <Icon className="w-3.5 h-3.5" />
-                              {label}{" "}
-                              {required && (
-                                <span className="text-destructive">*</span>
+                                      {touched.courier && errors.courier && (
+                                        <p className="font-body text-[10px] text-destructive mt-1">
+                                          {errors.courier}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               )}
-                            </label>
-                            {key === "notes" ? (
-                              <textarea
-                                value={form[key]}
-                                onChange={(e) =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    [key]: e.target.value,
-                                  }))
-                                }
-                                placeholder={placeholder}
-                                rows={3}
-                                disabled={formLocked}
-                                className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
-                              />
-                            ) : (
-                              <input
-                                type={type || "text"}
-                                inputMode={
-                                  key === "phone"
-                                    ? "tel"
-                                    : key === "email"
-                                      ? "email"
-                                      : undefined
-                                }
-                                autoComplete={
-                                  key === "fullName"
-                                    ? "name"
-                                    : key === "email"
-                                      ? "email"
-                                      : key === "phone"
-                                        ? "tel"
-                                        : undefined
-                                }
-                                value={(form[key] as string) || ""}
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  const next =
-                                    key === "phone" ? formatPhPhone(raw) : raw;
-                                  setForm((prev) => ({ ...prev, [key]: next }));
-                                  // Live-clear an existing error as soon as
-                                  // the field becomes valid — keeps the red
-                                  // hint from lingering after the visitor
-                                  // fixes their typo.
-                                  if (touched[key]) {
-                                    const err = validateField(key, next);
-                                    setErrors((prev) => ({
+                              <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                                <Icon className="w-3.5 h-3.5" />
+                                {label}{" "}
+                                {required && (
+                                  <span className="text-destructive">*</span>
+                                )}
+                              </label>
+                              {key === "notes" ? (
+                                <textarea
+                                  value={form[key]}
+                                  onChange={(e) =>
+                                    setForm((prev) => ({
                                       ...prev,
-                                      [key]: err || undefined,
-                                    }));
+                                      [key]: e.target.value,
+                                    }))
                                   }
-                                }}
-                                onBlur={() => handleFieldBlur(key)}
-                                placeholder={placeholder}
-                                disabled={formLocked}
-                                aria-invalid={
-                                  touched[key] && Boolean(errors[key])
-                                }
-                                className={`w-full px-3 py-2 bg-background border ${
-                                  touched[key] && errors[key]
-                                    ? "border-destructive/60"
-                                    : "border-border/30"
-                                } text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm disabled:opacity-60 disabled:cursor-not-allowed`}
-                              />
-                            )}
-                            {touched[key] && errors[key] && (
-                              <p className="font-body text-[10px] text-destructive mt-1">
-                                {errors[key]}
-                              </p>
-                            )}
-                            {/* TS quiet — idx unused but kept for parity */}
-                            {idx < 0 && null}
-                          </div>
-                        ),
-                      )}
-
-                      {/* Pay with QR Ph Button */}
-                      <button
-                        onClick={handlePayWithQR}
-                        disabled={isCreatingPayment}
-                        className="w-full py-4 bg-[#0066FF] text-[#FFFFFF] font-body text-xs tracking-[0.3em] uppercase hover:bg-[#0052CC] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 rounded-sm flex items-center justify-center gap-3"
-                      >
-                        {isCreatingPayment ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Generating QR Code...
-                          </>
-                        ) : (
-                          "Pay with QR Ph"
+                                  placeholder={placeholder}
+                                  rows={3}
+                                  disabled={formLocked}
+                                  className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
+                                />
+                              ) : (
+                                <input
+                                  type={type || "text"}
+                                  inputMode={
+                                    key === "phone"
+                                      ? "tel"
+                                      : key === "email"
+                                        ? "email"
+                                        : undefined
+                                  }
+                                  autoComplete={
+                                    key === "fullName"
+                                      ? "name"
+                                      : key === "email"
+                                        ? "email"
+                                        : key === "phone"
+                                          ? "tel"
+                                          : undefined
+                                  }
+                                  value={(form[key] as string) || ""}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const next =
+                                      key === "phone"
+                                        ? formatPhPhone(raw)
+                                        : raw;
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      [key]: next,
+                                    }));
+                                    // Live-clear an existing error as soon as
+                                    // the field becomes valid — keeps the red
+                                    // hint from lingering after the visitor
+                                    // fixes their typo.
+                                    if (touched[key]) {
+                                      const err = validateField(key, next);
+                                      setErrors((prev) => ({
+                                        ...prev,
+                                        [key]: err || undefined,
+                                      }));
+                                    }
+                                  }}
+                                  onBlur={() => handleFieldBlur(key)}
+                                  placeholder={placeholder}
+                                  disabled={formLocked}
+                                  aria-invalid={
+                                    touched[key] && Boolean(errors[key])
+                                  }
+                                  className={`w-full px-3 py-2 bg-background border ${
+                                    touched[key] && errors[key]
+                                      ? "border-destructive/60"
+                                      : "border-border/30"
+                                  } text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm disabled:opacity-60 disabled:cursor-not-allowed`}
+                                />
+                              )}
+                              {touched[key] && errors[key] && (
+                                <p className="font-body text-[10px] text-destructive mt-1">
+                                  {errors[key]}
+                                </p>
+                              )}
+                              {/* TS quiet — idx unused but kept for parity */}
+                              {idx < 0 && null}
+                            </div>
+                          ),
                         )}
-                      </button>
 
-                      <p className="font-body text-[10px] text-center text-muted-foreground/50">
-                        Secure payment via PayMongo. Scan with GCash, Maya, or
-                        any QR Ph app.
-                      </p>
-                    </div>
-                  </>
-                )}
+                        {/* Pay with QR Ph Button */}
+                        <button
+                          onClick={handlePayWithQR}
+                          disabled={isCreatingPayment}
+                          className="w-full py-4 bg-[#0066FF] text-[#FFFFFF] font-body text-xs tracking-[0.3em] uppercase hover:bg-[#0052CC] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 rounded-sm flex items-center justify-center gap-3"
+                        >
+                          {isCreatingPayment ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Generating QR Code...
+                            </>
+                          ) : (
+                            "Pay with QR Ph"
+                          )}
+                        </button>
+
+                        <p className="font-body text-[10px] text-center text-muted-foreground/50">
+                          Secure payment via PayMongo. Scan with GCash, Maya, or
+                          any QR Ph app.
+                        </p>
+                      </div>
+                    </>
+                  )}
               </div>
             </motion.div>
           </>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
@@ -40,6 +41,9 @@ const Lightbox = ({
   onNavigate,
 }: LightboxProps) => {
   const { addToCart } = useCart();
+  const {
+    config: { vacationMode },
+  } = useStorefrontConfig();
   const [zoomed, setZoomed] = useState(false);
   const [showMockup, setShowMockup] = useState(false);
   const art = artworks[currentIndex];
@@ -199,7 +203,16 @@ const Lightbox = ({
               {(() => {
                 const availability: Availability =
                   art.availability || "available";
-                const purchasable = isPurchasable(availability);
+                // Vacation mode hides the buy button while keeping the
+                // rest of the lightbox visible — buyers can still browse
+                // and view details.
+                const purchasable =
+                  isPurchasable(availability) && !vacationMode.enabled;
+                const buttonLabel = vacationMode.enabled
+                  ? "Shop paused"
+                  : purchasable
+                    ? "Add to Cart"
+                    : `${AVAILABILITY_LABEL[availability]}`;
                 return (
                   <div className="flex flex-col gap-3">
                     {availability !== "available" && (
@@ -228,9 +241,7 @@ const Lightbox = ({
                         }`}
                       >
                         <ShoppingCart className="w-4 h-4" />
-                        {purchasable
-                          ? "Add to Cart"
-                          : `${AVAILABILITY_LABEL[availability]}`}
+                        {buttonLabel}
                       </button>
                       <Link
                         to="/product/$id"

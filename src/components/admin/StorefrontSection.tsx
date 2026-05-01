@@ -8,6 +8,7 @@ import {
   Trash2,
   Loader2,
   PackageOpen,
+  Palmtree,
 } from "lucide-react";
 import {
   COURIERS,
@@ -122,6 +123,12 @@ interface AdminConfig {
     agentHandoff: boolean;
     faqs: ChatFaqItem[];
   };
+  vacationMode: {
+    enabled: boolean;
+    returnDate: string;
+    message: string;
+    pauseCheckout: boolean;
+  };
 }
 
 const DEFAULTS: AdminConfig = {
@@ -159,6 +166,12 @@ const DEFAULTS: AdminConfig = {
     agentHandoff: true,
     faqs: DEFAULT_CHAT_FAQS,
   },
+  vacationMode: {
+    enabled: false,
+    returnDate: "",
+    message: "",
+    pauseCheckout: true,
+  },
 };
 
 export function StorefrontSection() {
@@ -167,7 +180,13 @@ export function StorefrontSection() {
   const [cfg, setCfg] = useState<AdminConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<
-    null | "announcement" | "shipping" | "shipping-rates" | "promo" | "chat"
+    | null
+    | "announcement"
+    | "shipping"
+    | "shipping-rates"
+    | "promo"
+    | "chat"
+    | "vacation"
   >(null);
 
   // Promo form state
@@ -214,6 +233,13 @@ export function StorefrontSection() {
               ? data.config.chat.faqs
               : DEFAULTS.chat.faqs,
           },
+          vacationMode: {
+            ...DEFAULTS.vacationMode,
+            ...(data.config.vacationMode &&
+            typeof data.config.vacationMode === "object"
+              ? data.config.vacationMode
+              : {}),
+          },
         });
       }
     } catch (e) {
@@ -258,6 +284,25 @@ export function StorefrontSection() {
         announcement: cfg.announcement,
       });
       toast.success("Announcement saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveVacation = async () => {
+    setSaving("vacation");
+    try {
+      await post({
+        action: "update-vacation-mode",
+        vacationMode: cfg.vacationMode,
+      });
+      toast.success(
+        cfg.vacationMode.enabled
+          ? "Shop paused — buyers will see the vacation banner"
+          : "Vacation mode off — shop is open",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
@@ -501,6 +546,151 @@ export function StorefrontSection() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      {/* Vacation / shop pause — top of section so it's the first thing
+          admin sees on the Storefront tab. Visually distinct (amber tint)
+          when active so it's obvious the shop is paused. */}
+      <section
+        className={`border rounded-xl p-6 ${
+          cfg.vacationMode.enabled
+            ? "bg-amber-500/10 border-amber-500/40"
+            : "bg-card/40 border-border/60"
+        }`}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <Palmtree
+            className={`w-4 h-4 ${
+              cfg.vacationMode.enabled ? "text-amber-500" : "text-primary"
+            }`}
+          />
+          <h2 className="font-display text-lg">Vacation / shop pause</h2>
+          {cfg.vacationMode.enabled && (
+            <span className="ml-2 inline-flex items-center px-2 py-0.5 bg-amber-500 text-white text-[10px] font-body tracking-[0.2em] uppercase rounded-sm">
+              Active
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Pause the shop while you travel, attend a gallery opening, or take a
+          break. Buyers can still browse, wishlist, and read every page — they
+          just can't add to cart or check out. Existing orders and messages keep
+          working normally.
+        </p>
+        <div className="space-y-3">
+          <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+            <div>
+              <p className="text-sm font-medium">Pause shop</p>
+              <p className="text-xs text-muted-foreground">
+                Replaces the announcement bar with a "back soon" banner and
+                hides every Add-to-cart button.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.vacationMode.enabled}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({
+                  ...c,
+                  vacationMode: { ...c.vacationMode, enabled: v },
+                }))
+              }
+            />
+          </label>
+          <div>
+            <Label htmlFor="vac-return-date">
+              Return date{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="vac-return-date"
+              type="date"
+              value={cfg.vacationMode.returnDate}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  vacationMode: {
+                    ...c.vacationMode,
+                    returnDate: e.target.value,
+                  },
+                }))
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Shown to buyers as "back on May 5". Leave blank for an open-ended
+              pause.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="vac-message">
+              Custom banner message{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional, overrides default)
+              </span>
+            </Label>
+            <Textarea
+              id="vac-message"
+              maxLength={280}
+              rows={3}
+              placeholder={
+                cfg.vacationMode.returnDate
+                  ? `Canvas Hub is on a research trip — back ${cfg.vacationMode.returnDate}. Bookmark a piece, I'll reach out when I'm back.`
+                  : "Canvas Hub is briefly paused — bookmark a piece, I'll reach out when I'm back."
+              }
+              value={cfg.vacationMode.message}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  vacationMode: {
+                    ...c.vacationMode,
+                    message: e.target.value.slice(0, 280),
+                  },
+                }))
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {cfg.vacationMode.message.length}/280 characters. Leave blank to
+              use the default phrasing.
+            </p>
+          </div>
+          <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+            <div>
+              <p className="text-sm font-medium">
+                Block new orders at checkout
+              </p>
+              <p className="text-xs text-muted-foreground">
+                When on, the API refuses new orders even if a buyer somehow
+                bypasses the disabled buttons. Turn off for a soft pause where
+                you still want to take orders but warn buyers about delays.
+              </p>
+            </div>
+            <Switch
+              checked={cfg.vacationMode.pauseCheckout}
+              onCheckedChange={(v) =>
+                setCfg((c) => ({
+                  ...c,
+                  vacationMode: { ...c.vacationMode, pauseCheckout: v },
+                }))
+              }
+            />
+          </label>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => void handleSaveVacation()}
+              disabled={saving === "vacation"}
+            >
+              {saving === "vacation" ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save vacation settings"
+              )}
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* Announcement bar */}
       <section className="bg-card/40 border border-border/60 rounded-xl p-6">
         <div className="flex items-center gap-2 mb-1">

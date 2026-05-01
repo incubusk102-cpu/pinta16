@@ -786,6 +786,24 @@ export const handler = async (event) => {
           max: 10,
         });
         if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+        // Vacation-mode hard guard: when the gallery owner has paused
+        // checkout, refuse new orders with a friendly message instead of
+        // accepting them silently. Soft-pause (vacationMode.enabled but
+        // pauseCheckout = false) still lets orders through.
+        const vmConfig = await readStorefrontConfigDirect(event);
+        const vm = vmConfig?.vacationMode;
+        if (vm?.enabled && vm.pauseCheckout !== false) {
+          const friendly =
+            vm.message?.trim() ||
+            (vm.returnDate
+              ? `Canvas Hub is on a research trip until ${vm.returnDate}. New orders resume then — bookmark a piece and I'll reach out when I'm back.`
+              : "Canvas Hub is briefly paused. New orders resume soon — bookmark a piece and I'll reach out when I'm back.");
+          return json(423, {
+            error: friendly,
+            vacationMode: true,
+            returnDate: vm.returnDate || null,
+          });
+        }
         const order = body.order;
         if (!order?.items?.length) {
           return json(400, { error: "Invalid order" });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
   useProducts,
   getDiscountPercent,
@@ -69,6 +70,7 @@ import {
   Menu,
   MessageSquare,
   Package,
+  Palmtree,
   Pencil,
   Plus,
   QrCode,
@@ -747,7 +749,10 @@ function AdminDashboard() {
           className="flex-1 px-4 sm:px-6 py-8 max-w-6xl w-full mx-auto animate-in fade-in duration-200"
         >
           {section === "dashboard" && (
-            <DashboardSection onOpenOrders={() => navigate("orders")} />
+            <DashboardSection
+              onOpenOrders={() => navigate("orders")}
+              onOpenStorefront={() => navigate("storefront")}
+            />
           )}
           {section === "products" && <ProductsSection />}
           {section === "orders" && <OrdersSection />}
@@ -1420,7 +1425,16 @@ interface ActivityEntry {
   actor?: string;
 }
 
-function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
+function DashboardSection({
+  onOpenOrders,
+  onOpenStorefront,
+}: {
+  onOpenOrders: () => void;
+  onOpenStorefront: () => void;
+}) {
+  const {
+    config: { vacationMode },
+  } = useStorefrontConfig();
   const [summary, setSummary] = useState<OrdersSummary | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState<number>(30);
@@ -1477,6 +1491,33 @@ function DashboardSection({ onOpenOrders }: { onOpenOrders: () => void }) {
           Refresh
         </Button>
       </div>
+
+      {vacationMode.enabled && (
+        <button
+          type="button"
+          onClick={onOpenStorefront}
+          className="w-full flex items-start gap-3 text-left p-4 bg-amber-500/10 border border-amber-500/40 rounded-lg hover:bg-amber-500/15 transition-colors"
+        >
+          <Palmtree className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-display text-sm text-foreground">
+              Vacation mode is on — checkout is paused
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {vacationMode.returnDate
+                ? `Return date: ${new Date(
+                    `${vacationMode.returnDate}T00:00:00`,
+                  ).toLocaleDateString(undefined, {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}.`
+                : "No return date set."}{" "}
+              Click to open Storefront → Vacation panel and turn it off.
+            </p>
+          </div>
+        </button>
+      )}
 
       {error && (
         <div className="text-sm text-destructive border border-destructive/30 bg-destructive/10 rounded-md p-3">

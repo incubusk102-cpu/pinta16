@@ -189,6 +189,22 @@ export const DEFAULT_THANK_YOU: ThankYouConfig = {
   message: "Thank you for being one of the first to support Canvas Hub.",
 };
 
+export interface VacationModeConfig {
+  enabled: boolean;
+  // ISO YYYY-MM-DD or "" for "no return date set yet".
+  returnDate: string;
+  // Optional admin override for the customer-facing banner text. When
+  // empty, the storefront falls back to a default phrasing built from
+  // returnDate.
+  message: string;
+}
+
+export const DEFAULT_VACATION_MODE: VacationModeConfig = {
+  enabled: false,
+  returnDate: "",
+  message: "",
+};
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
@@ -200,6 +216,7 @@ export interface StorefrontConfig {
   dailyFeature: DailyFeatureConfig;
   dailyFeatureToday: DailyFeatureToday | null;
   thankYou: ThankYouConfig;
+  vacationMode: VacationModeConfig;
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -242,6 +259,7 @@ const DEFAULT_CONFIG: StorefrontConfig = {
   dailyFeature: DEFAULT_DAILY_FEATURE,
   dailyFeatureToday: null,
   thankYou: DEFAULT_THANK_YOU,
+  vacationMode: DEFAULT_VACATION_MODE,
 };
 
 const mergeDailyFeature = (raw: unknown): DailyFeatureConfig => {
@@ -270,6 +288,20 @@ const mergeDailyFeatureToday = (raw: unknown): DailyFeatureToday | null => {
     productId: String(data.productId),
     percent: Number(data.percent) || 0,
     expiresAt: String(data.expiresAt),
+  };
+};
+
+const mergeVacationMode = (raw: unknown): VacationModeConfig => {
+  const data = (
+    raw && typeof raw === "object" ? raw : {}
+  ) as Partial<VacationModeConfig>;
+  const dateRaw = String(data.returnDate ?? "").trim();
+  const returnDate = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : "";
+  return {
+    enabled: data.enabled === true,
+    returnDate,
+    message:
+      typeof data.message === "string" ? data.message.trim().slice(0, 280) : "",
   };
 };
 
@@ -440,6 +472,7 @@ export const StorefrontConfigProvider = ({
             data.config.dailyFeatureToday,
           ),
           thankYou: mergeThankYou(data.config.thankYou),
+          vacationMode: mergeVacationMode(data.config.vacationMode),
         });
       }
     } catch {
