@@ -227,7 +227,7 @@ const parseAddress = (raw) => {
   return { email: raw.trim() };
 };
 
-export const sendEmail = async ({ to, subject, html, text, purpose }) => {
+export const sendEmail = async ({ to, subject, html, text, purpose, from: fromOverride }) => {
   if (!to || !subject) {
     return { delivered: false, skipped: true, reason: "missing fields" };
   }
@@ -235,7 +235,7 @@ export const sendEmail = async ({ to, subject, html, text, purpose }) => {
   if (!providerKey) {
     return { delivered: false, skipped: true, reason: "not configured" };
   }
-  const from = resolveEmailEnv("FROM", purpose);
+  const from = fromOverride || resolveEmailEnv("FROM", purpose);
   if (!from) {
     const suffix = String(purpose || "")
       .trim()
@@ -584,12 +584,27 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
     return { delivered: false, skipped: true, reason: "kind disabled" };
   }
   const built = buildOrderEmail(kind, order, extra || {}, orderEmail);
+  // Resolve the from address: storefront config → env var → fallback.
+  // The orderEmail config (admin-editable) carries fromName + fromEmail
+  // which we format as "Name <email>". This lets the admin set
+  // "order@canvhub.com" in the dashboard without needing a separate
+  // EMAIL_FROM_ORDER Cloudflare env var.
+  const cfgEmail =
+    (orderEmail?.fromEmail || "order@canvhub.com").trim();
+  const cfgName =
+    (orderEmail?.fromName || "Canvas Hub").trim();
+  const configFrom = cfgEmail
+    ? cfgName
+      ? `${cfgName} <${cfgEmail}>`
+      : cfgEmail
+    : "";
   return await sendEmail({
     to: recipient,
     subject: built.subject,
     html: built.html,
     text: built.text,
     purpose: "order",
+    from: configFrom || undefined,
   });
 };
 
@@ -652,12 +667,22 @@ export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
     fakeExtra,
     previewOrderEmail,
   );
+  const cfgEmail =
+    (orderEmail?.fromEmail || "order@canvhub.com").trim();
+  const cfgName =
+    (orderEmail?.fromName || "Canvas Hub").trim();
+  const configFrom = cfgEmail
+    ? cfgName
+      ? `${cfgName} <${cfgEmail}>`
+      : cfgEmail
+    : "";
   return await sendEmail({
     to: recipient,
     subject: `[Test] ${built.subject}`,
     html: built.html,
     text: built.text,
     purpose: "order",
+    from: configFrom || undefined,
   });
 };
 

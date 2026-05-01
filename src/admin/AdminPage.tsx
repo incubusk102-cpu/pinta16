@@ -1765,8 +1765,8 @@ function OrdersSection() {
               Email notifications not configured. Set{" "}
               <code className="font-mono">RESEND_API_KEY</code> or{" "}
               <code className="font-mono">BREVO_API_KEY</code> plus{" "}
-              <code className="font-mono">EMAIL_FROM</code> in Netlify env to
-              start sending. Notification history is still recorded.
+              <code className="font-mono">EMAIL_FROM</code> in Cloudflare Pages
+              env to start sending. Notification history is still recorded.
             </>
           )}
         </div>
