@@ -421,15 +421,29 @@ export const handler = async (event) => {
 
       if (params.recent === "sold") {
         // Public-facing "last sold" feed for the homepage social-proof
-        // ticker. Only returns confirmed/paid orders that haven't been
-        // refunded. No PII, only first name + city + product title +
-        // timestamp. Capped at 20 items.
+        // ticker. Anonymous on purpose: only the painting itself + a
+        // timestamp. We deliberately do NOT return the buyer's first
+        // name or city — combining either with the (one-of-one)
+        // painting title is enough to re-identify the buyer to anyone
+        // who knows them. Capped at 20 items.
+        //
+        // We also drop any orders that belong to the signed-in viewer
+        // so collectors never see their own purchases narrated back
+        // to them in the strip.
         const orders = await readOrders(store);
         const limit = Math.min(Math.max(Number(params.limit) || 8, 1), 20);
+        const viewer = await getCurrentUserFromSession(event).catch(() => null);
+        const viewerEmail = viewer?.email ? normalizeEmail(viewer.email) : null;
         const eligible = orders.filter((o) => {
           if (!o.status || o.status === "cancelled") return false;
           if (o.refund?.status === "succeeded") return false;
           if (!Array.isArray(o.items) || o.items.length === 0) return false;
+          if (
+            viewerEmail &&
+            normalizeEmail(o.orderInfo?.email || "") === viewerEmail
+          ) {
+            return false;
+          }
           return true;
         });
         eligible.sort(
@@ -438,12 +452,8 @@ export const handler = async (event) => {
             new Date(a.createdAt || 0).getTime(),
         );
         const sales = eligible.slice(0, limit).map((o) => {
-          const firstName =
-            (o.orderInfo?.fullName || "").trim().split(/\s+/)[0] || "Someone";
           const item = o.items[0] || {};
           return {
-            firstName,
-            city: o.orderInfo?.city || "",
             productTitle: String(item.title || "").slice(0, 200),
             productImage: typeof item.image === "string" ? item.image : "",
             productId: String(item.id || ""),
