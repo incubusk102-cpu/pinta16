@@ -12,6 +12,14 @@ import {
   isEmailConfigured,
   resolveEmailEnv,
 } from "./_lib/email.js";
+import {
+  findUserByReferralCode,
+  getUsersStore,
+  normalizeEmail,
+  readUsers,
+  writeUsers,
+} from "./_lib/user-auth.js";
+import { ensurePersonalReward } from "./_lib/personal-rewards.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -137,6 +145,51 @@ const incrementPromoUsage = async (event, code) => {
   } catch (err) {
     console.error("incrementPromoUsage failed:", err);
   }
+};
+
+// On a successful order, mark the customer's first-order date so we can
+// fire anniversary rewards a year later. If the customer was referred by
+// another user, mint reciprocal ₱200 codes for both parties — but only
+// once, on the customer's true first paid order (avoids re-triggering
+// when somebody re-uses the same email later).
+const applyFirstOrderRewards = async ({ allOrders, order }) => {
+  const email = normalizeEmail(order.orderInfo?.email);
+  if (!email) return;
+  const usersStore = getUsersStore();
+  const users = await readUsers(usersStore);
+  const customer = users[email];
+  if (!customer) return;
+  const isFirst =
+    !customer.firstOrderAt &&
+    allOrders.filter((o) => normalizeEmail(o.orderInfo?.email) === email)
+      .length === 1;
+  if (!isFirst) return;
+  customer.firstOrderAt = order.createdAt;
+  // If the customer applied a referral code at signup, mint a reward
+  // for both inviter and invitee. We key on the customer's id to keep
+  // it idempotent — re-running this hook won't duplicate codes.
+  let inviter = null;
+  if (customer.referredBy) {
+    inviter = findUserByReferralCode(users, customer.referredBy);
+  }
+  await writeUsers(usersStore, users);
+  if (!inviter) return;
+  const periodKey = String(customer.id || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+  await ensurePersonalReward({
+    user: inviter,
+    kind: "referral-give",
+    periodKey,
+    description: `Thanks for referring ${customer.name || "a friend"} — ₱200 off your next order`,
+  });
+  await ensurePersonalReward({
+    user: customer,
+    kind: "referral-get",
+    periodKey,
+    description: `Welcome gift from a friend — ₱200 off your next order`,
+  });
 };
 
 const readStorefrontConfigDirect = async (event) => {
@@ -745,6 +798,14 @@ export const handler = async (event) => {
         await store.setJSON(ORDERS_KEY, next);
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
+        }
+        try {
+          await applyFirstOrderRewards({
+            allOrders: next,
+            order: safeOrder,
+          });
+        } catch (err) {
+          console.warn("first-order rewards hook failed:", err);
         }
         await appendAuditEvent(event, {
           type: "order.placed",
