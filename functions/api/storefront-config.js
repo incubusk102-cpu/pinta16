@@ -823,6 +823,33 @@ const DEFAULT_CONFIG = {
     threshold: 8000,
     shippingFee: 500,
   },
+  shippingRates: [
+    {
+      courierId: "j&t",
+      courierLabel: "J&T Express",
+      fees: { metro_manila: 120, luzon: 180, visayas: 220, mindanao: 260 },
+    },
+    {
+      courierId: "lbc",
+      courierLabel: "LBC Express",
+      fees: { metro_manila: 150, luzon: 220, visayas: 280, mindanao: 320 },
+    },
+    {
+      courierId: "jrs",
+      courierLabel: "JRS Express",
+      fees: { metro_manila: 130, luzon: 200, visayas: 260, mindanao: 300 },
+    },
+    {
+      courierId: "ninjavan",
+      courierLabel: "Ninja Van",
+      fees: { metro_manila: 110, luzon: 180, visayas: 230, mindanao: 270 },
+    },
+    {
+      courierId: "flash",
+      courierLabel: "Flash Express",
+      fees: { metro_manila: 100, luzon: 170, visayas: 220, mindanao: 260 },
+    },
+  ],
   promoCodes: [],
   chat: {
     enabled: true,
@@ -876,6 +903,33 @@ const sanitizeNewUserModal = (raw) => {
     ),
     body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body).slice(0, 400),
   };
+};
+
+const SHIPPING_ZONE_KEYS = ["metro_manila", "luzon", "visayas", "mindanao"];
+
+const sanitizeShippingRates = (raw) => {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const courierId = String(entry.courierId ?? "")
+      .trim()
+      .slice(0, 40);
+    if (!courierId) continue;
+    if (seen.has(courierId.toLowerCase())) continue;
+    seen.add(courierId.toLowerCase());
+    const courierLabel = String(entry.courierLabel ?? courierId).slice(0, 80);
+    const feesRaw =
+      entry.fees && typeof entry.fees === "object" ? entry.fees : {};
+    const fees = {};
+    for (const key of SHIPPING_ZONE_KEYS) {
+      const n = Math.floor(Number(feesRaw[key]) || 0);
+      fees[key] = n < 0 ? 0 : Math.min(100000, n);
+    }
+    out.push({ courierId, courierLabel, fees });
+  }
+  return out.slice(0, 12);
 };
 
 const sanitizeConfig = (raw) => {
@@ -947,6 +1001,11 @@ const sanitizeConfig = (raw) => {
         Math.floor(Number(freeShipping.shippingFee) || 0),
       ),
     },
+    shippingRates: sanitizeShippingRates(
+      Array.isArray(data.shippingRates)
+        ? data.shippingRates
+        : DEFAULT_CONFIG.shippingRates,
+    ),
     chat: {
       enabled: chatRaw.enabled !== false,
       welcome: (typeof chatRaw.welcome === "string" && chatRaw.welcome.trim()
@@ -1082,6 +1141,9 @@ const publicWelcomePreview = (welcome) => {
 const publicView = (config) => ({
   announcement: config.announcement,
   freeShipping: config.freeShipping,
+  shippingRates: Array.isArray(config.shippingRates)
+    ? config.shippingRates
+    : [],
   siteCopy: config.siteCopy,
   promoCodes: config.promoCodes
     .filter((p) => p.enabled)
@@ -1322,6 +1384,17 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           freeShipping: { ...existing.freeShipping, ...body.freeShipping },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-shipping-rates") {
+        const next = sanitizeConfig({
+          ...existing,
+          shippingRates: Array.isArray(body.shippingRates)
+            ? body.shippingRates
+            : existing.shippingRates,
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });

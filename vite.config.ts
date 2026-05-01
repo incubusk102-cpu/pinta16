@@ -40,10 +40,7 @@ export default defineConfig({
           // the lazy AddressMapPicker chunk that imports them, instead
           // of being bundled into `vendor` (which is part of the
           // initial paint).
-          if (
-            id.includes("/maplibre-gl/") ||
-            id.includes("/react-map-gl/")
-          ) {
+          if (id.includes("/maplibre-gl/") || id.includes("/react-map-gl/")) {
             return "maps";
           }
           return "vendor";

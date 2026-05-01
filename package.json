@@ -49,6 +49,8 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.38.0",
     "input-otp": "^1.4.2",
+    "jsbarcode": "^3.12.3",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.575.0",
     "maplibre-gl": "^5.24.0",
     "path": "^0.12.7",

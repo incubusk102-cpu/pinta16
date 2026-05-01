@@ -101,6 +101,7 @@ import {
 } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 import { COURIERS, buildTrackingUrl } from "@/lib/shipment";
+import { downloadWaybillPdf } from "@/lib/waybill";
 import { linkifyMessage } from "@/lib/chat-format";
 type AdminSection =
   | "dashboard"
@@ -3514,6 +3515,27 @@ function ShipmentEditor({
             Clear
           </Button>
         )}
+        {/* Admin-side waybill download — works any time, even before
+            tracking is set, so admins can print a label first then
+            stick the courier number on later. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs ml-auto"
+          onClick={() => {
+            try {
+              downloadWaybillPdf(order);
+            } catch (err) {
+              toast.error(
+                err instanceof Error
+                  ? err.message
+                  : "Could not generate waybill",
+              );
+            }
+          }}
+        >
+          Download waybill
+        </Button>
       </div>
     </div>
   );

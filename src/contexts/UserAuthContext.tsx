@@ -24,9 +24,14 @@ export interface SavedAddress {
   province: string;
   postalCode: string;
   country: string;
+  // PH cascading-picker fields. Optional so legacy addresses keep
+  // round-tripping; new orders will fill these.
+  region?: string;
+  barangay?: string;
+  landmark?: string;
   // Optional pin location set by the hybrid address picker
-  // (Google Places / draggable map marker). Couriers can use this
-  // when the human-readable address is ambiguous.
+  // (MapTiler autocomplete / draggable map marker). Couriers can use
+  // this when the human-readable address is ambiguous.
   latitude?: number | null;
   longitude?: number | null;
   formatted?: string;

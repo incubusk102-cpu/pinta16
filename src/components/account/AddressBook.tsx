@@ -8,7 +8,11 @@ import {
   type SavedAddress,
   useUserAuth,
 } from "@/contexts/UserAuthContext";
-import { AddressInput, type AddressValue } from "@/components/AddressInput";
+import {
+  PhAddressFields,
+  type PhAddressValue,
+} from "@/components/PhAddressFields";
+import { zoneForRegion } from "@/lib/ph-regions";
 
 const EMPTY: AddressInputType = {
   label: "",
@@ -23,6 +27,9 @@ const EMPTY: AddressInputType = {
   latitude: null,
   longitude: null,
   formatted: "",
+  region: "",
+  barangay: "",
+  landmark: "",
 };
 
 const toInput = (a: SavedAddress): AddressInputType => ({
@@ -39,6 +46,9 @@ const toInput = (a: SavedAddress): AddressInputType => ({
   longitude: a.longitude ?? null,
   formatted: a.formatted || "",
   placeId: a.placeId,
+  region: a.region || "",
+  barangay: a.barangay || "",
+  landmark: a.landmark || "",
 });
 
 export default function AddressBook() {
@@ -66,24 +76,44 @@ export default function AddressBook() {
     setForm(EMPTY);
   };
 
-  const onAddressChange = (next: AddressValue): void =>
+  const onAddressChange = (next: PhAddressValue): void =>
     setForm((prev) => ({
       ...prev,
       line1: next.line1,
-      line2: next.line2 || "",
+      line2: prev.line2 || "",
       city: next.city,
       province: next.province || "",
       postalCode: next.postalCode || "",
       country: next.country || prev.country || "Philippines",
-      latitude: next.latitude ?? null,
-      longitude: next.longitude ?? null,
-      formatted: next.formatted,
-      placeId: next.placeId,
+      region: next.region,
+      barangay: next.barangay,
+      landmark: next.landmark || "",
+      // Compose the formatted line eagerly so signed-out checkout
+      // (which falls back to `formatted` for printable copies) gets a
+      // clean string without re-running the joiner.
+      formatted: [
+        next.line1,
+        next.barangay ? `Brgy. ${next.barangay}` : "",
+        [next.city, next.province].filter(Boolean).join(", "),
+        next.postalCode,
+        next.country || "Philippines",
+      ]
+        .filter(Boolean)
+        .join(", "),
     }));
 
   const submit = async () => {
-    if (!form.fullName.trim() || !form.line1.trim() || !form.city.trim()) {
-      toast.error("Recipient, street and city are required");
+    if (
+      !form.fullName.trim() ||
+      !form.line1.trim() ||
+      !form.city.trim() ||
+      !(form.region || "").trim() ||
+      !(form.province || "").trim() ||
+      !(form.barangay || "").trim()
+    ) {
+      toast.error(
+        "Recipient, region, province, city, barangay and street are required",
+      );
       return;
     }
     setBusy(true);
@@ -128,17 +158,16 @@ export default function AddressBook() {
     }
   };
 
-  const addressValue: AddressValue = {
+  const addressValue: PhAddressValue = {
     line1: form.line1,
-    line2: form.line2,
     city: form.city,
     province: form.province,
     postalCode: form.postalCode,
     country: form.country,
-    latitude: form.latitude ?? null,
-    longitude: form.longitude ?? null,
-    formatted: form.formatted,
-    placeId: form.placeId,
+    region: form.region || "",
+    barangay: form.barangay || "",
+    landmark: form.landmark || "",
+    zone: zoneForRegion(form.region || ""),
   };
 
   return (
@@ -185,14 +214,21 @@ export default function AddressBook() {
                     {a.phone ? ` · ${a.phone}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {[a.line1, a.line2].filter(Boolean).join(", ")}
+                    {[a.line1, a.barangay ? `Brgy. ${a.barangay}` : "", a.line2]
+                      .filter(Boolean)
+                      .join(", ")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {[a.city, a.province, a.postalCode]
+                    {[a.city, a.province, a.region, a.postalCode]
                       .filter(Boolean)
                       .join(", ")}
                     {a.country ? ` · ${a.country}` : ""}
                   </p>
+                  {a.landmark && (
+                    <p className="text-xs text-muted-foreground italic">
+                      Landmark: {a.landmark}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {!isDefault && (
@@ -257,7 +293,15 @@ export default function AddressBook() {
               className="text-sm sm:col-span-2"
             />
           </div>
-          <AddressInput value={addressValue} onChange={onAddressChange} />
+          <PhAddressFields value={addressValue} onChange={onAddressChange} />
+          <Input
+            placeholder="Landmark (e.g. across SM Annex)"
+            value={form.landmark || ""}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, landmark: e.target.value }))
+            }
+            className="text-sm"
+          />
           <div className="flex justify-end gap-2 pt-1">
             <Button size="sm" variant="ghost" onClick={cancel} disabled={busy}>
               Cancel

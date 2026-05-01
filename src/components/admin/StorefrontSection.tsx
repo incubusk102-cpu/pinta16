@@ -7,7 +7,14 @@ import {
   Plus,
   Trash2,
   Loader2,
+  PackageOpen,
 } from "lucide-react";
+import {
+  COURIERS,
+  DEFAULT_SHIPPING_RATES,
+  type ShippingRate,
+} from "@/lib/shipment";
+import { SHIPPING_ZONES } from "@/lib/ph-regions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +114,7 @@ interface AdminConfig {
     threshold: number;
     shippingFee: number;
   };
+  shippingRates: ShippingRate[];
   promoCodes: AdminPromo[];
   chat: {
     enabled: boolean;
@@ -143,6 +151,7 @@ const DEFAULTS: AdminConfig = {
     threshold: 8000,
     shippingFee: 500,
   },
+  shippingRates: DEFAULT_SHIPPING_RATES,
   promoCodes: [],
   chat: {
     enabled: true,
@@ -158,7 +167,7 @@ export function StorefrontSection() {
   const [cfg, setCfg] = useState<AdminConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<
-    null | "announcement" | "shipping" | "promo" | "chat"
+    null | "announcement" | "shipping" | "shipping-rates" | "promo" | "chat"
   >(null);
 
   // Promo form state
@@ -190,6 +199,9 @@ export function StorefrontSection() {
             ...DEFAULTS.freeShipping,
             ...data.config.freeShipping,
           },
+          shippingRates: Array.isArray(data.config.shippingRates)
+            ? (data.config.shippingRates as ShippingRate[])
+            : DEFAULTS.shippingRates,
           promoCodes: Array.isArray(data.config.promoCodes)
             ? data.config.promoCodes
             : [],
@@ -266,6 +278,71 @@ export function StorefrontSection() {
     } finally {
       setSaving(null);
     }
+  };
+
+  const handleSaveShippingRates = async () => {
+    setSaving("shipping-rates");
+    try {
+      await post({
+        action: "update-shipping-rates",
+        shippingRates: cfg.shippingRates,
+      });
+      toast.success("Shipping rates saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const updateShippingRateRow = (
+    courierId: string,
+    patch: Partial<ShippingRate> | { fees: Partial<ShippingRate["fees"]> },
+  ) => {
+    setCfg((c) => ({
+      ...c,
+      shippingRates: c.shippingRates.map((row) =>
+        row.courierId === courierId
+          ? {
+              ...row,
+              ...("courierLabel" in patch
+                ? { courierLabel: patch.courierLabel as string }
+                : {}),
+              fees: { ...row.fees, ...(patch.fees ?? {}) },
+            }
+          : row,
+      ),
+    }));
+  };
+
+  const removeShippingRateRow = (courierId: string) => {
+    setCfg((c) => ({
+      ...c,
+      shippingRates: c.shippingRates.filter((r) => r.courierId !== courierId),
+    }));
+  };
+
+  const addShippingRateRow = (courier: { id: string; label: string }) => {
+    setCfg((c) => {
+      if (c.shippingRates.some((r) => r.courierId === courier.id)) return c;
+      const seed = DEFAULT_SHIPPING_RATES.find(
+        (r) => r.courierId === courier.id,
+      );
+      const fees = seed
+        ? { ...seed.fees }
+        : { metro_manila: 0, luzon: 0, visayas: 0, mindanao: 0 };
+      return {
+        ...c,
+        shippingRates: [
+          ...c.shippingRates,
+          {
+            courierId: courier.id,
+            courierLabel: courier.label,
+            fees,
+          },
+        ],
+      };
+    });
   };
 
   const handleAddPromo = async () => {
@@ -958,6 +1035,143 @@ export function StorefrontSection() {
               )}
             </Button>
           </div>
+        </div>
+      </section>
+
+      {/* Per-courier × per-zone shipping rates */}
+      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <PackageOpen className="w-4 h-4 text-primary" />
+          <h2 className="font-display text-lg">Per-courier shipping rates</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Customers pick a courier at checkout and the fee auto-fills based on
+          their region's zone. The free-shipping threshold above still applies
+          on top — orders over the threshold ship free regardless of courier.
+        </p>
+
+        {cfg.shippingRates.length === 0 ? (
+          <p className="text-xs text-muted-foreground p-3 bg-background/30 border border-border/40 rounded-md mb-3">
+            No couriers configured. Add one below to start charging per-courier
+            rates; until then checkout falls back to the flat shipping fee
+            above.
+          </p>
+        ) : (
+          <div className="overflow-x-auto -mx-2 sm:mx-0 mb-3">
+            <table className="w-full text-xs border-separate border-spacing-y-1.5 min-w-[640px]">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th className="text-left font-medium px-2 py-1.5">Courier</th>
+                  {SHIPPING_ZONES.map((z) => (
+                    <th
+                      key={z.id}
+                      className="text-left font-medium px-2 py-1.5"
+                    >
+                      {z.label} (₱)
+                    </th>
+                  ))}
+                  <th className="px-2 py-1.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {cfg.shippingRates.map((row) => (
+                  <tr key={row.courierId} className="bg-background/40">
+                    <td className="px-2 py-1.5 align-middle">
+                      <Input
+                        value={row.courierLabel}
+                        onChange={(e) =>
+                          updateShippingRateRow(row.courierId, {
+                            courierLabel: e.target.value.slice(0, 60),
+                          })
+                        }
+                        className="h-8 text-xs"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5 break-all">
+                        id: {row.courierId}
+                      </p>
+                    </td>
+                    {SHIPPING_ZONES.map((z) => (
+                      <td key={z.id} className="px-2 py-1.5 align-middle">
+                        <Input
+                          type="number"
+                          min={0}
+                          step={10}
+                          value={row.fees[z.id] ?? 0}
+                          onChange={(e) =>
+                            updateShippingRateRow(row.courierId, {
+                              fees: {
+                                [z.id]: Math.max(
+                                  0,
+                                  Math.floor(Number(e.target.value) || 0),
+                                ),
+                              },
+                            })
+                          }
+                          className="h-8 text-xs w-24"
+                        />
+                      </td>
+                    ))}
+                    <td className="px-2 py-1.5 align-middle text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => removeShippingRateRow(row.courierId)}
+                        aria-label={`Remove ${row.courierLabel}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {(() => {
+          const remaining = COURIERS.filter(
+            (c) =>
+              c.id !== "other" &&
+              !cfg.shippingRates.some((r) => r.courierId === c.id),
+          );
+          if (remaining.length === 0) return null;
+          return (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <span className="text-xs text-muted-foreground self-center mr-1">
+                Add courier:
+              </span>
+              {remaining.map((c) => (
+                <Button
+                  key={c.id}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() =>
+                    addShippingRateRow({ id: c.id, label: c.label })
+                  }
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  {c.label}
+                </Button>
+              ))}
+            </div>
+          );
+        })()}
+
+        <div className="flex justify-end">
+          <Button
+            onClick={() => void handleSaveShippingRates()}
+            disabled={saving === "shipping-rates"}
+          >
+            {saving === "shipping-rates" ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…
+              </>
+            ) : (
+              "Save shipping rates"
+            )}
+          </Button>
         </div>
       </section>
 
