@@ -35,6 +35,17 @@ export default defineConfig({
           if (id.includes("/embla-carousel")) return "embla";
           if (id.includes("/framer-motion/")) return "motion";
           if (id.includes("/sonner/")) return "sonner";
+          // Heavy WebGL map renderer + react-map-gl wrapper. Putting
+          // these in their own chunk means they only ride along with
+          // the lazy AddressMapPicker chunk that imports them, instead
+          // of being bundled into `vendor` (which is part of the
+          // initial paint).
+          if (
+            id.includes("/maplibre-gl/") ||
+            id.includes("/react-map-gl/")
+          ) {
+            return "maps";
+          }
           return "vendor";
         },
       },

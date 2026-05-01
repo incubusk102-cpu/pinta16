@@ -8,25 +8,10 @@ const HeroSection = () => {
     target: ref,
     offset: ["start start", "end start"],
   });
-  const bgY = useTransform(scrollYProgress, [0, 1], ["0%", "20%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 1], [1.05, 1.2]);
 
   return (
     <section id="hero" ref={ref} className="relative h-screen overflow-hidden">
-      {[
-        "https://via.placeholder.com/400",
-        "https://via.placeholder.com/400",
-        "https://via.placeholder.com/400",
-      ].map((img, i) => (
-        <motion.div
-          key={i}
-          className="absolute inset-0"
-          style={{ y: bgY, scale, opacity: i === 0 ? 0.25 : 0.5 }}
-        >
-          <img src={img} alt="" className="w-full h-full object-cover" />
-        </motion.div>
-      ))}
       <div className="absolute inset-0 bg-background/70" />
       <motion.div
         className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6"

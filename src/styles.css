@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+/* Google Fonts are loaded via <link rel="preconnect"> + <link rel="stylesheet">
+   in index.html so the connection to fonts.gstatic.com starts at the same
+   time as the document parse, instead of waiting for the Tailwind-built
+   stylesheet to download and a CSS @import to kick off another round-trip. */
 
 @custom-variant dark (&:is(.dark *));
 
