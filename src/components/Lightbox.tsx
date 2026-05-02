@@ -1,9 +1,10 @@
-import { useEffect, useCallback, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useCallback, useState, useId } from "react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   getEffectivePrice,
   getDiscountPercent,
@@ -46,9 +47,13 @@ const Lightbox = ({
   } = useStorefrontConfig();
   const [zoomed, setZoomed] = useState(false);
   const [showMockup, setShowMockup] = useState(false);
+  const titleId = useId();
   const art = artworks[currentIndex];
 
   const hasMockup = art?.mockup && art.mockup !== art.image;
+  // Lock <body> scroll while the lightbox is open so the gallery
+  // underneath doesn't drift on touch devices.
+  useBodyScrollLock(isOpen);
 
   const handlePrev = useCallback(() => {
     onNavigate(currentIndex > 0 ? currentIndex - 1 : artworks.length - 1);
@@ -85,6 +90,25 @@ const Lightbox = ({
   if (!isOpen || !art) return null;
 
   const displayImage = showMockup && hasMockup ? art.mockup! : art.image;
+
+  // Touch/trackpad swipe: drag horizontally to navigate, drag down to
+  // close. Threshold is forgiving (60px / 200px·s velocity) so the
+  // gesture feels responsive without firing on small jitters.
+  const SWIPE_THRESHOLD = 60;
+  const SWIPE_VELOCITY = 200;
+  const onSwipe = (_: unknown, info: PanInfo) => {
+    const { offset, velocity } = info;
+    const horizontal = Math.abs(offset.x) > Math.abs(offset.y);
+    if (horizontal) {
+      if (offset.x < -SWIPE_THRESHOLD || velocity.x < -SWIPE_VELOCITY) {
+        handleNext();
+      } else if (offset.x > SWIPE_THRESHOLD || velocity.x > SWIPE_VELOCITY) {
+        handlePrev();
+      }
+    } else if (offset.y > 120 || velocity.y > 400) {
+      onClose();
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -124,31 +148,48 @@ const Lightbox = ({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex items-center justify-center"
           onClick={onClose}
+          drag
+          dragSnapToOrigin
+          dragElastic={0.18}
+          dragMomentum={false}
+          onDragEnd={onSwipe}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
         >
           <button
             onClick={onClose}
-            className="absolute top-6 right-6 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            className="absolute top-6 right-6 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            aria-label="Close lightbox"
           >
-            <X className="w-6 h-6" />
+            <X className="w-6 h-6" aria-hidden="true" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               handlePrev();
             }}
-            className="absolute left-2 md:left-8 p-2 md:p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            className="absolute left-2 md:left-8 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            aria-label="Previous painting"
           >
-            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
+            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleNext();
             }}
-            className="absolute right-2 md:right-8 p-2 md:p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            className="absolute right-2 md:right-8 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            aria-label="Next painting"
           >
-            <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+            <ChevronRight
+              className="w-5 h-5 md:w-6 md:h-6"
+              aria-hidden="true"
+            />
           </button>
+          <span className="md:hidden absolute bottom-3 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full bg-foreground/10 backdrop-blur-sm font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground pointer-events-none">
+            Swipe to navigate
+          </span>
           <div
             className="max-w-5xl w-full px-12 sm:px-16 md:px-16 max-h-[90vh] overflow-y-auto flex flex-col md:flex-row items-center gap-6 md:gap-8"
             onClick={(e) => e.stopPropagation()}
@@ -179,7 +220,10 @@ const Lightbox = ({
               <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
                 {art.medium} · {art.year}
               </p>
-              <h3 className="font-display text-2xl md:text-3xl text-foreground mb-3">
+              <h3
+                id={titleId}
+                className="font-display text-2xl md:text-3xl text-foreground mb-3"
+              >
                 {art.title}
               </h3>
               <p className="font-body text-sm text-muted-foreground mb-4 leading-relaxed">

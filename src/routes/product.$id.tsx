@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -18,6 +18,8 @@ import CheckoutForm from "@/components/CheckoutForm";
 import RelatedProducts from "@/components/RelatedProducts";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import ZoomableImage from "@/components/ZoomableImage";
+import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
+import ImageWithFallback from "@/components/ImageWithFallback";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { addStamp } from "@/lib/passport";
 import {
@@ -81,6 +83,7 @@ function ProductPage() {
 
   const [activeImage, setActiveImage] = useState(0);
   const [zoomed, setZoomed] = useState(false);
+  const addToCartButtonRef = useRef<HTMLButtonElement>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const { addToCart } = useCart();
@@ -346,11 +349,12 @@ function ProductPage() {
                 className="block w-full"
                 aria-label="Zoom image"
               >
-                <img
+                <ImageWithFallback
                   key={currentImage.url}
                   src={currentImage.url}
                   alt={`${artwork.title} – photo ${activeImage + 1}`}
                   className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
+                  fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
                   loading="lazy"
                   decoding="async"
                 />
@@ -411,10 +415,11 @@ function ProductPage() {
                         : "border-transparent opacity-70 hover:opacity-100"
                     }`}
                   >
-                    <img
+                    <ImageWithFallback
                       src={img.url}
                       alt={`${artwork.title} thumbnail ${idx + 1}`}
                       className="w-full h-full object-cover"
+                      fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
                       loading="lazy"
                       decoding="async"
                     />
@@ -462,6 +467,7 @@ function ProductPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <button
+                ref={addToCartButtonRef}
                 type="button"
                 onClick={handleAdd}
                 disabled={!purchasable}
@@ -601,6 +607,31 @@ function ProductPage() {
         </div>
       )}
 
+      <StickyMobileBuyBar
+        watchRef={addToCartButtonRef}
+        price={effectivePrice}
+        originalPrice={discount > 0 ? artwork.price : undefined}
+        onAdd={handleAdd}
+        ctaDisabled={!purchasable}
+        ctaLabel={
+          purchasable ? "Add to cart" : AVAILABILITY_LABEL[artwork.availability]
+        }
+        isInWishlist={inWishlist}
+        onWishlist={() => {
+          if (!artwork) return;
+          const added = wishlist.toggle({
+            id,
+            title: artwork.title,
+            image: artwork.image,
+            price: effectivePrice,
+          });
+          toast.success(
+            added
+              ? `Saved "${artwork.title}" to your wishlist`
+              : `Removed "${artwork.title}" from your wishlist`,
+          );
+        }}
+      />
       <CartDrawer />
       <CheckoutForm />
     </div>
