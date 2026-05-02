@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  StickyNote,
   TrendingDown,
   UserPlus,
   X,
@@ -387,8 +388,14 @@ export function CustomersSection() {
                   onClick={() => setDrawerEmail(c.email)}
                 >
                   <td className="px-4 py-3 min-w-[200px]">
-                    <div className="font-medium truncate max-w-[260px]">
-                      {c.name || c.email}
+                    <div className="font-medium truncate max-w-[260px] flex items-center gap-1.5">
+                      <span className="truncate">{c.name || c.email}</span>
+                      {c.notes.trim() ? (
+                        <StickyNote
+                          className="w-3.5 h-3.5 text-amber-500 shrink-0"
+                          aria-label="Has internal notes"
+                        />
+                      ) : null}
                     </div>
                     <div className="text-xs text-muted-foreground truncate max-w-[260px]">
                       {c.email}

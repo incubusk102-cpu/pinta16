@@ -35,6 +35,14 @@ const parseBody = (body) => {
 const CHAT_FAQ_MAX = 12;
 const CHAT_FAQ_QUESTION_MAX = 80;
 const CHAT_FAQ_ANSWER_MAX = 1200;
+
+// Saved replies for the admin Messages section. These are admin-only
+// templates the gallery owner inserts into a chat reply with a click —
+// never shown to buyers, so they can be slightly more "operational" in
+// tone than the public chat FAQs.
+const SAVED_REPLY_MAX = 30;
+const SAVED_REPLY_LABEL_MAX = 80;
+const SAVED_REPLY_BODY_MAX = 2000;
 const CHAT_WELCOME_MAX = 200;
 
 const DEFAULT_CHAT_WELCOME =
@@ -86,6 +94,40 @@ const slugifyFaqId = (value) => {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
   return slug || `faq-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const slugifyReplyId = (label) => {
+  const base = String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return base || `reply-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const sanitizeSavedReplies = (raw) => {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const label = String(entry.label ?? "")
+      .trim()
+      .slice(0, SAVED_REPLY_LABEL_MAX);
+    const body = String(entry.body ?? "")
+      .trim()
+      .slice(0, SAVED_REPLY_BODY_MAX);
+    if (!label || !body) continue;
+    let id = String(entry.id ?? "")
+      .trim()
+      .slice(0, 40);
+    if (!id) id = slugifyReplyId(label);
+    while (seen.has(id)) id = `${id}-${out.length}`;
+    seen.add(id);
+    out.push({ id, label, body });
+    if (out.length >= SAVED_REPLY_MAX) break;
+  }
+  return out;
 };
 
 const sanitizeChatFaqs = (raw) => {
@@ -857,6 +899,31 @@ const DEFAULT_CONFIG = {
     agentHandoff: true,
     faqs: DEFAULT_CHAT_FAQS,
   },
+  // Saved replies (admin-only chat templates). Seed with the four
+  // canonical messages a soloist gallery owner ends up retyping
+  // dozens of times — admin can edit/delete them like any other entry.
+  savedReplies: [
+    {
+      id: "shipped",
+      label: "Order shipped — LBC",
+      body: "Hi! Your painting just shipped via LBC today. Tracking number coming through email shortly. Thanks again for the order — can't wait for it to reach you.",
+    },
+    {
+      id: "awb",
+      label: "Tracking number",
+      body: "Quick update: your AWB is {AWB}. You can track it on the courier's website. Reach out if anything looks off.",
+    },
+    {
+      id: "commission",
+      label: "Custom commission acknowledged",
+      body: "Got your commission request — really excited to take this on. I'll be in touch with sketches in 5–7 days, and the finished piece usually takes 2–3 weeks from your sign-off. Thank you so much.",
+    },
+    {
+      id: "delay",
+      label: "Apologies for the delay",
+      body: "Thanks so much for your patience — I'm running a few days behind on this one. New estimated ship date is {DATE}. I'll send the AWB the moment it goes out. Sorry again for the wait.",
+    },
+  ],
   siteCopy: SITE_COPY_DEFAULTS,
   welcomeEmail: DEFAULT_WELCOME_EMAIL,
   orderEmail: DEFAULT_ORDER_EMAIL,
@@ -1117,6 +1184,12 @@ const sanitizeConfig = (raw) => {
       agentHandoff: chatRaw.agentHandoff !== false,
       faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
     },
+    // Admin-only saved replies. Treat an undefined `savedReplies` field
+    // as "use the seed defaults" (first time admin loads the section);
+    // an explicit empty array means admin deleted them all on purpose.
+    savedReplies: Array.isArray(data.savedReplies)
+      ? sanitizeSavedReplies(data.savedReplies)
+      : DEFAULT_CONFIG.savedReplies,
     siteCopy: sanitizeSiteCopy(data.siteCopy),
     welcomeEmail: sanitizeWelcomeEmail(data.welcomeEmail),
     orderEmail: sanitizeOrderEmail(data.orderEmail),
@@ -1559,6 +1632,18 @@ const handle = async ({ request, env }) => {
             ...(existing.vacationMode || DEFAULT_VACATION_MODE),
             ...(body.vacationMode || {}),
           },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-saved-replies") {
+        const replies = Array.isArray(body.savedReplies)
+          ? body.savedReplies
+          : [];
+        const next = sanitizeConfig({
+          ...existing,
+          savedReplies: replies,
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });
