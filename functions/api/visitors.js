@@ -5,12 +5,16 @@ import { initRequestContext } from "./_lib/handler-wrapper.js";
 import { makeStore } from "./_lib/kv-store.js";
 import { getUserAgent } from "./_lib/request-info.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
-import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const HEARTBEATS_KEY = "heartbeats";
 const HISTORY_KEY = "history-24h";
 
-const LIVE_WINDOW_MS = 5 * 60 * 1000;
+// Live-window must comfortably exceed the client heartbeat cadence
+// (4 min — see useVisitorHeartbeat.ts) so a visitor whose ping is
+// late by a few seconds isn't briefly classed as offline. 6 min
+// gives a 50% safety margin without making the counter visibly
+// stale.
+const LIVE_WINDOW_MS = 6 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const HISTORY_BUCKETS = 24;
 const MAX_HEARTBEATS = 5000;
@@ -99,21 +103,14 @@ const handle = async ({ request, env }) => {
 
   try {
     if (event.httpMethod === "POST") {
-      // Heartbeat is sent every ~60s by the live counter, so 12 hits/
-      // minute / IP is plenty for a real tab and even a couple sibling
-      // tabs sharing an IP. Anything beyond is scripted.
-      const limit = await consumeRateLimit(event, {
-        bucket: "visitors-heartbeat",
-        windowMs: 60_000,
-        max: 12,
-      });
-      if (!limit.allowed) {
-        const r = rateLimitResponse(limit.retryAfter);
-        return new Response(r.body, {
-          status: r.statusCode,
-          headers: r.headers,
-        });
-      }
+      // Note: this endpoint used to consume a RATE_LIMITS KV write per
+      // heartbeat. With the client heartbeating every 4 min and the
+      // visibility-gated client throttle already in place, the
+      // rate-limit was burning ~3 KV writes per heartbeat for no real
+      // protection (a scripted attacker would just rotate session ids
+      // anyway). Free-tier Workers KV gives 1k writes/day, so the
+      // limit was the main thing pushing this site over quota — see
+      // useVisitorHeartbeat.ts for the matching client-side change.
       const { sessionId } = parseBody(event.body);
       if (
         !sessionId ||
