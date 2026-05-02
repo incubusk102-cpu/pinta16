@@ -449,8 +449,6 @@ const CheckoutForm = () => {
             return "Use a PH mobile (09XX XXX XXXX) or +63 9XX XXX XXXX";
           }
           return "";
-        case "region":
-          return value.trim() ? "" : "Region is required";
         case "province":
           return value.trim() ? "" : "Province is required";
         case "city":
@@ -482,7 +480,6 @@ const CheckoutForm = () => {
         "fullName",
         "email",
         "phone",
-        "region",
         "province",
         "city",
         "barangay",
@@ -503,7 +500,6 @@ const CheckoutForm = () => {
       fullName: true,
       email: true,
       phone: true,
-      region: true,
       province: true,
       city: true,
       barangay: true,
@@ -783,7 +779,6 @@ const CheckoutForm = () => {
     // hints disappear the moment a field becomes valid.
     setErrors((prev) => ({
       ...prev,
-      region: next.region ? undefined : prev.region,
       province: next.province ? undefined : prev.province,
       city: next.city ? undefined : prev.city,
       barangay: next.barangay ? undefined : prev.barangay,
@@ -1130,7 +1125,6 @@ const CheckoutForm = () => {
                                       />
                                     </fieldset>
                                     {[
-                                      touched.region && errors.region,
                                       touched.province && errors.province,
                                       touched.city && errors.city,
                                       touched.barangay && errors.barangay,
