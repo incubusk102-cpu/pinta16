@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import {
   Megaphone,
   MessageSquare,
@@ -514,7 +515,19 @@ export function StorefrontSection() {
   const { token } = useAdminAuth();
   const { refresh } = useStorefrontConfig();
   const [cfg, setCfg] = useState<AdminConfig>(DEFAULTS);
+  // Snapshot of the last persisted config so we can detect when the
+  // admin has unsaved edits. Updated after a successful load or save.
+  const baselineCfg = useRef<AdminConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
+  const isDirty = useMemo(() => {
+    if (loading) return false;
+    try {
+      return JSON.stringify(cfg) !== JSON.stringify(baselineCfg.current);
+    } catch {
+      return false;
+    }
+  }, [cfg, loading]);
+  useUnsavedChangesGuard(isDirty);
   const [saving, setSaving] = useState<
     | null
     | "announcement"
@@ -553,7 +566,7 @@ export function StorefrontSection() {
       }
       const data = await res.json();
       if (data?.config) {
-        setCfg({
+        const next: AdminConfig = {
           announcement: {
             ...DEFAULTS.announcement,
             ...data.config.announcement,
@@ -584,7 +597,9 @@ export function StorefrontSection() {
               ? data.config.vacationMode
               : {}),
           },
-        });
+        };
+        setCfg(next);
+        baselineCfg.current = next;
       }
     } catch (e) {
       toast.error(
@@ -615,7 +630,9 @@ export function StorefrontSection() {
     }
     const data = await res.json();
     if (data?.config) {
-      setCfg(data.config as AdminConfig);
+      const next = data.config as AdminConfig;
+      setCfg(next);
+      baselineCfg.current = next;
     }
     void refresh();
   };
@@ -890,6 +907,26 @@ export function StorefrontSection() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      {/* Unsaved-changes pill — slides into view at the top of the
+          section as soon as the admin edits any field, and disappears
+          after a successful save. Pairs with the `useUnsavedChangesGuard`
+          hook above, which warns if the admin tries to navigate away
+          (refresh, tab close, browser back) with pending edits. */}
+      {isDirty && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="sticky top-2 z-30 -mx-1 flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-700 dark:text-amber-300 font-body text-xs"
+        >
+          <span className="flex items-center gap-2">
+            <span
+              className="inline-block w-2 h-2 rounded-full bg-amber-500"
+              aria-hidden="true"
+            />
+            Unsaved changes — use the section's <em>Save</em> button to persist.
+          </span>
+        </div>
+      )}
       {/* Vacation / shop pause — top of section so it's the first thing
           admin sees on the Storefront tab. Visually distinct (amber tint)
           when active so it's obvious the shop is paused. */}

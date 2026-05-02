@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, RotateCcw, Save, Type } from "lucide-react";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,8 +24,18 @@ export const SiteCopySection = () => {
   const { token } = useAdminAuth();
   const { config, refresh } = useStorefrontConfig();
   const [copy, setCopy] = useState<SiteCopy>(cloneDefaults);
+  const baselineCopy = useRef<SiteCopy>(cloneDefaults());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const isDirty = useMemo(() => {
+    if (loading) return false;
+    try {
+      return JSON.stringify(copy) !== JSON.stringify(baselineCopy.current);
+    } catch {
+      return false;
+    }
+  }, [copy, loading]);
+  useUnsavedChangesGuard(isDirty);
 
   // Pull the current saved values from the admin endpoint so blanks vs
   // saved-empty are unambiguous. We seed from context first for a fast
@@ -49,7 +60,7 @@ export const SiteCopySection = () => {
         const data = await res.json();
         if (cancelled) return;
         if (data?.config?.siteCopy) {
-          setCopy({
+          const next: SiteCopy = {
             gallery: {
               ...DEFAULT_SITE_COPY.gallery,
               ...data.config.siteCopy.gallery,
@@ -66,7 +77,9 @@ export const SiteCopySection = () => {
               ...DEFAULT_SITE_COPY.contact,
               ...data.config.siteCopy.contact,
             },
-          });
+          };
+          setCopy(next);
+          baselineCopy.current = next;
         }
       } catch (e) {
         if (!cancelled)
@@ -100,6 +113,7 @@ export const SiteCopySection = () => {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       toast.success("Site copy saved");
+      baselineCopy.current = copy;
       void refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
@@ -231,13 +245,13 @@ export const SiteCopySection = () => {
       />
 
       <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving || !isDirty}>
           {saving ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
           ) : (
             <Save className="w-4 h-4 mr-2" />
           )}
-          Save site copy
+          {isDirty ? "Save site copy" : "Saved"}
         </Button>
         <Button
           type="button"
@@ -249,6 +263,34 @@ export const SiteCopySection = () => {
           Reset to defaults
         </Button>
       </div>
+
+      {/* Sticky save bar — slides in at the bottom of the viewport when
+          the admin has scrolled past the inline Save button and there
+          are unsaved edits. Avoids pinning a bar permanently when no
+          changes are pending. */}
+      {isDirty && (
+        <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-card/95 backdrop-blur-md border-t border-border/40 flex items-center justify-between gap-3 z-30 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <span
+            className="font-body text-xs text-amber-600 dark:text-amber-300 flex items-center gap-2"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full bg-amber-500"
+              aria-hidden="true"
+            />
+            Unsaved changes
+          </span>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            Save
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
