@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, CheckCircle, QrCode, RefreshCw } from "lucide-react";
 import { checkPaymentStatus as checkPaymentStatusFn } from "@/utils/payment.functions";
@@ -18,6 +18,16 @@ type PaymentStatus =
   | "succeeded"
   | "failed";
 
+// How often to silently re-check payment status with PayMongo while the
+// modal is open. The check-payment endpoint is rate-limited to ~30 reqs
+// / minute / IP, so 4s (= 15 polls / minute) leaves plenty of headroom
+// even if the user also taps the manual "Check now" button a few times.
+const POLL_INTERVAL_MS = 4000;
+// Stop auto-polling after this long. PayMongo QR-Ph intents expire on
+// their side after a few minutes; we don't want to keep hitting their
+// API forever for a tab the user left open and walked away from.
+const POLL_MAX_DURATION_MS = 10 * 60 * 1000;
+
 const PaymentModal = ({
   paymentIntentId,
   qrCodeUrl,
@@ -27,15 +37,16 @@ const PaymentModal = ({
 }: PaymentModalProps) => {
   const [status, setStatus] = useState<PaymentStatus>("awaiting_payment");
   const [statusMessage, setStatusMessage] = useState("");
+  // Latest status in a ref so the polling loop can read it without
+  // having to re-create itself on every state change (which would
+  // reset the interval and double-poll).
+  const statusRef = useRef<PaymentStatus>(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
-  const checkPaymentStatus = useCallback(async () => {
-    setStatus("checking");
-    setStatusMessage("Verifying payment...");
-
-    try {
-      const data = await checkPaymentStatusFn({ data: { paymentIntentId } });
-      const paymentStatus = data.attributes?.status;
-
+  const applyPaymentStatus = useCallback(
+    (paymentStatus: string | undefined) => {
       if (paymentStatus === "succeeded") {
         setStatus("succeeded");
         setStatusMessage("Payment successful!");
@@ -47,15 +58,26 @@ const PaymentModal = ({
       } else if (paymentStatus === "processing") {
         setStatus("awaiting_payment");
         setStatusMessage(
-          "Payment is processing. Please check again in a moment.",
+          "Payment is processing. We'll confirm automatically in a moment.",
         );
       } else if (paymentStatus === "awaiting_payment_method") {
         setStatus("failed");
         setStatusMessage("Payment session expired. Please start again.");
-      } else {
+      } else if (paymentStatus) {
         setStatus("awaiting_payment");
         setStatusMessage(`Status: ${paymentStatus}`);
       }
+    },
+    [],
+  );
+
+  const checkPaymentStatus = useCallback(async () => {
+    setStatus("checking");
+    setStatusMessage("Verifying payment...");
+
+    try {
+      const data = await checkPaymentStatusFn({ data: { paymentIntentId } });
+      applyPaymentStatus(data.attributes?.status);
     } catch (error) {
       console.error("Status check failed:", error);
       setStatus("awaiting_payment");
@@ -65,7 +87,57 @@ const PaymentModal = ({
           : "Could not verify payment. Please try again.",
       );
     }
-  }, [paymentIntentId]);
+  }, [paymentIntentId, applyPaymentStatus]);
+
+  // Background poller: silently re-checks payment status with PayMongo
+  // every few seconds while the modal is open. Customers who scan the
+  // QR Ph code and pay through GCash / Maya often forget to come back
+  // to the tab and tap "Check Payment Status", which previously left
+  // the order unconfirmed even though the money was transferred.
+  // Auto-polling closes that gap by promoting the intent to "succeeded"
+  // as soon as PayMongo reports it.
+  useEffect(() => {
+    if (!paymentIntentId) return;
+    // Don't start polling until the QR code is rendered — there's
+    // nothing to confirm yet, and it just burns rate-limit budget.
+    if (!qrCodeUrl) return;
+
+    let cancelled = false;
+    const startedAt = Date.now();
+
+    const poll = async () => {
+      if (cancelled) return;
+      // Skip while a manual "Check now" request or another poll is in
+      // flight, and stop entirely once we reach a terminal state.
+      const current = statusRef.current;
+      if (current === "checking") return;
+      if (current === "succeeded" || current === "failed") return;
+      if (Date.now() - startedAt > POLL_MAX_DURATION_MS) return;
+
+      try {
+        const data = await checkPaymentStatusFn({ data: { paymentIntentId } });
+        if (cancelled) return;
+        applyPaymentStatus(data.attributes?.status);
+      } catch (error) {
+        // Swallow transient errors silently — the next tick will retry,
+        // and we don't want to flash an error toast at the customer
+        // every few seconds for a flaky network.
+        if (!cancelled) {
+          console.warn("Auto status check failed:", error);
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(poll, POLL_INTERVAL_MS);
+    // Kick off an immediate first poll so customers who paid before the
+    // modal was even open get confirmed without waiting a full tick.
+    poll();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [paymentIntentId, qrCodeUrl, applyPaymentStatus]);
 
   useEffect(() => {
     if (status === "succeeded") {
@@ -155,7 +227,7 @@ const PaymentModal = ({
                   />
                   <p className="font-body text-[10px] text-muted-foreground mt-3">
                     Scan this QR code using GCash, Maya, or any QR Ph-enabled
-                    app, then come back here.
+                    app. We'll detect your payment automatically.
                   </p>
                 </div>
               ) : (
@@ -163,6 +235,15 @@ const PaymentModal = ({
                   <Loader2 className="w-8 h-8 animate-spin text-[#0066FF] mb-3" />
                   <p className="font-body text-xs text-muted-foreground">
                     Generating QR code...
+                  </p>
+                </div>
+              )}
+
+              {qrCodeUrl && status !== "failed" && (
+                <div className="mb-3 flex items-center justify-center gap-2 text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <p className="font-body text-[10px]">
+                    Waiting for payment — checking automatically…
                   </p>
                 </div>
               )}
@@ -175,7 +256,7 @@ const PaymentModal = ({
 
               <button
                 onClick={checkPaymentStatus}
-                disabled={status === "checking"}
+                disabled={status === "checking" || !qrCodeUrl}
                 className="w-full py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 disabled:opacity-50 transition-all duration-300 rounded-sm flex items-center justify-center gap-2"
               >
                 {status === "checking" ? (
@@ -186,13 +267,14 @@ const PaymentModal = ({
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4" />
-                    Check Payment Status
+                    Check Now
                   </>
                 )}
               </button>
 
               <p className="font-body text-[10px] text-muted-foreground/50 mt-4">
-                After paying, tap "Check Payment Status" to confirm your order.
+                Your order confirms automatically once payment is received. Use
+                "Check Now" if you don't want to wait.
               </p>
             </div>
           )}
