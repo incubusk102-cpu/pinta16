@@ -8,7 +8,11 @@ import { setCloudflareContext } from "./_lib/context.js";
 
 import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
-import { buildLambdaEvent } from "./_lib/lambda-event.js";
+import { BodyTooLargeError, buildLambdaEvent } from "./_lib/lambda-event.js";
+import {
+  turnstileFailureResponse,
+  verifyTurnstileToken,
+} from "./_lib/turnstile.js";
 import { isEmailConfigured, sendEmail } from "./_lib/email.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
@@ -147,7 +151,15 @@ const handle = async ({ request, env }) => {
     return json(500, { error: "NEWSLETTER KV binding missing" });
   }
   const store = makeStore(env.NEWSLETTER);
-  const event = await buildLambdaEvent(request);
+  let event;
+  try {
+    event = await buildLambdaEvent(request);
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      return json(413, { error: "Request body too large (max 5 MB)" });
+    }
+    throw err;
+  }
   const method = request.method;
 
   try {
@@ -189,6 +201,19 @@ const handle = async ({ request, env }) => {
         });
       }
       const body = parseBody(event.body);
+      // Verify Cloudflare Turnstile if configured. Falls open (skipped)
+      // when TURNSTILE_SECRET_KEY isn't set, so this is safe to ship
+      // before the dashboard widget is created.
+      const tsToken =
+        typeof body?.turnstileToken === "string" ? body.turnstileToken : "";
+      const ts = await verifyTurnstileToken(event, { token: tsToken });
+      if (!ts.allowed) {
+        const r = turnstileFailureResponse(ts.reason);
+        return new Response(r.body, {
+          status: r.statusCode,
+          headers: r.headers,
+        });
+      }
       const email = String(body?.email || "")
         .trim()
         .toLowerCase();

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import Turnstile, { isTurnstileEnabled } from "@/components/Turnstile";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
   useProducts,
@@ -213,8 +214,14 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   const { initPassword, login } = useAdminAuth();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const isInitMode = initialized === false;
+
+  const handleToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+  const handleExpire = useCallback(() => setTurnstileToken(null), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,16 +238,19 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
     setSubmitting(true);
     try {
       if (isInitMode) {
-        await initPassword(password);
+        await initPassword(password, turnstileToken || undefined);
         toast.success("Admin password set");
       } else {
-        await login(password);
+        await login(password, turnstileToken || undefined);
         toast.success("Welcome back");
       }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Authentication failed",
       );
+      // Reset the token after a failed attempt — Turnstile tokens are
+      // single-use and the widget auto-issues a fresh one.
+      setTurnstileToken(null);
     } finally {
       setSubmitting(false);
     }
@@ -275,6 +285,16 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
               disabled={initialized === null}
             />
           </div>
+          {isTurnstileEnabled() && (
+            <div className="flex justify-center">
+              <Turnstile
+                action={isInitMode ? "admin-init" : "admin-login"}
+                appearance="interaction-only"
+                onToken={handleToken}
+                onExpire={handleExpire}
+              />
+            </div>
+          )}
           <Button
             type="submit"
             className="w-full"
