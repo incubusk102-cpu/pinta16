@@ -288,37 +288,45 @@ const formatPHP = (n) =>
     maximumFractionDigits: 2,
   })}`;
 
-const wrapHtml = (heading, bodyHtml) =>
-  `
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(heading)}</title>
-</head>
-<body style="margin:0;padding:24px;background:#f5f3ee;font-family:Inter,Helvetica,Arial,sans-serif;color:#1c1c1c;">
-  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e1d8;border-radius:6px;">
-    <tr>
-      <td style="padding:24px 28px;border-bottom:1px solid #efece4;">
-        <div style="font-family:'Playfair Display',Georgia,serif;font-size:22px;letter-spacing:0.02em;color:#1c1c1c;">Canvas Hub</div>
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:#7a7468;margin-top:4px;">${escapeHtml(heading)}</div>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:24px 28px;font-size:14px;line-height:1.6;color:#1c1c1c;">
-        ${bodyHtml}
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:18px 28px;border-top:1px solid #efece4;font-size:11px;color:#7a7468;">
-        Canvas Hub &mdash; original Filipino paintings.
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-`.trim();
+// Hard-coded fallback chrome used when no admin orderEmail config has
+// been saved yet. Mirrors the field shape stored in storefront-config
+// (DEFAULT_ORDER_EMAIL) so wrapWelcomeHtml renders the same way it
+// would for an admin-customised brand. Keeping every customer- AND
+// admin-facing order email on the same chrome ensures "identical
+// template style" across status changes / new-order alerts.
+const DEFAULT_ORDER_CHROME = {
+  fromName: "Canvas Hub",
+  fromEmail: "order@canvhub.com",
+  primaryColor: "#1c1c1c",
+  accentColor: "#7a7468",
+  logoUrl: "",
+  bannerUrl: "",
+  showLogo: true,
+  showBanner: false,
+  bodyFont: "inter",
+  template: "classic",
+  headerAlign: "left",
+  dividerStyle: "line",
+  buttonStyle: "filled",
+  footerTagline: "original Filipino paintings",
+  footerLinks: [],
+  trackButtonText: "Track shipment",
+  reviewButtonText: "Write a review",
+};
+
+// Public site host for outbound deep links in transactional emails.
+// Mirrors the canonical hostname used in sitemap.js and policies.js.
+const PUBLIC_SITE_ORIGIN = "https://canvhub.com";
+
+// Deep-link a customer back to their order tracker (so the "Write a
+// review" CTA in the delivered email lands them straight on the form).
+// Mirrors the `?track=<orderId>` pattern OrderTracker reads on mount,
+// and the `#order-review-form` anchor exposed by DeliveredReviewPrompt
+// so the page also auto-scrolls to the rating UI.
+const buildOrderTrackUrl = (orderId) =>
+  orderId
+    ? `${PUBLIC_SITE_ORIGIN}/account?track=${encodeURIComponent(orderId)}#order-review-form`
+    : "";
 
 const renderItemsTable = (items = []) => {
   if (!items.length) return "";
@@ -506,6 +514,27 @@ export const buildOrderEmail = (kind, order, extra = {}, orderEmail = null) => {
         })}</p>`
       : "";
 
+  // Surface a "Write a review" CTA on the delivered (`received`) email
+  // so customers don't have to remember to come back to leave a rating.
+  // The existing reviewButtonText config (admin-editable, sanitized in
+  // storefront-config.js) was previously stored but never rendered;
+  // this block plumbs it through. Deep-links into /account?track=<id>
+  // so OrderTracker auto-loads the order and shows the review form.
+  const reviewButtonText =
+    (orderEmail && typeof orderEmail.reviewButtonText === "string"
+      ? orderEmail.reviewButtonText
+      : "") || "Write a review";
+  const reviewUrl = kind === "received" ? buildOrderTrackUrl(id) : "";
+  const reviewBlock =
+    reviewUrl && isSafeUrl(reviewUrl)
+      ? `<p style="margin:16px 0;">${renderActionLink({
+          label: reviewButtonText,
+          url: reviewUrl,
+          primary,
+          style: buttonStyle,
+        })}</p>`
+      : "";
+
   // Section divider (admin-tunable). Mirrors the welcome email's chrome
   // so order + welcome can share a visual identity.
   const accent = isSafeColor(orderEmail?.accentColor)
@@ -521,6 +550,7 @@ export const buildOrderEmail = (kind, order, extra = {}, orderEmail = null) => {
     ${itemsHtml}
     ${totalsHtml}
     ${trackingBlock}
+    ${reviewBlock}
     <p style="margin:24px 0 0;font-size:12px;color:${accent};">
       Questions? Just reply to this email.
     </p>
@@ -537,25 +567,7 @@ export const buildOrderEmail = (kind, order, extra = {}, orderEmail = null) => {
   // palette / template / footer links). When no admin config is saved we
   // use sensible defaults so order emails look professional out of the
   // box — never fall back to the plain-text wrapper.
-  const effectiveConfig = orderEmail || {
-    fromName: "Canvas Hub",
-    fromEmail: "order@canvhub.com",
-    primaryColor: "#1c1c1c",
-    accentColor: "#7a7468",
-    logoUrl: "",
-    bannerUrl: "",
-    showLogo: true,
-    showBanner: false,
-    bodyFont: "inter",
-    template: "classic",
-    headerAlign: "left",
-    dividerStyle: "line",
-    buttonStyle: "filled",
-    footerTagline: "original Filipino paintings",
-    footerLinks: [],
-    trackButtonText: "Track shipment",
-    reviewButtonText: "Write a review",
-  };
+  const effectiveConfig = orderEmail || DEFAULT_ORDER_CHROME;
   const html = wrapWelcomeHtml(
     {
       ...effectiveConfig,
@@ -752,26 +764,68 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
     )
     .join("");
   const subject = `New order ${id} — ${total}`;
-  const heading = `New order received`;
-  const adminLink = `https://canvhub.com/admin?order=${encodeURIComponent(id)}`;
+  const adminLink = `${PUBLIC_SITE_ORIGIN}/admin?order=${encodeURIComponent(id)}`;
+
+  // Resolve the same chrome the customer-facing order emails use so the
+  // admin alert lands in the inbox with matching logo / palette / fonts /
+  // footer. Previously this rendered through the legacy plain wrapHtml
+  // wrapper and looked visually disconnected from the customer copy that
+  // arrived seconds later.
+  const effectiveConfig = orderEmail || DEFAULT_ORDER_CHROME;
+  const accent = isSafeColor(effectiveConfig.accentColor)
+    ? effectiveConfig.accentColor
+    : "#7a7468";
+  const primary = isSafeColor(effectiveConfig.primaryColor)
+    ? effectiveConfig.primaryColor
+    : "#1c1c1c";
+  const buttonStyle = String(
+    effectiveConfig.buttonStyle || "filled",
+  ).toLowerCase();
+  const adminButton = renderActionLink({
+    label: "Open in admin",
+    url: adminLink,
+    primary,
+    style: buttonStyle,
+  });
+
   const bodyHtml = `
+    <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:${accent};">New order received</p>
     <p style="margin:0 0 12px;">A new order just came in.</p>
     <p style="margin:0 0 4px;"><strong>Order:</strong> <code style="background:#f5f3ee;padding:2px 6px;border-radius:3px;">${escapeHtml(id)}</code></p>
     <p style="margin:0 0 4px;"><strong>Customer:</strong> ${escapeHtml(customer)}</p>
-    ${customerEmail ? `<p style="margin:0 0 4px;"><strong>Email:</strong> <a href="mailto:${escapeHtml(customerEmail)}">${escapeHtml(customerEmail)}</a></p>` : ""}
+    ${customerEmail ? `<p style="margin:0 0 4px;"><strong>Email:</strong> <a href="mailto:${escapeHtml(customerEmail)}" style="color:${primary};">${escapeHtml(customerEmail)}</a></p>` : ""}
     ${customerPhone ? `<p style="margin:0 0 4px;"><strong>Phone:</strong> ${escapeHtml(customerPhone)}</p>` : ""}
     <p style="margin:0 0 12px;"><strong>Items:</strong> ${itemCount} item${itemPlural} &middot; <strong>Total:</strong> ${total}</p>
-    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;color:#1c1c1c;margin:0 0 16px;">
+    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;color:${primary};margin:0 0 16px;">
       ${itemRows}
     </table>
-    <p style="margin:16px 0;">
-      <a href="${adminLink}" style="display:inline-block;background:#1c1c1c;color:#ffffff;padding:10px 18px;border-radius:4px;text-decoration:none;font-size:13px;">Open in admin</a>
-    </p>
+    <p style="margin:16px 0;">${adminButton}</p>
   `;
+
+  const html = wrapWelcomeHtml(
+    {
+      ...effectiveConfig,
+      _logoSlot: "order-logo",
+      _bannerSlot: "order-banner",
+    },
+    bodyHtml,
+  );
+
+  // Resolve the same from-address the customer copies use so admin
+  // inbox threading groups them together (Gmail/Outlook collapse by
+  // sender + subject root).
+  const cfgEmail = (effectiveConfig.fromEmail || "order@canvhub.com").trim();
+  const cfgName = (effectiveConfig.fromName || "Canvas Hub").trim();
+  const configFrom = cfgEmail
+    ? cfgName
+      ? `${cfgName} <${cfgEmail}>`
+      : cfgEmail
+    : "";
+
   return await sendEmail({
     to: recipient,
     subject,
-    html: wrapHtml(heading, bodyHtml),
+    html,
     text:
       `New order ${id}\n\n` +
       `Customer: ${customer}\n` +
@@ -781,6 +835,7 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
       `Total: ${total}\n\n` +
       `Open: ${adminLink}\n`,
     purpose: "order",
+    from: configFrom || undefined,
   });
 };
 

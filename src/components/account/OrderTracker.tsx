@@ -20,6 +20,7 @@ import {
 } from "@/contexts/CartContext";
 import { buildTrackingUrl, findCourierById, COURIERS } from "@/lib/shipment";
 import OrderReviewForm from "@/components/OrderReviewForm";
+import DeliveredReviewPrompt from "@/components/DeliveredReviewPrompt";
 import RefundBanner from "@/components/RefundBanner";
 
 // Group a courier-issued AWB into space-separated runs of four digits
@@ -353,21 +354,30 @@ export default function OrderTracker() {
             return (
               <>
                 {showForm && (
-                  <OrderReviewForm
-                    orderId={order.id}
-                    customerEmail={order.orderInfo?.email}
-                    items={order.items}
-                    existingReviews={reviews}
-                    onSubmitted={(review) => {
-                      const idx = reviews.findIndex(
-                        (r) => (r.productId ?? "") === (review.productId ?? ""),
-                      );
-                      const next = [...reviews];
-                      if (idx >= 0) next[idx] = review;
-                      else next.push(review);
-                      setOrder({ ...order, reviews: next, review });
-                    }}
-                  />
+                  <>
+                    <DeliveredReviewPrompt
+                      items={order.items}
+                      existingReviews={reviews}
+                    />
+                    <div id="order-review-form" className="scroll-mt-24">
+                      <OrderReviewForm
+                        orderId={order.id}
+                        customerEmail={order.orderInfo?.email}
+                        items={order.items}
+                        existingReviews={reviews}
+                        onSubmitted={(review) => {
+                          const idx = reviews.findIndex(
+                            (r) =>
+                              (r.productId ?? "") === (review.productId ?? ""),
+                          );
+                          const next = [...reviews];
+                          if (idx >= 0) next[idx] = review;
+                          else next.push(review);
+                          setOrder({ ...order, reviews: next, review });
+                        }}
+                      />
+                    </div>
+                  </>
                 )}
                 {reviews.map((rev, idx) => (
                   <div
