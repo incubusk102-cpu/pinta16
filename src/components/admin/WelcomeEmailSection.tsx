@@ -715,8 +715,12 @@ const productsHtmlForPreview = (
   const cfg = config.products;
   if (!cfg.enabled || picked.length === 0) return "";
   const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
+  // Mirror functions/api/_lib/email.js. 1 → full-width, 2 / 4+ → 2-up,
+  // 3 → 3-up so we never have a stranded cell on an odd count.
+  const columns = picked.length === 3 ? 3 : picked.length === 1 ? 1 : 2;
+  const cellWidth = `${Math.floor(100 / columns)}%`;
   const renderCell = (p?: PreviewItem): string => {
-    if (!p) return `<td style="width:50%;padding:6px;"></td>`;
+    if (!p) return `<td style="width:${cellWidth};padding:6px;"></td>`;
     const img = p.imageUrl;
     const title = escapeHtml(p.title || "Untitled");
     const priceLine =
@@ -726,14 +730,22 @@ const productsHtmlForPreview = (
     const descLine = p.description
       ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;line-height:1.4;">${escapeHtml(p.description)}</div>`
       : "";
+    // Use explicit fixed pixel height for the placeholder div so it
+    // renders in Gmail (which doesn't honor `aspect-ratio`). Add an
+    // explicit `width` attribute to the <img> so Gmail mobile reserves
+    // space even before the image loads.
     const safeImg = img
-      ? `<img src="${img}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
-      : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
-    return `<td valign="top" style="padding:6px;width:50%;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</td>`;
+      ? `<img src="${img}" alt="${title}" width="240" style="display:block;width:100%;max-width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
+      : `<div style="width:100%;height:160px;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
+    return `<td valign="top" style="padding:6px;width:${cellWidth};">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</td>`;
   };
   const rows: string[] = [];
-  for (let i = 0; i < picked.length; i += 2) {
-    rows.push(`<tr>${renderCell(picked[i])}${renderCell(picked[i + 1])}</tr>`);
+  for (let i = 0; i < picked.length; i += columns) {
+    const cells: string[] = [];
+    for (let c = 0; c < columns; c += 1) {
+      cells.push(renderCell(picked[i + c]));
+    }
+    rows.push(`<tr>${cells.join("")}</tr>`);
   }
   return `
     <h3 style="margin:32px 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
@@ -817,9 +829,20 @@ const renderPreviewHtml = (
     .join("");
 
   const signature = config.signature.trim();
-  const signatureHtml = signature
-    ? `<p style="margin:24px 0 0;color:${accent};font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
-    : "";
+  // Mirror the dedupe in functions/api/_lib/email.js: if the body
+  // already ends with the same line(s) as the signature (e.g. body
+  // closes with "The Canvas Hub team" and signature is also "The
+  // Canvas Hub team"), don't render the signature twice.
+  const normalize = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const signatureLines = signature.split(/\n+/).map(normalize).filter(Boolean);
+  const bodyLines = bodyText.split(/\n+/).map(normalize).filter(Boolean);
+  const signatureDuplicatesBody =
+    signatureLines.length > 0 &&
+    signatureLines.every((line) => bodyLines.includes(line));
+  const signatureHtml =
+    signature && !signatureDuplicatesBody
+      ? `<p style="margin:24px 0 0;color:${accent};font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
+      : "";
 
   const ctaButton = (() => {
     const label = config.ctaLabel.trim();
@@ -876,8 +899,13 @@ const renderPreviewHtml = (
       : logoInner;
 
   const bannerBlock = showBanner
-    ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
+    ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="${fromName}" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
     : "";
+  // When a banner is shown, suppress the small logo block above it —
+  // the banner image typically already includes the wordmark, so
+  // stacking a redundant logo on top looks wrong. Mirrors
+  // wrapWelcomeHtml in functions/api/_lib/email.js.
+  const headerBlock = showBanner ? "" : logoBlock;
 
   const bodyFontStack = resolveBodyFontStack(config.bodyFont);
 
@@ -941,7 +969,7 @@ const renderPreviewHtml = (
     <strong>Subject:</strong> ${escapeHtml(subject)}
   </div>
   <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:${tpl.cardBg};border:${tpl.cardBorder};border-radius:${tpl.cardRadius};overflow:hidden;">
-    <tr><td style="padding:${tpl.headerPad};border-bottom:${tpl.separator};text-align:${headerAlign};">${logoBlock}</td></tr>
+    ${headerBlock ? `<tr><td style="padding:${tpl.headerPad};border-bottom:${tpl.separator};text-align:${headerAlign};">${headerBlock}</td></tr>` : ""}
     ${bannerBlock}
     <tr><td style="padding:${tpl.contentPad};font-size:14px;line-height:1.6;font-family:${bodyFontStack};color:${tpl.bodyColor};">
       ${sectionBlocks}

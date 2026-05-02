@@ -1119,20 +1119,30 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
     showLogo && isSafeUrl(welcome.logoUrl)
       ? rehostEmailImage(welcome, logoSlot, welcome.logoUrl)
       : "";
-  const logoInner = logoSrc
-    ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
-    : defaultBrandLogoHtml(fromName, tpl, headerAlign);
-  const logoHtml =
-    headerAlign === "center"
-      ? `<div style="text-align:center;">${logoInner}</div>`
-      : logoInner;
   const bannerSlot = welcome._bannerSlot || "banner";
   const bannerSrc =
     showBanner && isSafeUrl(welcome.bannerUrl)
       ? rehostEmailImage(welcome, bannerSlot, welcome.bannerUrl)
       : "";
+  // When a hero banner is present (the banner image typically already
+  // includes the wordmark / branding), suppress the small logo block
+  // above it. Otherwise we end up stacking a tiny redundant logo on
+  // top of the full brand banner — which looked wrong in the wild
+  // (small black "C" square hovering above the proper Canvas Hub
+  // banner). The admin can still override by clearing the banner if
+  // they want both visible.
+  const headerHtml = bannerSrc
+    ? ""
+    : (() => {
+        const logoInner = logoSrc
+          ? `<img src="${escapeHtml(logoSrc)}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
+          : defaultBrandLogoHtml(fromName, tpl, headerAlign);
+        return headerAlign === "center"
+          ? `<div style="text-align:center;">${logoInner}</div>`
+          : logoInner;
+      })();
   const bannerHtml = bannerSrc
-    ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc)}" alt="" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
+    ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc)}" alt="${fromName}" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
     : "";
   const bodyFontStack = resolveBodyFont(welcome);
   const footerLinksHtml = buildFooterLinksHtml(welcome, accent);
@@ -1155,11 +1165,15 @@ const wrapWelcomeHtml = (welcome, contentHtml) => {
 </head>
 <body style="margin:0;padding:24px;background:${tpl.pageBg};font-family:${bodyFontStack};color:${tpl.bodyColor};">
   <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:${tpl.cardBg};border:${tpl.cardBorder};border-radius:${tpl.cardRadius};overflow:hidden;">
-    <tr>
+    ${
+      headerHtml
+        ? `<tr>
       <td style="padding:${tpl.headerPad};border-bottom:${tpl.headerSeparator};text-align:${headerAlign};">
-        ${logoHtml}
+        ${headerHtml}
       </td>
-    </tr>
+    </tr>`
+        : ""
+    }
     ${bannerHtml}
     <tr>
       <td style="padding:${tpl.contentPad};font-size:14px;line-height:1.6;color:${tpl.bodyColor};font-family:${bodyFontStack};">
@@ -1295,17 +1309,30 @@ const buildProductsHtml = (welcome, products) => {
   const list = Array.isArray(products) ? products.slice(0, cfg.count || 4) : [];
   if (list.length === 0) return "";
   const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
+  // Layout decision:
+  //   - 1 item   → single full-width card.
+  //   - 2 items  → 2-up grid (50% / 50%).
+  //   - 3 items  → 3-up grid (33% / 33% / 33%) so the row stays balanced
+  //                and we don't end up with a stranded cell. On narrow
+  //                clients the cells naturally wrap.
+  //   - 4+ items → 2-up grid; counts always pair cleanly.
+  // Email clients are notoriously inconsistent about CSS grid / flex,
+  // so we stick with `<table>` + percentage widths (the email-safe
+  // pattern) rather than reaching for grid.
+  const columns = list.length === 3 ? 3 : list.length === 1 ? 1 : 2;
+  const cellWidth = `${Math.floor(100 / columns)}%`;
   const renderCell = (item) => {
-    if (!item) return `<td style="width:50%;padding:6px;"></td>`;
+    if (!item) return `<td style="width:${cellWidth};padding:6px;"></td>`;
     const row = productEmailRow(welcome, item);
     const title = escapeHtml(row.title);
-    // row.img has already been routed through rehostEmailImage so any
-    // data: URL has been replaced with a public /api/welcome-asset/...
-    // URL Gmail can fetch.
+    // Explicit `width` and `height` on the <img> tag ensure Gmail
+    // mobile (which strips most CSS) still reserves space for the
+    // image. The placeholder div uses a fixed pixel height for the
+    // same reason — `aspect-ratio` is not supported in Gmail.
     const safeImg =
       row.img && isSafeUrl(row.img)
-        ? `<img src="${escapeHtml(row.img)}" alt="${title}" style="display:block;width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
-        : `<div style="width:100%;aspect-ratio:1/1;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
+        ? `<img src="${escapeHtml(row.img)}" alt="${title}" width="240" style="display:block;width:100%;max-width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
+        : `<div style="width:100%;height:160px;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
     const priceLine =
       cfg.showPrice && row.price > 0
         ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(row.price)}</div>`
@@ -1313,11 +1340,15 @@ const buildProductsHtml = (welcome, products) => {
     const descLine = row.description
       ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;line-height:1.4;">${escapeHtml(row.description)}</div>`
       : "";
-    return `<td valign="top" style="padding:6px;width:50%;"><a href="${row.link}" style="text-decoration:none;color:inherit;display:block;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</a></td>`;
+    return `<td valign="top" style="padding:6px;width:${cellWidth};"><a href="${row.link}" style="text-decoration:none;color:inherit;display:block;">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</a></td>`;
   };
   const rows = [];
-  for (let i = 0; i < list.length; i += 2) {
-    rows.push(`<tr>${renderCell(list[i])}${renderCell(list[i + 1])}</tr>`);
+  for (let i = 0; i < list.length; i += columns) {
+    const cells = [];
+    for (let c = 0; c < columns; c += 1) {
+      cells.push(renderCell(list[i + c]));
+    }
+    rows.push(`<tr>${cells.join("")}</tr>`);
   }
   return `
     <h3 style="margin:32px 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
@@ -1407,6 +1438,18 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
   const bodyText = renderTemplateString(welcome.body, vars);
   const signature = String(welcome.signature || "").trim();
 
+  // Guard against the common authoring mistake where the body's last
+  // paragraph already ends with the same sender line that's also stored
+  // as the signature (e.g. body finishes with "The Canvas Hub team" and
+  // signature is "The Canvas Hub team" — we'd otherwise render it
+  // twice). Compare line-by-line, case-insensitive, after trimming.
+  const normalize = (s) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const signatureLines = signature.split(/\n+/).map(normalize).filter(Boolean);
+  const bodyLines = bodyText.split(/\n+/).map(normalize).filter(Boolean);
+  const signatureDuplicatesBody =
+    signatureLines.length > 0 &&
+    signatureLines.every((line) => bodyLines.includes(line));
+
   const paragraphsHtml = bodyText
     .split(/\n{2,}/)
     .map((para) => para.trim())
@@ -1417,9 +1460,10 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
     )
     .join("");
 
-  const signatureHtml = signature
-    ? `<p style="margin:24px 0 0;color:#7a7468;font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
-    : "";
+  const signatureHtml =
+    signature && !signatureDuplicatesBody
+      ? `<p style="margin:24px 0 0;color:#7a7468;font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
+      : "";
 
   const avatarHtml = buildAvatarHtml(welcome);
 
@@ -1450,7 +1494,7 @@ export const buildWelcomeEmail = (welcome, user, context = {}) => {
     `${bodyText}` +
     formatDiscountText(context.discount) +
     formatProductsText(welcome, context.products) +
-    (signature ? `\n\n${signature}` : "") +
+    (signature && !signatureDuplicatesBody ? `\n\n${signature}` : "") +
     formatFooterLinksText(welcome);
 
   return {
