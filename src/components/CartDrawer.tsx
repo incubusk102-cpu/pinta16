@@ -1,8 +1,18 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Minus, Plus, Trash2, Tag, Truck } from "lucide-react";
-import { useState } from "react";
+import {
+  X,
+  Minus,
+  Plus,
+  Trash2,
+  Tag,
+  Truck,
+  ShoppingBag,
+  ArrowRight,
+} from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { useCart } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 const CartDrawer = () => {
   const {
@@ -36,6 +46,20 @@ const CartDrawer = () => {
     config: { vacationMode },
   } = useStorefrontConfig();
   const [voucherInput, setVoucherInput] = useState("");
+  const titleId = useId();
+  // Lock <body> scroll while the drawer is open so the page underneath
+  // doesn't drift when the visitor scrolls inside the cart on mobile.
+  useBodyScrollLock(isOpen);
+  // Close on ESC for keyboard users. The overlay click + close button
+  // already cover pointer users.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeCart();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, closeCart]);
 
   return (
     <AnimatePresence>
@@ -47,6 +71,7 @@ const CartDrawer = () => {
             exit={{ opacity: 0 }}
             onClick={closeCart}
             className="fixed inset-0 z-[80] bg-background/60 backdrop-blur-sm"
+            aria-hidden="true"
           />
           <motion.div
             initial={{ x: "100%" }}
@@ -54,24 +79,47 @@ const CartDrawer = () => {
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
             className="fixed right-0 top-0 bottom-0 z-[85] w-full max-w-md bg-card border-l border-border/20 flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
           >
             <div className="p-6 border-b border-border/10 flex items-center justify-between">
-              <h2 className="font-display text-lg text-foreground">
+              <h2 id={titleId} className="font-display text-lg text-foreground">
                 Your Cart ({items.length})
               </h2>
               <button
                 onClick={closeCart}
-                className="p-2 hover:bg-accent rounded-sm transition-colors"
+                className="p-2 hover:bg-accent rounded-sm transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                aria-label="Close cart"
               >
                 <X className="w-5 h-5 text-foreground" />
               </button>
             </div>
 
             {items.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="font-body text-sm text-muted-foreground">
-                  Your cart is empty
-                </p>
+              <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-muted/30 border border-border/10 flex items-center justify-center">
+                  <ShoppingBag
+                    className="w-7 h-7 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-display text-base text-foreground">
+                    Your cart is empty
+                  </p>
+                  <p className="font-body text-xs text-muted-foreground max-w-[14rem] mx-auto">
+                    Browse the gallery and tap the cart icon on any piece you
+                    love.
+                  </p>
+                </div>
+                <button
+                  onClick={closeCart}
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-foreground text-background font-body text-xs tracking-[0.3em] uppercase rounded-sm hover:bg-foreground/90 transition-all duration-300"
+                >
+                  Browse the gallery
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
               </div>
             ) : (
               <>
@@ -127,26 +175,35 @@ const CartDrawer = () => {
                             onClick={() =>
                               updateQuantity(item.id, item.quantity - 1)
                             }
-                            className="p-1 hover:bg-accent rounded-sm transition-colors"
+                            className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-accent rounded-sm transition-colors"
+                            aria-label={`Decrease quantity of ${item.title}`}
                           >
-                            <Minus className="w-3 h-3" />
+                            <Minus className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
-                          <span className="font-body text-xs w-6 text-center">
+                          <span
+                            className="font-body text-xs w-6 text-center"
+                            aria-live="polite"
+                          >
                             {item.quantity}
                           </span>
                           <button
                             onClick={() =>
                               updateQuantity(item.id, item.quantity + 1)
                             }
-                            className="p-1 hover:bg-accent rounded-sm transition-colors"
+                            className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-accent rounded-sm transition-colors"
+                            aria-label={`Increase quantity of ${item.title}`}
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                           <button
                             onClick={() => removeFromCart(item.id)}
-                            className="p-1 ml-auto hover:bg-destructive/10 rounded-sm transition-colors"
+                            className="min-w-[36px] min-h-[36px] ml-auto flex items-center justify-center hover:bg-destructive/10 rounded-sm transition-colors"
+                            aria-label={`Remove ${item.title} from cart`}
                           >
-                            <Trash2 className="w-3 h-3 text-destructive" />
+                            <Trash2
+                              className="w-3.5 h-3.5 text-destructive"
+                              aria-hidden="true"
+                            />
                           </button>
                         </div>
                       </div>
@@ -208,7 +265,7 @@ const CartDrawer = () => {
                   </div>
                 </div>
 
-                <div className="p-6 border-t border-border/10 space-y-2">
+                <div className="p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t border-border/10 space-y-2 bg-card">
                   <div className="flex justify-between font-body text-xs text-muted-foreground">
                     <span>Subtotal</span>
                     <span>₱{subtotal.toLocaleString()}</span>

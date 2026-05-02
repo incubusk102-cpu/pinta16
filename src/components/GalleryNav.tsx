@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   ShoppingCart,
@@ -83,6 +83,19 @@ const GalleryNav = () => {
     [],
   );
   const { itemCount, openCart, orders, viewOrder } = useCart();
+  // Pulse the cart badge briefly when an item lands in the cart so the
+  // visitor gets a small visual confirmation in the corner of the nav.
+  const [cartPulse, setCartPulse] = useState(false);
+  const lastItemCountRef = useRef(itemCount);
+  useEffect(() => {
+    if (itemCount > lastItemCountRef.current) {
+      setCartPulse(true);
+      const t = setTimeout(() => setCartPulse(false), 600);
+      lastItemCountRef.current = itemCount;
+      return () => clearTimeout(t);
+    }
+    lastItemCountRef.current = itemCount;
+  }, [itemCount]);
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
   const { policies } = usePolicies();
@@ -241,9 +254,16 @@ const GalleryNav = () => {
               >
                 <ShoppingCart className="w-5 h-5 text-foreground" />
                 {itemCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center">
+                  <motion.span
+                    key={itemCount}
+                    initial={false}
+                    animate={cartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }}
+                    transition={{ duration: 0.45, ease: "easeOut" }}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center motion-reduce:animate-none"
+                    aria-live="polite"
+                  >
                     {itemCount}
-                  </span>
+                  </motion.span>
                 )}
               </button>
             </>

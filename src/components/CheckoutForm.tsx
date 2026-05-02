@@ -1,5 +1,13 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  useId,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   X,
   ArrowLeft,
@@ -178,6 +186,18 @@ const CheckoutForm = () => {
   const voucherFreeShipping = voucher.applied && voucher.freeShipping;
   const shippingIsWaived =
     !shippingFeePending && (isFreeShipping || voucherFreeShipping);
+  const checkoutTitleId = useId();
+  // Body scroll lock + ESC-to-close so the page underneath doesn't
+  // drift on mobile and keyboard users can dismiss the drawer.
+  useBodyScrollLock(showCheckout);
+  useEffect(() => {
+    if (!showCheckout) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowCheckout(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showCheckout, setShowCheckout]);
   const { config: storefrontConfig } = useStorefrontConfig();
   const { user, token, addAddress, updateAddress } = useUserAuth();
   const isSignedIn = Boolean(token && user);
@@ -719,6 +739,7 @@ const CheckoutForm = () => {
               exit={{ opacity: 0 }}
               onClick={() => setShowCheckout(false)}
               className="fixed inset-0 z-[90] bg-background/60 backdrop-blur-sm"
+              aria-hidden="true"
             />
             <motion.div
               initial={{ x: "100%" }}
@@ -726,22 +747,30 @@ const CheckoutForm = () => {
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
               className="fixed right-0 top-0 bottom-0 z-[95] w-full max-w-md bg-card border-l border-border/20 flex flex-col"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={checkoutTitleId}
             >
               <div className="p-6 border-b border-border/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setShowCheckout(false)}
-                    className="p-2 hover:bg-accent rounded-sm transition-colors"
+                    className="p-2 hover:bg-accent rounded-sm transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    aria-label="Back to cart"
                   >
                     <ArrowLeft className="w-5 h-5 text-foreground" />
                   </button>
-                  <h2 className="font-display text-lg text-foreground">
+                  <h2
+                    id={checkoutTitleId}
+                    className="font-display text-lg text-foreground"
+                  >
                     Checkout
                   </h2>
                 </div>
                 <button
                   onClick={() => setShowCheckout(false)}
-                  className="p-2 hover:bg-accent rounded-sm transition-colors"
+                  className="p-2 hover:bg-accent rounded-sm transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  aria-label="Close checkout"
                 >
                   <X className="w-5 h-5 text-foreground" />
                 </button>
