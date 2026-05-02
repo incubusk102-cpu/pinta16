@@ -1,6 +1,7 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { useLocale } from "@/contexts/LocaleContext";
+import Turnstile, { isTurnstileEnabled } from "./Turnstile";
 
 interface Props {
   source?: string;
@@ -17,10 +18,16 @@ export default function NewsletterForm({
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [message, setMessage] = useState<{
     kind: "success" | "error" | "info";
     text: string;
   } | null>(null);
+
+  const handleToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+  const handleExpire = useCallback(() => setTurnstileToken(null), []);
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,6 +45,10 @@ export default function NewsletterForm({
           email: email.trim(),
           name: name.trim(),
           source,
+          // Only included when Turnstile is enabled. Server falls open
+          // (skips verification) if its secret key isn't set, so missing
+          // token here is fine in dev / before dashboard widget exists.
+          ...(turnstileToken ? { turnstileToken } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -107,6 +118,16 @@ export default function NewsletterForm({
         aria-label={t("newsletter.namePlaceholder")}
         className="mt-2 w-full px-3 py-2.5 bg-background border border-border rounded-sm text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40"
       />
+      {isTurnstileEnabled() && (
+        <div className="mt-2">
+          <Turnstile
+            action="newsletter"
+            appearance="interaction-only"
+            onToken={handleToken}
+            onExpire={handleExpire}
+          />
+        </div>
+      )}
       {message && (
         <p
           role="status"

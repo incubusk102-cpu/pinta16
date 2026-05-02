@@ -15,8 +15,8 @@ interface AdminAuthContextValue {
   token: string | null;
   initialized: boolean | null;
   loading: boolean;
-  initPassword: (password: string) => Promise<void>;
-  login: (password: string) => Promise<void>;
+  initPassword: (password: string, turnstileToken?: string) => Promise<void>;
+  login: (password: string, turnstileToken?: string) => Promise<void>;
   logout: () => void;
   changePassword: (
     currentPassword: string,
@@ -91,11 +91,15 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const initPassword = useCallback(
-    async (password: string) => {
+    async (password: string, turnstileToken?: string) => {
       const response = await fetch(AUTH_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "init", password }),
+        body: JSON.stringify({
+          action: "init",
+          password,
+          ...(turnstileToken ? { turnstileToken } : {}),
+        }),
       });
       if (!response.ok) {
         throw new Error(await parseError(response, "Could not set password"));
@@ -108,11 +112,15 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const login = useCallback(
-    async (password: string) => {
+    async (password: string, turnstileToken?: string) => {
       const response = await fetch(AUTH_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "login", password }),
+        body: JSON.stringify({
+          action: "login",
+          password,
+          ...(turnstileToken ? { turnstileToken } : {}),
+        }),
       });
       if (!response.ok) {
         throw new Error(await parseError(response, "Could not log in"));

@@ -18,6 +18,7 @@ import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent, readAuditEvents } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { verifyTurnstileToken } from "./_lib/turnstile.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -73,6 +74,14 @@ export const handler = async (event) => {
           error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
         });
       }
+      const ts = await verifyTurnstileToken(event, {
+        token: String(body.turnstileToken || ""),
+      });
+      if (!ts.allowed) {
+        return json(400, {
+          error: "Verification failed. Please refresh and try again.",
+        });
+      }
 
       const { salt, hash } = await hashPassword(password);
       const written = await writeCredentialsIfNew(store, {
@@ -94,6 +103,18 @@ export const handler = async (event) => {
         max: 8,
       });
       if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+      // Verify Turnstile token (when configured) before any password
+      // comparison, so a bot that spams the login endpoint doesn't even
+      // get to exercise the slow constant-time compare. Falls open if
+      // TURNSTILE_SECRET_KEY isn't set.
+      const ts = await verifyTurnstileToken(event, {
+        token: String(body.turnstileToken || ""),
+      });
+      if (!ts.allowed) {
+        return json(400, {
+          error: "Verification failed. Please refresh and try again.",
+        });
+      }
       const meta = captureRequestMeta(event);
       if (!credentials) {
         return json(404, { error: "Admin password not set" });

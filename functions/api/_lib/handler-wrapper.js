@@ -5,7 +5,11 @@
 // `env` through every call site.
 
 import { setCloudflareContext } from "./context.js";
-import { buildLambdaEvent, toPagesResponse } from "./lambda-event.js";
+import {
+  BodyTooLargeError,
+  buildLambdaEvent,
+  toPagesResponse,
+} from "./lambda-event.js";
 
 export const wrapHandler =
   (handler) =>
@@ -25,7 +29,21 @@ export const wrapHandler =
         globalThis.process.env[key] = value;
       }
     }
-    const event = await buildLambdaEvent(request);
+    let event;
+    try {
+      event = await buildLambdaEvent(request);
+    } catch (error) {
+      if (error instanceof BodyTooLargeError) {
+        return new Response(
+          JSON.stringify({ error: "Request body too large (max 5 MB)" }),
+          {
+            status: 413,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      throw error;
+    }
     const result = await handler(event);
     return toPagesResponse(result);
   };
