@@ -1,12 +1,12 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Upload, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   PRODUCT_MAX_IMAGES,
   type ProductImage,
 } from "@/contexts/ProductContext";
 import { compressImage } from "@/lib/imageCompress";
+import { dataUrlToBlob, uploadImageToR2 } from "@/lib/uploadImage";
 
 // Original file size cap before compression. The Netlify Functions request
 // body is capped at 6 MB, so even though we accept up to 30 MB phone photos
@@ -26,8 +26,14 @@ interface Props {
   onChange: (images: ProductImage[]) => void;
 }
 
+// Module-scoped flag so we only show the "falling back to inline" toast
+// once per page load, rather than once per upload after R2 says it's not
+// configured. Avoids spamming the admin when they batch-upload images.
+let r2FallbackToastShown = false;
+
 export function ProductImageGallery({ images, onChange }: Props) {
   const addRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
   const remaining = Math.max(0, PRODUCT_MAX_IMAGES - images.length);
 
   const handleFiles = async (fileList: FileList | null) => {
@@ -40,27 +46,52 @@ export function ProductImageGallery({ images, onChange }: Props) {
     }
     const accepted = files.slice(0, remaining);
     const next: ProductImage[] = [];
-    for (const file of accepted) {
-      if (!file.type.startsWith("image/")) {
-        toast.error(`${file.name}: please select an image file`);
-        continue;
+    setUploading(true);
+    try {
+      for (const file of accepted) {
+        if (!file.type.startsWith("image/")) {
+          toast.error(`${file.name}: please select an image file`);
+          continue;
+        }
+        if (file.size > MAX_RAW_UPLOAD_BYTES) {
+          toast.error(`${file.name}: must be under 30 MB`);
+          continue;
+        }
+        try {
+          const compressed = await compressImage(file);
+          // Try R2 first. The endpoint returns 503 when the bucket isn't
+          // bound on this deploy, so we keep the existing data-URL flow
+          // as a graceful fallback — the product still saves either way.
+          const blob = await dataUrlToBlob(compressed.url);
+          let storedUrl = compressed.url;
+          if (blob) {
+            const outcome = await uploadImageToR2(blob);
+            if (outcome.kind === "uploaded") {
+              storedUrl = outcome.result.url;
+            } else if (outcome.kind === "error") {
+              toast.error(
+                `Could not upload ${file.name} to R2: ${outcome.message}. Saved inline instead.`,
+              );
+            } else if (outcome.kind === "fallback" && !r2FallbackToastShown) {
+              toast.message(
+                "R2 image storage isn't configured on this deploy — saving images inline. (See docs/cloudflare-setup.md)",
+              );
+              r2FallbackToastShown = true;
+            }
+          }
+          next.push({
+            url: storedUrl,
+            fileName: compressed.fileName,
+            bytes: compressed.bytes,
+          });
+        } catch {
+          toast.error(`Could not read ${file.name}`);
+        }
       }
-      if (file.size > MAX_RAW_UPLOAD_BYTES) {
-        toast.error(`${file.name}: must be under 30 MB`);
-        continue;
-      }
-      try {
-        const compressed = await compressImage(file);
-        next.push({
-          url: compressed.url,
-          fileName: compressed.fileName,
-          bytes: compressed.bytes,
-        });
-      } catch {
-        toast.error(`Could not read ${file.name}`);
-      }
+      if (next.length > 0) onChange([...images, ...next]);
+    } finally {
+      setUploading(false);
     }
-    if (next.length > 0) onChange([...images, ...next]);
   };
 
   const removeAt = (idx: number) => {
@@ -136,9 +167,12 @@ export function ProductImageGallery({ images, onChange }: Props) {
           <button
             type="button"
             onClick={() => addRef.current?.click()}
-            className="aspect-[4/3] border-2 border-dashed border-border rounded-md flex flex-col items-center justify-center text-muted-foreground hover:border-primary/60 hover:text-foreground transition-colors bg-background/40"
+            disabled={uploading}
+            className="aspect-[4/3] border-2 border-dashed border-border rounded-md flex flex-col items-center justify-center text-muted-foreground hover:border-primary/60 hover:text-foreground transition-colors bg-background/40 disabled:opacity-60 disabled:cursor-progress"
           >
-            {images.length === 0 ? (
+            {uploading ? (
+              <span className="text-xs">Uploading…</span>
+            ) : images.length === 0 ? (
               <>
                 <Upload className="w-6 h-6 mb-1" />
                 <span className="text-xs">Upload photo (max 30 MB)</span>
