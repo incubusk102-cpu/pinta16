@@ -79,7 +79,7 @@ const WelcomeBonusCountdown = () => {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 12 }}
-        className="fixed bottom-4 right-4 z-[80] max-w-[calc(100vw-2rem)] sm:max-w-sm"
+        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-[80] max-w-[calc(100vw-2rem)] sm:max-w-sm"
       >
         <div className="rounded-md border border-amber-300/60 bg-gradient-to-br from-amber-50 via-amber-100/90 to-amber-50 dark:border-amber-700/60 dark:from-amber-950 dark:via-amber-900 dark:to-amber-950 shadow-xl shadow-amber-900/10 p-4 pr-9 relative">
           <button

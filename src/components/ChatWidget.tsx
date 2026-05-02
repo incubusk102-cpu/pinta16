@@ -585,9 +585,16 @@ export default function ChatWidget() {
   );
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 print:hidden">
+    <div className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:inset-x-auto sm:bottom-4 sm:right-4 z-50 print:hidden flex sm:block justify-end">
       {open ? (
-        <div className="w-[340px] sm:w-[380px] h-[520px] bg-card border border-border/60 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        // Mobile: pin to the bottom and fill the viewport width minus a
+        // small gutter so the chat panel never overflows narrow phones
+        // (was hard-coded 340px which clipped on 320px viewports). Tab
+        // and up gets the original fixed-width card.
+        // Height caps at 75svh on mobile so it never covers more than ~3/4
+        // of the screen — leaves room for the URL bar / nav. svh respects
+        // dynamic viewport on iOS Safari.
+        <div className="w-full sm:w-[380px] max-w-[420px] h-[min(520px,75svh)] bg-card border border-border/60 rounded-xl shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/60">
             <div>
               <p className="text-sm font-medium">Chat with us</p>
