@@ -9,7 +9,7 @@
 // gracefully fall back to the existing data-URL path. This keeps the
 // PR safe to merge before R2 is bound in the Cloudflare dashboard.
 
-import { setCloudflareContext } from "./_lib/context.js";
+import { initRequestContext } from "./_lib/handler-wrapper.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
 
@@ -39,7 +39,8 @@ const toHex = (bytes) =>
   ).join("");
 
 export const onRequestPost = async ({ request, env }) => {
-  setCloudflareContext(env);
+  const blocked = await initRequestContext({ request, env });
+  if (blocked) return blocked;
 
   // Admin-gated: same Bearer-token check as every other admin endpoint.
   const event = await buildLambdaEvent(request);

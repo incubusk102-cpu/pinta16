@@ -1,5 +1,5 @@
 // /api/hero-slides — homepage slider config & slides.
-import { setCloudflareContext } from "./_lib/context.js";
+import { initRequestContext } from "./_lib/handler-wrapper.js";
 // KV namespace: HERO_SLIDES (single key "slides" → JSON object).
 //
 // Cloudflare Pages Function port of netlify/functions/hero-slides.js. The
@@ -174,7 +174,8 @@ const publicView = (data) => ({
 });
 
 const handle = async ({ request, env }) => {
-  setCloudflareContext(env);
+  const blocked = await initRequestContext({ request, env });
+  if (blocked) return blocked;
   if (!env.HERO_SLIDES) {
     return json(500, { error: "HERO_SLIDES KV binding missing" });
   }

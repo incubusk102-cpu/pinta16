@@ -6,6 +6,7 @@
 import { makeStore } from "./kv-store.js";
 import { getCloudflareEnv } from "./context.js";
 import { getClientIp } from "./request-info.js";
+import { resolveRateLimit } from "./security-config.js";
 
 const getLimitStore = () => {
   const env = getCloudflareEnv();
@@ -29,7 +30,13 @@ export const consumeRateLimit = async (
   event,
   { bucket, windowMs, max, key },
 ) => {
-  if (!bucket || !windowMs || !max) {
+  if (!bucket) {
+    return { allowed: true, retryAfter: 0, remaining: max ?? 0, count: 0 };
+  }
+  const resolved = await resolveRateLimit(bucket, { windowMs, max });
+  windowMs = resolved.windowMs;
+  max = resolved.max;
+  if (!windowMs || !max) {
     return { allowed: true, retryAfter: 0, remaining: max ?? 0, count: 0 };
   }
   const limitKey = buildKey(bucket, key || getClientIp(event) || "anon");

@@ -1,5 +1,5 @@
 // /api/newsletter — public POST to subscribe; admin GET (list) / DELETE (unsubscribe).
-import { setCloudflareContext } from "./_lib/context.js";
+import { initRequestContext } from "./_lib/handler-wrapper.js";
 // KV namespace: NEWSLETTER (single key "subscribers" → JSON array).
 //
 // Subscribers are also forwarded to Resend or Brevo (whichever is configured
@@ -146,7 +146,8 @@ const sendVoucherEmail = async (to, voucherCode) => {
 };
 
 const handle = async ({ request, env }) => {
-  setCloudflareContext(env);
+  const blocked = await initRequestContext({ request, env });
+  if (blocked) return blocked;
   if (!env.NEWSLETTER) {
     return json(500, { error: "NEWSLETTER KV binding missing" });
   }
@@ -156,7 +157,7 @@ const handle = async ({ request, env }) => {
     event = await buildLambdaEvent(request);
   } catch (err) {
     if (err instanceof BodyTooLargeError) {
-      return json(413, { error: "Request body too large (max 5 MB)" });
+      return json(413, { error: "Request body too large" });
     }
     throw err;
   }
