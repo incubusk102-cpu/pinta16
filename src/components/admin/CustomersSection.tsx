@@ -30,6 +30,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import ScrollableTable from "./ScrollableTable";
 
 type Segment = "vip" | "repeat" | "one_time" | "at_risk" | "lead";
 
@@ -362,7 +363,7 @@ export function CustomersSection() {
             : "No customers match the current filters."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/60">
+        <ScrollableTable>
           <table className="w-full text-sm">
             <thead className="bg-card/40 text-muted-foreground text-xs uppercase tracking-wider">
               <tr>
@@ -447,7 +448,7 @@ export function CustomersSection() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
 
       <CustomerDrawer

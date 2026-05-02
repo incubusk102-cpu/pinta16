@@ -36,6 +36,7 @@ import {
   type ChatFaqItem,
 } from "@/lib/chat-faqs";
 import { toast } from "sonner";
+import ScrollableTable from "./ScrollableTable";
 
 type AdminPromoType = "percent" | "fixed" | "flat" | "free_shipping";
 
@@ -1560,7 +1561,7 @@ export function StorefrontSection() {
             above.
           </p>
         ) : (
-          <div className="overflow-x-auto -mx-2 sm:mx-0 mb-3">
+          <ScrollableTable edgeBleed bordered={false} className="mb-3">
             <table className="w-full text-xs border-separate border-spacing-y-1.5 min-w-[640px]">
               <thead>
                 <tr className="text-muted-foreground">
@@ -1629,7 +1630,7 @@ export function StorefrontSection() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
         )}
 
         {(() => {

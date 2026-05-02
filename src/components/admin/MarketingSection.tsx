@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import ScrollableTable from "./ScrollableTable";
 
 interface PromoStat {
   code: string;
@@ -160,7 +161,7 @@ export function MarketingSection() {
           No promo codes yet. Create one in Storefront → Promo codes.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/60">
+        <ScrollableTable>
           <table className="w-full text-sm">
             <thead className="bg-card/40 text-muted-foreground text-xs uppercase tracking-wider">
               <tr>
@@ -236,7 +237,7 @@ export function MarketingSection() {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
     </section>
   );

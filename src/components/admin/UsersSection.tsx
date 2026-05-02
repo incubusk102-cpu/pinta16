@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2, Mail, RefreshCcw, Trash2, UserCircle } from "lucide-react";
+import ScrollableTable from "./ScrollableTable";
 
 interface AdminUser {
   id: string;
@@ -243,7 +244,7 @@ export function UsersSection() {
           No registered users yet.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/60">
+        <ScrollableTable>
           <table className="w-full text-sm">
             <thead className="bg-card/40 text-muted-foreground text-xs uppercase tracking-wider">
               <tr>
@@ -326,7 +327,7 @@ export function UsersSection() {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       )}
     </div>
   );

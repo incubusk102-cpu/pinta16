@@ -562,7 +562,14 @@ function AdminDashboard() {
   const { products } = useProducts();
   const [section, setSection] = useState<AdminSection>("dashboard");
   const [navOpen, setNavOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Default the sidebar to collapsed (icon-only) on tablet-sized viewports
+  // so the dashboard's main content has room to breathe at 768–1024 px.
+  // Desktop users (≥1024 px) get the full-width sidebar by default. The
+  // user can still toggle either way with Ctrl+B.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 1024;
+  });
 
   const navigate = (next: AdminSection) => {
     setSection(next);
@@ -623,9 +630,9 @@ function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Desktop persistent sidebar */}
+      {/* Persistent sidebar from tablet up; mobile uses the drawer. */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-border/40 bg-card/30 backdrop-blur-sm sticky top-0 h-screen transition-all duration-300 ${
+        className={`hidden md:flex flex-col border-r border-border/40 bg-card/30 backdrop-blur-sm sticky top-0 h-screen transition-all duration-300 ${
           sidebarCollapsed ? "w-16" : "w-60"
         }`}
       >
@@ -709,7 +716,7 @@ function AdminDashboard() {
               size="icon"
               onClick={() => setNavOpen(true)}
               aria-label="Open menu"
-              className="lg:hidden"
+              className="md:hidden"
             >
               <Menu className="w-5 h-5" />
             </Button>
@@ -738,7 +745,7 @@ function AdminDashboard() {
               variant="ghost"
               size="sm"
               onClick={logout}
-              className="text-xs lg:hidden"
+              className="text-xs md:hidden"
             >
               <LogOut className="w-3 h-3 mr-1" />
               <span className="hidden sm:inline">Sign out</span>
