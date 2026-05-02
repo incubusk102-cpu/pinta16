@@ -143,7 +143,34 @@ rules → Create rule`.
 This catches a credential-stuffing campaign that ramps up faster than the
 in-app limiter can react.
 
-## What the security PR ships in code (for reference)
+## 6. Live security tuning panel (Admin → Security)
+
+The repo ships an admin panel that lets you tune rate-limit windows,
+Turnstile mode, the body-size cap, and the IP block list at runtime
+without touching code or redeploying. It needs a `SECURITY_CONFIG` KV
+namespace bound to the Pages project. As of PR #212 the binding is wired
+in `wrangler.toml`; you only do this once per deploy environment.
+
+If the namespace already exists for your account, you can skip ahead to
+"Verify" below.
+
+1. `dash.cloudflare.com → Workers & Pages → KV → Create namespace`.
+2. Name `canvhub-security-config`. Copy the 32-char namespace ID.
+3. Repeat with `canvhub-security-config-preview`. Copy that ID too.
+4. Open `wrangler.toml`, find the `SECURITY_CONFIG` block at the bottom,
+   paste the production ID into `id` and the preview ID into
+   `preview_id`. Push to `main`. Pages redeploys with the binding live.
+5. **Verify.** Open `canvhub.com/admin → Security`. The yellow
+   "SECURITY_CONFIG KV namespace not bound" banner should be gone.
+   Drag any setting (e.g. body-size cap from 5 MB → 6 MB), click Save,
+   refresh — the value should persist.
+
+The panel reads a 30-second cached snapshot of the namespace, so changes
+propagate everywhere within a minute. All saves write an entry to the
+`AUDIT_LOG` namespace alongside the existing admin login / order events,
+so you can review who tweaked what.
+
+## What the security PRs ship in code (for reference)
 
 - `functions/api/_lib/turnstile.js` — server-side `siteverify` helper, falls
   open when `TURNSTILE_SECRET_KEY` isn't set.
@@ -152,11 +179,15 @@ in-app limiter can react.
 - Wired into `NewsletterForm.tsx` and the admin `AdminAuthGate`.
 - `functions/api/_lib/lambda-event.js` — 5 MB body-size cap with a 413
   response, applied to every Function via the wrapper.
+- `functions/api/_lib/security-config.js` + `src/components/admin/
+  SecuritySection.tsx` — read/write the live config in `SECURITY_CONFIG`
+  KV. Defaults match the hardcoded values shipped in #204 / #206 so the
+  binding is safe to add or remove.
 - `npm audit` clean (postcss bumped to 8.5.10+).
 - CSP updated to allow `challenges.cloudflare.com` for the Turnstile
   script + iframe.
 
-## 6. (Optional) R2 image storage — free up to 10 GB
+## 7. (Optional) R2 image storage — free up to 10 GB
 
 By default, every product photo is JPEG-compressed in the browser and
 stored as a base64 data URL inside the product record in KV. That works
