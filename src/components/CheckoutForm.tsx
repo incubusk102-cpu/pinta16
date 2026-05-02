@@ -78,9 +78,20 @@ const loadCheckoutDraft = (): Partial<OrderInfo> | null => {
     const raw = sessionStorage.getItem(CHECKOUT_DRAFT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Partial<OrderInfo>)
-      : null;
+    if (typeof parsed !== "object" || parsed === null) return null;
+    // Drop the courier + zone selection from the restored draft so the
+    // dropdown always starts blank. We want the customer to consciously
+    // re-pick a courier each time they reopen checkout — that way the
+    // running fee preview reflects their current intent rather than a
+    // stale carry-over from a previous session/refresh.
+    const {
+      courier: _c,
+      shippingZone: _z,
+      ...rest
+    } = parsed as Partial<OrderInfo>;
+    void _c;
+    void _z;
+    return rest;
   } catch {
     return null;
   }
