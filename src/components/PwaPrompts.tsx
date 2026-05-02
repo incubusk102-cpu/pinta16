@@ -89,7 +89,7 @@ export default function PwaPrompts() {
 
       {/* Update banner */}
       {updateAvailable && !showConfirmation && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
+        <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[1000] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
           <RefreshCw className="w-4 h-4 text-foreground mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">
@@ -123,7 +123,7 @@ export default function PwaPrompts() {
         !dismissedInstall &&
         !updateAvailable &&
         !showConfirmation && (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[999] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
+          <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[999] max-w-sm w-[calc(100vw-2rem)] rounded-md border border-border bg-background shadow-lg p-3 flex items-start gap-3">
             <Download className="w-4 h-4 text-foreground mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">Install app</p>

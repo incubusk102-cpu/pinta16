@@ -304,8 +304,8 @@ const GalleryNav = () => {
           menuOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
         }`}
       >
-        {/* Drawer header */}
-        <div className="flex items-center justify-end px-5 py-4 border-b border-border/30">
+        {/* Drawer header — pt respects iPhone notch / dynamic island. */}
+        <div className="flex items-center justify-end px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 border-b border-border/30">
           <button
             onClick={closeMenu}
             className="p-2 -mr-2 text-foreground/80 hover:text-foreground"
@@ -315,8 +315,8 @@ const GalleryNav = () => {
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto py-2">
+        {/* Body — pb respects iPhone home indicator. */}
+        <div className="flex-1 overflow-y-auto py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {onIndex && !user ? (
             /* Homepage, signed-out: just the Google sign-in tile. */
             <div className="px-5 pt-3 pb-4 flex flex-col gap-2">

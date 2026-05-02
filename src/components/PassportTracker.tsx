@@ -67,7 +67,7 @@ const PassportTracker = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.9 }}
             transition={{ duration: 0.35 }}
-            className="fixed left-3 bottom-3 sm:left-4 sm:bottom-4 z-40"
+            className="fixed left-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:left-4 sm:bottom-4 z-40"
           >
             <button
               type="button"
