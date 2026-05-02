@@ -16,6 +16,7 @@ import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
 import { buildTrackingUrl } from "@/lib/shipment";
 import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
+import DeliveredReviewPrompt from "./DeliveredReviewPrompt";
 import RefundBanner from "./RefundBanner";
 
 const formatNotificationDate = (iso: string) => {
@@ -298,12 +299,20 @@ const OrderConfirmation = () => {
                   return (
                     <>
                       {showForm && (
-                        <OrderReviewForm
-                          orderId={lastOrder.id}
-                          customerEmail={lastOrder.orderInfo.email}
-                          items={lastOrder.items}
-                          existingReviews={reviews}
-                        />
+                        <>
+                          <DeliveredReviewPrompt
+                            items={lastOrder.items}
+                            existingReviews={reviews}
+                          />
+                          <div id="order-review-form" className="scroll-mt-24">
+                            <OrderReviewForm
+                              orderId={lastOrder.id}
+                              customerEmail={lastOrder.orderInfo.email}
+                              items={lastOrder.items}
+                              existingReviews={reviews}
+                            />
+                          </div>
+                        </>
                       )}
                       {reviews.map((rev, idx) => (
                         <div
