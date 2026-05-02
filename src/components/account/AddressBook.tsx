@@ -107,12 +107,11 @@ export default function AddressBook() {
       !form.fullName.trim() ||
       !form.line1.trim() ||
       !form.city.trim() ||
-      !(form.region || "").trim() ||
       !(form.province || "").trim() ||
       !(form.barangay || "").trim()
     ) {
       toast.error(
-        "Recipient, region, province, city, barangay and street are required",
+        "Recipient, province, city, barangay and street are required",
       );
       return;
     }

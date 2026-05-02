@@ -213,6 +213,44 @@ export const provincesForRegion = (regionId: string): string[] =>
 export const zoneForRegion = (regionId: string): ShippingZone | null =>
   findRegion(regionId)?.zone ?? null;
 
+// Flat, deduplicated list of every PH province (NCR exposed as
+// "Metro Manila"). Used by the checkout address picker now that
+// Region is hidden — the buyer types/picks a province directly and
+// region+zone are derived behind the scenes for the per-courier ×
+// per-zone shipping fee.
+export const ALL_PH_PROVINCES: string[] = Array.from(
+  new Set(PH_REGIONS.flatMap((r) => r.provinces)),
+).sort((a, b) => a.localeCompare(b));
+
+// Reverse map province → region. Built lazily once because the
+// PH_REGIONS list is static. Lookups are O(1) after first call.
+let provinceToRegionId: Map<string, string> | null = null;
+const buildProvinceIndex = (): Map<string, string> => {
+  if (provinceToRegionId) return provinceToRegionId;
+  const map = new Map<string, string>();
+  for (const r of PH_REGIONS) {
+    for (const p of r.provinces) {
+      // First-write wins. PSGC has no province shared across regions
+      // so this is safe; the guard is just paranoia.
+      if (!map.has(p.toLowerCase())) {
+        map.set(p.toLowerCase(), r.id);
+      }
+    }
+  }
+  provinceToRegionId = map;
+  return map;
+};
+
+export const regionForProvince = (province: string): string => {
+  if (!province) return "";
+  return buildProvinceIndex().get(province.trim().toLowerCase()) ?? "";
+};
+
+export const zoneForProvince = (province: string): ShippingZone | null => {
+  const regionId = regionForProvince(province);
+  return regionId ? zoneForRegion(regionId) : null;
+};
+
 export const zoneLabel = (zone: ShippingZone | null | undefined): string =>
   SHIPPING_ZONES.find((z) => z.id === zone)?.label ?? "";
 

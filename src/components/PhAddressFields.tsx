@@ -1,10 +1,10 @@
-// PH address picker (region as a strict select; province / city /
-// barangay as type-or-pick combobox inputs).
-//
-// Region stays a real `<Select>` because it directly drives the
-// courier zone (Metro Manila / Luzon / Visayas / Mindanao) which the
-// shipping-fee calculation depends on — we want exactly one of the 17
-// canonical region IDs there, not a free-typed string.
+// PH address picker (province / city / barangay as type-or-pick
+// combobox inputs). Region is intentionally NOT a visible field —
+// each PH province belongs to exactly one region, so we derive the
+// region (and its courier zone: Metro Manila / Luzon / Visayas /
+// Mindanao) from the picked province behind the scenes. The
+// per-courier × per-zone shipping-fee math still works without
+// asking the buyer to pick the region twice.
 //
 // Province / city / barangay each render an `AddressTypeahead`: a
 // plain text input where the buyer can either type their place freely
@@ -29,16 +29,9 @@ import { Building, Home, Hash, MapPin, Pin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  PH_REGIONS,
-  provincesForRegion,
-  zoneForRegion,
+  ALL_PH_PROVINCES,
+  regionForProvince,
+  zoneForProvince,
   type ShippingZone,
 } from "@/lib/ph-regions";
 import {
@@ -94,7 +87,11 @@ export function PhAddressFields({
   showZoneHint = true,
   disabled = false,
 }: PhAddressFieldsProps) {
-  const provinceOptions = provincesForRegion(value.region);
+  // Province dropdown is now flat (all 81+ PH provinces). Region is
+  // hidden from the form; we derive region+zone from the picked
+  // province behind the scenes so the per-courier × per-zone shipping
+  // fee math still works.
+  const provinceOptions = ALL_PH_PROVINCES;
 
   // Lazy-load PSGC data on mount; cached across instances so the
   // dynamic import only fires once per page load.
@@ -127,32 +124,25 @@ export function PhAddressFields({
     [psgc, value.province, value.city],
   );
 
-  const updateRegion = (regionId: string) => {
-    const zone = zoneForRegion(regionId);
-    const provinces = provincesForRegion(regionId);
-    // If only one province (NCR), auto-select it so the user doesn't
-    // have to click. Otherwise reset province because the old one
-    // probably doesn't belong to the new region.
-    const nextProvince = provinces.length === 1 ? provinces[0] : "";
-    onChange({
-      ...value,
-      region: regionId,
-      province: nextProvince,
-      // Province changed → city + barangay are now stale.
-      city: "",
-      barangay: "",
-      zone,
-    });
-  };
-
   // Cascade reset only when the buyer explicitly picks a different
   // parent value (`picked=true`). Free-typed edits keep dependent
   // fields intact so mid-keystroke typos don't blow them away.
+  // Region + zone are derived from province on every change so the
+  // hidden-region UX stays consistent with the shipping-fee math.
   const updateProvince = (province: string, picked = false) => {
+    const regionId = regionForProvince(province);
+    const zone = zoneForProvince(province);
     if (picked) {
-      onChange({ ...value, province, city: "", barangay: "" });
+      onChange({
+        ...value,
+        province,
+        region: regionId,
+        zone,
+        city: "",
+        barangay: "",
+      });
     } else {
-      onChange({ ...value, province });
+      onChange({ ...value, province, region: regionId, zone });
     }
   };
 
@@ -170,55 +160,30 @@ export function PhAddressFields({
 
   return (
     <div className="space-y-3">
-      {/* Region + Province */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-            <MapPin className="w-3.5 h-3.5" />
-            Region
-            {showZoneHint && value.zone && (
-              <span className="ml-auto px-1.5 py-0.5 text-[10px] tracking-wider rounded bg-foreground/5 text-foreground/70">
-                {value.zone === "metro_manila"
-                  ? "Metro Manila zone"
-                  : value.zone === "luzon"
-                    ? "Luzon zone"
-                    : value.zone === "visayas"
-                      ? "Visayas zone"
-                      : "Mindanao zone"}
-              </span>
-            )}
-          </Label>
-          <Select
-            value={value.region}
-            onValueChange={updateRegion}
-            disabled={disabled}
-          >
-            <SelectTrigger className="h-10 text-sm">
-              <SelectValue placeholder="Select region" />
-            </SelectTrigger>
-            <SelectContent>
-              {PH_REGIONS.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-            <Building className="w-3.5 h-3.5" />
-            Province
-          </Label>
-          <AddressTypeahead
-            value={value.province}
-            onChange={updateProvince}
-            options={provinceOptions}
-            disabled={disabled}
-            placeholder="Type your province (suggestions below)"
-          />
-        </div>
+      {/* Province (region is hidden — derived behind the scenes) */}
+      <div className="space-y-1.5">
+        <Label className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <Building className="w-3.5 h-3.5" />
+          Province
+          {showZoneHint && value.zone && (
+            <span className="ml-auto px-1.5 py-0.5 text-[10px] tracking-wider rounded bg-foreground/5 text-foreground/70">
+              {value.zone === "metro_manila"
+                ? "Metro Manila zone"
+                : value.zone === "luzon"
+                  ? "Luzon zone"
+                  : value.zone === "visayas"
+                    ? "Visayas zone"
+                    : "Mindanao zone"}
+            </span>
+          )}
+        </Label>
+        <AddressTypeahead
+          value={value.province}
+          onChange={updateProvince}
+          options={provinceOptions}
+          disabled={disabled}
+          placeholder="Type your province (suggestions below)"
+        />
       </div>
 
       {/* City + Barangay (free-text with PSGC suggestions) */}
