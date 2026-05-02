@@ -20,6 +20,7 @@ const STORE_TO_BINDING = {
   "audit-log": "AUDIT_LOG",
   "admin-auth": "ADMIN_AUTH",
   "customer-meta": "CUSTOMER_META",
+  "security-config": "SECURITY_CONFIG",
 };
 
 export const getStore = (name) => {

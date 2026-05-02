@@ -5,11 +5,21 @@
 // taking action. Token verification happens against Cloudflare's siteverify
 // endpoint; the widget itself is rendered client-side via `Turnstile.tsx`.
 //
+// Three runtime modes, sourced from the Admin → Security panel:
+//   "off"  — bypass verification entirely (skipped + allowed)
+//   "soft" — verify, but never block on failure (allowed + skipped with
+//            reason: `soft:<original-reason>`). Lets the admin observe the
+//            real fail rate without locking real users out while tuning.
+//   "hard" — verify and block on failure (default; matches the behavior
+//            shipped in #206).
+//
 // Graceful fallback: when `TURNSTILE_SECRET_KEY` is not configured (which is
 // the default in local dev and on freshly deployed Pages projects), this
-// helper returns `{ allowed: true, skipped: true }` so the rest of the
-// handler proceeds normally. That keeps the integration safe to ship before
-// the dashboard widget is created.
+// helper returns `{ allowed: true, skipped: true }` regardless of mode so
+// the rest of the handler proceeds normally. That keeps the integration
+// safe to ship before the dashboard widget is created.
+
+import { getTurnstileMode } from "./security-config.js";
 
 const SITEVERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -23,12 +33,23 @@ const getClientIp = (event) => {
   return "";
 };
 
+const softPass = (reason) => ({
+  allowed: true,
+  skipped: true,
+  reason: `soft:${reason}`,
+});
+
 export const verifyTurnstileToken = async (event, { token } = {}) => {
+  const mode = await getTurnstileMode();
+  if (mode === "off") {
+    return { allowed: true, skipped: true, reason: "mode-off" };
+  }
   const secret = (process.env.TURNSTILE_SECRET_KEY || "").trim();
   if (!secret) {
     return { allowed: true, skipped: true };
   }
   if (typeof token !== "string" || token.length === 0) {
+    if (mode === "soft") return softPass("missing-token");
     return { allowed: false, reason: "missing-token" };
   }
 
@@ -51,12 +72,11 @@ export const verifyTurnstileToken = async (event, { token } = {}) => {
     }
     const data = await res.json();
     if (data?.success) return { allowed: true };
-    return {
-      allowed: false,
-      reason: Array.isArray(data?.["error-codes"])
-        ? data["error-codes"].join(",")
-        : "invalid-token",
-    };
+    const reason = Array.isArray(data?.["error-codes"])
+      ? data["error-codes"].join(",")
+      : "invalid-token";
+    if (mode === "soft") return softPass(reason);
+    return { allowed: false, reason };
   } catch {
     return { allowed: true, skipped: true, reason: "siteverify-exception" };
   }

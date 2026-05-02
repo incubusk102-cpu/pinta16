@@ -1,5 +1,5 @@
 // /api/products — public list, admin-gated create/delete.
-import { setCloudflareContext } from "./_lib/context.js";
+import { initRequestContext } from "./_lib/handler-wrapper.js";
 // KV namespace: PRODUCTS (single key "all-products" → JSON array).
 //
 // Cloudflare Pages Function port of netlify/functions/products.js. Same wire
@@ -37,7 +37,8 @@ const parseBody = (body) => {
 };
 
 const handle = async ({ request, env }) => {
-  setCloudflareContext(env);
+  const blocked = await initRequestContext({ request, env });
+  if (blocked) return blocked;
   if (!env.PRODUCTS) {
     return json(500, { error: "PRODUCTS KV binding missing" });
   }

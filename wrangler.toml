@@ -96,6 +96,25 @@ id = "b55d858597374aaa8a0ff2ecf21a9177"
 preview_id = "a03c9102eeb1456d87683043d48e001d"
 
 # ---------------------------------------------------------------------------
+# SECURITY_CONFIG (optional)
+#
+# Backs the Admin → Security panel: per-endpoint rate limits, Turnstile mode
+# (off / soft / hard), body-size cap (1–10 MB), and IP block list. When this
+# binding is missing, every helper falls back to the hardcoded defaults that
+# match the values shipped in #204 / #206 — so this PR is safe to merge
+# before the namespace is created.
+#
+# To enable: create the namespace in the Cloudflare dashboard
+# (Workers & Pages → KV → Create namespace, name e.g. `canvhub-security-config`),
+# paste the production `id` and a separate preview `id`, and redeploy. The
+# panel starts using the new bindings on the next request after deploy.
+# ---------------------------------------------------------------------------
+# [[kv_namespaces]]
+# binding = "SECURITY_CONFIG"
+# id = ""
+# preview_id = ""
+
+# ---------------------------------------------------------------------------
 # R2 bucket binding (optional)
 #
 # When this binding is present, admin product photo uploads write to R2

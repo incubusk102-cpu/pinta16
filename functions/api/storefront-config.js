@@ -1,5 +1,5 @@
 // /api/storefront-config — public read of announcement / free shipping /
-import { setCloudflareContext } from "./_lib/context.js";
+import { initRequestContext } from "./_lib/handler-wrapper.js";
 // promo codes / chat config; admin write of all of the above.
 // KV namespace: STOREFRONT_CONFIG (single key "config" → JSON object).
 //
@@ -1394,7 +1394,8 @@ const publicView = (config) => {
 };
 
 const handle = async ({ request, env }) => {
-  setCloudflareContext(env);
+  const blocked = await initRequestContext({ request, env });
+  if (blocked) return blocked;
   if (!env.STOREFRONT_CONFIG) {
     return json(500, { error: "STOREFRONT_CONFIG KV binding missing" });
   }

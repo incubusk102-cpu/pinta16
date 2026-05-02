@@ -9,17 +9,29 @@
 
 // Cap inbound bodies to a sane size. The biggest legitimate payload we accept
 // is the storefront-config save (which can include a few base64-embedded
-// banner / hero images); 5 MB covers that comfortably while bounding how much
-// memory and KV write quota a single malicious request can consume. Workers
-// have a higher built-in cap (~100 MB) so this is the application-level guard.
+// banner / hero images). The hard ceiling here (10 MB) is the absolute upper
+// bound that no admin override can blow past — the live-tunable cap shipped
+// in the Admin → Security panel is checked separately and is clamped to
+// 1–10 MB. Workers have a higher built-in cap (~100 MB) so this is the
+// application-level guard.
+const HARD_CEILING_BYTES = 10 * 1024 * 1024;
+// Kept as a public alias for callers that want the legacy default at compile
+// time. The runtime cap is whatever `getMaxBodyBytes()` returns.
 const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
+
+import { getMaxBodyBytes } from "./security-config.js";
 
 class BodyTooLargeError extends Error {
   constructor() {
-    super("Request body exceeds the 5 MB limit");
+    super(`Request body exceeds the configured limit`);
     this.name = "BodyTooLargeError";
   }
 }
+
+const byteLengthOf = (s) =>
+  typeof TextEncoder !== "undefined"
+    ? new TextEncoder().encode(s).byteLength
+    : s.length;
 
 export const buildLambdaEvent = async (request) => {
   const url = new URL(request.url);
@@ -33,10 +45,7 @@ export const buildLambdaEvent = async (request) => {
     // Reject obviously oversized requests before we read them. Cheap and
     // covers well-behaved clients that always send Content-Length.
     const contentLength = Number(headers["content-length"] || 0);
-    if (
-      Number.isFinite(contentLength) &&
-      contentLength > DEFAULT_MAX_BODY_BYTES
-    ) {
+    if (Number.isFinite(contentLength) && contentLength > HARD_CEILING_BYTES) {
       throw new BodyTooLargeError();
     }
     try {
@@ -47,11 +56,21 @@ export const buildLambdaEvent = async (request) => {
     // Final byte-length guard for clients that omit Content-Length or lie
     // about it. UTF-16 surrogate pair counts each code unit as one in
     // .length so use TextEncoder for a true byte count.
-    const byteLength =
-      typeof TextEncoder !== "undefined"
-        ? new TextEncoder().encode(body).byteLength
-        : body.length;
-    if (byteLength > DEFAULT_MAX_BODY_BYTES) {
+    const byteLength = byteLengthOf(body);
+    if (byteLength > HARD_CEILING_BYTES) {
+      throw new BodyTooLargeError();
+    }
+    // Honor the live-tunable cap from the Admin → Security panel. Reads
+    // from a 30s module-scoped cache so this is essentially free in the
+    // steady state. Falls back to the hardcoded default if the security
+    // config can't be resolved.
+    let configuredCap = DEFAULT_MAX_BODY_BYTES;
+    try {
+      configuredCap = await getMaxBodyBytes();
+    } catch {
+      configuredCap = DEFAULT_MAX_BODY_BYTES;
+    }
+    if (byteLength > configuredCap) {
       throw new BodyTooLargeError();
     }
   }
