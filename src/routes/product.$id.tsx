@@ -355,8 +355,13 @@ function ProductPage() {
                   alt={`${artwork.title} – photo ${activeImage + 1}`}
                   className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
                   fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
-                  loading="lazy"
-                  decoding="async"
+                  // This is the LCP element on the product detail page —
+                  // tell the browser to prioritize it over off-screen
+                  // gallery images and deferred chunks.
+                  loading="eager"
+                  // Cast to bypass the older React DOM types that don't
+                  // know about the modern `fetchpriority` attribute yet.
+                  {...({ fetchpriority: "high" } as Record<string, string>)}
                 />
               </button>
               {showAvailabilityBadge && (

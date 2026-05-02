@@ -19,7 +19,6 @@ import {
   type CompletedOrder,
 } from "@/contexts/CartContext";
 import { buildTrackingUrl, findCourierById, COURIERS } from "@/lib/shipment";
-import { downloadWaybillPdf } from "@/lib/waybill";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
 
@@ -273,8 +272,13 @@ export default function OrderTracker() {
                           number, matching the user spec. */}
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           try {
+                            // Lazy-load the waybill module so jspdf +
+                            // jsbarcode (~410 KB minified) only ship
+                            // when the customer actually clicks Download.
+                            const { downloadWaybillPdf } =
+                              await import("@/lib/waybill");
                             downloadWaybillPdf(order);
                           } catch (err) {
                             toast.error(

@@ -111,7 +111,6 @@ import {
 } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 import { COURIERS, buildTrackingUrl } from "@/lib/shipment";
-import { downloadWaybillPdf } from "@/lib/waybill";
 import { linkifyMessage } from "@/lib/chat-format";
 type AdminSection =
   | "dashboard"
@@ -3799,8 +3798,11 @@ function ShipmentEditor({
           variant="ghost"
           size="sm"
           className="h-7 text-xs ml-auto"
-          onClick={() => {
+          onClick={async () => {
             try {
+              // Lazy-load to keep jspdf + jsbarcode (~410 KB) out of
+              // the admin-page initial chunk; only loaded on demand.
+              const { downloadWaybillPdf } = await import("@/lib/waybill");
               downloadWaybillPdf(order);
             } catch (err) {
               toast.error(

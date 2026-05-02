@@ -43,6 +43,13 @@ export default defineConfig({
           if (id.includes("/maplibre-gl/") || id.includes("/react-map-gl/")) {
             return "maps";
           }
+          // PDF + barcode rendering for waybills. Heavy (~410 KB
+          // minified) and only invoked on a button click in
+          // OrderTracker / AdminPage, so isolate them so they
+          // ride along with the lazy `@/lib/waybill` import only.
+          if (id.includes("/jspdf/") || id.includes("/jsbarcode/")) {
+            return "waybill";
+          }
           return "vendor";
         },
       },

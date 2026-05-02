@@ -249,6 +249,14 @@ const HeroSlider = () => {
                 ease: "linear",
               }}
               draggable={false}
+              // The first slide is the LCP element on the homepage; load
+              // it eagerly with high fetch priority. Subsequent slides
+              // load lazily so the initial paint stays fast.
+              loading={safeIndex === 0 ? "eager" : "lazy"}
+              decoding="async"
+              {...(safeIndex === 0
+                ? ({ fetchpriority: "high" } as Record<string, string>)
+                : {})}
             />
           )}
           {/* readability overlay — gradient bottom-up */}

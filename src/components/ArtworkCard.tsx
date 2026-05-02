@@ -178,6 +178,11 @@ const ArtworkCard = ({
             transition={{ duration: 0.4 }}
             className={`w-full object-cover ${isDimmed ? "grayscale opacity-80" : ""}`}
             loading="lazy"
+            decoding="async"
+            // Help the browser pick an appropriately-sized image for
+            // the card slot at each breakpoint (gallery is 1-up on
+            // mobile, 2-up on `sm:`, 3-up on `lg:`).
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           />
         </AnimatePresence>
 
