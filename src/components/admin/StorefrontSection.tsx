@@ -19,8 +19,10 @@ import { SHIPPING_ZONES } from "@/lib/ph-regions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
@@ -174,6 +176,340 @@ const DEFAULTS: AdminConfig = {
   },
 };
 
+// Common minimum-spend / shipping-fee presets surfaced as one-tap chips
+// so admins don't have to think about the right round number to type.
+const THRESHOLD_PRESETS: { value: number; label: string }[] = [
+  { value: 0, label: "Always" },
+  { value: 2500, label: "₱2,500" },
+  { value: 5000, label: "₱5,000" },
+  { value: 8000, label: "₱8,000" },
+  { value: 10000, label: "₱10,000" },
+  { value: 15000, label: "₱15,000" },
+];
+
+const SHIPPING_FEE_PRESETS = [100, 150, 250, 350, 500, 800];
+
+interface FreeShippingRuleSectionProps {
+  freeShipping: AdminConfig["freeShipping"];
+  onChange: (next: Partial<AdminConfig["freeShipping"]>) => void;
+  onReset: () => void;
+  onSave: () => void;
+  saving: boolean;
+  previewSubtotal: number;
+  onPreviewSubtotalChange: (next: number) => void;
+}
+
+function FreeShippingRuleSection({
+  freeShipping,
+  onChange,
+  onReset,
+  onSave,
+  saving,
+  previewSubtotal,
+  onPreviewSubtotalChange,
+}: FreeShippingRuleSectionProps) {
+  const { enabled, threshold, shippingFee } = freeShipping;
+  // Cap the slider's range so the thumb is always meaningfully placed —
+  // a bit above the threshold so admins can drag past "free shipping
+  // unlocked" and see the green state too.
+  const previewMax = Math.max(threshold * 1.5, threshold + 4000, 12000);
+  const remaining = Math.max(0, threshold - previewSubtotal);
+  const previewIsFree =
+    enabled && (threshold === 0 || previewSubtotal >= threshold);
+  const progressPercent =
+    threshold > 0 ? Math.min((previewSubtotal / threshold) * 100, 100) : 100;
+
+  const feeExceedsThreshold =
+    enabled && threshold > 0 && shippingFee >= threshold;
+  const feeIsZero = enabled && threshold > 0 && shippingFee === 0;
+
+  return (
+    <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Truck className="w-4 h-4 text-primary" />
+        <h2 className="font-display text-lg">Free-shipping rule</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Pick a minimum spend that unlocks free shipping. The cart drawer shows
+        "₱X away from free shipping" automatically and the announcement bar
+        reflects this threshold.
+      </p>
+
+      <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md mb-3">
+        <div>
+          <p className="text-sm font-medium">Offer free shipping</p>
+          <p className="text-xs text-muted-foreground">
+            {enabled
+              ? "Above the minimum spend below, the shipping fee is waived."
+              : "Customers always pay the shipping fee. The threshold below has no effect while this is off."}
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => onChange({ enabled: v })}
+        />
+      </label>
+
+      <div
+        className={cn(
+          "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 transition-opacity",
+          !enabled && "opacity-60",
+        )}
+      >
+        {/* Minimum spend */}
+        <div className="space-y-2">
+          <Label htmlFor="fs-threshold">
+            Minimum spend to unlock free shipping
+          </Label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">
+              ₱
+            </span>
+            <Input
+              id="fs-threshold"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={500}
+              className="pl-7"
+              disabled={!enabled}
+              value={threshold}
+              onChange={(e) =>
+                onChange({
+                  threshold: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {THRESHOLD_PRESETS.map((p) => {
+              const active = threshold === p.value;
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  disabled={!enabled}
+                  onClick={() => onChange({ threshold: p.value })}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-xs border transition-colors",
+                    active
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-background/40 text-muted-foreground border-border/50 hover:border-foreground/40",
+                    !enabled && "cursor-not-allowed",
+                  )}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {threshold === 0
+              ? "Every order ships free regardless of cart total."
+              : `Customers see free shipping when their cart reaches ₱${threshold.toLocaleString()}.`}
+          </p>
+        </div>
+
+        {/* Shipping fee */}
+        <div className="space-y-2">
+          <Label htmlFor="fs-fee">Default shipping fee</Label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">
+              ₱
+            </span>
+            <Input
+              id="fs-fee"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={50}
+              className="pl-7"
+              value={shippingFee}
+              onChange={(e) =>
+                onChange({
+                  shippingFee: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SHIPPING_FEE_PRESETS.map((preset) => {
+              const active = shippingFee === preset;
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => onChange({ shippingFee: preset })}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-xs border transition-colors",
+                    active
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-background/40 text-muted-foreground border-border/50 hover:border-foreground/40",
+                  )}
+                >
+                  ₱{preset.toLocaleString()}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Used when no per-courier rate matches. Customers below the threshold
+            pay this.
+          </p>
+        </div>
+      </div>
+
+      {/* Plain-English summary */}
+      <div className="rounded-md border border-border/40 bg-background/30 p-3 mb-3 text-xs sm:text-sm space-y-1">
+        {!enabled ? (
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Free shipping is off.
+            </span>{" "}
+            Every order pays ₱{shippingFee.toLocaleString()} (or the per-courier
+            rate when available).
+          </p>
+        ) : threshold === 0 ? (
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Every order ships free.
+            </span>{" "}
+            Threshold is ₱0, so the shipping fee is waived for every cart.
+          </p>
+        ) : (
+          <>
+            <p className="text-muted-foreground">
+              Cart{" "}
+              <span className="font-medium text-foreground">
+                ≥ ₱{threshold.toLocaleString()}
+              </span>{" "}
+              → Free shipping{" "}
+              {shippingFee > 0 && (
+                <span className="text-success">
+                  (saves ₱{shippingFee.toLocaleString()})
+                </span>
+              )}
+            </p>
+            <p className="text-muted-foreground">
+              Cart{" "}
+              <span className="font-medium text-foreground">
+                &lt; ₱{threshold.toLocaleString()}
+              </span>{" "}
+              → ₱{shippingFee.toLocaleString()} shipping fee
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Validation hints */}
+      {feeExceedsThreshold && (
+        <div className="rounded-md border border-amber-400/40 bg-amber-400/5 p-3 mb-3 text-xs text-amber-200">
+          Heads up: your shipping fee (₱{shippingFee.toLocaleString()}) is at or
+          above the threshold (₱{threshold.toLocaleString()}). Customers will
+          hit free shipping with very small orders, which usually isn't what you
+          want.
+        </div>
+      )}
+      {feeIsZero && (
+        <div className="rounded-md border border-border/40 bg-background/30 p-3 mb-3 text-xs text-muted-foreground">
+          Note: shipping fee is ₱0, so the threshold doesn't change what
+          customers pay — every order already ships free.
+        </div>
+      )}
+
+      {/* Live customer preview */}
+      <div className="rounded-md border border-border/40 bg-background/30 p-3 mb-4">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+          What customers will see
+        </p>
+        <div className="flex items-center justify-between text-xs mb-2">
+          <span className="text-muted-foreground">Mock cart subtotal</span>
+          <span className="font-medium text-foreground">
+            ₱{previewSubtotal.toLocaleString()}
+          </span>
+        </div>
+        <Slider
+          value={[Math.min(previewSubtotal, previewMax)]}
+          max={previewMax}
+          step={500}
+          onValueChange={([v]) => onPreviewSubtotalChange(v)}
+          aria-label="Mock cart subtotal"
+        />
+        <div className="rounded-md border border-border/30 bg-card/40 p-3 mt-3 text-xs space-y-2">
+          {enabled && threshold > 0 && previewSubtotal < threshold ? (
+            <>
+              <div className="flex items-center gap-2">
+                <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">
+                  ₱{remaining.toLocaleString()} away from free shipping (₱
+                  {threshold.toLocaleString()})
+                </span>
+              </div>
+              <div className="w-full h-1 bg-border/30 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-foreground/50 rounded-full transition-all"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </>
+          ) : enabled ? (
+            <div className="flex items-center gap-2">
+              <Truck className="w-3.5 h-3.5 text-success" />
+              <span className="text-success font-medium">
+                Free shipping unlocked
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">
+                Free shipping is off — customer pays ₱
+                {shippingFee.toLocaleString()}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-2 border-t border-border/20 text-muted-foreground">
+            <span>Shipping</span>
+            <span>
+              {previewIsFree ? (
+                <>
+                  {shippingFee > 0 && (
+                    <span className="line-through mr-1">
+                      ₱{shippingFee.toLocaleString()}
+                    </span>
+                  )}
+                  <span className="text-foreground">FREE</span>
+                </>
+              ) : (
+                <>₱{shippingFee.toLocaleString()}</>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onReset}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Reset to defaults
+        </button>
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…
+            </>
+          ) : (
+            "Save shipping rule"
+          )}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 export function StorefrontSection() {
   const { token } = useAdminAuth();
   const { refresh } = useStorefrontConfig();
@@ -188,6 +524,14 @@ export function StorefrontSection() {
     | "chat"
     | "vacation"
   >(null);
+
+  // Free-shipping rule preview — admin-only state used to show what
+  // the customer cart will say at a hypothetical subtotal. Defaults to
+  // half the threshold so the "₱X away from free shipping" copy is
+  // visible right away when the section first renders.
+  const [previewSubtotal, setPreviewSubtotal] = useState<number>(() =>
+    Math.round((DEFAULTS.freeShipping.threshold || 0) / 2),
+  );
 
   // Promo form state
   const [promoCode, setPromoCode] = useState("");
@@ -1140,93 +1484,25 @@ export function StorefrontSection() {
       </section>
 
       {/* Free shipping rule */}
-      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Truck className="w-4 h-4 text-primary" />
-          <h2 className="font-display text-lg">
-            Shipping & free-shipping rule
-          </h2>
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Customers see "₱X away from free shipping" in the cart and the
-          announcement bar reflects this threshold dynamically.
-        </p>
-        <div className="space-y-3">
-          <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
-            <div>
-              <p className="text-sm font-medium">Offer free shipping</p>
-              <p className="text-xs text-muted-foreground">
-                Above the threshold, shipping fee is waived.
-              </p>
-            </div>
-            <Switch
-              checked={cfg.freeShipping.enabled}
-              onCheckedChange={(v) =>
-                setCfg((c) => ({
-                  ...c,
-                  freeShipping: { ...c.freeShipping, enabled: v },
-                }))
-              }
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="fs-threshold">
-                Free-shipping minimum spend (₱)
-              </Label>
-              <Input
-                id="fs-threshold"
-                type="number"
-                min={0}
-                step={100}
-                value={cfg.freeShipping.threshold}
-                onChange={(e) =>
-                  setCfg((c) => ({
-                    ...c,
-                    freeShipping: {
-                      ...c.freeShipping,
-                      threshold: Number(e.target.value) || 0,
-                    },
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="fs-fee">Shipping fee (₱)</Label>
-              <Input
-                id="fs-fee"
-                type="number"
-                min={0}
-                step={50}
-                value={cfg.freeShipping.shippingFee}
-                onChange={(e) =>
-                  setCfg((c) => ({
-                    ...c,
-                    freeShipping: {
-                      ...c.freeShipping,
-                      shippingFee: Number(e.target.value) || 0,
-                    },
-                  }))
-                }
-              />
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button
-              onClick={() => void handleSaveShipping()}
-              disabled={saving === "shipping"}
-            >
-              {saving === "shipping" ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…
-                </>
-              ) : (
-                "Save shipping rule"
-              )}
-            </Button>
-          </div>
-        </div>
-      </section>
+      <FreeShippingRuleSection
+        freeShipping={cfg.freeShipping}
+        onChange={(next) =>
+          setCfg((c) => ({
+            ...c,
+            freeShipping: { ...c.freeShipping, ...next },
+          }))
+        }
+        onReset={() =>
+          setCfg((c) => ({
+            ...c,
+            freeShipping: { ...DEFAULTS.freeShipping },
+          }))
+        }
+        onSave={() => void handleSaveShipping()}
+        saving={saving === "shipping"}
+        previewSubtotal={previewSubtotal}
+        onPreviewSubtotalChange={setPreviewSubtotal}
+      />
 
       {/* Per-courier × per-zone shipping rates */}
       <section className="bg-card/40 border border-border/60 rounded-xl p-6">
