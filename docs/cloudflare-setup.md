@@ -39,7 +39,7 @@ widget the integration is dormant — forms work as today, no challenge shown.
 2. **Widget name:** `canvhub`.
 3. **Hostnames:** `canvhub.com` (and `*.pinta16.pages.dev` if you want the
    challenge to also run on Cloudflare Pages preview deploys).
-4. **Widget Mode:** *Managed* (Cloudflare picks the right challenge).
+4. **Widget Mode:** _Managed_ (Cloudflare picks the right challenge).
 5. Click **Create**.
 6. Copy the **Site Key** and **Secret Key** off the next page — you'll need
    them in step 2.
@@ -47,13 +47,13 @@ widget the integration is dormant — forms work as today, no challenge shown.
 ### Wire the keys into Pages
 
 1. `dash.cloudflare.com → Workers & Pages → canvhub (or pinta16)
-   → Settings → Environment variables`.
+→ Settings → Environment variables`.
 2. Add **Production** + **Preview** vars:
 
-| Variable | Type | Value |
-|---|---|---|
-| `VITE_TURNSTILE_SITE_KEY` | Plaintext | (the site key from above) |
-| `TURNSTILE_SECRET_KEY` | **Encrypted (Secret)** | (the secret key from above) |
+| Variable                  | Type                   | Value                       |
+| ------------------------- | ---------------------- | --------------------------- |
+| `VITE_TURNSTILE_SITE_KEY` | Plaintext              | (the site key from above)   |
+| `TURNSTILE_SECRET_KEY`    | **Encrypted (Secret)** | (the secret key from above) |
 
 3. Save → trigger a redeploy (`Deployments → Retry deployment` on the latest
    production deploy).
@@ -75,16 +75,20 @@ forms gracefully fall back to "no challenge" mode.
 ## 4. Cloudflare Access on `/admin` (30 minutes)
 
 This is the big one for security. It puts the entire `/admin` URL behind a
-Cloudflare-issued login (Google sign-in, magic link, etc.) so even *reaching*
+Cloudflare-issued login (Google sign-in, magic link, etc.) so even _reaching_
 the admin page requires authentication. The existing password screen
 becomes a second factor on top.
 
 Free for ≤50 users.
 
+> For the rest of the free Zero Trust feature set (Tunnel, WARP, Gateway
+> DNS / HTTP filtering, service tokens, audit log review), see
+> [`cloudflare-zero-trust.md`](./cloudflare-zero-trust.md).
+
 ### Create the application
 
 1. `dash.cloudflare.com → Zero Trust → Access → Applications → Add an
-   application → Self-hosted`.
+application → Self-hosted`.
 2. **Application name:** `Canvas Hub admin`.
 3. **Session duration:** `24 hours`.
 4. **Application domain:** `canvhub.com` + path `/admin*`.
@@ -130,7 +134,7 @@ in `functions/api/_lib/rate-limit.js`. Free plan includes 1 rate-limit rule
 out of the box, which is enough to protect `/api/admin-auth`.
 
 1. `dash.cloudflare.com → canvhub.com → Security → WAF → Rate limiting
-   rules → Create rule`.
+rules → Create rule`.
 2. **Field:** URI Path **contains** `/api/admin-auth`.
 3. **When rate exceeds:** 30 requests per 10 seconds per IP.
 4. **Action:** Block, **Duration:** 10 minutes.
@@ -174,14 +178,14 @@ Setup:
    Optionally repeat with `canvhub-uploads-preview` for PR previews.
 2. **Bind it to the Pages project.**
    `Workers & Pages → canvhub → Settings → Functions → R2 bucket
-   bindings → Add binding`.
+bindings → Add binding`.
    - Variable name: `UPLOADS_BUCKET`
    - Bucket: `canvhub-uploads`
    - (Repeat under "Preview" with `canvhub-uploads-preview` for previews.)
 3. **Uncomment the `[[r2_buckets]]` block in `wrangler.toml`** and push
    to `main`. Pages CI redeploys with the binding active.
 4. **Verify.** Open the admin → Products → edit any product → upload a
-   photo. You should *not* see the "saving images inline" toast. The
+   photo. You should _not_ see the "saving images inline" toast. The
    stored URL in the product record will be `/api/r/products/.../...jpg`
    instead of `data:image/jpeg;base64,...`.
 
