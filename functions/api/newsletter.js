@@ -10,6 +10,7 @@ import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
 import { isEmailConfigured, sendEmail } from "./_lib/email.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const LIST_KEY = "subscribers";
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -169,6 +170,24 @@ const handle = async ({ request, env }) => {
     }
 
     if (method === "POST") {
+      // Throttle public newsletter signups so the endpoint can't be
+      // used as a free transactional-email cannon (we email a voucher
+      // code on every signup that includes one). 5 signups / minute /
+      // IP is plenty for legitimate visitors and cheap to absorb.
+      const limit = await consumeRateLimit(event, {
+        bucket: "newsletter-subscribe",
+        windowMs: 60_000,
+        max: 5,
+      });
+      if (!limit.allowed) {
+        // Newsletter handler uses native Response (not wrapHandler), so
+        // adapt the lambda-event shape to fetch-style.
+        const r = rateLimitResponse(limit.retryAfter);
+        return new Response(r.body, {
+          status: r.statusCode,
+          headers: r.headers,
+        });
+      }
       const body = parseBody(event.body);
       const email = String(body?.email || "")
         .trim()

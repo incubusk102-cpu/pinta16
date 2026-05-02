@@ -1,4 +1,5 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -55,6 +56,16 @@ const handler = async (event) => {
       body: JSON.stringify({ error: "Method not allowed" }),
     };
   }
+
+  // Rate-limit payment intent creation per IP. PayMongo bills per
+  // request and abusing this endpoint can rack up fees and noise. 6
+  // intents / minute is well above any real checkout retry pattern.
+  const limit = await consumeRateLimit(event, {
+    bucket: "create-payment",
+    windowMs: 60_000,
+    max: 6,
+  });
+  if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
 
   try {
     const { amount, description, customer } = parseBody(event.body);
