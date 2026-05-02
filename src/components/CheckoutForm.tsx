@@ -168,9 +168,16 @@ const CheckoutForm = () => {
     placeOrder,
     isFreeShipping,
     shippingFeeOriginal,
+    shippingFeePending,
     voucher,
     setCheckoutShipping,
   } = useCart();
+  // Mirrors the same state machine the cart drawer uses so the order
+  // summary in checkout doesn't accidentally render "₱0 FREE" before
+  // the customer has picked a courier.
+  const voucherFreeShipping = voucher.applied && voucher.freeShipping;
+  const shippingIsWaived =
+    !shippingFeePending && (isFreeShipping || voucherFreeShipping);
   const { config: storefrontConfig } = useStorefrontConfig();
   const { user, token, addAddress, updateAddress } = useUserAuth();
   const isSignedIn = Boolean(token && user);
@@ -864,11 +871,17 @@ const CheckoutForm = () => {
                             </div>
                             <div className="flex justify-between font-body text-xs text-muted-foreground">
                               <span>Shipping</span>
-                              {shippingFee === 0 ? (
+                              {shippingFeePending ? (
+                                <span className="text-foreground/70">
+                                  Pick a courier below
+                                </span>
+                              ) : shippingIsWaived ? (
                                 <span>
-                                  <span className="line-through mr-1">
-                                    ₱{shippingFeeOriginal.toLocaleString()}
-                                  </span>
+                                  {shippingFeeOriginal > 0 && (
+                                    <span className="line-through mr-1">
+                                      ₱{shippingFeeOriginal.toLocaleString()}
+                                    </span>
+                                  )}
                                   <span className="text-foreground">FREE</span>
                                 </span>
                               ) : (
@@ -893,6 +906,11 @@ const CheckoutForm = () => {
                               <span>Total</span>
                               <span className="font-semibold">
                                 ₱{total.toLocaleString()}
+                                {shippingFeePending && (
+                                  <span className="font-body text-[10px] text-muted-foreground ml-1">
+                                    + shipping
+                                  </span>
+                                )}
                               </span>
                             </div>
                           </div>

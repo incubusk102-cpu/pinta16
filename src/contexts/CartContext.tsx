@@ -13,7 +13,7 @@ import {
   type PromoCodeType,
 } from "@/contexts/StorefrontConfigContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
-import { getShippingFee } from "@/lib/shipment";
+import { getShippingFee, hasShippingRates } from "@/lib/shipment";
 import type { ShippingZone } from "@/lib/ph-regions";
 
 export interface CartItem {
@@ -202,6 +202,11 @@ interface CartContextType {
   removeVoucher: () => void;
   shippingFee: number;
   shippingFeeOriginal: number;
+  // True when the storefront has per-courier shipping rates configured
+  // but the customer hasn't picked a courier+region yet. Lets the cart
+  // and checkout summaries render "Pick a courier" instead of a
+  // misleading "₱0 / FREE" placeholder.
+  shippingFeePending: boolean;
   subtotal: number;
   discount: number;
   total: number;
@@ -551,7 +556,19 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     checkoutShipping.courier,
     checkoutShipping.zone,
   );
-  const baseShippingFee = courierFee != null ? courierFee : SHIPPING_FEE;
+  // When the admin has configured per-courier rates we treat the cart's
+  // shipping fee as "pending" until the customer has actually picked a
+  // courier+region in checkout. Otherwise the cart would silently fall
+  // back to the legacy flat fee (which can be ₱0 if the admin only set
+  // the per-courier rates) and render a misleading "₱0 FREE" before the
+  // shopper ever sees the courier picker.
+  const ratesConfigured = hasShippingRates(config.shippingRates);
+  const courierPicked = Boolean(
+    checkoutShipping.courier && checkoutShipping.zone,
+  );
+  const shippingFeePending = ratesConfigured && !courierPicked;
+  const baseShippingFee =
+    courierFee != null ? courierFee : shippingFeePending ? 0 : SHIPPING_FEE;
   const shippingFeeOriginal = baseShippingFee;
   const shippingFee =
     isFreeShipping || voucherFreeShipping ? 0 : baseShippingFee;
@@ -722,6 +739,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       removeVoucher,
       shippingFee,
       shippingFeeOriginal,
+      shippingFeePending,
       subtotal,
       discount,
       total,
@@ -761,6 +779,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       removeVoucher,
       shippingFee,
       shippingFeeOriginal,
+      shippingFeePending,
       subtotal,
       discount,
       total,
