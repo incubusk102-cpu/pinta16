@@ -685,6 +685,72 @@ const CheckoutForm = () => {
     },
   ];
 
+  // Quick-pick saved addresses. Signed-in customers with 2+ saved
+  // addresses see a horizontal pill row at the top of the delivery
+  // section so they can swap addresses in one tap instead of editing
+  // the cascading picker by hand.
+  const savedAddresses = useMemo(
+    () => (isSignedIn ? (user?.addresses ?? []) : []),
+    [isSignedIn, user?.addresses],
+  );
+  const showSavedAddressPicker = savedAddresses.length >= 2;
+  const activeSavedAddressId = useMemo(() => {
+    if (!showSavedAddressPicker) return null;
+    const match = savedAddresses.find((a) => {
+      const sameLine =
+        (a.line1 || "").trim().toLowerCase() ===
+        (form.addressLine1 || "").trim().toLowerCase();
+      const samePostal = (a.postalCode || "") === (form.postalCode || "");
+      const sameCity = (a.city || "") === (form.city || "");
+      return sameLine && samePostal && sameCity;
+    });
+    return match?.id ?? null;
+  }, [
+    savedAddresses,
+    showSavedAddressPicker,
+    form.addressLine1,
+    form.postalCode,
+    form.city,
+  ]);
+  const applySavedAddress = useCallback((addr: SavedAddress): void => {
+    const composed = [addr.line1, addr.line2].filter(Boolean).join(", ");
+    setForm((prev) => ({
+      ...prev,
+      fullName: addr.fullName || prev.fullName,
+      phone: addr.phone || prev.phone,
+      address: composed,
+      addressLine1: addr.line1 || "",
+      addressLine2: addr.line2 || "",
+      city: addr.city || "",
+      province: addr.province || "",
+      postalCode: addr.postalCode || "",
+      region: addr.region || "",
+      barangay: addr.barangay || "",
+      landmark: addr.landmark || "",
+      country: addr.country || "Philippines",
+      latitude: addr.latitude ?? null,
+      longitude: addr.longitude ?? null,
+      formattedAddress: addr.formatted || composed,
+      placeId: addr.placeId,
+      shippingZone: zoneForRegion(addr.region || "") || "",
+    }));
+    // Clear address-related errors since the customer just picked a
+    // pre-validated saved address — no need to keep red hints around.
+    setErrors((prev) => ({
+      ...prev,
+      fullName: addr.fullName ? undefined : prev.fullName,
+      phone: addr.phone ? undefined : prev.phone,
+      addressLine1: addr.line1 ? undefined : prev.addressLine1,
+      city: addr.city ? undefined : prev.city,
+      province: addr.province ? undefined : prev.province,
+      postalCode: isValidPhPostal(addr.postalCode || "")
+        ? undefined
+        : prev.postalCode,
+      region: addr.region ? undefined : prev.region,
+      barangay: addr.barangay ? undefined : prev.barangay,
+    }));
+  }, []);
+
   const onPhAddressChange = (next: PhAddressValue): void => {
     const flatAddress = composePhAddressLine(next);
     setForm((prev) => ({
@@ -983,6 +1049,65 @@ const CheckoutForm = () => {
                                         *
                                       </span>
                                     </label>
+                                    {showSavedAddressPicker && (
+                                      <div className="mb-3">
+                                        <p className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground mb-2">
+                                          Saved addresses
+                                        </p>
+                                        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                                          {savedAddresses.map((addr) => {
+                                            const isActive =
+                                              addr.id === activeSavedAddressId;
+                                            const isDefault =
+                                              addr.id ===
+                                              user?.defaultAddressId;
+                                            const cityLine = [
+                                              addr.city,
+                                              addr.province,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(", ");
+                                            return (
+                                              <button
+                                                type="button"
+                                                key={addr.id}
+                                                onClick={() =>
+                                                  applySavedAddress(addr)
+                                                }
+                                                disabled={formLocked}
+                                                aria-pressed={isActive}
+                                                className={`flex-shrink-0 max-w-[14rem] text-left px-3 py-2 rounded-sm border transition-all ${
+                                                  isActive
+                                                    ? "border-foreground bg-foreground/5"
+                                                    : "border-border/30 hover:border-foreground/50"
+                                                } ${formLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                                              >
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                  <span className="font-body text-xs text-foreground truncate">
+                                                    {addr.label ||
+                                                      addr.fullName ||
+                                                      "Saved address"}
+                                                  </span>
+                                                  {isDefault && (
+                                                    <span className="font-body text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
+                                                      Default
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <p className="font-body text-[10px] text-muted-foreground truncate">
+                                                  {addr.line1}
+                                                </p>
+                                                {cityLine && (
+                                                  <p className="font-body text-[10px] text-muted-foreground truncate">
+                                                    {cityLine}
+                                                  </p>
+                                                )}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
                                     <fieldset
                                       disabled={formLocked}
                                       className="contents"

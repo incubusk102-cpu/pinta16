@@ -137,40 +137,63 @@ export default function OrderTracker() {
             ))}
           </div>
 
-          <div className="space-y-0 pt-2">
+          <ol className="space-y-0 pt-2" aria-label="Order progress">
             {ORDER_STEPS.map((step, idx) => {
               const done = idx <= currentStepIdx;
               const active = idx === currentStepIdx;
               return (
-                <div key={step.key} className="flex gap-3">
+                <li
+                  key={step.key}
+                  className="flex gap-3"
+                  aria-current={active ? "step" : undefined}
+                >
                   <div className="flex flex-col items-center">
                     <div
-                      className={`w-3 h-3 rounded-full border-2 shrink-0 ${
-                        done
-                          ? "bg-foreground border-foreground"
-                          : "border-border bg-transparent"
-                      } ${active ? "ring-2 ring-foreground/20" : ""}`}
-                    />
+                      className={`shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${
+                        active
+                          ? "w-4 h-4 bg-foreground border-foreground ring-4 ring-foreground/15"
+                          : done
+                            ? "w-3 h-3 bg-foreground border-foreground"
+                            : "w-3 h-3 border-border bg-transparent"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {done && !active && (
+                        <Check className="w-2 h-2 text-background" />
+                      )}
+                    </div>
                     {idx < ORDER_STEPS.length - 1 && (
                       <div
                         className={`w-0.5 h-6 ${done ? "bg-foreground" : "bg-border"}`}
+                        aria-hidden="true"
                       />
                     )}
                   </div>
                   <div className="-mt-0.5 pb-3">
                     <p
-                      className={`text-xs font-medium ${done ? "text-foreground" : "text-muted-foreground"}`}
+                      className={`text-xs font-medium ${
+                        active
+                          ? "text-foreground"
+                          : done
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                      }`}
                     >
                       {step.label}
+                      {active && (
+                        <span className="ml-2 font-body text-[9px] tracking-[0.2em] uppercase text-foreground/70">
+                          Current
+                        </span>
+                      )}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {step.description}
                     </p>
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ol>
 
           {order.shipment ? (
             <div className="pt-2 border-t border-border/10">
@@ -220,12 +243,12 @@ export default function OrderTracker() {
                         }
                         aria-label="Copy tracking number"
                         title="Copy tracking number"
-                        className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors"
+                        className="inline-flex items-center justify-center min-w-[36px] min-h-[36px] rounded hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {copiedAwb ? (
-                          <Check className="w-3 h-3" />
+                          <Check className="w-4 h-4" aria-hidden="true" />
                         ) : (
-                          <Copy className="w-3 h-3" />
+                          <Copy className="w-4 h-4" aria-hidden="true" />
                         )}
                       </button>
                     </div>
