@@ -17,6 +17,7 @@ const CartDrawer = () => {
     total,
     isFreeShipping,
     shippingFeeOriginal,
+    shippingFeePending,
     amountToFreeShipping,
     freeShippingThreshold,
     freeShippingEnabled,
@@ -25,6 +26,12 @@ const CartDrawer = () => {
     removeVoucher,
     setShowCheckout,
   } = useCart();
+  // The shipping line has three distinct states. Picking these apart up
+  // front keeps the JSX readable and avoids the previous bug where a
+  // genuine ₱0 fallback fee rendered as "₱0 FREE".
+  const voucherFreeShipping = voucher.applied && voucher.freeShipping;
+  const shippingIsWaived =
+    !shippingFeePending && (isFreeShipping || voucherFreeShipping);
   const {
     config: { vacationMode },
   } = useStorefrontConfig();
@@ -70,26 +77,28 @@ const CartDrawer = () => {
               <>
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                   {/* Free shipping progress */}
-                  {shippingFee > 0 && freeShippingEnabled && (
-                    <div className="p-3 bg-muted/30 border border-border/10 rounded-sm mb-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Truck className="w-3.5 h-3.5 text-muted-foreground" />
-                        <p className="font-body text-[10px] text-muted-foreground">
-                          ₱{amountToFreeShipping.toLocaleString()} away from
-                          free shipping (₱
-                          {freeShippingThreshold.toLocaleString()})
-                        </p>
+                  {freeShippingEnabled &&
+                    freeShippingThreshold > 0 &&
+                    subtotal < freeShippingThreshold && (
+                      <div className="p-3 bg-muted/30 border border-border/10 rounded-sm mb-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                          <p className="font-body text-[10px] text-muted-foreground">
+                            ₱{amountToFreeShipping.toLocaleString()} away from
+                            free shipping (₱
+                            {freeShippingThreshold.toLocaleString()})
+                          </p>
+                        </div>
+                        <div className="w-full h-1 bg-border/30 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-foreground/50 rounded-full transition-all"
+                            style={{
+                              width: `${Math.min((subtotal / freeShippingThreshold) * 100, 100)}%`,
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full h-1 bg-border/30 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-foreground/50 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min((subtotal / freeShippingThreshold) * 100, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    )}
 
                   {items.map((item) => (
                     <div
@@ -206,11 +215,17 @@ const CartDrawer = () => {
                   </div>
                   <div className="flex justify-between font-body text-xs text-muted-foreground">
                     <span>Shipping</span>
-                    {shippingFee === 0 ? (
+                    {shippingFeePending ? (
+                      <span className="text-foreground/70">
+                        Pick a courier at checkout
+                      </span>
+                    ) : shippingIsWaived ? (
                       <span>
-                        <span className="line-through mr-1">
-                          ₱{shippingFeeOriginal.toLocaleString()}
-                        </span>
+                        {shippingFeeOriginal > 0 && (
+                          <span className="line-through mr-1">
+                            ₱{shippingFeeOriginal.toLocaleString()}
+                          </span>
+                        )}
                         <span className="text-foreground">FREE</span>
                       </span>
                     ) : (
@@ -227,6 +242,11 @@ const CartDrawer = () => {
                     <span>Total</span>
                     <span className="font-semibold">
                       ₱{total.toLocaleString()}
+                      {shippingFeePending && (
+                        <span className="font-body text-[10px] text-muted-foreground ml-1">
+                          + shipping
+                        </span>
+                      )}
                     </span>
                   </div>
                   {vacationMode.enabled ? (
