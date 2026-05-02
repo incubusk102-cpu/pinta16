@@ -5,6 +5,7 @@ import { setCloudflareContext } from "./_lib/context.js";
 import { makeStore } from "./_lib/kv-store.js";
 import { getUserAgent } from "./_lib/request-info.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const HEARTBEATS_KEY = "heartbeats";
 const HISTORY_KEY = "history-24h";
@@ -97,6 +98,21 @@ const handle = async ({ request, env }) => {
 
   try {
     if (event.httpMethod === "POST") {
+      // Heartbeat is sent every ~60s by the live counter, so 12 hits/
+      // minute / IP is plenty for a real tab and even a couple sibling
+      // tabs sharing an IP. Anything beyond is scripted.
+      const limit = await consumeRateLimit(event, {
+        bucket: "visitors-heartbeat",
+        windowMs: 60_000,
+        max: 12,
+      });
+      if (!limit.allowed) {
+        const r = rateLimitResponse(limit.retryAfter);
+        return new Response(r.body, {
+          status: r.statusCode,
+          headers: r.headers,
+        });
+      }
       const { sessionId } = parseBody(event.body);
       if (
         !sessionId ||

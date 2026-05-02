@@ -1,4 +1,5 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -38,6 +39,17 @@ const handler = async (event) => {
       body: JSON.stringify({ error: "Method not allowed" }),
     };
   }
+
+  // Throttle status polls. The checkout page polls this every few
+  // seconds while waiting for QR-Ph confirmation, so we allow ~30 /
+  // minute / IP — well above the real polling rate but enough to
+  // dampen scripted abuse.
+  const limit = await consumeRateLimit(event, {
+    bucket: "check-payment",
+    windowMs: 60_000,
+    max: 30,
+  });
+  if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
 
   try {
     const { paymentIntentId } = parseBody(event.body);
