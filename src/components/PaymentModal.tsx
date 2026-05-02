@@ -18,11 +18,15 @@ type PaymentStatus =
   | "succeeded"
   | "failed";
 
-// How often to silently re-check payment status with PayMongo while the
-// modal is open. The check-payment endpoint is rate-limited to ~30 reqs
-// / minute / IP, so 4s (= 15 polls / minute) leaves plenty of headroom
-// even if the user also taps the manual "Check now" button a few times.
-const POLL_INTERVAL_MS = 4000;
+// How often to silently re-check payment status with PayMongo while
+// the modal is open. Each poll consumes one Workers KV write on the
+// /api/check-payment rate-limit counter (free tier: 1k writes / day),
+// so the cadence is tuned to be responsive enough that a customer
+// doesn't notice the wait but slow enough that one parked checkout
+// can't burn the whole site's daily KV write budget. 8s = ~7 polls /
+// minute, well under the existing 30 req/min rate-limit ceiling and
+// well-paced for QR-Ph payments which clear in 5-30 seconds anyway.
+const POLL_INTERVAL_MS = 8000;
 // Stop auto-polling after this long. PayMongo QR-Ph intents expire on
 // their side after a few minutes; we don't want to keep hitting their
 // API forever for a tab the user left open and walked away from.
