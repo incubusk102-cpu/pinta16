@@ -1,0 +1,72 @@
+// /api/r/* — public GET proxy that streams an object from R2.
+//
+// The bucket itself stays private; this thin function lets us attach
+// the right Cache-Control + security headers and gives us one URL
+// shape we control (vs. an account-specific R2 public-bucket URL).
+//
+// Returns 404 if R2 is not bound or the key is missing — the storefront
+// already shows ImageWithFallback's gentle frame on 404, so the user
+// experience degrades gracefully if a key is mis-typed.
+
+const HEADERS_404 = {
+  "Content-Type": "text/plain",
+  // Don't let CDNs cache a missing-image response for long.
+  "Cache-Control": "public, max-age=60",
+};
+
+export const onRequestGet = async ({ request, env, params }) => {
+  if (!env.UPLOADS_BUCKET) {
+    return new Response("R2 not configured", {
+      status: 404,
+      headers: HEADERS_404,
+    });
+  }
+
+  const segments = Array.isArray(params?.path) ? params.path : [];
+  const key = segments.join("/");
+  if (!key || key.includes("..") || key.startsWith("/")) {
+    return new Response("Not found", { status: 404, headers: HEADERS_404 });
+  }
+
+  const object = await env.UPLOADS_BUCKET.get(key, {
+    onlyIf: request.headers.get("if-none-match")
+      ? { etagMatches: request.headers.get("if-none-match").replace(/"/g, "") }
+      : undefined,
+  });
+
+  if (!object) {
+    return new Response("Not found", { status: 404, headers: HEADERS_404 });
+  }
+
+  // R2 returned just the metadata (etag matched) — tell the browser to
+  // serve from its cache.
+  if (!("body" in object) || object.body === null) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ETag: `"${object.etag}"`,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+  }
+
+  const headers = new Headers();
+  // Object-level metadata wins; fall back to safe defaults.
+  if (object.httpMetadata?.contentType) {
+    headers.set("Content-Type", object.httpMetadata.contentType);
+  } else {
+    headers.set("Content-Type", "application/octet-stream");
+  }
+  headers.set(
+    "Cache-Control",
+    object.httpMetadata?.cacheControl || "public, max-age=31536000, immutable",
+  );
+  if (object.etag) {
+    headers.set("ETag", `"${object.etag}"`);
+  }
+  // Defence-in-depth: stop the browser from sniffing the body to a
+  // different content type (e.g. interpreting an image as JS).
+  headers.set("X-Content-Type-Options", "nosniff");
+
+  return new Response(object.body, { status: 200, headers });
+};

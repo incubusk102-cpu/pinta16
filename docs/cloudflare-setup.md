@@ -151,3 +151,47 @@ in-app limiter can react.
 - `npm audit` clean (postcss bumped to 8.5.10+).
 - CSP updated to allow `challenges.cloudflare.com` for the Turnstile
   script + iframe.
+
+## 6. (Optional) R2 image storage — free up to 10 GB
+
+By default, every product photo is JPEG-compressed in the browser and
+stored as a base64 data URL inside the product record in KV. That works
+forever but inflates storage by ~33% and balloons the JSON payload that
+the storefront has to download for each list of products.
+
+Switching to **R2** moves the bytes to a real object store with $0
+egress and serves them via `/api/r/<key>`. The product record then only
+has to remember the URL.
+
+Free tier: **10 GB** of storage, **1 M** Class-A operations/month, **10
+M** Class-B/month, **$0** egress forever. A small art gallery (a few
+thousand paintings, modest traffic) stays free indefinitely.
+
+Setup:
+
+1. **Create the bucket.**
+   `Workers & Pages → R2 → Create bucket`. Name `canvhub-uploads`.
+   Optionally repeat with `canvhub-uploads-preview` for PR previews.
+2. **Bind it to the Pages project.**
+   `Workers & Pages → canvhub → Settings → Functions → R2 bucket
+   bindings → Add binding`.
+   - Variable name: `UPLOADS_BUCKET`
+   - Bucket: `canvhub-uploads`
+   - (Repeat under "Preview" with `canvhub-uploads-preview` for previews.)
+3. **Uncomment the `[[r2_buckets]]` block in `wrangler.toml`** and push
+   to `main`. Pages CI redeploys with the binding active.
+4. **Verify.** Open the admin → Products → edit any product → upload a
+   photo. You should *not* see the "saving images inline" toast. The
+   stored URL in the product record will be `/api/r/products/.../...jpg`
+   instead of `data:image/jpeg;base64,...`.
+
+That's it. Until step 2 is done, `POST /api/uploads` returns **503** and
+the admin upload UI silently falls back to the existing data-URL flow,
+so you can merge the R2 PR before doing the dashboard config.
+
+### What still uses the data-URL fallback
+
+This first cut only migrates **product photo uploads** (the highest-
+volume case). Hero slides, welcome-email banners, profile avatars, and
+order-review attachments still go through the existing data-URL path.
+Migrating those is a follow-up PR with the same shape.
