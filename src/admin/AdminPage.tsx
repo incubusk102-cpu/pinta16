@@ -314,10 +314,17 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-md bg-card/40 border border-border/60 rounded-xl p-8 space-y-6">
-        <div className="space-y-2 text-center">
-          <div className="flex items-center justify-center gap-2">
-            <GoldenCMark size={36} />
-            <h1 className="font-logo text-2xl">Canvas Hub</h1>
+        <div className="space-y-3 text-center">
+          <div
+            className="flex items-center justify-center"
+            aria-label="Canvas Hub"
+          >
+            <GoldenCMark size={64} />
+            {/* Wordmark intentionally hidden visually — the gold C mark
+                stands in for the brand on the auth screen. Keep an
+                accessible label above + the hidden h1 below for SR /
+                tab-title semantics. */}
+            <h1 className="sr-only">Canvas Hub</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             {isTwoFactorStage
