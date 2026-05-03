@@ -29,16 +29,21 @@ const getPermission = (): NotificationPermission | "unsupported" => {
   return Notification.permission;
 };
 
-// PushManager.subscribe expects the VAPID public key as a Uint8Array of the
-// raw uncompressed P-256 point (65 bytes), not the base64url string the
-// server hands us. So we decode here.
-const urlBase64ToUint8Array = (b64: string): Uint8Array => {
+// PushManager.subscribe expects the VAPID public key as raw bytes of the
+// uncompressed P-256 point (65 bytes), not the base64url string the
+// server hands us. We decode into a fresh ArrayBuffer so the result is
+// unambiguously a `BufferSource` backed by `ArrayBuffer` (not
+// `SharedArrayBuffer`), which the lib.dom typings for
+// `PushSubscriptionOptionsInit.applicationServerKey` require under
+// TypeScript >= 5.7.
+const urlBase64ToBuffer = (b64: string): ArrayBuffer => {
   const padded = b64 + "===".slice((b64.length + 3) % 4);
   const std = padded.replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(std);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+  const buf = new ArrayBuffer(bin.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+  return buf;
 };
 
 const fetchVapidKey = async (): Promise<string | null> => {
@@ -143,7 +148,7 @@ export const subscribeToOrderPush = async (
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapid),
+        applicationServerKey: urlBase64ToBuffer(vapid),
       });
     }
   } catch (err) {
