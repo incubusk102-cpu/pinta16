@@ -8,6 +8,9 @@
 // already shows ImageWithFallback's gentle frame on 404, so the user
 // experience degrades gracefully if a key is mis-typed.
 
+import { logSecurityEvent } from "../_lib/security-events.js";
+import { autobanIfNeeded } from "../_lib/handler-wrapper.js";
+
 const HEADERS_404 = {
   "Content-Type": "text/plain",
   "X-Content-Type-Options": "nosniff",
@@ -45,6 +48,20 @@ export const onRequestGet = async ({ request, env, params }) => {
   const segments = Array.isArray(params?.path) ? params.path : [];
   const key = segments.join("/");
   if (!key || hasPathTraversal(key)) {
+    const ip =
+      request.headers.get("cf-connecting-ip") ||
+      (request.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() ||
+      "";
+    if (key) {
+      void logSecurityEvent({
+        type: "path-traversal",
+        ip,
+        path: `/api/r/${key}`,
+        detail: "Path traversal attempt in R2 proxy",
+        userAgent: request.headers.get("user-agent") || "",
+      });
+      void autobanIfNeeded(ip);
+    }
     return new Response("Not found", { status: 404, headers: HEADERS_404 });
   }
 

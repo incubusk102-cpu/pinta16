@@ -110,6 +110,31 @@ id = "89358933447747e58dee7f7e53dcf999"
 preview_id = "e717d43c38a64b8bb4efc387710620a7"
 
 # ---------------------------------------------------------------------------
+# SECURITY_EVENTS (optional)
+#
+# Stores time-bucketed threat events (scanner probes, CSRF blocks, path
+# traversal attempts, rate-limit denials, IP blocks) and rolling aggregate
+# stats surfaced in Admin → Security → Threat Dashboard. Hourly buckets
+# auto-expire after 7 days to keep the namespace tidy. Also stores the
+# auto-ban configuration (threshold + window).
+#
+# To enable in production:
+#   1. Create the namespace in the Cloudflare dashboard:
+#      Workers & Pages → KV → Create namespace → name `SECURITY_EVENTS`.
+#      Then create a second namespace for preview (e.g. `SECURITY_EVENTS_PREVIEW`).
+#   2. Paste the production + preview IDs below and uncomment the block.
+#   3. `git push` (CI redeploys with the binding active).
+#
+# Until the binding exists, the threat dashboard renders with empty data
+# and a "binding not bound" warning, and `logSecurityEvent` is a no-op —
+# so the rest of the API keeps working unchanged.
+#
+# [[kv_namespaces]]
+# binding = "SECURITY_EVENTS"
+# id = "REPLACE_WITH_PRODUCTION_NAMESPACE_ID"
+# preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
+
+# ---------------------------------------------------------------------------
 # R2 bucket binding (optional)
 #
 # When this binding is present, admin product photo uploads write to R2
