@@ -110,6 +110,20 @@ id = "89358933447747e58dee7f7e53dcf999"
 preview_id = "e717d43c38a64b8bb4efc387710620a7"
 
 # ---------------------------------------------------------------------------
+# SECURITY_EVENTS
+#
+# Stores time-bucketed threat events (scanner probes, CSRF blocks, path
+# traversal attempts, rate-limit denials, IP blocks) and rolling aggregate
+# stats surfaced in Admin → Security → Threat Dashboard. Hourly buckets
+# auto-expire after 7 days to keep the namespace tidy. Also stores the
+# auto-ban configuration (threshold + window).
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "SECURITY_EVENTS"
+id = "PLACEHOLDER_CREATE_IN_DASHBOARD"
+preview_id = "PLACEHOLDER_CREATE_IN_DASHBOARD"
+
+# ---------------------------------------------------------------------------
 # R2 bucket binding (optional)
 #
 # When this binding is present, admin product photo uploads write to R2

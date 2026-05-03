@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ThreatDashboard } from "./ThreatDashboard";
 import {
   Loader2,
   RefreshCw,
@@ -315,10 +316,9 @@ export function SecuritySection() {
         <div>
           <h1 className="font-display text-2xl">Security</h1>
           <p className="text-xs text-muted-foreground">
-            Live-tunable rate limits, Turnstile mode, body-size cap, and IP
-            block list. Audit log records every admin login, password change,
-            and security setting tweak. IP + device captured on every sensitive
-            action.
+            Monitor and fight back. Threat dashboard shows blocked attacks in
+            real time. Tune rate limits, Turnstile mode, body-size cap, and IP
+            block list below.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -356,6 +356,8 @@ export function SecuritySection() {
           }
         />
       </div>
+
+      <ThreatDashboard />
 
       {meta && !meta.bound && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">

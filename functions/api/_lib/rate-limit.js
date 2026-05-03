@@ -21,6 +21,8 @@ import { makeStore } from "./kv-store.js";
 import { getCloudflareEnv } from "./context.js";
 import { getClientIp } from "./request-info.js";
 import { resolveRateLimit } from "./security-config.js";
+import { logSecurityEvent } from "./security-events.js";
+import { autobanIfNeeded } from "./handler-wrapper.js";
 
 // Buckets routed through the per-edge-PoP Cache API. All have 60s windows,
 // which fits cleanly under the cache `max-age` we set. Long-window buckets
@@ -204,10 +206,23 @@ export const consumeRateLimit = async (
   max = resolved.max;
   if (!windowMs || !max) return allowResponse(max);
 
-  if (CACHE_BACKED_BUCKETS.has(baseBucket(bucket))) {
-    return consumeCacheRateLimit(event, { bucket, windowMs, max, key });
+  const result = CACHE_BACKED_BUCKETS.has(baseBucket(bucket))
+    ? await consumeCacheRateLimit(event, { bucket, windowMs, max, key })
+    : await consumeKvRateLimit(event, { bucket, windowMs, max, key });
+
+  if (!result.allowed) {
+    const ip = key || getClientIp(event) || "";
+    void logSecurityEvent({
+      type: "rate-limit",
+      ip,
+      path: "",
+      detail: `Rate limited: ${bucket} (${result.count}/${max})`,
+      userAgent: "",
+    });
+    void autobanIfNeeded(ip);
   }
-  return consumeKvRateLimit(event, { bucket, windowMs, max, key });
+
+  return result;
 };
 
 export const rateLimitResponse = (retryAfter) => ({

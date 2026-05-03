@@ -10,7 +10,12 @@ import {
   buildLambdaEvent,
   toPagesResponse,
 } from "./lambda-event.js";
-import { isIpBlocked } from "./security-config.js";
+import {
+  isIpBlocked,
+  writeSecurityConfig,
+  getSecurityConfig,
+} from "./security-config.js";
+import { logSecurityEvent, shouldAutoban } from "./security-events.js";
 
 const jsonResponse = (status, body) =>
   new Response(JSON.stringify(body), {
@@ -74,6 +79,22 @@ const isJsonContentType = (request) => {
   return ct.startsWith("application/json");
 };
 
+export const autobanIfNeeded = async (ip) => {
+  if (!ip) return;
+  try {
+    if (await shouldAutoban(ip)) {
+      const cfg = await getSecurityConfig();
+      if (!cfg.ipBlockList.includes(ip)) {
+        await writeSecurityConfig({
+          ipBlockList: [...cfg.ipBlockList, ip],
+        });
+      }
+    }
+  } catch {
+    // Best effort — never block the response.
+  }
+};
+
 // Shared preflight: sets per-request context, mirrors env onto process.env,
 // then enforces the IP block list from the Admin → Security panel. Returns a
 // Response when the request should be short-circuited (e.g. blocked IP), or
@@ -88,12 +109,29 @@ export const initRequestContext = async ({ request, env }) => {
 
   const url = new URL(request.url);
 
+  const ip = extractClientIp(request);
+  const ua = request.headers?.get?.("user-agent") || "";
+
   if (isScannerProbe(url.pathname)) {
+    void logSecurityEvent({
+      type: "scanner",
+      ip,
+      path: url.pathname,
+      detail: "Vulnerability scanner probe",
+      userAgent: ua,
+    });
+    void autobanIfNeeded(ip);
     return jsonResponse(404, { error: "Not found" });
   }
 
-  const ip = extractClientIp(request);
   if (ip && (await isIpBlocked(ip))) {
+    void logSecurityEvent({
+      type: "ip-blocked",
+      ip,
+      path: url.pathname,
+      detail: "Request from blocked IP",
+      userAgent: ua,
+    });
     return jsonResponse(403, { error: "Forbidden" });
   }
   return null;
@@ -107,11 +145,21 @@ export const wrapHandler =
 
     const url = new URL(request.url);
     const method = request.method;
+    const ip = extractClientIp(request);
+    const ua = request.headers?.get?.("user-agent") || "";
     if (
       (method === "POST" || method === "PUT" || method === "PATCH") &&
       !CSRF_EXEMPT_PATHS.has(url.pathname) &&
       !isJsonContentType(request)
     ) {
+      void logSecurityEvent({
+        type: "csrf",
+        ip,
+        path: url.pathname,
+        detail: `CSRF attempt: ${request.headers?.get?.("content-type") || "no content-type"}`,
+        userAgent: ua,
+      });
+      void autobanIfNeeded(ip);
       return jsonResponse(415, {
         error: "Content-Type must be application/json",
       });
@@ -122,6 +170,14 @@ export const wrapHandler =
       event = await buildLambdaEvent(request);
     } catch (error) {
       if (error instanceof BodyTooLargeError) {
+        void logSecurityEvent({
+          type: "body-too-large",
+          ip,
+          path: url.pathname,
+          detail: "Request body exceeded size limit",
+          userAgent: ua,
+        });
+        void autobanIfNeeded(ip);
         return jsonResponse(413, {
           error: "Request body too large",
         });
