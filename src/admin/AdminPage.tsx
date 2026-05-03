@@ -1037,7 +1037,13 @@ function NavLink({
 }
 
 function ProductsSection() {
-  const { products, addProduct, updateProduct, deleteProduct } = useProducts();
+  const {
+    products,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    bulkUpdateProducts,
+  } = useProducts();
   const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Acrylic on Canvas");
@@ -1056,6 +1062,10 @@ function ProductsSection() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string>("");
+  const [bulkValue, setBulkValue] = useState<string>("");
+  const [bulkApplying, setBulkApplying] = useState(false);
 
   const reset = () => {
     setImages([]);
@@ -1186,6 +1196,78 @@ function ProductsSection() {
       );
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) =>
+      prev.size === filteredProducts.length
+        ? new Set()
+        : new Set(filteredProducts.map((p) => p.id)),
+    );
+  }, [filteredProducts]);
+
+  const handleBulkApply = async () => {
+    if (!bulkAction || !selectedIds.size) return;
+    setBulkApplying(true);
+    try {
+      const ids = [...selectedIds];
+      if (bulkAction === "availability") {
+        const val = bulkValue as ProductAvailability;
+        if (!["available", "reserved", "sold", "draft"].includes(val)) {
+          toast.error("Pick a valid availability");
+          return;
+        }
+        await bulkUpdateProducts(ids, { availability: val });
+        toast.success(
+          `${ids.length} product(s) set to ${AVAILABILITY_LABEL[val]}`,
+        );
+      } else if (bulkAction === "price") {
+        const p = Number(bulkValue);
+        if (!p || p <= 0) {
+          toast.error("Enter a valid price");
+          return;
+        }
+        await bulkUpdateProducts(ids, { price: p });
+        toast.success(
+          `Price set to ₱${p.toLocaleString()} for ${ids.length} product(s)`,
+        );
+      } else if (bulkAction === "salePrice") {
+        const s = Number(bulkValue);
+        if (bulkValue.trim() === "" || bulkValue.trim() === "0") {
+          await bulkUpdateProducts(ids, { salePrice: undefined });
+          toast.success(`Sale price cleared for ${ids.length} product(s)`);
+        } else if (s > 0) {
+          await bulkUpdateProducts(ids, { salePrice: s });
+          toast.success(
+            `Sale price set to ₱${s.toLocaleString()} for ${ids.length} product(s)`,
+          );
+        } else {
+          toast.error("Enter a valid sale price (or 0 to clear)");
+          return;
+        }
+      } else if (bulkAction === "category") {
+        await bulkUpdateProducts(ids, { category: bulkValue });
+        toast.success(
+          `Category set to "${bulkValue}" for ${ids.length} product(s)`,
+        );
+      }
+      setSelectedIds(new Set());
+      setBulkAction("");
+      setBulkValue("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk update failed");
+    } finally {
+      setBulkApplying(false);
     }
   };
 
@@ -1378,9 +1460,30 @@ function ProductsSection() {
 
         <section>
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h2 className="font-display text-lg">
-              Your uploads ({filteredProducts.length})
-            </h2>
+            <div className="flex items-center gap-2">
+              {filteredProducts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={
+                    selectedIds.size === filteredProducts.length
+                      ? "Deselect all"
+                      : "Select all"
+                  }
+                >
+                  {selectedIds.size === filteredProducts.length &&
+                  filteredProducts.length > 0 ? (
+                    <CheckSquare className="w-4 h-4" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+              <h2 className="font-display text-lg">
+                Your uploads ({filteredProducts.length})
+              </h2>
+            </div>
             <div className="flex gap-2 flex-wrap">
               <Input
                 value={searchQuery}
@@ -1422,6 +1525,98 @@ function ProductsSection() {
               </Select>
             </div>
           </div>
+          {selectedIds.size > 0 && (
+            <div className="mb-4 flex items-center gap-2 flex-wrap bg-primary/5 border border-primary/20 rounded-lg p-3">
+              <span className="text-sm font-medium">
+                {selectedIds.size} selected
+              </span>
+              <Select
+                value={bulkAction}
+                onValueChange={(v) => {
+                  setBulkAction(v);
+                  setBulkValue("");
+                }}
+              >
+                <SelectTrigger className="h-8 w-40">
+                  <SelectValue placeholder="Bulk action…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="availability">Set availability</SelectItem>
+                  <SelectItem value="price">Set price</SelectItem>
+                  <SelectItem value="salePrice">Set sale price</SelectItem>
+                  <SelectItem value="category">Set category</SelectItem>
+                </SelectContent>
+              </Select>
+              {bulkAction === "availability" && (
+                <Select value={bulkValue} onValueChange={setBulkValue}>
+                  <SelectTrigger className="h-8 w-36">
+                    <SelectValue placeholder="Pick…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AVAILABILITY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {bulkAction === "price" && (
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="₱ new price"
+                  value={bulkValue}
+                  onChange={(e) => setBulkValue(e.target.value)}
+                  className="h-8 w-32"
+                />
+              )}
+              {bulkAction === "salePrice" && (
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="₱ sale price (0 = clear)"
+                  value={bulkValue}
+                  onChange={(e) => setBulkValue(e.target.value)}
+                  className="h-8 w-44"
+                />
+              )}
+              {bulkAction === "category" && (
+                <Select value={bulkValue} onValueChange={setBulkValue}>
+                  <SelectTrigger className="h-8 w-36">
+                    <SelectValue placeholder="Pick…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Button
+                size="sm"
+                disabled={!bulkAction || !bulkValue || bulkApplying}
+                onClick={() => void handleBulkApply()}
+              >
+                {bulkApplying ? "Applying…" : "Apply"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelectedIds(new Set());
+                  setBulkAction("");
+                  setBulkValue("");
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
           {pureCustomProducts.length === 0 ? (
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
               No uploaded products yet. Add your first painting on the left, or
@@ -1438,12 +1633,29 @@ function ProductsSection() {
                 const photos = getProductImages(product);
                 const main = photos[0];
                 const extras = photos.slice(1);
+                const isSelected = selectedIds.has(product.id);
 
                 return (
                   <li
                     key={product.id}
-                    className="flex gap-4 bg-card/40 border border-border/50 rounded-lg p-3"
+                    className={`flex gap-4 bg-card/40 border rounded-lg p-3 ${isSelected ? "border-primary/60 bg-primary/5" : "border-border/50"}`}
                   >
+                    <button
+                      type="button"
+                      onClick={() => toggleSelected(product.id)}
+                      className="flex-shrink-0 self-center p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={
+                        isSelected
+                          ? `Deselect ${product.title}`
+                          : `Select ${product.title}`
+                      }
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
                     <div className="flex-shrink-0 space-y-1.5">
                       {main && (
                         <div className="relative">
