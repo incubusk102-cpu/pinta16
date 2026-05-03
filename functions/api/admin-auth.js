@@ -42,6 +42,18 @@ import {
 import { findRecoveryCodeIndex, verifyTotpCode } from "./_lib/totp.js";
 import { getSecurityConfig } from "./_lib/security-config.js";
 import { sendAdminLoginAlert } from "./_lib/admin-alerts.js";
+import {
+  beginAuthentication,
+  beginRegistration,
+  finishAuthentication,
+  finishRegistration,
+  readPasskeyConfig,
+  readPasskeys,
+  removePasskey,
+  renamePasskey,
+  summarizePasskey,
+  writePasskeyConfig,
+} from "./_lib/admin-passkeys.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -87,8 +99,34 @@ export const handler = async (event) => {
           enabledAt: totp?.enabledAt ?? null,
         });
       }
+      if (params.action === "passkeys") {
+        // Authenticated list of registered passkeys + the
+        // require-passkey toggle.
+        const secret = await ensureSessionSecret(store);
+        const token = extractToken(event);
+        if (!token || !(await verifyTokenWithSecret(token, secret))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const list = await readPasskeys(store);
+        const cfg = await readPasskeyConfig(store);
+        return json(200, {
+          passkeys: list.map(summarizePasskey),
+          requirePasskey: cfg.requirePasskey,
+          updatedAt: cfg.updatedAt,
+        });
+      }
       const credentials = await readCredentials(store);
-      return json(200, { initialized: Boolean(credentials) });
+      // Public probe — does the deploy have at least one passkey
+      // registered? Used by the login screen to decide whether to
+      // surface the "Sign in with passkey" button. Does not leak
+      // secrets, just a count.
+      const passkeys = await readPasskeys(store);
+      const cfg = await readPasskeyConfig(store);
+      return json(200, {
+        initialized: Boolean(credentials),
+        passkeyCount: passkeys.length,
+        requirePasskey: Boolean(cfg.requirePasskey) && passkeys.length > 0,
+      });
     }
 
     if (event.httpMethod !== "POST") {
@@ -214,6 +252,28 @@ export const handler = async (event) => {
       if (!credentials) {
         return json(404, { error: "Admin password not set" });
       }
+
+      // Passkey-required gate. Once an admin has registered a passkey
+      // *and* turned on the "Require passkey" toggle, the password
+      // login path is closed entirely — they must use a passkey or a
+      // 2FA recovery code via a future passkey-recovery flow. Generic
+      // error so an attacker probing the password endpoint can't tell
+      // whether the deploy is in passkey-only mode.
+      const passkeyCfg = await readPasskeyConfig(store);
+      if (passkeyCfg.requirePasskey) {
+        const havePasskeys = (await readPasskeys(store)).length > 0;
+        if (havePasskeys) {
+          await appendAuditEvent(event, {
+            type: "admin.login",
+            outcome: "failure",
+            subject: "admin",
+            detail: "Password rejected: passkey-only mode",
+            ...meta,
+          });
+          return json(401, { error: "Incorrect password" });
+        }
+      }
+
       const password = String(body.password || "");
       const recoveryPassword = (
         process.env.ADMIN_RECOVERY_PASSWORD || ""
@@ -381,6 +441,268 @@ export const handler = async (event) => {
         detail: outcome === "recovery" ? "Used a 2FA recovery code" : "",
       });
       return json(200, { token: await issueToken(secret) });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Passkey (WebAuthn) actions
+    // ─────────────────────────────────────────────────────────────────
+
+    if (action === "passkey-register-begin") {
+      // Authenticated. Returns the WebAuthn `PublicKeyCredentialCreationOptions`
+      // and a server-issued challenge id the client must echo back.
+      const token = extractToken(event);
+      if (!token || !(await verifyTokenWithSecret(token, secret))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      const existing = await readPasskeys(store);
+      const { options, challengeId } = await beginRegistration({
+        store,
+        event,
+        existing,
+      });
+      return json(200, { options, challengeId });
+    }
+
+    if (action === "passkey-register-finish") {
+      const token = extractToken(event);
+      if (!token || !(await verifyTokenWithSecret(token, secret))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      const meta = captureRequestMeta(event);
+      try {
+        const stored = await finishRegistration({
+          store,
+          event,
+          challengeId: String(body.challengeId || ""),
+          response: body.response,
+          name: String(body.name || "Passkey").slice(0, 40),
+        });
+        await appendAuditEvent(event, {
+          type: "admin.passkey",
+          outcome: "registered",
+          subject: "admin",
+          detail: `Passkey registered: ${stored.name}`,
+          ...meta,
+        });
+        return json(200, { passkey: summarizePasskey(stored) });
+      } catch (err) {
+        await appendAuditEvent(event, {
+          type: "admin.passkey",
+          outcome: "failure",
+          subject: "admin",
+          detail: `Registration failed: ${err.message || "unknown"}`,
+          ...meta,
+        });
+        return json(400, { error: err.message || "Registration failed" });
+      }
+    }
+
+    if (action === "passkey-login-begin") {
+      // Public. Rate-limited the same as password login. Returns the
+      // assertion options + a challenge id. The challenge is one-shot
+      // and TTL-capped server-side.
+      const limit = await consumeRateLimit(event, {
+        bucket: "admin-login",
+        windowMs: 15 * 60_000,
+        max: 8,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+      const ip = getClientIp(event);
+      const country = getClientCountry(event);
+      const ua = getUserAgent(event);
+      // Country allow-list mirrors the password path.
+      const secCfg = await getSecurityConfig();
+      const allowList = Array.isArray(secCfg.adminCountryAllowlist)
+        ? secCfg.adminCountryAllowlist
+        : [];
+      if (allowList.length > 0) {
+        const cc = String(country || "").toUpperCase();
+        if (!cc || !allowList.includes(cc)) {
+          void logSecurityEvent({
+            type: "country-blocked",
+            ip,
+            country,
+            path: "/api/admin-auth",
+            detail: `Passkey login blocked: country ${cc || "?"} not in allow-list`,
+            userAgent: ua,
+          });
+          // Same generic 401 the password endpoint would return.
+          return json(401, { error: "Incorrect password" });
+        }
+      }
+      const list = await readPasskeys(store);
+      const { options, challengeId } = await beginAuthentication({
+        store,
+        event,
+        allowCredentials: list,
+      });
+      return json(200, { options, challengeId });
+    }
+
+    if (action === "passkey-login-finish") {
+      const limit = await consumeRateLimit(event, {
+        bucket: "admin-login",
+        windowMs: 15 * 60_000,
+        max: 8,
+      });
+      if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+      const meta = captureRequestMeta(event);
+      const ip = getClientIp(event);
+      const country = getClientCountry(event);
+      const ua = getUserAgent(event);
+      try {
+        const used = await finishAuthentication({
+          store,
+          event,
+          challengeId: String(body.challengeId || ""),
+          response: body.response,
+        });
+        await appendAuditEvent(event, {
+          type: "admin.login",
+          outcome: "success",
+          subject: "admin",
+          detail: `Passkey login (${used.name})`,
+          ...meta,
+        });
+        void sendAdminLoginAlert({
+          ip,
+          country,
+          userAgent: ua,
+          outcome: "success",
+          detail: `Used passkey "${used.name}"`,
+        });
+        return json(200, { token: await issueToken(secret) });
+      } catch (err) {
+        await appendAuditEvent(event, {
+          type: "admin.login",
+          outcome: "failure",
+          subject: "admin",
+          detail: `Passkey rejected: ${err.message || "unknown"}`,
+          ...meta,
+        });
+        void logSecurityEvent({
+          type: "auth-failed",
+          ip,
+          country,
+          path: "/api/admin-auth",
+          detail: `Passkey login failed: ${err.message || "unknown"}`,
+          userAgent: ua,
+        });
+        void recordAuthFailure(ADMIN_LOCKOUT_SUBJECT);
+        void autobanIfNeeded(ip);
+        return json(401, { error: "Incorrect password" });
+      }
+    }
+
+    if (action === "passkey-rename") {
+      const token = extractToken(event);
+      if (!token || !(await verifyTokenWithSecret(token, secret))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      const id = String(body.id || "");
+      const name = String(body.name || "")
+        .trim()
+        .slice(0, 40);
+      if (!id || !name) {
+        return json(400, { error: "Missing id or name" });
+      }
+      const ok = await renamePasskey(store, id, name);
+      if (!ok) return json(404, { error: "Passkey not found" });
+      const meta = captureRequestMeta(event);
+      await appendAuditEvent(event, {
+        type: "admin.passkey",
+        outcome: "renamed",
+        subject: "admin",
+        detail: `Renamed passkey to "${name}"`,
+        ...meta,
+      });
+      return json(200, { ok: true });
+    }
+
+    if (action === "passkey-remove") {
+      // Requires both the session token AND the current password — a
+      // stolen session token alone shouldn't be able to silently
+      // remove an admin's passkey.
+      const token = extractToken(event);
+      if (!token || !(await verifyTokenWithSecret(token, secret))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      if (!credentials) {
+        return json(409, { error: "Admin password not set" });
+      }
+      const password = String(body.password || "");
+      const ok = await verifyPassword(
+        password,
+        credentials.salt,
+        credentials.hash,
+      );
+      if (!ok) {
+        return json(401, { error: "Incorrect password" });
+      }
+      const id = String(body.id || "");
+      if (!id) return json(400, { error: "Missing id" });
+      const removed = await removePasskey(store, id);
+      if (!removed) return json(404, { error: "Passkey not found" });
+      // If we just removed the last passkey, force-disable the
+      // require-passkey flag so the admin doesn't lock themselves out.
+      const remaining = await readPasskeys(store);
+      if (remaining.length === 0) {
+        await writePasskeyConfig(store, { requirePasskey: false });
+      }
+      const meta = captureRequestMeta(event);
+      await appendAuditEvent(event, {
+        type: "admin.passkey",
+        outcome: "removed",
+        subject: "admin",
+        detail: `Removed passkey id=${id.slice(0, 8)}…`,
+        ...meta,
+      });
+      return json(200, { ok: true });
+    }
+
+    if (action === "passkey-require") {
+      // Toggle the "require passkey for admin login" flag.
+      // - Enabling requires both the session token AND the current
+      //   password (so a stolen token alone can't strand the human),
+      //   plus at least one registered passkey.
+      // - Disabling requires the password too — same reasoning.
+      const token = extractToken(event);
+      if (!token || !(await verifyTokenWithSecret(token, secret))) {
+        return json(401, { error: "Not authenticated" });
+      }
+      if (!credentials) {
+        return json(409, { error: "Admin password not set" });
+      }
+      const password = String(body.password || "");
+      const ok = await verifyPassword(
+        password,
+        credentials.salt,
+        credentials.hash,
+      );
+      if (!ok) {
+        return json(401, { error: "Incorrect password" });
+      }
+      const want = Boolean(body.required);
+      if (want) {
+        const list = await readPasskeys(store);
+        if (list.length === 0) {
+          return json(409, {
+            error: "Register a passkey first before requiring one",
+          });
+        }
+      }
+      const next = await writePasskeyConfig(store, { requirePasskey: want });
+      const meta = captureRequestMeta(event);
+      await appendAuditEvent(event, {
+        type: "admin.passkey",
+        outcome: want ? "required" : "optional",
+        subject: "admin",
+        detail: want
+          ? "Passkey now required for admin login"
+          : "Passkey requirement removed; password login re-enabled",
+        ...meta,
+      });
+      return json(200, { config: next });
     }
 
     if (action === "change") {

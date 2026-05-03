@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThreatDashboard } from "./ThreatDashboard";
 import { Admin2FASection } from "./Admin2FASection";
+import { AdminPasskeysSection } from "./AdminPasskeysSection";
 import {
   Globe,
   Loader2,
@@ -401,6 +402,8 @@ export function SecuritySection() {
           paste the id into <code>wrangler.toml</code>, then redeploy.
         </div>
       )}
+
+      <AdminPasskeysSection />
 
       <Admin2FASection />
 

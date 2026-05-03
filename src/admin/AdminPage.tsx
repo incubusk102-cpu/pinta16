@@ -214,7 +214,8 @@ function AdminPage() {
 }
 
 function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
-  const { initPassword, login, loginWith2fa } = useAdminAuth();
+  const { initPassword, login, loginWith2fa, loginWithPasskey, gate } =
+    useAdminAuth();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -225,9 +226,30 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   const [recoveryAvailable, setRecoveryAvailable] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   const isInitMode = initialized === false;
   const isTwoFactorStage = Boolean(challengeToken);
+  const passkeyOffered = Boolean(gate?.passkeyCount && !isInitMode);
+  const passkeyOnly = Boolean(gate?.requirePasskey);
+
+  const handlePasskeyLogin = useCallback(async () => {
+    if (passkeyBusy) return;
+    setPasskeyBusy(true);
+    try {
+      await loginWithPasskey();
+      toast.success("Welcome back");
+    } catch (error) {
+      // The browser throws when the user cancels the WebAuthn prompt.
+      // Skip the toast in that one case so it doesn't feel noisy.
+      const msg = error instanceof Error ? error.message : "Passkey rejected";
+      if (!/cancell?ed|aborted|not allowed/i.test(msg)) {
+        toast.error(msg);
+      }
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }, [loginWithPasskey, passkeyBusy]);
 
   const resetToPasswordStage = useCallback(() => {
     setChallengeToken(null);
@@ -335,10 +357,37 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
                 ? "First time setup — choose a password to protect this admin."
                 : initialized === null
                   ? "Could not reach the auth service. Check your connection."
-                  : "Enter the admin password to manage your collection."}
+                  : passkeyOnly
+                    ? "Sign in with your passkey to continue."
+                    : passkeyOffered
+                      ? "Sign in with your passkey, or use your password."
+                      : "Enter the admin password to manage your collection."}
           </p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {passkeyOffered && !isTwoFactorStage && (
+          <div className="space-y-3">
+            <Button
+              type="button"
+              variant="default"
+              className="w-full"
+              onClick={handlePasskeyLogin}
+              disabled={passkeyBusy || initialized === null}
+            >
+              {passkeyBusy ? "Waiting for passkey…" : "Sign in with passkey"}
+            </Button>
+            {!passkeyOnly && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border/60" />
+                <span>or use your password</span>
+                <span className="h-px flex-1 bg-border/60" />
+              </div>
+            )}
+          </div>
+        )}
+        <form
+          onSubmit={handleSubmit}
+          className={`space-y-4 ${passkeyOnly && !isTwoFactorStage ? "hidden" : ""}`}
+        >
           {isTwoFactorStage ? (
             <div>
               <Label htmlFor="totp-code">
