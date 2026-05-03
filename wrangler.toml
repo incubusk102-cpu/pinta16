@@ -135,6 +135,31 @@ preview_id = "e717d43c38a64b8bb4efc387710620a7"
 # preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
 
 # ---------------------------------------------------------------------------
+# ABANDONED_CARTS (optional)
+#
+# Stores cart snapshots synced when a shopper enters their email at
+# checkout but never completes payment. A scheduled GitHub Action calls
+# POST /api/abandoned-cart/process every 30 minutes; it finds carts older
+# than 1 h (first nudge) and 24 h (final nudge), sends a branded recovery
+# email, then marks the entry so it isn't re-sent. Entries auto-expire
+# after 7 days via KV TTL.
+#
+# To enable in production:
+#   1. Create the namespace in the Cloudflare dashboard:
+#      Workers & Pages → KV → Create namespace → name `canvhub-abandoned-carts`.
+#      Then create a second namespace for preview.
+#   2. Paste the production + preview IDs below and uncomment the block.
+#   3. `git push` (CI redeploys with the binding active).
+#
+# Until the binding exists, the sync endpoint returns 503 and the cron
+# is a no-op — the storefront keeps working unchanged.
+#
+# [[kv_namespaces]]
+# binding = "ABANDONED_CARTS"
+# id = "REPLACE_WITH_PRODUCTION_NAMESPACE_ID"
+# preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
+
+# ---------------------------------------------------------------------------
 # R2 bucket binding (optional)
 #
 # When this binding is present, admin product photo uploads write to R2

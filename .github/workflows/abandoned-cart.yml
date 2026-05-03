@@ -1,0 +1,73 @@
+name: Abandoned-cart recovery
+
+# Calls POST /api/abandoned-cart/process every 30 minutes. The endpoint
+# scans the ABANDONED_CARTS KV namespace, finds carts that crossed the
+# 1-hour or 24-hour threshold since the shopper last synced, and sends
+# a branded recovery email for each. Entries that have already been
+# emailed, converted, or unsubscribed are skipped.
+#
+# Uses the same BACKUP_TOKEN secret that the nightly KV backup workflow
+# uses — no extra secrets to configure.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   - BACKUP_TOKEN   Bearer token. Must equal the BACKUP_TOKEN env var
+#                    set on the canvhub Pages project.
+
+on:
+  schedule:
+    # Every 30 minutes.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you running an ad-hoc recovery sweep?"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: abandoned-cart-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Send recovery emails
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+          BASE_URL: ${{ vars.BACKUP_BASE_URL || 'https://canvhub.com' }}
+        run: |
+          if [ -z "$BACKUP_TOKEN" ]; then
+            echo "::warning::BACKUP_TOKEN secret is not set — skipping."
+            exit 0
+          fi
+
+          http_code=$(curl --silent --show-error \
+            --max-time 120 \
+            --retry 2 --retry-delay 10 \
+            --header "Authorization: Bearer $BACKUP_TOKEN" \
+            --header "Content-Type: application/json" \
+            --request POST \
+            --write-out "%{http_code}" \
+            --output response.json \
+            "$BASE_URL/api/abandoned-cart/process")
+
+          cat response.json || true
+          echo ""
+          echo "HTTP $http_code"
+
+          # 503 means the KV binding isn't set up yet — not a failure,
+          # just nothing to do.
+          if [ "$http_code" = "503" ]; then
+            echo "::notice::ABANDONED_CARTS KV binding not configured yet — nothing to process."
+            exit 0
+          fi
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Abandoned-cart process returned HTTP $http_code"
+            exit 1
+          fi

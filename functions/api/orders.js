@@ -1,5 +1,7 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { connectLambda, getStore } from "./_lib/kv-stores.js";
+import { makeStore } from "./_lib/kv-store.js";
+import { getCloudflareEnv } from "./_lib/context.js";
 import crypto from "node:crypto";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
@@ -1072,6 +1074,26 @@ export const handler = async (event) => {
           detail: `Total ₱${safeOrder.total.toLocaleString()}`,
           ...captureRequestMeta(event),
         });
+        // Mark the abandoned-cart entry as converted so the cron doesn't
+        // send recovery emails for a cart that already checked out.
+        try {
+          const acBinding = getCloudflareEnv().ABANDONED_CARTS;
+          if (acBinding) {
+            const acStore = makeStore(acBinding);
+            const acEmail = (safeOrder.orderInfo?.email || "")
+              .trim()
+              .toLowerCase();
+            if (acEmail) {
+              const entry = await acStore.get(acEmail, { type: "json" });
+              if (entry && !entry.convertedAt) {
+                entry.convertedAt = new Date().toISOString();
+                await acStore.setJSON(acEmail, entry);
+              }
+            }
+          }
+        } catch {
+          // Best effort — never block order persistence.
+        }
         return json(200, { order: safeOrder });
       }
 

@@ -37,6 +37,7 @@ const CACHE_BACKED_BUCKETS = new Set([
   "submit-review",
   "chat-start",
   "chat-send",
+  "abandoned-cart-sync",
 ]);
 
 const getLimitStore = () => {

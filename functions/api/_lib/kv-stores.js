@@ -21,6 +21,7 @@ const STORE_TO_BINDING = {
   "admin-auth": "ADMIN_AUTH",
   "customer-meta": "CUSTOMER_META",
   "security-config": "SECURITY_CONFIG",
+  "abandoned-carts": "ABANDONED_CARTS",
 };
 
 export const getStore = (name) => {
