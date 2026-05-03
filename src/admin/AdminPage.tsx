@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import {
+  TwoFactorRequiredError,
+  useAdminAuth,
+} from "@/contexts/AdminAuthContext";
+import { TwoFactorSection } from "@/components/admin/TwoFactorSection";
 import Turnstile, { isTurnstileEnabled } from "@/components/Turnstile";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
@@ -219,12 +223,27 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   const [submitting, setSubmitting] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
+  // 2FA second step. When the server reports `requires2FA`, we keep the
+  // password field's value (so the second submit can re-send it) and reveal
+  // the code field.
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [code, setCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+
   const isInitMode = initialized === false;
 
   const handleToken = useCallback((token: string) => {
     setTurnstileToken(token);
   }, []);
   const handleExpire = useCallback(() => setTurnstileToken(null), []);
+
+  const resetSecondFactor = () => {
+    setTwoFactorRequired(false);
+    setCode("");
+    setRecoveryCode("");
+    setUseRecovery(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,26 +257,54 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
       }
     }
 
+    if (twoFactorRequired) {
+      if (useRecovery) {
+        if (recoveryCode.replace(/[\s-]/g, "").length < 8) {
+          return toast.error("Enter a recovery code (e.g. ABCD-EFGH)");
+        }
+      } else if (code.length !== 6) {
+        return toast.error("Enter the 6-digit code from your authenticator");
+      }
+    }
+
     setSubmitting(true);
     try {
       if (isInitMode) {
         await initPassword(password, turnstileToken || undefined);
         toast.success("Admin password set");
       } else {
-        await login(password, turnstileToken || undefined);
+        await login(password, {
+          turnstileToken: turnstileToken || undefined,
+          ...(twoFactorRequired && !useRecovery ? { code } : {}),
+          ...(twoFactorRequired && useRecovery ? { recoveryCode } : {}),
+        });
         toast.success("Welcome back");
+        resetSecondFactor();
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Authentication failed",
-      );
-      // Reset the token after a failed attempt — Turnstile tokens are
-      // single-use and the widget auto-issues a fresh one.
-      setTurnstileToken(null);
+      if (error instanceof TwoFactorRequiredError) {
+        setTwoFactorRequired(true);
+        toast.message("Enter your 2FA code");
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "Authentication failed",
+        );
+        // Reset the token after a failed attempt — Turnstile tokens are
+        // single-use and the widget auto-issues a fresh one.
+        setTurnstileToken(null);
+      }
     } finally {
       setSubmitting(false);
     }
   };
+
+  const headerCopy = isInitMode
+    ? "First time setup — choose a password to protect this admin."
+    : twoFactorRequired
+      ? "Enter the 6-digit code from your authenticator app."
+      : initialized === null
+        ? "Could not reach the auth service. Check your connection."
+        : "Enter the admin password to manage your collection.";
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
@@ -267,28 +314,75 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
             <GoldenCMark size={36} />
             <h1 className="font-logo text-2xl">Canvas Hub</h1>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {isInitMode
-              ? "First time setup — choose a password to protect this admin."
-              : initialized === null
-                ? "Could not reach the auth service. Check your connection."
-                : "Enter the admin password to manage your collection."}
-          </p>
+          <p className="text-sm text-muted-foreground">{headerCopy}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete={isInitMode ? "new-password" : "current-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              disabled={initialized === null}
-            />
-          </div>
-          {isTurnstileEnabled() && (
+          {!twoFactorRequired && (
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete={isInitMode ? "new-password" : "current-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+                disabled={initialized === null}
+              />
+            </div>
+          )}
+          {twoFactorRequired && !useRecovery && (
+            <div>
+              <Label htmlFor="totpCode">6-digit code</Label>
+              <Input
+                id="totpCode"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                autoComplete="one-time-code"
+                placeholder="000000"
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                autoFocus
+              />
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground mt-2"
+                onClick={() => {
+                  setUseRecovery(true);
+                  setCode("");
+                }}
+              >
+                Lost your phone? Use a recovery code →
+              </button>
+            </div>
+          )}
+          {twoFactorRequired && useRecovery && (
+            <div>
+              <Label htmlFor="recoveryCode">Recovery code</Label>
+              <Input
+                id="recoveryCode"
+                placeholder="XXXX-XXXX"
+                autoComplete="one-time-code"
+                value={recoveryCode}
+                onChange={(e) => setRecoveryCode(e.target.value.toUpperCase())}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground mt-2"
+                onClick={() => {
+                  setUseRecovery(false);
+                  setRecoveryCode("");
+                }}
+              >
+                ← Use authenticator code instead
+              </button>
+            </div>
+          )}
+          {!twoFactorRequired && isTurnstileEnabled() && (
             <div className="flex justify-center">
               <Turnstile
                 action={isInitMode ? "admin-init" : "admin-login"}
@@ -307,8 +401,19 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
               ? "Working..."
               : isInitMode
                 ? "Set password"
-                : "Sign in"}
+                : twoFactorRequired
+                  ? "Verify"
+                  : "Sign in"}
           </Button>
+          {twoFactorRequired && (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground w-full text-center"
+              onClick={resetSecondFactor}
+            >
+              ← Sign in as a different user
+            </button>
+          )}
         </form>
         <div className="text-center">
           <Link
@@ -3910,6 +4015,8 @@ function SettingsSection() {
           </Button>
         </form>
       </section>
+
+      <TwoFactorSection />
 
       <section className="bg-card/40 border border-border/60 rounded-xl p-6">
         <h2 className="font-display text-lg mb-2">Sign out</h2>

@@ -5,15 +5,19 @@ import {
   extractToken,
   getAuthStore,
   hashPassword,
+  is2FAEnabled,
   issueToken,
   MIN_PASSWORD_LENGTH,
+  read2FA,
   readCredentials,
   rotateSessionSecret,
-  verifyPassword,
+  verifyCredentials,
   verifyTokenWithSecret,
+  write2FA,
   writeCredentials,
   writeCredentialsIfNew,
 } from "./_lib/admin-auth.js";
+import { verifyRecoveryCode, verifyTotp } from "./_lib/totp.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent, readAuditEvents } from "./_lib/audit-log.js";
@@ -35,6 +39,14 @@ const parseBody = (body) => {
   }
 };
 
+const recoveryBypassesTwoFactor = () =>
+  String(process.env.ADMIN_RECOVERY_BYPASS_2FA || "")
+    .trim()
+    .toLowerCase() === "1" ||
+  String(process.env.ADMIN_RECOVERY_BYPASS_2FA || "")
+    .trim()
+    .toLowerCase() === "true";
+
 export const handler = async (event) => {
   try {
     const store = getAuthStore(event);
@@ -52,7 +64,11 @@ export const handler = async (event) => {
         return json(200, { events });
       }
       const credentials = await readCredentials(store);
-      return json(200, { initialized: Boolean(credentials) });
+      const twoFactorEnabled = await is2FAEnabled(store);
+      return json(200, {
+        initialized: Boolean(credentials),
+        twoFactorEnabled,
+      });
     }
 
     if (event.httpMethod !== "POST") {
@@ -83,10 +99,9 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = await hashPassword(password);
+      const record = await hashPassword(password);
       const written = await writeCredentialsIfNew(store, {
-        salt,
-        hash,
+        ...record,
         updatedAt: new Date().toISOString(),
       });
       if (!written) {
@@ -123,14 +138,15 @@ export const handler = async (event) => {
       const recoveryPassword = (
         process.env.ADMIN_RECOVERY_PASSWORD || ""
       ).trim();
-      const matchesStored = await verifyPassword(
+
+      const { ok: matchesStored, needsRehash } = await verifyCredentials(
         password,
-        credentials.salt,
-        credentials.hash,
+        credentials,
       );
       const matchesRecovery =
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
         (await constantTimeEquals(password, recoveryPassword));
+
       if (!matchesStored && !matchesRecovery) {
         await appendAuditEvent(event, {
           type: "admin.login",
@@ -141,11 +157,113 @@ export const handler = async (event) => {
         });
         return json(401, { error: "Incorrect password" });
       }
+
+      // Transparent argon2id upgrade for legacy PBKDF2 records — only on a
+      // real-password match (recovery passwords don't migrate).
+      if (matchesStored && needsRehash) {
+        try {
+          const newRecord = await hashPassword(password);
+          await writeCredentials(store, {
+            ...newRecord,
+            updatedAt: new Date().toISOString(),
+          });
+          await appendAuditEvent(event, {
+            type: "admin.password",
+            outcome: "rehashed",
+            subject: "admin",
+            detail: "PBKDF2 → argon2id upgrade on login",
+            ...meta,
+          });
+        } catch (err) {
+          // Don't fail login if rehash write fails — log and continue.
+          console.error("admin-auth: argon2id rehash failed", err);
+        }
+      }
+
+      // 2FA gate. Recovery password bypasses 2FA only if explicitly opted in
+      // via env var (default off, so a leaked recovery password alone can't
+      // walk past 2FA).
+      const twofa = await read2FA(store);
+      const twoFactorRequired =
+        Boolean(twofa?.enabled) &&
+        !(matchesRecovery && recoveryBypassesTwoFactor());
+
+      if (twoFactorRequired) {
+        const code = String(body.code || "").trim();
+        const recoveryCode = String(body.recoveryCode || "").trim();
+
+        if (!code && !recoveryCode) {
+          // Don't burn the rate limit slot we already consumed — but signal
+          // to the client that it should prompt for a 2FA code.
+          return json(401, {
+            error: "Two-factor authentication is enabled",
+            requires2FA: true,
+          });
+        }
+
+        if (recoveryCode) {
+          const matchedIndex = await verifyRecoveryCode(
+            recoveryCode,
+            twofa.recoveryHashes || [],
+          );
+          if (matchedIndex < 0) {
+            await appendAuditEvent(event, {
+              type: "admin.login",
+              outcome: "2fa.failure",
+              subject: "admin",
+              detail: "Recovery code did not match",
+              ...meta,
+            });
+            return json(401, {
+              error: "Recovery code is incorrect",
+              requires2FA: true,
+            });
+          }
+          // Single-use: drop the matched hash.
+          const remainingHashes = (twofa.recoveryHashes || []).filter(
+            (_, i) => i !== matchedIndex,
+          );
+          try {
+            await write2FA(store, {
+              ...twofa,
+              recoveryHashes: remainingHashes,
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (err) {
+            console.error("admin-auth: recovery code consume failed", err);
+          }
+          await appendAuditEvent(event, {
+            type: "admin.login",
+            outcome: "2fa.recovery",
+            subject: "admin",
+            detail: `Recovery code used (${remainingHashes.length} remaining)`,
+            ...meta,
+          });
+        } else {
+          const codeOk = await verifyTotp(twofa.secret, code);
+          if (!codeOk) {
+            await appendAuditEvent(event, {
+              type: "admin.login",
+              outcome: "2fa.failure",
+              subject: "admin",
+              detail: "TOTP code did not match",
+              ...meta,
+            });
+            return json(401, {
+              error: "Code is incorrect",
+              requires2FA: true,
+            });
+          }
+        }
+      }
+
       await appendAuditEvent(event, {
         type: "admin.login",
         outcome: matchesRecovery ? "recovery" : "success",
         subject: "admin",
-        detail: matchesRecovery ? "Recovery password used" : "Password OK",
+        detail:
+          (matchesRecovery ? "Recovery password used" : "Password OK") +
+          (twoFactorRequired ? " + 2FA verified" : ""),
         ...meta,
       });
       return json(200, { token: await issueToken(secret) });
@@ -162,10 +280,9 @@ export const handler = async (event) => {
       const currentPassword = String(body.currentPassword || "");
       const newPassword = String(body.newPassword || "");
       const recoveryPw = (process.env.ADMIN_RECOVERY_PASSWORD || "").trim();
-      const currentMatchesStored = await verifyPassword(
+      const { ok: currentMatchesStored } = await verifyCredentials(
         currentPassword,
-        credentials.salt,
-        credentials.hash,
+        credentials,
       );
       const currentMatchesRecovery =
         recoveryPw.length >= MIN_PASSWORD_LENGTH &&
@@ -179,10 +296,9 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = await hashPassword(newPassword);
+      const record = await hashPassword(newPassword);
       await writeCredentials(store, {
-        salt,
-        hash,
+        ...record,
         updatedAt: new Date().toISOString(),
       });
       const newSecret = await rotateSessionSecret(store);

@@ -1,8 +1,28 @@
 // Admin authentication helpers ported from netlify/lib/admin-auth.js.
 //
 // Storage: ADMIN_AUTH KV namespace, keyed by:
-//   "credentials"     → { salt, hash, updatedAt }
+//   "credentials"     → password record (see below)
 //   "session-secret"  → string (rotated on password change)
+//   "2fa"             → 2FA record (see below) or absent if disabled
+//
+// Password record formats (verifyCredentials dispatches on `algo`):
+//
+//   Legacy PBKDF2 (no algo field):
+//     { salt: "...hex...", hash: "...hex...", updatedAt }
+//
+//   Current argon2id:
+//     { algo: "argon2id", v, t, m, p, salt, hash, updatedAt }
+//
+// On successful login with a legacy record we transparently re-hash to
+// argon2id so the next login uses the stronger algorithm.
+//
+// 2FA record format:
+//   {
+//     enabled: true,
+//     secret:  "BASE32",          // RFC 6238 TOTP shared secret
+//     recoveryHashes: [argon2id…], // 10 single-use codes, hashed
+//     updatedAt: "ISO",
+//   }
 //
 // Crypto runs on the platform-native WebCrypto API (`globalThis.crypto`).
 // On Cloudflare Workers / Pages Functions this is fast, hardware-accelerated,
@@ -13,10 +33,16 @@
 
 import { makeStore } from "./kv-store.js";
 import { requireKvBinding } from "./context.js";
+import {
+  hashPasswordArgon2id,
+  verifyPasswordArgon2id,
+  needsRehash as argon2NeedsRehash,
+} from "./argon2.js";
 
 export const STORE_NAME = "admin-auth";
 export const CREDENTIALS_KEY = "credentials";
 export const SECRET_KEY = "session-secret";
+export const TWOFA_KEY = "2fa";
 export const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 export const PBKDF2_ITERATIONS = 100_000;
 export const PBKDF2_KEYLEN = 32;
@@ -82,20 +108,20 @@ const hmacSha256 = async (secret, data) => {
   return new Uint8Array(sig);
 };
 
-export const hashPassword = async (password) => {
-  const saltBytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
-  const salt = toHex(saltBytes);
-  const hashBytes = await pbkdf2Bytes(
-    password,
-    salt,
-    PBKDF2_ITERATIONS,
-    PBKDF2_KEYLEN,
-    PBKDF2_DIGEST,
-  );
-  return { salt, hash: toHex(hashBytes) };
-};
+/**
+ * Hash a password for *new* credentials. Always argon2id from this commit
+ * forward.
+ */
+export const hashPassword = async (password) =>
+  await hashPasswordArgon2id(password);
 
-export const verifyPassword = async (password, salt, expectedHash) => {
+/**
+ * Legacy PBKDF2 verifier — kept for back-compat with pre-2FA records that
+ * predate the argon2id rollout. Not exported as part of the public surface;
+ * verifyCredentials dispatches on `record.algo`.
+ */
+const verifyPasswordPbkdf2 = async (password, salt, expectedHash) => {
+  if (!salt || !expectedHash) return false;
   const hashBytes = await pbkdf2Bytes(
     password,
     salt,
@@ -106,6 +132,38 @@ export const verifyPassword = async (password, salt, expectedHash) => {
   const expected = fromHex(expectedHash);
   return constantTimeEqualBytes(expected, hashBytes);
 };
+
+/**
+ * Verify a password against a stored credentials record. Returns:
+ *   {
+ *     ok: bool,
+ *     needsRehash: bool,   // true ⇒ caller should re-hash + writeCredentials
+ *   }
+ *
+ * Dispatches on record.algo:
+ *   - "argon2id": verify with stored argon2id params
+ *   - anything else (legacy PBKDF2): use PBKDF2 — if it matches, signal that
+ *     the record should be upgraded to argon2id.
+ */
+export const verifyCredentials = async (password, record) => {
+  if (!record) return { ok: false, needsRehash: false };
+  if (record.algo === "argon2id") {
+    const ok = await verifyPasswordArgon2id(password, record);
+    return { ok, needsRehash: ok && argon2NeedsRehash(record) };
+  }
+  // Legacy: PBKDF2-SHA256 record
+  const ok = await verifyPasswordPbkdf2(password, record.salt, record.hash);
+  return { ok, needsRehash: ok };
+};
+
+/**
+ * Public alias retained so external integrations that imported `verifyPassword`
+ * directly (with the legacy salt/hash signature) keep compiling. Internal
+ * callers should switch to `verifyCredentials` so they pick up the algo
+ * dispatch + needsRehash signal automatically.
+ */
+export const verifyPassword = async (password, salt, expectedHash) =>
+  await verifyPasswordPbkdf2(password, salt, expectedHash);
 
 export const constantTimeEquals = async (a, b) => {
   const ha = await hmacSha256("constant-time-cmp", String(a));
@@ -210,6 +268,31 @@ export const rotateSessionSecret = async (store) => {
   await store.set(SECRET_KEY, secret);
   return secret;
 };
+
+// 2FA storage helpers --------------------------------------------------------
+
+export const read2FA = async (store) =>
+  await store.get(TWOFA_KEY, { type: "json" });
+
+export const write2FA = async (store, record) =>
+  await store.setJSON(TWOFA_KEY, record);
+
+export const delete2FA = async (store) => await store.delete(TWOFA_KEY);
+
+/**
+ * Convenience: returns true iff a complete + enabled 2FA record exists.
+ */
+export const is2FAEnabled = async (store) => {
+  const record = await read2FA(store);
+  return Boolean(
+    record &&
+    record.enabled &&
+    typeof record.secret === "string" &&
+    record.secret.length > 0,
+  );
+};
+
+// Token helpers --------------------------------------------------------------
 
 export const extractToken = (event) => {
   const auth =
