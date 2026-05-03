@@ -44,5 +44,10 @@ build
 coverage
 .nyc_output
 
+# Playwright
+playwright-report
+test-results
+.cache/playwright
+
 # Devin local artifacts
 .devin/
