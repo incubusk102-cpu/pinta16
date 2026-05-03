@@ -159,6 +159,15 @@ interface ProductContextType {
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
+  bulkUpdateProducts: (
+    ids: string[],
+    updates: Partial<
+      Pick<
+        Product,
+        "price" | "salePrice" | "availability" | "category" | "medium"
+      >
+    >,
+  ) => Promise<void>;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -464,9 +473,77 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
   );
 
+  const bulkUpdateProducts = useCallback(
+    async (
+      ids: string[],
+      updates: Partial<
+        Pick<
+          Product,
+          "price" | "salePrice" | "availability" | "category" | "medium"
+        >
+      >,
+    ) => {
+      if (!ids.length) return;
+      const idSet = new Set(ids);
+      const snapshots = productsRef.current.filter((p) => idSet.has(p.id));
+      if (!snapshots.length) return;
+
+      cancelInFlightLoad();
+      setAndPersistProducts((prev) =>
+        prev.map((p) => (idSet.has(p.id) ? { ...p, ...updates } : p)),
+      );
+
+      const rollback = () =>
+        setAndPersistProducts((prev) =>
+          prev.map((p) => {
+            const snap = snapshots.find((s) => s.id === p.id);
+            return snap ?? p;
+          }),
+        );
+
+      const token = getAdminToken();
+      if (!token) {
+        rollback();
+        throw new Error("Not authenticated");
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(PRODUCTS_API, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ids, updates }),
+        });
+      } catch (error) {
+        rollback();
+        throw error;
+      }
+
+      if (!response.ok) {
+        rollback();
+        throw new Error(
+          response.status === 401
+            ? "Session expired — please log in again"
+            : "Could not bulk-update products",
+        );
+      }
+      broadcastChange();
+    },
+    [setAndPersistProducts, broadcastChange, cancelInFlightLoad],
+  );
+
   return (
     <ProductContext.Provider
-      value={{ products, addProduct, updateProduct, deleteProduct }}
+      value={{
+        products,
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        bulkUpdateProducts,
+      }}
     >
       {children}
     </ProductContext.Provider>
