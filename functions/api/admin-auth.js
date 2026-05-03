@@ -199,21 +199,8 @@ export const handler = async (event) => {
     return json(400, { error: "Unknown action" });
   } catch (error) {
     console.error("admin-auth handler error:", error);
-    const name = error?.name || "Error";
-    const message = error?.message || String(error);
-    const stackLine = (error?.stack || "")
-      .split("\n")
-      .slice(1, 3)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .join(" | ");
     return json(500, {
-      error: `Internal error: ${name}: ${message}${stackLine ? ` @ ${stackLine}` : ""}`,
-      _debug: {
-        message,
-        name,
-        stack: (error?.stack || "").split("\n").slice(0, 6).join("\n"),
-      },
+      error: "Internal error",
     });
   }
 };

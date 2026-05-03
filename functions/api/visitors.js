@@ -26,7 +26,10 @@ const BOT_UA_PATTERN =
 const json = (status, body) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 
 const parseBody = (body) => {
@@ -115,7 +118,8 @@ const handle = async ({ request, env }) => {
       if (
         !sessionId ||
         typeof sessionId !== "string" ||
-        sessionId.length > 64
+        sessionId.length > 64 ||
+        !/^[a-zA-Z0-9_-]+$/.test(sessionId)
       ) {
         return json(400, { error: "sessionId required" });
       }

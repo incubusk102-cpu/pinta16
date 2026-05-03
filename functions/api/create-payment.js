@@ -3,6 +3,7 @@ import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
+  "X-Content-Type-Options": "nosniff",
 };
 
 const parseBody = (body) => {
@@ -70,7 +71,13 @@ const handler = async (event) => {
   try {
     const { amount, description, customer } = parseBody(event.body);
 
-    if (!amount || typeof amount !== "number" || amount <= 0) {
+    if (
+      !amount ||
+      typeof amount !== "number" ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > 1_000_000
+    ) {
       return {
         statusCode: 400,
         headers: jsonHeaders,
@@ -173,9 +180,7 @@ const handler = async (event) => {
       statusCode: 500,
       headers: jsonHeaders,
       body: JSON.stringify({
-        error: "Payment creation failed",
-        detail:
-          error instanceof Error ? error.message : "Internal server error",
+        error: "Payment creation failed. Please try again.",
       }),
     };
   }

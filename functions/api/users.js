@@ -32,6 +32,7 @@ import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { loadWelcomeEmailConfig, sendWelcomeEmail } from "./_lib/email.js";
+import { verifyTurnstileToken } from "./_lib/turnstile.js";
 
 // Fire the welcome email without blocking the auth response on it. We log
 // failures via the audit trail so admins can see misconfigurations.
@@ -241,6 +242,16 @@ export const handler = async (event) => {
       });
       if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
       const body = parseBody(event.body);
+
+      const ts = await verifyTurnstileToken(event, {
+        token: String(body.turnstileToken || ""),
+      });
+      if (!ts.allowed) {
+        return json(400, {
+          error: "Verification failed. Please refresh and try again.",
+        });
+      }
+
       const email = normalizeEmail(body.email);
       const password = String(body.password || "");
       const name = String(body.name || "")
@@ -254,6 +265,12 @@ export const handler = async (event) => {
         return json(400, {
           error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
         });
+      }
+      if (password.length > 128) {
+        return json(400, { error: "Password is too long" });
+      }
+      if (/^(.)\1+$/.test(password)) {
+        return json(400, { error: "Password is too weak" });
       }
 
       const birthday = sanitizeBirthday(body.birthday);
@@ -322,6 +339,16 @@ export const handler = async (event) => {
       });
       if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
       const body = parseBody(event.body);
+
+      const ts = await verifyTurnstileToken(event, {
+        token: String(body.turnstileToken || ""),
+      });
+      if (!ts.allowed) {
+        return json(400, {
+          error: "Verification failed. Please refresh and try again.",
+        });
+      }
+
       const email = normalizeEmail(body.email);
       const password = String(body.password || "");
       const users = await readUsers(store);

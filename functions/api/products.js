@@ -14,7 +14,11 @@ const PRODUCTS_KEY = "all-products";
 const json = (status, data, extraHeaders = {}) =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...extraHeaders },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders,
+    },
   });
 
 const sortProducts = (products = []) =>

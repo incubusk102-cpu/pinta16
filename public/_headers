@@ -2,11 +2,12 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=(), fullscreen=(self)
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=(), fullscreen=(self), usb=(), bluetooth=(), serial=(), hid=()
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-site
   X-Robots-Tag: index, follow
+  X-Permitted-Cross-Domain-Policies: none
 
 # CSP only on HTML so static assets stay flexible.
 #
@@ -51,6 +52,8 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Cross-Origin-Resource-Policy: same-origin
+  X-DNS-Prefetch-Control: off
+  X-Permitted-Cross-Domain-Policies: none
 
 # Service worker should be revalidated on every load and scoped to the
 # whole origin so navigation requests can be intercepted.

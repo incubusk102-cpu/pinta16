@@ -7,6 +7,8 @@ export const SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Cache-Control": "no-store",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "Cross-Origin-Resource-Policy": "same-origin",
 };
 
 export const withSecurityHeaders = (extra = {}) => ({

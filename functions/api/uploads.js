@@ -16,7 +16,11 @@ import { buildLambdaEvent } from "./_lib/lambda-event.js";
 const json = (status, data, extraHeaders = {}) =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...extraHeaders },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders,
+    },
   });
 
 // Mirror the body cap from handler-wrapper.js. The admin image-compress
