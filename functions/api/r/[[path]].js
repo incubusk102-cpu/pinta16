@@ -53,9 +53,13 @@ export const onRequestGet = async ({ request, env, params }) => {
       (request.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() ||
       "";
     if (key) {
+      const cc = (request.headers.get("cf-ipcountry") || "")
+        .trim()
+        .toUpperCase();
       void logSecurityEvent({
         type: "path-traversal",
         ip,
+        country: cc && cc !== "XX" ? cc : "",
         path: `/api/r/${key}`,
         detail: "Path traversal attempt in R2 proxy",
         userAgent: request.headers.get("user-agent") || "",

@@ -1,4 +1,4 @@
-import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { autobanIfNeeded, wrapHandler } from "./_lib/handler-wrapper.js";
 import crypto from "node:crypto";
 import { isAuthenticated as isAdmin } from "./_lib/admin-auth.js";
 import {
@@ -27,7 +27,17 @@ import {
   computeActiveRewards,
   ensurePersonalReward,
 } from "./_lib/personal-rewards.js";
-import { captureRequestMeta } from "./_lib/request-info.js";
+import {
+  captureRequestMeta,
+  getClientCountry,
+  getClientIp,
+  getUserAgent,
+} from "./_lib/request-info.js";
+import {
+  isAccountLocked,
+  logSecurityEvent,
+  recordAuthFailure,
+} from "./_lib/security-events.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
@@ -354,6 +364,33 @@ export const handler = async (event) => {
       const users = await readUsers(store);
       const user = users[email];
       const meta = captureRequestMeta(event);
+      const ip = getClientIp(event);
+      const country = getClientCountry(event);
+      const ua = getUserAgent(event);
+
+      // Per-account brute-force lockout. Always returns the same error as
+      // a bad password so an attacker can't tell whether the email exists
+      // or whether the account is just temporarily locked. Defends a real
+      // user's account from credential stuffing across many IPs.
+      if (email && (await isAccountLocked(email))) {
+        void logSecurityEvent({
+          type: "account-locked",
+          ip,
+          country,
+          path: "/api/users",
+          detail: `Login blocked by lockout: ${email}`,
+          userAgent: ua,
+        });
+        await appendAuditEvent(event, {
+          type: "user.login",
+          outcome: "failure",
+          subject: email,
+          detail: "Locked: too many recent failures",
+          ...meta,
+        });
+        return json(401, { error: "Incorrect email or password" });
+      }
+
       if (!user || !verifyPassword(password, user.salt, user.hash)) {
         await appendAuditEvent(event, {
           type: "user.login",
@@ -362,6 +399,18 @@ export const handler = async (event) => {
           detail: "Incorrect email or password",
           ...meta,
         });
+        if (email) {
+          void logSecurityEvent({
+            type: "auth-failed",
+            ip,
+            country,
+            path: "/api/users",
+            detail: `Login failed: ${email}`,
+            userAgent: ua,
+          });
+          void recordAuthFailure(email);
+        }
+        void autobanIfNeeded(ip);
         return json(401, { error: "Incorrect email or password" });
       }
       user.lastSeenAt = new Date().toISOString();
@@ -528,6 +577,19 @@ export const handler = async (event) => {
           detail: "Bad current password",
           ...captureRequestMeta(event),
         });
+        const ip = getClientIp(event);
+        const country = getClientCountry(event);
+        const ua = getUserAgent(event);
+        void logSecurityEvent({
+          type: "auth-failed",
+          ip,
+          country,
+          path: "/api/users",
+          detail: `Change-password failed: ${user.email}`,
+          userAgent: ua,
+        });
+        void recordAuthFailure(normalizeEmail(user.email));
+        void autobanIfNeeded(ip);
         return json(400, { error: "Current password is incorrect" });
       }
       const { hash: newHash, salt: newSalt } = hashPassword(newPassword);

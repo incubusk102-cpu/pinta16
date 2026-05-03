@@ -1,4 +1,4 @@
-import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { autobanIfNeeded, wrapHandler } from "./_lib/handler-wrapper.js";
 import {
   constantTimeEquals,
   ensureSessionSecret,
@@ -14,11 +14,22 @@ import {
   writeCredentials,
   writeCredentialsIfNew,
 } from "./_lib/admin-auth.js";
-import { captureRequestMeta } from "./_lib/request-info.js";
+import {
+  captureRequestMeta,
+  getClientCountry,
+  getClientIp,
+  getUserAgent,
+} from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent, readAuditEvents } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { verifyTurnstileToken } from "./_lib/turnstile.js";
+import {
+  ADMIN_LOCKOUT_SUBJECT,
+  isAccountLocked,
+  logSecurityEvent,
+  recordAuthFailure,
+} from "./_lib/security-events.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -116,6 +127,34 @@ export const handler = async (event) => {
         });
       }
       const meta = captureRequestMeta(event);
+      const ip = getClientIp(event);
+      const country = getClientCountry(event);
+      const ua = getUserAgent(event);
+
+      // Per-account brute-force lockout. We check this *before* the
+      // password compare so credential stuffing can't keep guessing
+      // against the admin account regardless of source IP. The error is
+      // intentionally generic so an attacker can't tell whether they hit
+      // the lockout or just got the wrong password.
+      if (await isAccountLocked(ADMIN_LOCKOUT_SUBJECT)) {
+        void logSecurityEvent({
+          type: "account-locked",
+          ip,
+          country,
+          path: "/api/admin-auth",
+          detail: "Admin login blocked by lockout",
+          userAgent: ua,
+        });
+        await appendAuditEvent(event, {
+          type: "admin.login",
+          outcome: "failure",
+          subject: "admin",
+          detail: "Locked: too many recent failures",
+          ...meta,
+        });
+        return json(401, { error: "Incorrect password" });
+      }
+
       if (!credentials) {
         return json(404, { error: "Admin password not set" });
       }
@@ -139,6 +178,19 @@ export const handler = async (event) => {
           detail: "Incorrect password",
           ...meta,
         });
+        // Surface to the threat dashboard and feed the auto-ban counter
+        // so a script attacking admin from one IP gets banned by the IP
+        // path *and* the password-fail path independently.
+        void logSecurityEvent({
+          type: "auth-failed",
+          ip,
+          country,
+          path: "/api/admin-auth",
+          detail: "Admin password incorrect",
+          userAgent: ua,
+        });
+        void recordAuthFailure(ADMIN_LOCKOUT_SUBJECT);
+        void autobanIfNeeded(ip);
         return json(401, { error: "Incorrect password" });
       }
       await appendAuditEvent(event, {

@@ -24,7 +24,15 @@ const MAX_PER_BUCKET = 500;
 const BUCKET_TTL_SECONDS = 7 * 24 * 3600; // auto-expire after 7 days
 const STATS_KEY = "stats";
 const AUTOBAN_KEY = "autoban-config";
+const LOCKOUT_KEY_PREFIX = "auth-fails:";
+const MAX_LOCKOUT_TIMESTAMPS = 100;
 const CAS_RETRIES = 3;
+
+// Sentinel email used by the admin login flow. The admin password lives in
+// AUTH_STORE keyed by `admin`, not by an email, so we use this constant as
+// the lockout key for the admin account. Don't change it once data exists
+// in KV — existing lockout records are keyed by this string.
+export const ADMIN_LOCKOUT_SUBJECT = "__admin__";
 
 const getStore = () => {
   const env = getCloudflareEnv();
@@ -54,6 +62,7 @@ export const logSecurityEvent = async ({
   path,
   detail,
   userAgent,
+  country,
 }) => {
   const kv = getStore();
   if (!kv) return;
@@ -67,6 +76,11 @@ export const logSecurityEvent = async ({
     detail: safeStr(detail, 200),
     ua: safeStr(userAgent, 300),
   };
+  // Cloudflare exposes the resolved country (or "XX" for unknown) on every
+  // request via the `cf-ipcountry` header. Persisting it lets the dashboard
+  // surface country flags without an extra geo-IP lookup at read time.
+  const cc = safeStr(country, 4).toUpperCase();
+  if (cc && cc !== "XX") entry.cc = cc;
 
   const key = bucketKey(now);
 
@@ -207,6 +221,13 @@ const defaultAutobanConfig = () => ({
   enabled: false,
   threshold: 20,
   windowMinutes: 60,
+  // Per-email brute-force lockout. Defaults to ON because the cost of a
+  // false positive (a real customer waiting 15 minutes) is small compared
+  // to the cost of a credential-stuffing attack succeeding. Disable with
+  // care.
+  lockoutEnabled: true,
+  lockoutThreshold: 5,
+  lockoutWindowMinutes: 15,
   updatedAt: null,
 });
 
@@ -216,6 +237,10 @@ const sanitizeAutobanConfig = (input) => {
     enabled: Boolean(cfg.enabled),
     threshold: clampInt(cfg.threshold, 3, 1000, 20),
     windowMinutes: clampInt(cfg.windowMinutes, 5, 1440, 60),
+    lockoutEnabled:
+      cfg.lockoutEnabled === undefined ? true : Boolean(cfg.lockoutEnabled),
+    lockoutThreshold: clampInt(cfg.lockoutThreshold, 3, 50, 5),
+    lockoutWindowMinutes: clampInt(cfg.lockoutWindowMinutes, 1, 1440, 15),
     updatedAt:
       typeof cfg.updatedAt === "string" ? cfg.updatedAt.slice(0, 40) : null,
   };
@@ -266,6 +291,144 @@ export const shouldAutoban = async (ip) => {
   }
 
   return count >= config.threshold;
+};
+
+// ── Per-email brute-force lockout ──────────────────────────────────────
+//
+// Tracks recent failed-login timestamps per email. Once an email accumulates
+// `lockoutThreshold` failures inside `lockoutWindowMinutes`, every subsequent
+// login attempt for that email is rejected with a generic error — even with
+// the correct password — until the window slides past.
+//
+// Storage: SECURITY_EVENTS KV, key `auth-fails:<lowercased email>` → JSON
+// array of millisecond timestamps. KV TTL matches the window so abandoned
+// keys self-clean.
+//
+// All operations short-circuit cheaply if the binding is missing or lockout
+// is disabled in autoban-config, so the rest of the auth flow never depends
+// on this returning anything in particular.
+
+const lockoutKey = (subject) =>
+  `${LOCKOUT_KEY_PREFIX}${safeStr(subject, 80).toLowerCase()}`;
+
+export const recordAuthFailure = async (subject) => {
+  if (!subject) return;
+  const kv = getStore();
+  if (!kv) return;
+  const cfg = await getAutobanConfig();
+  if (!cfg.lockoutEnabled) return;
+  const windowMs = cfg.lockoutWindowMinutes * 60_000;
+  // Add a small grace pad to TTL so the last failure isn't garbage-collected
+  // a second before the window completes.
+  const ttl = Math.max(60, cfg.lockoutWindowMinutes * 60 + 30);
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  const key = lockoutKey(subject);
+
+  for (let attempt = 0; attempt < CAS_RETRIES; attempt++) {
+    try {
+      const { data, etag } = await kv.getWithMetadata(key, { type: "json" });
+      const previous = Array.isArray(data) ? data : [];
+      const list = previous.filter((t) => t > cutoff);
+      list.push(now);
+      if (list.length > MAX_LOCKOUT_TIMESTAMPS) {
+        list.splice(0, list.length - MAX_LOCKOUT_TIMESTAMPS);
+      }
+      const opts =
+        etag != null
+          ? { onlyIfMatch: etag, expirationTtl: ttl }
+          : { onlyIfNew: true, expirationTtl: ttl };
+      const result = await kv.setJSON(key, list, opts);
+      if (result?.modified) break;
+    } catch {
+      break;
+    }
+  }
+};
+
+export const isAccountLocked = async (subject) => {
+  if (!subject) return false;
+  const kv = getStore();
+  if (!kv) return false;
+  const cfg = await getAutobanConfig();
+  if (!cfg.lockoutEnabled) return false;
+  const windowMs = cfg.lockoutWindowMinutes * 60_000;
+  const cutoff = Date.now() - windowMs;
+  try {
+    const list = await kv.get(lockoutKey(subject), { type: "json" });
+    if (!Array.isArray(list)) return false;
+    const recent = list.filter((t) => t > cutoff);
+    return recent.length >= cfg.lockoutThreshold;
+  } catch {
+    return false;
+  }
+};
+
+export const clearAccountLockout = async (subject) => {
+  if (!subject) return false;
+  const kv = getStore();
+  if (!kv) return false;
+  try {
+    await kv.delete(lockoutKey(subject));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// List currently-locked accounts so the admin dashboard can surface them
+// (and offer a one-click "Unlock" button if a real customer got caught).
+// Best-effort: pages through up to 5_000 lockout keys.
+export const getAccountLockouts = async () => {
+  const ns = getRawNamespace();
+  if (!ns) return [];
+  const cfg = await getAutobanConfig();
+  if (!cfg.lockoutEnabled) return [];
+  const windowMs = cfg.lockoutWindowMinutes * 60_000;
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  const result = [];
+  let cursor;
+  for (let page = 0; page < 5; page++) {
+    let response;
+    try {
+      response = await ns.list({
+        prefix: LOCKOUT_KEY_PREFIX,
+        cursor,
+        limit: 1000,
+      });
+    } catch {
+      break;
+    }
+    const keys = Array.isArray(response?.keys) ? response.keys : [];
+    if (keys.length === 0) break;
+    await Promise.all(
+      keys.map(async (k) => {
+        try {
+          const raw = await ns.get(k.name, "text");
+          if (!raw) return;
+          const list = JSON.parse(raw);
+          if (!Array.isArray(list)) return;
+          const recent = list.filter((t) => t > cutoff);
+          if (recent.length >= cfg.lockoutThreshold) {
+            const subject = k.name.slice(LOCKOUT_KEY_PREFIX.length);
+            const lastAttempt = Math.max(...recent);
+            result.push({
+              subject,
+              attempts: recent.length,
+              lockedUntil: new Date(lastAttempt + windowMs).toISOString(),
+            });
+          }
+        } catch {
+          // Skip corrupt entries.
+        }
+      }),
+    );
+    if (response?.list_complete || !response?.cursor) break;
+    cursor = response.cursor;
+  }
+  result.sort((a, b) => b.attempts - a.attempts);
+  return result;
 };
 
 // ── Reset ────────────────────────────────────────────────────────────
