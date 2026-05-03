@@ -211,7 +211,11 @@ export const consumeRateLimit = async (
     : await consumeKvRateLimit(event, { bucket, windowMs, max, key });
 
   if (!result.allowed) {
-    const ip = key || getClientIp(event) || "";
+    // Always attribute to the client IP. `key` may be a user id for
+    // per-user buckets (e.g. `user-change-password:<userId>`), and
+    // tagging that as "ip" would mislead the dashboard and feed a
+    // non-IP value to autobanIfNeeded.
+    const ip = getClientIp(event) || "";
     void logSecurityEvent({
       type: "rate-limit",
       ip,

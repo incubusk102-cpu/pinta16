@@ -82,14 +82,21 @@ const isJsonContentType = (request) => {
 export const autobanIfNeeded = async (ip) => {
   if (!ip) return;
   try {
-    if (await shouldAutoban(ip)) {
-      const cfg = await getSecurityConfig();
-      if (!cfg.ipBlockList.includes(ip)) {
-        await writeSecurityConfig({
-          ipBlockList: [...cfg.ipBlockList, ip],
-        });
-      }
-    }
+    // Short-circuit if the IP is already banned. getSecurityConfig() is
+    // cached for ~30s, so this is essentially free; without this check
+    // every additional probe from a banned IP would otherwise force
+    // shouldAutoban() to sweep the hourly buckets again, turning
+    // auto-ban into a KV-read amplifier during a scanner storm.
+    const cfg = await getSecurityConfig();
+    if (cfg.ipBlockList.includes(ip)) return;
+    if (!(await shouldAutoban(ip))) return;
+    // Re-check with the fresh cached value: if some other request beat
+    // us to the ban, skip the redundant write.
+    const fresh = await getSecurityConfig();
+    if (fresh.ipBlockList.includes(ip)) return;
+    await writeSecurityConfig({
+      ipBlockList: [...fresh.ipBlockList, ip],
+    });
   } catch {
     // Best effort — never block the response.
   }

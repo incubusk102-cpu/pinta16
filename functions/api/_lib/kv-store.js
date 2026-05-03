@@ -61,20 +61,27 @@ export const makeStore = (kv) => {
     },
 
     async set(key, value, opts = {}) {
+      const putOpts = {};
+      if (typeof opts.expirationTtl === "number") {
+        putOpts.expirationTtl = opts.expirationTtl;
+      }
+      if (typeof opts.expiration === "number") {
+        putOpts.expiration = opts.expiration;
+      }
       if (opts.onlyIfNew) {
         const existing = await kv.get(key, "text");
         if (existing != null) return { modified: false };
-        await kv.put(key, value);
+        await kv.put(key, value, putOpts);
         return { modified: true };
       }
       if (opts.onlyIfMatch !== undefined) {
         const current = await kv.get(key, "text");
         const currentEtag = await stableHash(current);
         if (currentEtag !== opts.onlyIfMatch) return { modified: false };
-        await kv.put(key, value);
+        await kv.put(key, value, putOpts);
         return { modified: true };
       }
-      await kv.put(key, value);
+      await kv.put(key, value, putOpts);
       return { modified: true };
     },
 

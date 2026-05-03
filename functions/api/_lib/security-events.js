@@ -11,15 +11,27 @@
 // error the original request. The caller awaits `logSecurityEvent()` only
 // so the KV write can start before the isolate shuts down; callers in hot
 // paths can `void logSecurityEvent(...)` instead.
+//
+// Concurrent writers to the same hourly bucket or to the `stats` key would
+// otherwise overwrite each other (KV has no atomic mutate). Bucket / stats
+// writes go through the makeStore() etag-CAS shim with a small retry loop
+// so simultaneous events don't silently drop entries from the dashboard.
 
+import { makeStore } from "./kv-store.js";
 import { getCloudflareEnv } from "./context.js";
 
 const MAX_PER_BUCKET = 500;
 const BUCKET_TTL_SECONDS = 7 * 24 * 3600; // auto-expire after 7 days
 const STATS_KEY = "stats";
 const AUTOBAN_KEY = "autoban-config";
+const CAS_RETRIES = 3;
 
 const getStore = () => {
+  const env = getCloudflareEnv();
+  return env?.SECURITY_EVENTS ? makeStore(env.SECURITY_EVENTS) : null;
+};
+
+const getRawNamespace = () => {
   const env = getCloudflareEnv();
   return env?.SECURITY_EVENTS ?? null;
 };
@@ -58,18 +70,25 @@ export const logSecurityEvent = async ({
 
   const key = bucketKey(now);
 
-  try {
-    const raw = await kv.get(key, "text");
-    const list = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(list)) throw new Error("corrupt");
-    list.push(entry);
-    if (list.length > MAX_PER_BUCKET)
-      list.splice(0, list.length - MAX_PER_BUCKET);
-    await kv.put(key, JSON.stringify(list), {
-      expirationTtl: BUCKET_TTL_SECONDS,
-    });
-  } catch {
-    // Fire-and-forget: never block the request.
+  for (let attempt = 0; attempt < CAS_RETRIES; attempt++) {
+    try {
+      const { data, etag } = await kv.getWithMetadata(key, { type: "json" });
+      const list = Array.isArray(data) ? [...data] : [];
+      list.push(entry);
+      if (list.length > MAX_PER_BUCKET) {
+        list.splice(0, list.length - MAX_PER_BUCKET);
+      }
+      const opts =
+        etag != null
+          ? { onlyIfMatch: etag, expirationTtl: BUCKET_TTL_SECONDS }
+          : { onlyIfNew: true, expirationTtl: BUCKET_TTL_SECONDS };
+      const result = await kv.setJSON(key, list, opts);
+      if (result?.modified) break;
+      // Lost the CAS race; retry against the fresh value.
+    } catch {
+      // Fire-and-forget: never block the request.
+      break;
+    }
   }
 
   try {
@@ -82,26 +101,38 @@ export const logSecurityEvent = async ({
 // ── Rolling stats ────────────────────────────────────────────────────
 
 const incrementStats = async (kv, type, ip) => {
-  const raw = await kv.get(STATS_KEY, "text");
-  const stats = raw ? JSON.parse(raw) : freshStats();
-  if (!stats.byType || !stats.byIp) Object.assign(stats, freshStats());
+  for (let attempt = 0; attempt < CAS_RETRIES; attempt++) {
+    const { data, etag } = await kv.getWithMetadata(STATS_KEY, {
+      type: "json",
+    });
+    const stats =
+      data && typeof data === "object"
+        ? { ...freshStats(), ...data }
+        : freshStats();
+    if (!stats.byType || typeof stats.byType !== "object") stats.byType = {};
+    if (!stats.byIp || typeof stats.byIp !== "object") stats.byIp = {};
 
-  stats.total = (stats.total || 0) + 1;
-  stats.byType[type] = (stats.byType[type] || 0) + 1;
-  if (ip) stats.byIp[ip] = (stats.byIp[ip] || 0) + 1;
+    stats.total = (stats.total || 0) + 1;
+    stats.byType[type] = (stats.byType[type] || 0) + 1;
+    if (ip) stats.byIp[ip] = (stats.byIp[ip] || 0) + 1;
 
-  // Trim byIp to top 200 entries to prevent unbounded growth.
-  const ipEntries = Object.entries(stats.byIp);
-  if (ipEntries.length > 200) {
-    ipEntries.sort((a, b) => b[1] - a[1]);
-    stats.byIp = Object.fromEntries(ipEntries.slice(0, 200));
+    // Trim byIp to top 200 entries to prevent unbounded growth.
+    const ipEntries = Object.entries(stats.byIp);
+    if (ipEntries.length > 200) {
+      ipEntries.sort((a, b) => b[1] - a[1]);
+      stats.byIp = Object.fromEntries(ipEntries.slice(0, 200));
+    }
+
+    stats.updatedAt = new Date().toISOString();
+
+    const opts =
+      etag != null
+        ? { onlyIfMatch: etag, expirationTtl: BUCKET_TTL_SECONDS }
+        : { onlyIfNew: true, expirationTtl: BUCKET_TTL_SECONDS };
+    const result = await kv.setJSON(STATS_KEY, stats, opts);
+    if (result?.modified) return;
+    // Lost the CAS race; retry against the fresh value.
   }
-
-  stats.updatedAt = new Date().toISOString();
-
-  await kv.put(STATS_KEY, JSON.stringify(stats), {
-    expirationTtl: BUCKET_TTL_SECONDS,
-  });
 };
 
 const freshStats = () => ({
@@ -117,9 +148,8 @@ export const getSecurityStats = async () => {
   const kv = getStore();
   if (!kv) return freshStats();
   try {
-    const raw = await kv.get(STATS_KEY, "text");
-    if (!raw) return freshStats();
-    const parsed = JSON.parse(raw);
+    const parsed = await kv.get(STATS_KEY, { type: "json" });
+    if (!parsed || typeof parsed !== "object") return freshStats();
     return { ...freshStats(), ...parsed };
   } catch {
     return freshStats();
@@ -137,11 +167,8 @@ export const getRecentEvents = async ({ hours = 24, limit = 300 } = {}) => {
     const d = new Date(now.getTime() - h * 3600_000);
     const key = bucketKey(d);
     try {
-      const raw = await kv.get(key, "text");
-      if (raw) {
-        const entries = JSON.parse(raw);
-        if (Array.isArray(entries)) results.push(...entries);
-      }
+      const entries = await kv.get(key, { type: "json" });
+      if (Array.isArray(entries)) results.push(...entries);
     } catch {
       // Skip corrupt buckets.
     }
@@ -158,9 +185,8 @@ export const getAutobanConfig = async () => {
   const kv = getStore();
   if (!kv) return defaultAutobanConfig();
   try {
-    const raw = await kv.get(AUTOBAN_KEY, "text");
-    if (!raw) return defaultAutobanConfig();
-    const parsed = JSON.parse(raw);
+    const parsed = await kv.get(AUTOBAN_KEY, { type: "json" });
+    if (!parsed) return defaultAutobanConfig();
     return sanitizeAutobanConfig(parsed);
   } catch {
     return defaultAutobanConfig();
@@ -173,7 +199,7 @@ export const writeAutobanConfig = async (patch) => {
   const current = await getAutobanConfig();
   const merged = sanitizeAutobanConfig({ ...current, ...patch });
   merged.updatedAt = new Date().toISOString();
-  await kv.put(AUTOBAN_KEY, JSON.stringify(merged));
+  await kv.setJSON(AUTOBAN_KEY, merged);
   return merged;
 };
 
@@ -204,6 +230,11 @@ const clampInt = (n, min, max, fallback) => {
 // Check whether an IP has exceeded the auto-ban threshold by counting
 // recent events for that IP across the configured time window. Returns
 // true if the IP should be auto-blocked.
+//
+// This walks one hourly bucket per call, so on a scanner storm the caller
+// must short-circuit before calling this if the IP is already in the
+// SECURITY_CONFIG ipBlockList — otherwise auto-ban becomes a KV-read
+// amplifier (every additional probe forces another sweep).
 export const shouldAutoban = async (ip) => {
   if (!ip) return false;
   const config = await getAutobanConfig();
@@ -213,21 +244,18 @@ export const shouldAutoban = async (ip) => {
   if (!kv) return false;
 
   const now = new Date();
+  const cutoff = now.getTime() - config.windowMinutes * 60_000;
   let count = 0;
 
   for (let h = 0; h < Math.ceil(config.windowMinutes / 60); h++) {
     const d = new Date(now.getTime() - h * 3600_000);
     const key = bucketKey(d);
     try {
-      const raw = await kv.get(key, "text");
-      if (raw) {
-        const entries = JSON.parse(raw);
-        if (Array.isArray(entries)) {
-          const cutoff = now.getTime() - config.windowMinutes * 60_000;
-          for (const e of entries) {
-            if (e.ip === ip && new Date(e.t).getTime() >= cutoff) {
-              count++;
-            }
+      const entries = await kv.get(key, { type: "json" });
+      if (Array.isArray(entries)) {
+        for (const e of entries) {
+          if (e.ip === ip && new Date(e.t).getTime() >= cutoff) {
+            count++;
           }
         }
       }
@@ -243,14 +271,16 @@ export const shouldAutoban = async (ip) => {
 // ── Reset ────────────────────────────────────────────────────────────
 
 export const resetSecurityEvents = async () => {
-  const kv = getStore();
-  if (!kv) return { deleted: 0, skipped: true };
+  // Use the raw KV namespace here: makeStore.list() reshapes the result,
+  // and we want the native cursor/list_complete fields for paging.
+  const ns = getRawNamespace();
+  if (!ns) return { deleted: 0, skipped: true };
   let deleted = 0;
   let cursor;
   for (let page = 0; page < 50; page++) {
     let result;
     try {
-      result = await kv.list({ cursor, limit: 1000 });
+      result = await ns.list({ cursor, limit: 1000 });
     } catch {
       break;
     }
@@ -259,7 +289,7 @@ export const resetSecurityEvents = async () => {
     await Promise.all(
       keys.map(async (k) => {
         try {
-          await kv.delete(k.name);
+          await ns.delete(k.name);
           deleted += 1;
         } catch {
           // Swallow individual failures.
