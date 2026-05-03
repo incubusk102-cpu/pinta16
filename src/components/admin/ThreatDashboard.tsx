@@ -81,6 +81,7 @@ const THREAT_LABELS: Record<string, { label: string; color: string }> = {
   "path-traversal": { label: "Path traversal", color: "text-red-600" },
   "auth-failed": { label: "Login failure", color: "text-fuchsia-500" },
   "account-locked": { label: "Account locked", color: "text-purple-500" },
+  "country-blocked": { label: "Country blocked", color: "text-blue-500" },
 };
 
 // Convert a 2-letter ISO country code into the matching emoji flag. Falls

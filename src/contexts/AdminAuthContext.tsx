@@ -11,12 +11,26 @@ import {
 const STORAGE_KEY = "canvhub_admin_token";
 const AUTH_API = "/api/admin-auth";
 
+export interface LoginPasswordResult {
+  // When 2FA is *off*, we already have a session token and `requires2fa`
+  // is false. When 2FA is *on*, the server returns a short-lived
+  // challenge token instead and the caller must finish login by calling
+  // `loginWith2fa(challengeToken, code)`.
+  requires2fa: boolean;
+  challengeToken: string | null;
+  recoveryAvailable: boolean;
+}
+
 interface AdminAuthContextValue {
   token: string | null;
   initialized: boolean | null;
   loading: boolean;
   initPassword: (password: string, turnstileToken?: string) => Promise<void>;
-  login: (password: string, turnstileToken?: string) => Promise<void>;
+  login: (
+    password: string,
+    turnstileToken?: string,
+  ) => Promise<LoginPasswordResult>;
+  loginWith2fa: (challengeToken: string, code: string) => Promise<void>;
   logout: () => void;
   changePassword: (
     currentPassword: string,
@@ -112,7 +126,10 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const login = useCallback(
-    async (password: string, turnstileToken?: string) => {
+    async (
+      password: string,
+      turnstileToken?: string,
+    ): Promise<LoginPasswordResult> => {
       const response = await fetch(AUTH_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,6 +138,41 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
           password,
           ...(turnstileToken ? { turnstileToken } : {}),
         }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, "Could not log in"));
+      }
+      const data = (await response.json()) as {
+        token?: string;
+        requires2fa?: boolean;
+        challengeToken?: string;
+        recoveryAvailable?: boolean;
+      };
+      if (data.requires2fa) {
+        // Stage 1 succeeded; caller must finish via loginWith2fa.
+        return {
+          requires2fa: true,
+          challengeToken: data.challengeToken || "",
+          recoveryAvailable: Boolean(data.recoveryAvailable),
+        };
+      }
+      setAuthToken(data.token ?? null);
+      setInitialized(true);
+      return {
+        requires2fa: false,
+        challengeToken: null,
+        recoveryAvailable: false,
+      };
+    },
+    [setAuthToken],
+  );
+
+  const loginWith2fa = useCallback(
+    async (challengeToken: string, code: string) => {
+      const response = await fetch(AUTH_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "login-2fa", challengeToken, code }),
       });
       if (!response.ok) {
         throw new Error(await parseError(response, "Could not log in"));
@@ -182,10 +234,20 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
       loading,
       initPassword,
       login,
+      loginWith2fa,
       logout,
       changePassword,
     }),
-    [token, initialized, loading, initPassword, login, logout, changePassword],
+    [
+      token,
+      initialized,
+      loading,
+      initPassword,
+      login,
+      loginWith2fa,
+      logout,
+      changePassword,
+    ],
   );
 
   return (
