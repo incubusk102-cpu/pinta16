@@ -839,6 +839,52 @@ const WELCOME10_PROMO_DEFAULT = {
   description: "Welcome offer for new visitors",
 };
 
+const DEFAULT_ABANDONED_CART = {
+  enabled: true,
+  nudge1Minutes: 60,
+  nudge2Minutes: 1440,
+  nudge1Subject: "You left something behind at Canvas Hub",
+  nudge2Subject: "Still thinking about it? Your cart is waiting",
+  nudge1Heading: "Your cart is waiting",
+  nudge2Heading: "Don\u2019t miss out on your picks",
+  ctaLabel: "Complete your order",
+  ctaUrl: "",
+};
+
+const sanitizeAbandonedCart = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const nudge1Min = Math.floor(Number(data.nudge1Minutes) || 0);
+  const nudge2Min = Math.floor(Number(data.nudge2Minutes) || 0);
+  return {
+    enabled: data.enabled !== false,
+    nudge1Minutes:
+      nudge1Min >= 15 && nudge1Min <= 10080
+        ? nudge1Min
+        : DEFAULT_ABANDONED_CART.nudge1Minutes,
+    nudge2Minutes:
+      nudge2Min >= 60 && nudge2Min <= 10080
+        ? nudge2Min
+        : DEFAULT_ABANDONED_CART.nudge2Minutes,
+    nudge1Subject: String(
+      data.nudge1Subject ?? DEFAULT_ABANDONED_CART.nudge1Subject,
+    ).slice(0, 200),
+    nudge2Subject: String(
+      data.nudge2Subject ?? DEFAULT_ABANDONED_CART.nudge2Subject,
+    ).slice(0, 200),
+    nudge1Heading: String(
+      data.nudge1Heading ?? DEFAULT_ABANDONED_CART.nudge1Heading,
+    ).slice(0, 100),
+    nudge2Heading: String(
+      data.nudge2Heading ?? DEFAULT_ABANDONED_CART.nudge2Heading,
+    ).slice(0, 100),
+    ctaLabel: String(data.ctaLabel ?? DEFAULT_ABANDONED_CART.ctaLabel).slice(
+      0,
+      60,
+    ),
+    ctaUrl: String(data.ctaUrl ?? "").slice(0, 500),
+  };
+};
+
 const DEFAULT_CONFIG = {
   announcement: {
     enabled: false,
@@ -933,6 +979,7 @@ const DEFAULT_CONFIG = {
   // notification channels in one place.
   orderPush: DEFAULT_ORDER_PUSH,
   newUserModal: DEFAULT_NEW_USER_MODAL,
+  abandonedCart: DEFAULT_ABANDONED_CART,
 };
 
 const DEFAULT_DAILY_FEATURE = {
@@ -1250,6 +1297,7 @@ const sanitizeConfig = (raw) => {
       })
       .filter(Boolean),
     newUserModal: sanitizeNewUserModal(data.newUserModal),
+    abandonedCart: sanitizeAbandonedCart(data.abandonedCart),
     dailyFeature: sanitizeDailyFeature(data.dailyFeature),
     thankYou: sanitizeThankYou(data.thankYou),
     vacationMode: sanitizeVacationMode(data.vacationMode),
@@ -1444,6 +1492,15 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           chat: { ...existing.chat, ...body.chat },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-abandoned-cart") {
+        const next = sanitizeConfig({
+          ...existing,
+          abandonedCart: { ...existing.abandonedCart, ...body.abandonedCart },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });
