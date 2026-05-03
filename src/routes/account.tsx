@@ -34,6 +34,7 @@ import ProfileEditor from "@/components/account/ProfileEditor";
 import AddressBook from "@/components/account/AddressBook";
 import MyOrders from "@/components/account/MyOrders";
 import AppreciationSection from "@/components/account/AppreciationSection";
+import OrderPushOptInPrompt from "@/components/OrderPushOptInPrompt";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -488,6 +489,16 @@ function AccountPage() {
 
         <div id="account-wishlist" className="scroll-mt-28">
           <WishlistSection />
+        </div>
+
+        {/* Free Web Push opt-in / management. The customer's email is
+            already on hand from their authenticated session, so we can
+            wire the subscription on the spot without re-asking for
+            anything. forceShow=true so the card is always visible from
+            here even if the customer dismissed the order-confirmation
+            variant. */}
+        <div id="account-notifications" className="scroll-mt-28">
+          <OrderPushOptInPrompt email={user.email} variant="inline" forceShow />
         </div>
 
         <div className="bg-card/40 border border-border/60 rounded-xl p-5">

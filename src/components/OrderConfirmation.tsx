@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
 import DeliveredReviewPrompt from "./DeliveredReviewPrompt";
 import RefundBanner from "./RefundBanner";
+import OrderPushOptInPrompt from "./OrderPushOptInPrompt";
 
 const formatNotificationDate = (iso: string) => {
   const d = new Date(iso);
@@ -369,6 +370,18 @@ const OrderConfirmation = () => {
                     </>
                   );
                 })()}
+
+                {/* Free push-notification opt-in. Renders only when the
+                    browser supports Web Push and the user hasn't already
+                    granted/denied permission. The customer's email comes
+                    from the order they just placed, so the server can
+                    fan out future status changes to this device. */}
+                {lastOrder.orderInfo?.email && (
+                  <OrderPushOptInPrompt
+                    email={lastOrder.orderInfo.email}
+                    variant="card"
+                  />
+                )}
 
                 {/* Instructions */}
                 <div className="p-4 bg-muted/20 border border-border/10 rounded-sm space-y-2">

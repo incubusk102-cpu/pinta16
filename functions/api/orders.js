@@ -12,6 +12,7 @@ import {
   isEmailConfigured,
   resolveEmailEnv,
 } from "./_lib/email.js";
+import { sendOrderPush } from "./_lib/push.js";
 import {
   findUserByReferralCode,
   getCurrentUserFromSession,
@@ -313,6 +314,47 @@ const recordEmail = async (orderForEmail, notification, extra = {}) => {
   } catch (err) {
     notification.delivered = false;
     notification.error = err instanceof Error ? err.message : String(err);
+  }
+  return notification;
+};
+
+/**
+ * Fire a Web Push notification for the same status change the email
+ * pipeline just covered, and stamp the result onto a `push` sub-object on
+ * the notification entry. Never throws — push is a free, best-effort
+ * channel that runs alongside email; its failure must not block status
+ * persistence.
+ *
+ * The push payload, recipient resolution, and per-kind admin gating all
+ * live in functions/api/_lib/push.js (mirroring email.js).
+ */
+const recordPush = async (orderForPush, notification, extra = {}) => {
+  try {
+    const result = await sendOrderPush({
+      kind: notification.type,
+      order: orderForPush,
+      extra,
+    });
+    notification.push = {
+      delivered: !!result.delivered,
+      ...(result.skipped ? { skipped: true } : {}),
+      ...(result.reason ? { reason: String(result.reason).slice(0, 120) } : {}),
+      ...(result.provider ? { provider: result.provider } : {}),
+      ...(typeof result.attempted === "number"
+        ? { attempted: result.attempted }
+        : {}),
+      ...(typeof result.successful === "number"
+        ? { successful: result.successful }
+        : {}),
+      ...(typeof result.expired === "number" && result.expired > 0
+        ? { expired: result.expired }
+        : {}),
+    };
+  } catch (err) {
+    notification.push = {
+      delivered: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
   return notification;
 };
@@ -995,6 +1037,12 @@ export const handler = async (event) => {
         // notification entry. We persist after the email to capture the
         // provider id / error.
         await recordEmail(safeOrder, safeOrder.notifications[0]);
+        // Fire the parallel free Web Push channel. Almost always a no-op
+        // here because the shopper hasn't opted in yet (the opt-in card
+        // appears on the OrderConfirmation modal that's about to render).
+        // Future status changes will land on this device once they tap
+        // "Enable for free".
+        await recordPush(safeOrder, safeOrder.notifications[0]);
         // Fire a separate "new order" alert to the admin so they get a
         // phone-push from Gmail/Outlook the moment an order lands. Best
         // effort — a delivery failure here must not block order
@@ -1067,17 +1115,23 @@ export const handler = async (event) => {
             recipient,
             sentAt: new Date().toISOString(),
           };
+          const statusEmailExtra = existing.shipment
+            ? {
+                shipment: existing.shipment,
+                trackingUrl: existing.shipment.trackingUrl,
+                courier: existing.shipment.courier,
+                trackingNumber: existing.shipment.trackingNumber,
+              }
+            : {};
           await recordEmail(
             { ...existing, status, shipment: existing.shipment },
             note,
-            existing.shipment
-              ? {
-                  shipment: existing.shipment,
-                  trackingUrl: existing.shipment.trackingUrl,
-                  courier: existing.shipment.courier,
-                  trackingNumber: existing.shipment.trackingNumber,
-                }
-              : {},
+            statusEmailExtra,
+          );
+          await recordPush(
+            { ...existing, status, shipment: existing.shipment },
+            note,
+            statusEmailExtra,
           );
           notifications.push(note);
           activityLog.push({
@@ -1135,14 +1189,18 @@ export const handler = async (event) => {
         delete target.provider;
         target.recipient = existing.orderInfo?.email || target.recipient || "";
         target.sentAt = new Date().toISOString();
-        await recordEmail(existing, target, {
+        const resendExtra = {
           shipment: existing.shipment,
           trackingUrl: existing.shipment?.trackingUrl,
           courier: existing.shipment?.courier,
           trackingNumber: existing.shipment?.trackingNumber,
           refundAmount: existing.refund?.amount,
           failureMessage: existing.refund?.failureMessage,
-        });
+        };
+        await recordEmail(existing, target, resendExtra);
+        // Push uses the same per-kind config and gets re-fired here so an
+        // admin "Resend" pushes to opted-in devices alongside the email.
+        await recordPush(existing, target, resendExtra);
         notifications[idx] = target;
         orders[orderIdx] = { ...existing, notifications };
         await store.setJSON(ORDERS_KEY, orders);
@@ -1266,12 +1324,26 @@ export const handler = async (event) => {
             recipient: existing.orderInfo?.email || "",
             sentAt: new Date().toISOString(),
           };
-          await recordEmail({ ...existing, shipment: safeShipment }, note, {
+          const shipExtra = {
             shipment: safeShipment,
             trackingUrl: safeShipment.trackingUrl,
             courier: safeShipment.courier,
             trackingNumber: safeShipment.trackingNumber,
-          });
+          };
+          await recordEmail(
+            { ...existing, shipment: safeShipment },
+            note,
+            shipExtra,
+          );
+          // Note.type is "shipped" (legacy), which is not in ORDER_PUSH_KINDS,
+          // so recordPush will skip with reason="unknown kind". The actual
+          // user-facing push for shipping fires via the matching
+          // "out_for_delivery" status update.
+          await recordPush(
+            { ...existing, shipment: safeShipment },
+            note,
+            shipExtra,
+          );
           notifications.push(note);
           activityLog.push({
             at: new Date().toISOString(),
@@ -1869,6 +1941,11 @@ export const handler = async (event) => {
           refundRequestedNote,
           { refundAmount: refundRecord.amount },
         );
+        await recordPush(
+          { ...existing, refund: refundRecord },
+          refundRequestedNote,
+          { refundAmount: refundRecord.amount },
+        );
         notifications.push(refundRequestedNote);
         if (refundRecord.status === "succeeded") {
           const refundDoneNote = {
@@ -1878,6 +1955,11 @@ export const handler = async (event) => {
             sentAt: new Date().toISOString(),
           };
           await recordEmail(
+            { ...existing, refund: refundRecord },
+            refundDoneNote,
+            { refundAmount: refundRecord.amount },
+          );
+          await recordPush(
             { ...existing, refund: refundRecord },
             refundDoneNote,
             { refundAmount: refundRecord.amount },
@@ -1979,6 +2061,9 @@ export const handler = async (event) => {
             await recordEmail({ ...existing, refund: updatedRefund }, note, {
               refundAmount: refund.amount,
             });
+            await recordPush({ ...existing, refund: updatedRefund }, note, {
+              refundAmount: refund.amount,
+            });
             notifications.push(note);
           } else if (newStatus === "failed") {
             updatedRefund.completedAt = new Date().toISOString();
@@ -1991,6 +2076,10 @@ export const handler = async (event) => {
               sentAt: new Date().toISOString(),
             };
             await recordEmail({ ...existing, refund: updatedRefund }, note, {
+              refundAmount: refund.amount,
+              failureMessage: updatedRefund.failureMessage,
+            });
+            await recordPush({ ...existing, refund: updatedRefund }, note, {
               refundAmount: refund.amount,
               failureMessage: updatedRefund.failureMessage,
             });
