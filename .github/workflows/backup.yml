@@ -1,0 +1,130 @@
+name: Nightly KV backup
+
+# Calls the production /api/admin/export-backup endpoint, which streams
+# every key/value in every business KV namespace as NDJSON. The dump is
+# uploaded as a workflow artifact (90-day retention by default —
+# adjustable via repo Actions settings) and, when the optional R2
+# credentials are configured, also pushed to the `canvhub-backups` R2
+# bucket for off-site cold storage.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   - BACKUP_TOKEN     Bearer token. Must equal the BACKUP_TOKEN env
+#                      var set on the canvhub Pages project.
+#
+# Optional repo secrets (skip the R2 step if either is missing):
+#   - CLOUDFLARE_ACCOUNT_ID                already used by deploy.yml
+#   - BACKUP_R2_TOKEN                      Cloudflare API token with
+#                                          "Workers R2 Storage: Edit"
+#                                          on the canvhub-backups bucket.
+#
+# The endpoint requires no admin login — `BACKUP_TOKEN` is a static
+# bearer that is rotatable by changing the value in both Pages env and
+# this repo's Actions secret. See docs/backup-recovery.md.
+
+on:
+  schedule:
+    # 02:00 UTC daily — quiet hours in PHT (10:00 AM PHT).
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you running an ad-hoc backup?"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Set timestamp
+        id: ts
+        run: echo "stamp=$(date -u +'%Y-%m-%dT%H-%M-%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch backup
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+          BACKUP_BASE_URL: ${{ vars.BACKUP_BASE_URL || 'https://canvhub.com' }}
+        run: |
+          if [ -z "$BACKUP_TOKEN" ]; then
+            echo "::error::BACKUP_TOKEN secret is not set."
+            echo "Set it in repo Settings → Secrets and variables → Actions."
+            echo "It must match the BACKUP_TOKEN env on the canvhub Pages project."
+            exit 1
+          fi
+
+          mkdir -p out
+          OUT="out/canvhub-backup-${{ steps.ts.outputs.stamp }}.ndjson"
+
+          # `--fail-with-body` ensures non-2xx responses fail the step but still
+          # leave the body on disk for inspection. `--no-buffer` lets the
+          # curl streaming match the endpoint's streaming output so memory
+          # stays bounded even on a multi-GB dump.
+          http_code=$(curl --silent --show-error --fail-with-body \
+            --no-buffer \
+            --max-time 1500 \
+            --retry 3 --retry-delay 5 \
+            --header "Authorization: Bearer $BACKUP_TOKEN" \
+            --header "Accept: application/x-ndjson" \
+            --output "$OUT" \
+            --write-out "%{http_code}" \
+            "$BACKUP_BASE_URL/api/admin/export-backup" || echo "FAILED")
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Backup endpoint returned HTTP $http_code"
+            head -c 4096 "$OUT" || true
+            exit 1
+          fi
+
+          # Quick sanity check: response must contain at least one
+          # `meta.startedAt` and one `meta.finishedAt` line, otherwise
+          # the dump was truncated mid-stream.
+          if ! grep -q '"startedAt"' "$OUT"; then
+            echo "::error::Backup is missing the startedAt header — likely truncated."
+            exit 1
+          fi
+          if ! grep -q '"finishedAt"' "$OUT"; then
+            echo "::error::Backup is missing the finishedAt footer — likely truncated."
+            exit 1
+          fi
+
+          # Compress to keep the artifact small. NDJSON usually
+          # compresses ~10× because the keys repeat per line.
+          gzip "$OUT"
+
+          ls -lh "$OUT.gz"
+          echo "artifact_path=$OUT.gz" >> "$GITHUB_OUTPUT"
+        id: fetch
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvhub-backup-${{ steps.ts.outputs.stamp }}
+          path: out/*.ndjson.gz
+          # GitHub default is 90 days; we keep that — it gives a
+          # reasonable rolling window for "the order data from 2 weeks
+          # ago" recovery scenarios. Bump or clamp via repo settings.
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Push to R2 (optional)
+        if: env.HAS_R2 == 'true'
+        env:
+          HAS_R2: ${{ (secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.BACKUP_R2_TOKEN != '') && 'true' || 'false' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BACKUP_R2_TOKEN }}
+          # Bucket name can be overridden via a repo variable so a
+          # second environment can dump to a different bucket.
+          BUCKET: ${{ vars.BACKUP_R2_BUCKET || 'canvhub-backups' }}
+        run: |
+          npx --yes wrangler@3 r2 object put \
+            "$BUCKET/$(basename out/*.ndjson.gz)" \
+            --file "$(ls out/*.ndjson.gz | head -n 1)" \
+            --content-type application/gzip

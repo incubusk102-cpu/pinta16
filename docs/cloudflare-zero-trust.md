@@ -255,9 +255,11 @@ log HTTP activity for incident response.
 ## 7. Service tokens for CI/CD or scripts
 
 If you ever want to call a Cloudflare-Access-protected endpoint from a
-script (e.g. a backup job that hits `/admin/api/export.json`), you can
-mint a service token instead of forcing the script to do interactive
-sign-in.
+script, you can mint a service token instead of forcing the script to
+do interactive sign-in. Note that the nightly KV backup endpoint at
+`/api/admin/export-backup` deliberately uses a static `BACKUP_TOKEN`
+bearer instead of admin sessions or Access service tokens — see
+[`docs/backup-recovery.md`](./backup-recovery.md) for the rationale.
 
 1. `Access controls → Service credentials → Create Service Token`.
 2. Name: `Canvhub Backups`. Save.
