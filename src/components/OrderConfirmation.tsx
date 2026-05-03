@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle,
@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
 import DeliveredReviewPrompt from "./DeliveredReviewPrompt";
 import RefundBanner from "./RefundBanner";
-import OrderPushOptInPrompt from "./OrderPushOptInPrompt";
+const OrderPushOptInPrompt = lazy(() => import("./OrderPushOptInPrompt"));
 
 const formatNotificationDate = (iso: string) => {
   const d = new Date(iso);
@@ -377,10 +377,12 @@ const OrderConfirmation = () => {
                     from the order they just placed, so the server can
                     fan out future status changes to this device. */}
                 {lastOrder.orderInfo?.email && (
-                  <OrderPushOptInPrompt
-                    email={lastOrder.orderInfo.email}
-                    variant="card"
-                  />
+                  <Suspense>
+                    <OrderPushOptInPrompt
+                      email={lastOrder.orderInfo.email}
+                      variant="card"
+                    />
+                  </Suspense>
                 )}
 
                 {/* Instructions */}
