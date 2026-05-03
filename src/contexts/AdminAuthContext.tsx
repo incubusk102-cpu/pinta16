@@ -21,16 +21,28 @@ export interface LoginPasswordResult {
   recoveryAvailable: boolean;
 }
 
+export interface LoginGateInfo {
+  initialized: boolean;
+  passkeyCount: number;
+  requirePasskey: boolean;
+}
+
 interface AdminAuthContextValue {
   token: string | null;
   initialized: boolean | null;
   loading: boolean;
+  // Public probe info from GET /api/admin-auth — passkey count +
+  // whether the deploy is in passkey-only mode. Used by the login
+  // screen to decide which buttons / forms to show.
+  gate: LoginGateInfo | null;
+  refreshGate: () => Promise<void>;
   initPassword: (password: string, turnstileToken?: string) => Promise<void>;
   login: (
     password: string,
     turnstileToken?: string,
   ) => Promise<LoginPasswordResult>;
   loginWith2fa: (challengeToken: string, code: string) => Promise<void>;
+  loginWithPasskey: () => Promise<void>;
   logout: () => void;
   changePassword: (
     currentPassword: string,
@@ -77,18 +89,44 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gate, setGate] = useState<LoginGateInfo | null>(null);
+
+  const fetchGate = useCallback(async () => {
+    const response = await fetch(AUTH_API);
+    if (!response.ok) throw new Error("status check failed");
+    const data = (await response.json()) as {
+      initialized?: boolean;
+      passkeyCount?: number;
+      requirePasskey?: boolean;
+    };
+    const next: LoginGateInfo = {
+      initialized: Boolean(data.initialized),
+      passkeyCount: Number(data.passkeyCount ?? 0),
+      requirePasskey: Boolean(data.requirePasskey),
+    };
+    setInitialized(next.initialized);
+    setGate(next);
+  }, []);
+
+  const refreshGate = useCallback(async () => {
+    try {
+      await fetchGate();
+    } catch {
+      // Swallow — the form will show a banner.
+    }
+  }, [fetchGate]);
 
   useEffect(() => {
     let cancelled = false;
     const checkInitialized = async () => {
       try {
-        const response = await fetch(AUTH_API);
-        if (!response.ok) throw new Error("status check failed");
-        const data = await response.json();
+        await fetchGate();
         if (cancelled) return;
-        setInitialized(Boolean(data.initialized));
       } catch {
-        if (!cancelled) setInitialized(null);
+        if (!cancelled) {
+          setInitialized(null);
+          setGate(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -97,7 +135,7 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fetchGate]);
 
   const setAuthToken = useCallback((next: string | null) => {
     setToken(next);
@@ -184,6 +222,42 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
     [setAuthToken],
   );
 
+  const loginWithPasskey = useCallback(async () => {
+    // Lazy-load the browser helper so the SPA doesn't ship the
+    // WebAuthn polyfill until someone actually clicks the button.
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+    const beginRes = await fetch(AUTH_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "passkey-login-begin" }),
+    });
+    if (!beginRes.ok) {
+      throw new Error(await parseError(beginRes, "Passkey login failed"));
+    }
+    const beginData = (await beginRes.json()) as {
+      options: Parameters<typeof startAuthentication>[0]["optionsJSON"];
+      challengeId: string;
+    };
+    const assertion = await startAuthentication({
+      optionsJSON: beginData.options,
+    });
+    const finishRes = await fetch(AUTH_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "passkey-login-finish",
+        challengeId: beginData.challengeId,
+        response: assertion,
+      }),
+    });
+    if (!finishRes.ok) {
+      throw new Error(await parseError(finishRes, "Passkey rejected"));
+    }
+    const finishData = (await finishRes.json()) as { token?: string };
+    setAuthToken(finishData.token ?? null);
+    setInitialized(true);
+  }, [setAuthToken]);
+
   const logout = useCallback(() => {
     setAuthToken(null);
   }, [setAuthToken]);
@@ -232,9 +306,12 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
       token,
       initialized,
       loading,
+      gate,
+      refreshGate,
       initPassword,
       login,
       loginWith2fa,
+      loginWithPasskey,
       logout,
       changePassword,
     }),
@@ -242,9 +319,12 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
       token,
       initialized,
       loading,
+      gate,
+      refreshGate,
       initPassword,
       login,
       loginWith2fa,
+      loginWithPasskey,
       logout,
       changePassword,
     ],
