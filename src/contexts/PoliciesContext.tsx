@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { DEFAULT_POLICY_BODIES } from "@/data/defaultPolicies";
 
 export const POLICY_SLUGS = ["terms", "refund", "shipping", "privacy"] as const;
 export type PolicySlug = (typeof POLICY_SLUGS)[number];
@@ -25,10 +26,20 @@ const DEFAULT_TITLES: Record<PolicySlug, string> = {
   privacy: "Privacy Policy",
 };
 
+// Falls back to the bundled draft bodies in src/data/defaultPolicies.ts
+// so the public /policy/$slug pages are never blank when the POLICIES
+// KV namespace has no entry for a slug. Admin-saved bodies (delivered
+// by /api/policies and merged in mergeFromResponse) always win — the
+// defaults only render until the merchant edits the slug in
+// /admin → Policies for the first time.
 const buildDefaults = (): PoliciesMap => {
   const out = {} as PoliciesMap;
   for (const slug of POLICY_SLUGS) {
-    out[slug] = { title: DEFAULT_TITLES[slug], body: "", updatedAt: null };
+    out[slug] = {
+      title: DEFAULT_TITLES[slug],
+      body: DEFAULT_POLICY_BODIES[slug],
+      updatedAt: null,
+    };
   }
   return out;
 };
@@ -50,12 +61,17 @@ const mergeFromResponse = (raw: unknown): PoliciesMap | null => {
   for (const slug of POLICY_SLUGS) {
     const entry = incoming[slug];
     if (entry) {
+      // Admin-saved values win, but a missing or empty body falls back
+      // to the bundled draft so the public page never renders blank.
+      const incomingBody =
+        typeof entry.body === "string" ? entry.body.trim() : "";
       merged[slug] = {
         title:
           typeof entry.title === "string" && entry.title
             ? entry.title
             : DEFAULT_TITLES[slug],
-        body: typeof entry.body === "string" ? entry.body : "",
+        body:
+          incomingBody.length > 0 ? entry.body! : DEFAULT_POLICY_BODIES[slug],
         updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null,
       };
     }
