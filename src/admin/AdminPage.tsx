@@ -214,12 +214,27 @@ function AdminPage() {
 }
 
 function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
-  const { initPassword, login } = useAdminAuth();
+  const { initPassword, login, loginWith2fa } = useAdminAuth();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // 2FA stage: when the password POST returns `requires2fa: true`, we
+  // swap the form into a TOTP-code prompt and remember the challenge
+  // token issued by the server.
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   const isInitMode = initialized === false;
+  const isTwoFactorStage = Boolean(challengeToken);
+
+  const resetToPasswordStage = useCallback(() => {
+    setChallengeToken(null);
+    setRecoveryAvailable(false);
+    setTwoFactorCode("");
+    setRecoveryMode(false);
+  }, []);
 
   const handleToken = useCallback((token: string) => {
     setTurnstileToken(token);
@@ -229,6 +244,36 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+
+    if (isTwoFactorStage) {
+      const trimmed = twoFactorCode.trim();
+      if (!trimmed) {
+        return toast.error(
+          recoveryMode ? "Enter a recovery code" : "Enter the 6-digit code",
+        );
+      }
+      setSubmitting(true);
+      try {
+        await loginWith2fa(challengeToken!, trimmed);
+        toast.success("Welcome back");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Authentication failed",
+        );
+        if (
+          error instanceof Error &&
+          /session expired|please log in again/i.test(error.message)
+        ) {
+          // Challenge token expired → bounce back to the password form.
+          resetToPasswordStage();
+          setPassword("");
+          setTurnstileToken(null);
+        }
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
 
     if (isInitMode) {
       if (password.length < MIN_PASSWORD_LENGTH) {
@@ -244,8 +289,15 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
         await initPassword(password, turnstileToken || undefined);
         toast.success("Admin password set");
       } else {
-        await login(password, turnstileToken || undefined);
-        toast.success("Welcome back");
+        const result = await login(password, turnstileToken || undefined);
+        if (result.requires2fa && result.challengeToken) {
+          setChallengeToken(result.challengeToken);
+          setRecoveryAvailable(result.recoveryAvailable);
+          setPassword("");
+          setTurnstileToken(null);
+        } else {
+          toast.success("Welcome back");
+        }
       }
     } catch (error) {
       toast.error(
@@ -268,27 +320,71 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
             <h1 className="font-logo text-2xl">Canvas Hub</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            {isInitMode
-              ? "First time setup — choose a password to protect this admin."
-              : initialized === null
-                ? "Could not reach the auth service. Check your connection."
-                : "Enter the admin password to manage your collection."}
+            {isTwoFactorStage
+              ? recoveryMode
+                ? "Enter one of your recovery codes to continue."
+                : "Enter the 6-digit code from your authenticator app."
+              : isInitMode
+                ? "First time setup — choose a password to protect this admin."
+                : initialized === null
+                  ? "Could not reach the auth service. Check your connection."
+                  : "Enter the admin password to manage your collection."}
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete={isInitMode ? "new-password" : "current-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              disabled={initialized === null}
-            />
-          </div>
-          {isTurnstileEnabled() && (
+          {isTwoFactorStage ? (
+            <div>
+              <Label htmlFor="totp-code">
+                {recoveryMode ? "Recovery code" : "Authenticator code"}
+              </Label>
+              <Input
+                id="totp-code"
+                type="text"
+                inputMode={recoveryMode ? "text" : "numeric"}
+                autoComplete="one-time-code"
+                pattern={recoveryMode ? undefined : "[0-9]*"}
+                maxLength={recoveryMode ? 16 : 6}
+                value={twoFactorCode}
+                onChange={(e) =>
+                  setTwoFactorCode(
+                    recoveryMode
+                      ? e.target.value.toUpperCase().slice(0, 16)
+                      : e.target.value.replace(/\D/g, "").slice(0, 6),
+                  )
+                }
+                autoFocus
+                placeholder={recoveryMode ? "XXXXX-XXXXX" : "123 456"}
+              />
+              {recoveryAvailable && (
+                <button
+                  type="button"
+                  className="mt-2 text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setRecoveryMode((v) => !v);
+                    setTwoFactorCode("");
+                  }}
+                >
+                  {recoveryMode
+                    ? "Use authenticator app instead"
+                    : "Lost your authenticator? Use a recovery code"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete={isInitMode ? "new-password" : "current-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+                disabled={initialized === null}
+              />
+            </div>
+          )}
+          {!isTwoFactorStage && isTurnstileEnabled() && (
             <div className="flex justify-center">
               <Turnstile
                 action={isInitMode ? "admin-init" : "admin-login"}
@@ -305,10 +401,24 @@ function AdminAuthGate({ initialized }: { initialized: boolean | null }) {
           >
             {submitting
               ? "Working..."
-              : isInitMode
-                ? "Set password"
-                : "Sign in"}
+              : isTwoFactorStage
+                ? "Verify"
+                : isInitMode
+                  ? "Set password"
+                  : "Sign in"}
           </Button>
+          {isTwoFactorStage && (
+            <button
+              type="button"
+              className="w-full text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                resetToPasswordStage();
+                setPassword("");
+              }}
+            >
+              ← Use a different password
+            </button>
+          )}
         </form>
         <div className="text-center">
           <Link

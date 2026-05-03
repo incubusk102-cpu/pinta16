@@ -65,11 +65,20 @@ const baseBucket = (bucket) =>
     .split(":")[0]
     .trim();
 
+// Country allow-list for the admin login. Empty array = allow all (the
+// pre-2FA behaviour). When populated, admin-login from a request whose
+// `cf-ipcountry` is not in the list is rejected with the same generic
+// error as a wrong password — never disclose the allow-list.
+export const DEFAULT_ADMIN_COUNTRY_ALLOWLIST = [];
+
 export const defaults = () => ({
   rateLimits: { ...DEFAULT_RATE_LIMITS },
   turnstileMode: DEFAULT_TURNSTILE_MODE,
   maxBodyBytes: DEFAULT_BODY_BYTES,
   ipBlockList: [],
+  adminCountryAllowlist: [...DEFAULT_ADMIN_COUNTRY_ALLOWLIST],
+  loginAlertEnabled: true,
+  loginAlertEmail: "",
   updatedAt: null,
 });
 
@@ -102,6 +111,34 @@ const sanitizeRateLimits = (input) => {
     out[bucket] = { windowMs, max };
   }
   return out;
+};
+
+const sanitizeCountryList = (input) => {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of input) {
+    const cc = String(raw || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z]{2}$/.test(cc)) continue;
+    if (seen.has(cc)) continue;
+    seen.add(cc);
+    out.push(cc);
+    if (out.length >= 50) break;
+  }
+  return out;
+};
+
+const sanitizeEmail = (input) => {
+  const v = String(input || "")
+    .trim()
+    .slice(0, 254);
+  // Permissive-but-not-stupid: must contain `@` and a `.` after it. Full
+  // RFC 5322 validation isn't worth the bytes.
+  if (!v) return "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "";
+  return v;
 };
 
 const sanitizeIpList = (input) => {
@@ -140,6 +177,12 @@ export const sanitizeConfig = (input) => {
     turnstileMode,
     maxBodyBytes,
     ipBlockList: sanitizeIpList(cfg.ipBlockList),
+    adminCountryAllowlist: sanitizeCountryList(cfg.adminCountryAllowlist),
+    loginAlertEnabled:
+      cfg.loginAlertEnabled === undefined
+        ? true
+        : Boolean(cfg.loginAlertEnabled),
+    loginAlertEmail: sanitizeEmail(cfg.loginAlertEmail),
     updatedAt:
       typeof cfg.updatedAt === "string" ? cfg.updatedAt.slice(0, 40) : null,
   };

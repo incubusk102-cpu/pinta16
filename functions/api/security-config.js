@@ -92,7 +92,7 @@ export const handler = async (event) => {
         type: "security.config",
         outcome: "updated",
         subject: "admin",
-        detail: `Turnstile=${saved.turnstileMode}; cap=${saved.maxBodyBytes}; IPs=${saved.ipBlockList.length}; rateOverrides=${Object.keys(saved.rateLimits).length}`,
+        detail: `Turnstile=${saved.turnstileMode}; cap=${saved.maxBodyBytes}; IPs=${saved.ipBlockList.length}; rateOverrides=${Object.keys(saved.rateLimits).length}; countries=${saved.adminCountryAllowlist.length}; alert=${saved.loginAlertEnabled ? "on" : "off"}`,
         ...meta,
       });
       return json(200, { config: saved });

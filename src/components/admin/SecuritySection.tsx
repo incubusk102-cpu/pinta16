@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThreatDashboard } from "./ThreatDashboard";
+import { Admin2FASection } from "./Admin2FASection";
 import {
+  Globe,
   Loader2,
+  Mail,
   RefreshCw,
   Save,
   ShieldAlert,
@@ -46,6 +49,9 @@ interface SecurityConfig {
   turnstileMode: "off" | "soft" | "hard";
   maxBodyBytes: number;
   ipBlockList: string[];
+  adminCountryAllowlist: string[];
+  loginAlertEnabled: boolean;
+  loginAlertEmail: string;
   updatedAt: string | null;
 }
 
@@ -149,6 +155,9 @@ export function SecuritySection() {
   const [savingRateLimits, setSavingRateLimits] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [ipText, setIpText] = useState<string>("");
+  const [countryText, setCountryText] = useState<string>("");
+  const [savingCountries, setSavingCountries] = useState(false);
+  const [savingAlert, setSavingAlert] = useState(false);
 
   const refreshAudit = async () => {
     setLoadingAudit(true);
@@ -180,6 +189,7 @@ export function SecuritySection() {
       setServerConfig(data.config);
       setDraft(data.config);
       setIpText(data.config.ipBlockList.join("\n"));
+      setCountryText((data.config.adminCountryAllowlist ?? []).join(", "));
       const { config: _config, ...rest } = data;
       void _config;
       setMeta(rest);
@@ -242,6 +252,7 @@ export function SecuritySection() {
       setServerConfig(data.config);
       setDraft(data.config);
       setIpText(data.config.ipBlockList.join("\n"));
+      setCountryText((data.config.adminCountryAllowlist ?? []).join(", "));
       toast.success(successMessage);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
@@ -298,6 +309,29 @@ export function SecuritySection() {
     }
     return false;
   }, [ipText, serverConfig]);
+  const parsedCountries = useMemo(
+    () =>
+      countryText
+        .split(/[\s,]+/)
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => /^[A-Z]{2}$/.test(s)),
+    [countryText],
+  );
+  const countriesChanged = useMemo(() => {
+    if (!serverConfig) return false;
+    const cur = serverConfig.adminCountryAllowlist ?? [];
+    if (cur.length !== parsedCountries.length) return true;
+    for (let i = 0; i < cur.length; i++) {
+      if (cur[i] !== parsedCountries[i]) return true;
+    }
+    return false;
+  }, [serverConfig, parsedCountries]);
+  const alertChanged =
+    serverConfig &&
+    draft &&
+    (serverConfig.loginAlertEnabled !== draft.loginAlertEnabled ||
+      serverConfig.loginAlertEmail !== draft.loginAlertEmail);
+
   const rateLimitsChanged = useMemo(() => {
     if (!serverConfig || !draft) return false;
     const a = serverConfig.rateLimits;
@@ -367,6 +401,152 @@ export function SecuritySection() {
           paste the id into <code>wrangler.toml</code>, then redeploy.
         </div>
       )}
+
+      <Admin2FASection />
+
+      <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
+        <header className="p-3 border-b border-border/60 bg-muted/20 flex items-center gap-2">
+          <Globe className="w-4 h-4 text-muted-foreground" />
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Country allow-list (admin login)
+          </span>
+        </header>
+        <div className="p-4 space-y-3 max-w-xl">
+          <p className="text-sm text-muted-foreground">
+            Restrict admin login to specific countries. Two-letter ISO codes
+            (e.g. <code>PH</code>, <code>US</code>), comma- or space-separated.
+            Logins from outside the list are rejected with the same generic
+            error as a wrong password and recorded as a{" "}
+            <code>country-blocked</code> event. Leave empty to allow any
+            country.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Country comes from Cloudflare&apos;s <code>cf-ipcountry</code>{" "}
+            header. If you travel, add the country before you leave or you will
+            lock yourself out.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="country-allowlist" className="text-xs">
+              Allowed countries
+            </Label>
+            <Input
+              id="country-allowlist"
+              value={countryText}
+              onChange={(e) => setCountryText(e.target.value.toUpperCase())}
+              placeholder="PH"
+              className="font-mono"
+            />
+            <div className="text-xs text-muted-foreground">
+              {parsedCountries.length === 0
+                ? "All countries allowed (default)."
+                : `${parsedCountries.length} countr${
+                    parsedCountries.length === 1 ? "y" : "ies"
+                  } allowed: ${parsedCountries.join(", ")}`}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={() =>
+                saveSection(
+                  { adminCountryAllowlist: parsedCountries },
+                  setSavingCountries,
+                  parsedCountries.length === 0
+                    ? "Country allow-list cleared"
+                    : `Allow-list: ${parsedCountries.join(", ")}`,
+                )
+              }
+              disabled={!countriesChanged || savingCountries}
+            >
+              {savingCountries ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span className="ml-2">Save allow-list</span>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
+        <header className="p-3 border-b border-border/60 bg-muted/20 flex items-center gap-2">
+          <Mail className="w-4 h-4 text-muted-foreground" />
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Login email alert
+          </span>
+        </header>
+        <div className="p-4 space-y-3 max-w-xl">
+          <p className="text-sm text-muted-foreground">
+            Send an email every time someone successfully logs into{" "}
+            <code>/admin</code>. Acts as a tripwire: if you ever get an email
+            about a login you didn&apos;t make, rotate the password immediately.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              id="login-alert-enabled"
+              type="checkbox"
+              className="w-4 h-4 accent-current"
+              checked={Boolean(draft?.loginAlertEnabled)}
+              onChange={(e) =>
+                setDraft((prev) =>
+                  prev
+                    ? { ...prev, loginAlertEnabled: e.target.checked }
+                    : prev,
+                )
+              }
+            />
+            <Label htmlFor="login-alert-enabled" className="text-sm">
+              Send an email on every successful admin login
+            </Label>
+          </div>
+          <div>
+            <Label htmlFor="login-alert-email" className="text-xs">
+              Recipient (optional)
+            </Label>
+            <Input
+              id="login-alert-email"
+              type="email"
+              value={draft?.loginAlertEmail ?? ""}
+              onChange={(e) =>
+                setDraft((prev) =>
+                  prev ? { ...prev, loginAlertEmail: e.target.value } : prev,
+                )
+              }
+              placeholder="you@example.com"
+              disabled={!draft?.loginAlertEnabled}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Falls back to the <code>EMAIL_ADMIN_RECIPIENT</code> /{" "}
+              <code>EMAIL_BCC</code> env vars if blank.
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={() =>
+                draft &&
+                saveSection(
+                  {
+                    loginAlertEnabled: draft.loginAlertEnabled,
+                    loginAlertEmail: draft.loginAlertEmail,
+                  },
+                  setSavingAlert,
+                  draft.loginAlertEnabled
+                    ? "Login alerts on"
+                    : "Login alerts off",
+                )
+              }
+              disabled={!alertChanged || savingAlert}
+            >
+              {savingAlert ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span className="ml-2">Save</span>
+            </Button>
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
         <header className="p-3 border-b border-border/60 bg-muted/20 flex items-center gap-2">
