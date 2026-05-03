@@ -15,6 +15,7 @@ import {
   ORDER_EMAIL_KINDS,
   DEFAULT_ORDER_EMAIL_KINDS,
 } from "./_lib/email.js";
+import { DEFAULT_ORDER_PUSH, sanitizeOrderPush } from "./_lib/push.js";
 import { isValidEmail, normalizeEmail } from "./_lib/user-auth.js";
 
 const CONFIG_KEY = "config";
@@ -927,6 +928,10 @@ const DEFAULT_CONFIG = {
   siteCopy: SITE_COPY_DEFAULTS,
   welcomeEmail: DEFAULT_WELCOME_EMAIL,
   orderEmail: DEFAULT_ORDER_EMAIL,
+  // Free Web Push channel that fires alongside email on every status
+  // change. Settings live alongside orderEmail so admins can manage all
+  // notification channels in one place.
+  orderPush: DEFAULT_ORDER_PUSH,
   newUserModal: DEFAULT_NEW_USER_MODAL,
 };
 
@@ -1193,6 +1198,7 @@ const sanitizeConfig = (raw) => {
     siteCopy: sanitizeSiteCopy(data.siteCopy),
     welcomeEmail: sanitizeWelcomeEmail(data.welcomeEmail),
     orderEmail: sanitizeOrderEmail(data.orderEmail),
+    orderPush: sanitizeOrderPush(data.orderPush),
     promoCodes: promoCodes
       .map((p) => {
         if (!p || typeof p !== "object") return null;
@@ -1535,6 +1541,34 @@ const handle = async ({ request, env }) => {
           ...existing,
           orderEmail: {
             ...existing.orderEmail,
+            ...incoming,
+            kinds: mergedKinds,
+          },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-order-push") {
+        const incoming =
+          body.orderPush && typeof body.orderPush === "object"
+            ? body.orderPush
+            : {};
+        // Deep-merge kinds so a partial update (e.g. just the
+        // "out_for_delivery" body) doesn't reset the other six kinds.
+        const mergedKinds = { ...(existing.orderPush?.kinds || {}) };
+        if (incoming.kinds && typeof incoming.kinds === "object") {
+          for (const [k, v] of Object.entries(incoming.kinds)) {
+            mergedKinds[k] = {
+              ...(existing.orderPush?.kinds?.[k] || {}),
+              ...(v && typeof v === "object" ? v : {}),
+            };
+          }
+        }
+        const next = sanitizeConfig({
+          ...existing,
+          orderPush: {
+            ...existing.orderPush,
             ...incoming,
             kinds: mergedKinds,
           },

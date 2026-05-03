@@ -56,6 +56,7 @@ import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
 import { SiteCopySection } from "@/components/admin/SiteCopySection";
 import { WelcomeEmailSection } from "@/components/admin/WelcomeEmailSection";
 import { OrderEmailSection } from "@/components/admin/OrderEmailSection";
+import { OrderPushSection } from "@/components/admin/OrderPushSection";
 import { NewUserModalSection } from "@/components/admin/NewUserModalSection";
 import { AppreciationSection } from "@/components/admin/AppreciationSection";
 import { SecuritySection } from "@/components/admin/SecuritySection";
@@ -128,6 +129,7 @@ type AdminSection =
   | "siteCopy"
   | "welcomeEmail"
   | "orderEmail"
+  | "orderPush"
   | "newUserModal"
   | "appreciation"
   | "policies"
@@ -150,6 +152,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   siteCopy: "Site copy",
   welcomeEmail: "Welcome email",
   orderEmail: "Order email",
+  orderPush: "Order push",
   newUserModal: "New-user modal",
   appreciation: "Appreciation",
   policies: "Policies",
@@ -384,6 +387,11 @@ const NAV_GROUPS: {
       { key: "siteCopy", icon: <Type className="w-4 h-4" /> },
       { key: "welcomeEmail", icon: <Mail className="w-4 h-4" /> },
       { key: "orderEmail", icon: <Package className="w-4 h-4" /> },
+      {
+        key: "orderPush",
+        icon: <Bell className="w-4 h-4" />,
+        hint: "Free Web Push for status changes",
+      },
       {
         key: "newUserModal",
         icon: <Users className="w-4 h-4" />,
@@ -802,6 +810,7 @@ function AdminDashboard() {
           {section === "siteCopy" && <SiteCopySection />}
           {section === "welcomeEmail" && <WelcomeEmailSection />}
           {section === "orderEmail" && <OrderEmailSection />}
+          {section === "orderPush" && <OrderPushSection />}
           {section === "newUserModal" && <NewUserModalSection />}
           {section === "appreciation" && <AppreciationSection />}
           {section === "policies" && <PoliciesSection />}

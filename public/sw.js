@@ -9,7 +9,7 @@
  *  - All other requests: pass through.
  */
 
-const VERSION = "v4";
+const VERSION = "v5";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
@@ -95,6 +95,124 @@ self.addEventListener("message", (event) => {
   if (event.data === "skipWaiting" || event.data?.type === "skipWaiting") {
     self.skipWaiting();
   }
+});
+
+// --- Web Push handlers ---------------------------------------------------
+// Order-status notifications fan out from /api/push/* to every device that
+// opted in for the customer's email. The push payload is the JSON the
+// server built in functions/api/_lib/push.js (buildPushPayload):
+//   { title, body, icon, badge, tag, url, kind, orderId }
+// We deliberately fall back to a generic Canvas Hub notification if the
+// payload can't be decoded so the user still sees *something* rather than
+// a silent miss (which Chrome will warn about loudly via "site sent push
+// without showing a notification").
+
+const FALLBACK_NOTIFICATION = {
+  title: "Canvas Hub",
+  body: "You have a new order update.",
+  icon: "/icon-192.png",
+  badge: "/icon-192.png",
+  url: "/account",
+};
+
+self.addEventListener("push", (event) => {
+  let data = null;
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      try {
+        data = { body: event.data.text() };
+      } catch {
+        data = null;
+      }
+    }
+  }
+  const payload = data || FALLBACK_NOTIFICATION;
+  const title = String(payload.title || FALLBACK_NOTIFICATION.title).slice(
+    0,
+    120,
+  );
+  const options = {
+    body: String(payload.body || FALLBACK_NOTIFICATION.body).slice(0, 400),
+    icon: payload.icon || FALLBACK_NOTIFICATION.icon,
+    badge: payload.badge || FALLBACK_NOTIFICATION.badge,
+    tag: payload.tag || undefined,
+    data: {
+      url: payload.url || FALLBACK_NOTIFICATION.url,
+      kind: payload.kind || "",
+      orderId: payload.orderId || "",
+    },
+    requireInteraction: false,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  const target =
+    (event.notification.data && event.notification.data.url) || "/account";
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Reuse an existing tab on the same origin if possible; otherwise
+      // open a new one.
+      for (const client of all) {
+        try {
+          const url = new URL(client.url);
+          if (url.origin === self.location.origin) {
+            await client.focus();
+            if ("navigate" in client) {
+              try {
+                await client.navigate(target);
+              } catch {
+                /* same-origin navigation may fail in some browsers */
+              }
+            }
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  // The push subscription was rotated by the user agent (key rotation,
+  // GCM->FCM migration, etc.). We can't reconstruct the user's email here,
+  // so we just resubscribe with the same applicationServerKey and post the
+  // new subscription back through any open client; the client is responsible
+  // for re-registering it under the right email.
+  event.waitUntil(
+    (async () => {
+      try {
+        const oldSub = event.oldSubscription;
+        const opts = oldSub?.options || {};
+        const newSub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: opts.applicationServerKey,
+        });
+        const all = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        for (const client of all) {
+          client.postMessage({
+            type: "pushsubscriptionchange",
+            subscription: newSub.toJSON(),
+          });
+        }
+      } catch {
+        /* ignore — best-effort */
+      }
+    })(),
+  );
 });
 
 const isApiRequest = (url) => url.pathname.startsWith("/api/");

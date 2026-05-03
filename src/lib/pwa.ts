@@ -95,6 +95,20 @@ export const registerPwa = () => {
   if (!("serviceWorker" in navigator)) return;
   if (import.meta.env.DEV) return;
 
+  // Wire up the rotation listener so the SW can hand back rotated push
+  // subscriptions and we re-register them under the same email. Safe to
+  // call before the SW finishes registering; addEventListener attaches to
+  // navigator.serviceWorker which exists immediately.
+  void import("@/lib/orderPush").then(
+    ({ handlePushSubscriptionChangeMessages }) => {
+      try {
+        handlePushSubscriptionChangeMessages();
+      } catch {
+        /* ignore — push isn't critical to PWA registration */
+      }
+    },
+  );
+
   const start = () => {
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
