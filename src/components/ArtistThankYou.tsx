@@ -42,11 +42,11 @@ const ArtistThankYou = () => {
     if (!config.thankYou.assetUrl) return;
     if (!lastOrder) return;
     if (wasSeen()) return;
-    // Only fire on the visitor's *first* paid order — guard with the
-    // local orders array. Cancelled orders never count as paid.
-    if (lastOrder.status === "cancelled") return;
-    const paidCount = orders.filter((o) => o.status !== "cancelled").length;
-    if (paidCount !== 1) return;
+    // Only fire on the visitor's *first* paid order. Cancelled orders
+    // are never inserted into the local orders array (the
+    // CompletedOrder.status union excludes them), so the array length
+    // is the paid-order count.
+    if (orders.length !== 1) return;
     setOpen(true);
     markSeen();
   }, [
