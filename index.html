@@ -57,36 +57,54 @@
       href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap"
     />
 
-    <style>
-      /* Initial splash screen — gold italic C on dark background, with a
-         thin gold spinner ring orbiting around the mark.
-         Inlined here so it paints before any CSS or JS download. */
-      #splash {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #181613;
-        transition: opacity 600ms ease 100ms;
+    <!-- Splash screen styles. Loaded as an external sheet so the
+         document's CSP can drop `'unsafe-inline'` from `style-src`
+         in a follow-up without behaviour changes. -->
+    <link rel="stylesheet" href="/splash.css" />
+
+    <!-- Structured data for Google. `<script type="application/ld+json">`
+         is treated as data, not script, by browsers, so it is not
+         subject to `script-src` CSP enforcement. Two top-level entities:
+           - Organization: who runs the site, contact, country.
+           - WebSite:      site search box on Google SERPs.
+         Per-page schema (Product, BreadcrumbList) is emitted by the
+         relevant route components. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://canvhub.com/#organization",
+            "name": "Canvas Hub",
+            "url": "https://canvhub.com/",
+            "logo": "https://canvhub.com/icon-512.png",
+            "image": "https://canvhub.com/icon-512.png",
+            "description": "Hand-crafted paintings and original art shipped from the Philippines, made to order.",
+            "email": "support@canvhub.com",
+            "areaServed": "PH",
+            "address": {
+              "@type": "PostalAddress",
+              "addressCountry": "PH"
+            },
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "contactType": "customer support",
+              "email": "support@canvhub.com",
+              "availableLanguage": ["English", "Filipino"]
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://canvhub.com/#website",
+            "url": "https://canvhub.com/",
+            "name": "Canvas Hub",
+            "publisher": { "@id": "https://canvhub.com/#organization" },
+            "inLanguage": "en"
+          }
+        ]
       }
-      #splash.splash-hide {
-        opacity: 0;
-        pointer-events: none;
-      }
-      #splash svg {
-        width: 128px;
-        height: 128px;
-        will-change: transform, opacity;
-      }
-      @media (min-width: 640px) {
-        #splash svg { width: 160px; height: 160px; }
-      }
-      /* Rotation is driven by an SVG <animateTransform> below for maximum
-         cross-browser/mobile compatibility (CSS transform-box: fill-box is
-         flaky on Android Chrome/Brave for SVG groups). */
-    </style>
+    </script>
   </head>
   <body>
     <div id="splash" role="status" aria-label="Loading Canvas Hub">
@@ -119,38 +137,13 @@
         </g>
       </svg>
     </div>
-    <script>
-      // Mark splash start time + safety net: hide splash after 8s no matter what,
-      // in case main.tsx fails to load.
-      window.__splashStart = performance.now();
-      setTimeout(function () {
-        var s = document.getElementById("splash");
-        if (s && !s.classList.contains("splash-hide")) {
-          s.classList.add("splash-hide");
-          setTimeout(function () { s.remove(); }, 700);
-        }
-      }, 8000);
-
-      // Respect prefers-reduced-motion: SMIL <animateTransform> ignores CSS
-      // media queries, so remove it directly when the user prefers reduced
-      // motion. Falls back to a static gold C in the same final orientation.
-      try {
-        if (
-          window.matchMedia &&
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ) {
-          var splashEl = document.getElementById("splash");
-          if (splashEl) {
-            var anims = splashEl.getElementsByTagName("animateTransform");
-            for (var i = anims.length - 1; i >= 0; i--) {
-              anims[i].parentNode && anims[i].parentNode.removeChild(anims[i]);
-            }
-          }
-        }
-      } catch (e) {
-        /* ignore */
-      }
-    </script>
+    <!-- Splash safety-net + reduced-motion handling. Extracted from
+         a previous inline <script> so the document's CSP can drop
+         `'unsafe-inline'` from `script-src` in a follow-up without
+         behaviour changes. Classic script (no defer/async) so it
+         runs synchronously while the parser is still emitting the
+         body — same timing as the previous inline block. -->
+    <script src="/splash.js"></script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

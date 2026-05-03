@@ -227,6 +227,28 @@ const renderMarkdown = (md: string) => {
   return out;
 };
 
+// BreadcrumbList JSON-LD helper. Embedded as a `<script type="application/ld+json">`
+// data block, which is not subject to CSP `script-src` enforcement.
+const breadcrumbJsonLd = (slug: PolicySlug, title: string) =>
+  JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: "https://canvhub.com/",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: title,
+        item: `https://canvhub.com/policy/${slug}`,
+      },
+    ],
+  });
+
 function PolicyPage() {
   const { slug } = Route.useParams();
   const { policies, loading } = usePolicies();
@@ -261,6 +283,15 @@ function PolicyPage() {
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16">
+      <script
+        type="application/ld+json"
+        // BreadcrumbList tells Google the page sits one click from
+        // the home page, which surfaces a breadcrumb trail in
+        // search results instead of the raw URL slug.
+        dangerouslySetInnerHTML={{
+          __html: breadcrumbJsonLd(slug, policy?.title || slug),
+        }}
+      />
       <GalleryNav />
       <article className="max-w-3xl mx-auto px-4 sm:px-6 md:px-12 mt-8">
         <Link
