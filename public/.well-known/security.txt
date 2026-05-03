@@ -1,0 +1,8 @@
+# Canvas Hub — security contact (RFC 9116).
+# Full policy: https://github.com/incubusk102-cpu/pinta16/blob/main/SECURITY.md
+
+Contact: mailto:chaomen1998@gmail.com
+Expires: 2027-04-30T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://canvhub.com/.well-known/security.txt
+Policy: https://github.com/incubusk102-cpu/pinta16/blob/main/SECURITY.md

@@ -129,6 +129,22 @@ const handle = async ({ request, env }) => {
 
       const now = Date.now();
       const heartbeats = await readHeartbeats(store);
+
+      // Per-session heartbeat de-dupe. The legitimate client cadence is
+      // 4 min (see useVisitorHeartbeat.ts) so a single session id pinging
+      // more than once every 30 s is either a stuck retry loop or a
+      // scripted attempt to inflate the live counter. Returning the
+      // current live count without writing back to KV avoids burning a
+      // KV write per spam ping while still keeping the response shape
+      // identical for legitimate clients.
+      const lastSeen = heartbeats[sessionId];
+      if (lastSeen && now - lastSeen < 30_000) {
+        const liveNow = Object.values(heartbeats).filter(
+          (ts) => now - ts <= LIVE_WINDOW_MS,
+        ).length;
+        return json(200, { live: liveNow });
+      }
+
       heartbeats[sessionId] = now;
 
       for (const [id, ts] of Object.entries(heartbeats)) {

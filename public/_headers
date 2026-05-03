@@ -8,8 +8,14 @@
   Cross-Origin-Resource-Policy: same-site
   X-Robots-Tag: index, follow
   X-Permitted-Cross-Domain-Policies: none
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://api.paymongo.com https://oauth2.googleapis.com https://accounts.google.com https://challenges.cloudflare.com https://cloudflareinsights.com https://api.maptiler.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src https://accounts.google.com https://content.google.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
 
-# CSP only on HTML so static assets stay flexible.
+# CSP rationale (kept on the global `/*` rule above so it applies to every
+# SPA route — `/`, `/product/<id>`, `/admin`, etc. The previous `/*.html`
+# selector only matched explicit .html requests, which Cloudflare Pages
+# never produces for the SPA: every navigation hits `/foo` and is rewritten
+# to `index.html` server-side, so the CSP header was effectively never sent
+# to browsers.):
 #
 # `script-src` no longer allows `'unsafe-inline'` — splash logic was
 # extracted to `/splash.js` (see #231) and the only remaining inline
@@ -24,6 +30,10 @@
 # custom properties. Removing it would require migrating every
 # component that uses inline styles, which is out of scope here.
 #
+# `worker-src 'self' blob:` is required by maplibre-gl, which spawns
+# its tile-decoder worker from a blob URL. Without this directive the
+# hybrid address picker (PR #163) silently fails to render the map.
+#
 # Allowlists:
 #   script-src   accounts.google.com, apis.google.com, www.gstatic.com  Google Sign-In (GIS)
 #                challenges.cloudflare.com                              Turnstile widget
@@ -34,18 +44,17 @@
 #                oauth2.googleapis.com, accounts.google.com             Google Sign-In token exchange
 #                challenges.cloudflare.com                              Turnstile siteverify
 #                cloudflareinsights.com                                 Cloudflare Web Analytics beacon POSTs
+#                api.maptiler.com                                       MapTiler vector tiles + geocoding (PR #163)
 #                *.ingest.sentry.io, *.ingest.us.sentry.io              Sentry browser-SDK ingest endpoints
 #   frame-src    accounts.google.com, content.google.com                Google Sign-In iframe
 #                challenges.cloudflare.com                              Turnstile iframe
 #
-# When VITE_CF_ANALYTICS_TOKEN / VITE_SENTRY_DSN are unset, neither
-# observability integration loads, but the allowlist is harmless
-# either way.
+# When VITE_CF_ANALYTICS_TOKEN / VITE_SENTRY_DSN / MAPTILER_API_KEY are
+# unset, the corresponding integration silently no-ops, so the allowlist
+# entries are harmless either way.
 #
 # `frame-ancestors 'none'` is the CSP-3 equivalent of X-Frame-Options:
-# DENY (kept in `/*` above for legacy browsers).
-/*.html
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://api.paymongo.com https://oauth2.googleapis.com https://accounts.google.com https://challenges.cloudflare.com https://cloudflareinsights.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src https://accounts.google.com https://content.google.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
+# DENY (kept above for legacy browsers).
 
 /api/*
   Cache-Control: no-store
@@ -54,6 +63,7 @@
   Cross-Origin-Resource-Policy: same-origin
   X-DNS-Prefetch-Control: off
   X-Permitted-Cross-Domain-Policies: none
+  X-Robots-Tag: noindex, nofollow
 
 # Service worker should be revalidated on every load and scoped to the
 # whole origin so navigation requests can be intercepted.
@@ -65,3 +75,10 @@
 /manifest.webmanifest
   Cache-Control: public, max-age=3600
   Content-Type: application/manifest+json; charset=utf-8
+
+# RFC 9116 — security.txt is intentionally cacheable. Researchers and
+# automated scanners read this to find a vulnerability-reporting contact;
+# they don't expect freshness, and we want CDN caching for cheap reads.
+/.well-known/security.txt
+  Cache-Control: public, max-age=86400
+  Content-Type: text/plain; charset=utf-8
