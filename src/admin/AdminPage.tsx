@@ -49,6 +49,7 @@ import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { CustomersSection } from "@/components/admin/CustomersSection";
+import { AbandonedCartSection } from "@/components/admin/AbandonedCartSection";
 import { MarketingSection } from "@/components/admin/MarketingSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
@@ -96,6 +97,7 @@ import {
   Truck,
   Type,
   Search,
+  ShoppingCart,
   Clock,
   StickyNote,
   CheckSquare,
@@ -124,6 +126,7 @@ type AdminSection =
   | "users"
   | "customers"
   | "marketing"
+  | "abandonedCart"
   | "storefront"
   | "hero"
   | "siteCopy"
@@ -147,6 +150,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   users: "Users",
   customers: "Customers",
   marketing: "Marketing",
+  abandonedCart: "Cart recovery",
   storefront: "Storefront",
   hero: "Hero slider",
   siteCopy: "Site copy",
@@ -540,6 +544,11 @@ const NAV_GROUPS: {
     label: "Customize",
     items: [
       { key: "marketing", icon: <TrendingUp className="w-4 h-4" /> },
+      {
+        key: "abandonedCart",
+        icon: <ShoppingCart className="w-4 h-4" />,
+        hint: "Cart recovery emails",
+      },
       {
         key: "storefront",
         icon: <Activity className="w-4 h-4" />,
@@ -971,6 +980,7 @@ function AdminDashboard() {
           {section === "users" && <UsersSection />}
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}
+          {section === "abandonedCart" && <AbandonedCartSection />}
           {section === "storefront" && <StorefrontSection />}
           {section === "hero" && <HeroSlidesSection />}
           {section === "siteCopy" && <SiteCopySection />}

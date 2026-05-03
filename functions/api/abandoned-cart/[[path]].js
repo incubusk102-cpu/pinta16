@@ -33,11 +33,12 @@ import { initRequestContext } from "../_lib/handler-wrapper.js";
 import { consumeRateLimit, rateLimitResponse } from "../_lib/rate-limit.js";
 import { BodyTooLargeError, buildLambdaEvent } from "../_lib/lambda-event.js";
 import { sendEmail, loadOrderEmailConfig } from "../_lib/email.js";
+import { isAuthenticated } from "../_lib/admin-auth.js";
 import { makeStore } from "../_lib/kv-store.js";
+import { getStore } from "../_lib/kv-stores.js";
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
-const ONE_HOUR_MS = 60 * 60 * 1000;
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const MS_PER_MINUTE = 60_000;
 
 const json = (status, body) =>
   new Response(JSON.stringify(body), {
@@ -139,12 +140,34 @@ const handleSync = async (event, env, store) => {
   return json(200, { ok: true });
 };
 
+const loadAbandonedCartConfig = async () => {
+  try {
+    const cfgStore = getStore("storefront-config");
+    const raw = await cfgStore.get("config", { type: "json" });
+    if (!raw || typeof raw !== "object") return null;
+    if (!raw.abandonedCart || typeof raw.abandonedCart !== "object")
+      return null;
+    return raw.abandonedCart;
+  } catch {
+    return null;
+  }
+};
+
 // ── process (cron) ──────────────────────────────────────────────────────
 const handleProcess = async (env, store) => {
   const token = env.BACKUP_TOKEN;
   if (!token) {
     return json(503, { error: "BACKUP_TOKEN not configured" });
   }
+
+  const settings = await loadAbandonedCartConfig();
+  if (settings && settings.enabled === false) {
+    return json(200, { ok: true, skipped: true, reason: "disabled" });
+  }
+
+  const nudge1Ms = ((settings && settings.nudge1Minutes) || 60) * MS_PER_MINUTE;
+  const nudge2Ms =
+    ((settings && settings.nudge2Minutes) || 1440) * MS_PER_MINUTE;
 
   const orderEmail = await loadOrderEmailConfig();
   const now = Date.now();
@@ -166,8 +189,8 @@ const handleProcess = async (env, store) => {
 
       const age = now - created;
 
-      if (!entry.nudge1SentAt && age >= ONE_HOUR_MS) {
-        const result = await sendRecoveryEmail(entry, 1, orderEmail);
+      if (!entry.nudge1SentAt && age >= nudge1Ms) {
+        const result = await sendRecoveryEmail(entry, 1, orderEmail, settings);
         if (result.delivered) {
           entry.nudge1SentAt = new Date().toISOString();
           await store.setJSON(blob.key, entry, {
@@ -175,12 +198,8 @@ const handleProcess = async (env, store) => {
           });
           emailsSent++;
         }
-      } else if (
-        entry.nudge1SentAt &&
-        !entry.nudge2SentAt &&
-        age >= TWENTY_FOUR_HOURS_MS
-      ) {
-        const result = await sendRecoveryEmail(entry, 2, orderEmail);
+      } else if (entry.nudge1SentAt && !entry.nudge2SentAt && age >= nudge2Ms) {
+        const result = await sendRecoveryEmail(entry, 2, orderEmail, settings);
         if (result.delivered) {
           entry.nudge2SentAt = new Date().toISOString();
           await store.setJSON(blob.key, entry, {
@@ -252,7 +271,7 @@ const formatPHP = (n) =>
     maximumFractionDigits: 2,
   })}`;
 
-const sendRecoveryEmail = async (entry, nudge, orderEmail) => {
+const sendRecoveryEmail = async (entry, nudge, orderEmail, settings) => {
   const firstName = (entry.name || "").split(/\s+/)[0] || "there";
   const items = entry.items || [];
   const subtotal = items.reduce(
@@ -262,20 +281,28 @@ const sendRecoveryEmail = async (entry, nudge, orderEmail) => {
 
   const unsubToken = await buildUnsubToken(entry.email, entry.createdAt);
   const unsubUrl = `${PUBLIC_SITE}/api/abandoned-cart/unsubscribe?id=${encodeURIComponent(entry.email)}&t=${unsubToken}`;
-  const shopUrl = PUBLIC_SITE;
+  const shopUrl =
+    (settings && settings.ctaUrl && settings.ctaUrl.trim()) || PUBLIC_SITE;
 
   const subject =
     nudge === 1
-      ? "You left something behind at Canvas Hub"
-      : "Still thinking about it? Your cart is waiting";
+      ? (settings && settings.nudge1Subject) ||
+        "You left something behind at Canvas Hub"
+      : (settings && settings.nudge2Subject) ||
+        "Still thinking about it? Your cart is waiting";
 
   const heading =
-    nudge === 1 ? "Your cart is waiting" : "Don't miss out on your picks";
+    nudge === 1
+      ? (settings && settings.nudge1Heading) || "Your cart is waiting"
+      : (settings && settings.nudge2Heading) ||
+        "Don\u2019t miss out on your picks";
+
+  const ctaLabel = (settings && settings.ctaLabel) || "Complete your order";
 
   const introText =
     nudge === 1
-      ? `Hi ${escapeHtml(firstName)},\n\nLooks like you left some beautiful artwork in your cart. We've saved it for you — come back and complete your order whenever you're ready.`
-      : `Hi ${escapeHtml(firstName)},\n\nYour handpicked paintings are still waiting. Original artwork sells fast — grab yours before someone else does.`;
+      ? `Hi ${escapeHtml(firstName)},\n\nLooks like you left some beautiful artwork in your cart. We've saved it for you \u2014 come back and complete your order whenever you're ready.`
+      : `Hi ${escapeHtml(firstName)},\n\nYour handpicked paintings are still waiting. Original artwork sells fast \u2014 grab yours before someone else does.`;
 
   const introHtml = introText
     .split(/\n{2,}/)
@@ -312,7 +339,7 @@ const sendRecoveryEmail = async (entry, nudge, orderEmail) => {
     ${itemsHtml}
     ${totalsHtml}
     <p style="margin:24px 0 16px;">
-      <a href="${escapeHtml(shopUrl)}" style="display:inline-block;padding:10px 28px;background:${primary};color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:500;">Complete your order</a>
+      <a href="${escapeHtml(shopUrl)}" style="display:inline-block;padding:10px 28px;background:${primary};color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:500;">${escapeHtml(ctaLabel)}</a>
     </p>
     <p style="margin:24px 0 0;font-size:12px;color:${accent};">
       Questions? Just reply to this email.
@@ -405,6 +432,48 @@ const unsubscribePage = (message) =>
 </body>
 </html>`.trim();
 
+// ── stats (admin) ───────────────────────────────────────────────────────
+const handleStats = async (store) => {
+  let cursor;
+  let total = 0;
+  let pending = 0;
+  let nudge1Sent = 0;
+  let nudge2Sent = 0;
+  let converted = 0;
+  let unsubscribed = 0;
+
+  do {
+    const page = await store.list({ cursor, limit: 100 });
+    cursor = page.cursor;
+
+    for (const blob of page.blobs) {
+      const entry = await store.get(blob.key, { type: "json" });
+      if (!entry || !entry.email) continue;
+      total++;
+      if (entry.convertedAt) {
+        converted++;
+      } else if (entry.unsubscribedAt) {
+        unsubscribed++;
+      } else if (entry.nudge2SentAt) {
+        nudge2Sent++;
+      } else if (entry.nudge1SentAt) {
+        nudge1Sent++;
+      } else {
+        pending++;
+      }
+    }
+  } while (cursor);
+
+  return json(200, {
+    total,
+    pending,
+    nudge1Sent,
+    nudge2Sent,
+    converted,
+    unsubscribed,
+  });
+};
+
 // ── router ──────────────────────────────────────────────────────────────
 const handle = async ({ request, env }) => {
   const blocked = await initRequestContext({ request, env });
@@ -447,6 +516,14 @@ const handle = async ({ request, env }) => {
 
   if (method === "GET" && route === "unsubscribe") {
     return handleUnsubscribe(url, store);
+  }
+
+  if (method === "GET" && route === "stats") {
+    const event = await buildLambdaEvent(request);
+    if (!(await isAuthenticated(event))) {
+      return json(401, { error: "Not authenticated" });
+    }
+    return handleStats(store);
   }
 
   return json(404, { error: "Not found" });
