@@ -7,6 +7,13 @@
 import crypto from "node:crypto";
 import { makeStore } from "./kv-store.js";
 import { requireKvBinding, getCloudflareEnv } from "./context.js";
+import { readCookie } from "./cookies.js";
+
+// HttpOnly cookie that carries the storefront-user session JWT. Set on
+// signup / login, cleared on logout. Browsers auto-attach it to
+// same-origin requests so authenticated `/api/users` and `/api/orders`
+// calls don't need the legacy `Authorization: Bearer` header.
+export const USER_SESSION_COOKIE = "cv_user_session";
 
 export const STORE_NAME = "users";
 export const USERS_KEY = "users-by-email";
@@ -130,13 +137,26 @@ export const normalizeEmail = (email) =>
 export const isValidEmail = (email) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ""));
 
-export const extractToken = (event) => {
+// Pull the storefront-user session token out of an inbound request.
+// Mirrors the dual-source admin model: prefer the legacy
+// `Authorization: Bearer` header when both are present (so explicit
+// clients opt into the CSRF-exempt legacy path) and fall back to the
+// HttpOnly `cv_user_session` cookie for cross-site requests.
+export const extractTokenWithSource = (event) => {
   const auth =
     event.headers?.authorization || event.headers?.Authorization || "";
-  if (typeof auth !== "string") return null;
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7).trim() || null;
+  if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
+    const value = auth.slice(7).trim();
+    if (value) return { token: value, source: "header" };
+  }
+  const cookie = readCookie(event, USER_SESSION_COOKIE);
+  if (typeof cookie === "string" && cookie.length > 0) {
+    return { token: cookie, source: "cookie" };
+  }
+  return { token: null, source: null };
 };
+
+export const extractToken = (event) => extractTokenWithSource(event).token;
 
 export const publicUser = (user) => {
   if (!user) return null;

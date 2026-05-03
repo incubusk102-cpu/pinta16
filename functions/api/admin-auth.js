@@ -1,20 +1,29 @@
 import { autobanIfNeeded, wrapHandler } from "./_lib/handler-wrapper.js";
 import { logError } from "./_lib/redact.js";
 import {
+  ADMIN_SESSION_COOKIE,
   constantTimeEquals,
   ensureSessionSecret,
   extractToken,
+  extractTokenWithSource,
   getAuthStore,
   hashPassword,
   issueToken,
   MIN_PASSWORD_LENGTH,
   readCredentials,
   rotateSessionSecret,
+  TOKEN_TTL_SECONDS,
   verifyPassword,
   verifyTokenWithSecret,
   writeCredentials,
   writeCredentialsIfNew,
 } from "./_lib/admin-auth.js";
+import { clearCookieHeader, serializeCookie } from "./_lib/cookies.js";
+import {
+  CSRF_COOKIE_NAME,
+  generateCsrfToken,
+  verifyCsrf,
+} from "./_lib/csrf.js";
 import {
   captureRequestMeta,
   getClientCountry,
@@ -71,12 +80,123 @@ const parseBody = (body) => {
   }
 };
 
+// Build the Set-Cookie pair we attach to every successful login /
+// init / 2FA / passkey / rotate response. The session cookie is
+// HttpOnly so JS can't read it (XSS-safe); the CSRF cookie is *not*
+// HttpOnly because the SPA needs to read it and echo the value back as
+// `X-CSRF-Token` on every state-changing request (double-submit).
+//
+// Both are `Secure; SameSite=Strict; Path=/` and share the session
+// TTL — they're paired and lifecycle-tied.
+const buildSessionCookies = (token, csrfToken) => [
+  serializeCookie(ADMIN_SESSION_COOKIE, token, {
+    maxAgeSeconds: TOKEN_TTL_SECONDS,
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+  serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
+    maxAgeSeconds: TOKEN_TTL_SECONDS,
+    httpOnly: false,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+];
+
+// Mint a fresh session token + matching CSRF token and return the
+// pair plus the Set-Cookie headers to attach to the response. The
+// JSON body still includes `token` (and now `csrfToken`) so curl /
+// CI / pre-migration clients can use the legacy Authorization
+// header path; modern browsers ignore the body and rely on cookies.
+const issueAuthSession = async (secret) => {
+  const token = await issueToken(secret);
+  const csrfToken = generateCsrfToken();
+  return {
+    token,
+    csrfToken,
+    cookies: buildSessionCookies(token, csrfToken),
+  };
+};
+
+// Successful login response — JSON body for legacy clients +
+// Set-Cookie pair for browsers.
+const loginSuccessResponse = async (secret) => {
+  const session = await issueAuthSession(secret);
+  return {
+    statusCode: 200,
+    headers: withSecurityHeaders(),
+    body: JSON.stringify({
+      token: session.token,
+      csrfToken: session.csrfToken,
+    }),
+    cookies: session.cookies,
+  };
+};
+
+// Logout — clears both cookies. Browsers honour the deletion when
+// path / domain match what was set, so we mirror the write opts.
+const buildLogoutCookies = () => [
+  clearCookieHeader(ADMIN_SESSION_COOKIE, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+  clearCookieHeader(CSRF_COOKIE_NAME, {
+    httpOnly: false,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+];
+
+// CSRF gate for state-changing admin endpoints when authentication
+// came from the cookie (browsers auto-attach cookies, so a malicious
+// cross-site form would otherwise replay the request as the victim).
+// `Authorization: Bearer` requests are exempt because the browser
+// doesn't auto-attach that header.
+const csrfBlocked = (event, source) =>
+  !verifyCsrf(event, {
+    method: event.httpMethod,
+    usingCookieAuth: source === "cookie",
+  });
+
 export const handler = async (event) => {
   try {
     const store = getAuthStore(event);
 
     if (event.httpMethod === "GET") {
       const params = event.queryStringParameters || {};
+      if (params.action === "session") {
+        // Boot probe used by the SPA on page load. The browser
+        // auto-attaches the HttpOnly session cookie; if it's still
+        // valid we echo the token back in the JSON body so the SPA can
+        // rehydrate its in-memory React state (the SPA can't read the
+        // HttpOnly cookie itself). Also re-issues the CSRF cookie.
+        const secret = await ensureSessionSecret(store);
+        const { token, source } = extractTokenWithSource(event);
+        if (!token || !(await verifyTokenWithSecret(token, secret))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const csrfToken = generateCsrfToken();
+        const cookies = [
+          serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
+            maxAgeSeconds: TOKEN_TTL_SECONDS,
+            httpOnly: false,
+            secure: true,
+            sameSite: "Strict",
+            path: "/",
+          }),
+        ];
+        return {
+          statusCode: 200,
+          headers: withSecurityHeaders(),
+          body: JSON.stringify({ ok: true, token, csrfToken, source }),
+          cookies,
+        };
+      }
       if (params.action === "audit") {
         const secret = await ensureSessionSecret(store);
         const token = extractToken(event);
@@ -139,6 +259,36 @@ export const handler = async (event) => {
     const credentials = await readCredentials(store);
     const secret = await ensureSessionSecret(store);
 
+    // CSRF double-submit gate. Skipped for the actions that *issue*
+    // sessions (init / login / login-2fa / login-passkey) because no
+    // session cookie exists yet at that point — Origin / Turnstile /
+    // rate-limit handle abuse on those flows. All other state-changing
+    // actions go through this guard when authed via cookie.
+    const PRE_AUTH_ACTIONS = new Set([
+      "init",
+      "login",
+      "login-2fa",
+      "passkey-authenticate-begin",
+      "passkey-authenticate-finish",
+    ]);
+    if (!PRE_AUTH_ACTIONS.has(action)) {
+      const { source } = extractTokenWithSource(event);
+      if (csrfBlocked(event, source)) {
+        return json(403, { error: "Invalid CSRF token" });
+      }
+    }
+
+    if (action === "logout") {
+      // Idempotent. Always 200, always clears the cookies — the
+      // browser will drop them whether or not the session was valid.
+      return {
+        statusCode: 200,
+        headers: withSecurityHeaders(),
+        body: JSON.stringify({ ok: true }),
+        cookies: buildLogoutCookies(),
+      };
+    }
+
     if (action === "init") {
       if (credentials) {
         return json(409, { error: "Admin password already set" });
@@ -168,7 +318,7 @@ export const handler = async (event) => {
         return json(409, { error: "Admin password already set" });
       }
 
-      return json(200, { token: await issueToken(secret) });
+      return await loginSuccessResponse(secret);
     }
 
     if (action === "login") {
@@ -345,7 +495,7 @@ export const handler = async (event) => {
         outcome: matchesRecovery ? "recovery" : "success",
         detail: matchesRecovery ? "Recovery password used" : "",
       });
-      return json(200, { token: await issueToken(secret) });
+      return await loginSuccessResponse(secret);
     }
 
     if (action === "login-2fa") {
@@ -441,7 +591,7 @@ export const handler = async (event) => {
         outcome: outcome === "recovery" ? "recovery-code" : "success",
         detail: outcome === "recovery" ? "Used a 2FA recovery code" : "",
       });
-      return json(200, { token: await issueToken(secret) });
+      return await loginSuccessResponse(secret);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -572,7 +722,7 @@ export const handler = async (event) => {
           outcome: "success",
           detail: `Used passkey "${used.name}"`,
         });
-        return json(200, { token: await issueToken(secret) });
+        return await loginSuccessResponse(secret);
       } catch (err) {
         await appendAuditEvent(event, {
           type: "admin.login",
@@ -748,7 +898,7 @@ export const handler = async (event) => {
         detail: "Password updated, session secret rotated",
         ...captureRequestMeta(event),
       });
-      return json(200, { token: await issueToken(newSecret) });
+      return await loginSuccessResponse(newSecret);
     }
 
     if (action === "setup-2fa") {

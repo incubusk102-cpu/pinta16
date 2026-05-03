@@ -95,10 +95,37 @@ export const buildLambdaEvent = async (request) => {
 };
 
 // Convert a Netlify-style Lambda return value into a Cloudflare Pages Response.
+//
+// Most handlers return a flat `headers` object — that's converted as-is.
+// For responses that need to set multiple `Set-Cookie` headers (login,
+// logout, anywhere we issue both the session cookie and the CSRF
+// double-submit cookie at once), the handler attaches a `cookies`
+// array of pre-serialised cookie strings; we append each as a separate
+// `Set-Cookie` header. A flat `headers` object can only carry one
+// `Set-Cookie` value, so the array path is required for any multi-
+// cookie response.
 export const toPagesResponse = (result) => {
   const status = result?.statusCode ?? 200;
-  const headers = result?.headers ?? {};
+  const flatHeaders = result?.headers ?? {};
+  const cookies = Array.isArray(result?.cookies) ? result.cookies : [];
   const body = result?.body ?? "";
+  if (cookies.length === 0) {
+    return new Response(body, { status, headers: flatHeaders });
+  }
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(flatHeaders)) {
+    if (v == null) continue;
+    if (Array.isArray(v)) {
+      for (const item of v) headers.append(k, item);
+    } else {
+      headers.set(k, v);
+    }
+  }
+  for (const c of cookies) {
+    if (typeof c === "string" && c.length > 0) {
+      headers.append("Set-Cookie", c);
+    }
+  }
   return new Response(body, { status, headers });
 };
 

@@ -9,8 +9,12 @@ import {
 } from "react";
 import { readStoredReferral } from "@/lib/referral";
 
-const STORAGE_KEY = "canvhub_user_token";
-const USER_KEY = "canvhub_user";
+// Legacy localStorage keys from the pre-Tier-3-#11 model. Purged on
+// boot — the token is now derived from the HttpOnly `cv_user_session`
+// cookie via the `?action=session` probe, and the user object is
+// returned alongside it so we don't need to persist either client-side.
+const LEGACY_TOKEN_KEY = "canvhub_user_token";
+const LEGACY_USER_KEY = "canvhub_user";
 const API = "/api/users";
 
 export interface SavedAddress {
@@ -97,32 +101,12 @@ const UserAuthContext = createContext<UserAuthContextValue | undefined>(
   undefined,
 );
 
-const readStored = <T,>(key: string): T | null => {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-};
-
-const readToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const persist = (token: string | null, user: PublicUser | null) => {
+// One-time cleanup of the legacy localStorage entries. Idempotent.
+const purgeLegacyState = () => {
   if (typeof window === "undefined") return;
   try {
-    if (token) localStorage.setItem(STORAGE_KEY, token);
-    else localStorage.removeItem(STORAGE_KEY);
-    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-    else localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_USER_KEY);
   } catch {
     /* ignore */
   }
@@ -138,10 +122,11 @@ const parseError = async (response: Response, fallback: string) => {
 };
 
 export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(() => readToken());
-  const [user, setUser] = useState<PublicUser | null>(() =>
-    readStored<PublicUser>(USER_KEY),
-  );
+  // Token + user live only in React state; we re-derive both from the
+  // HttpOnly `cv_user_session` cookie via the `?action=session` boot
+  // probe. localStorage is no longer authoritative.
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<PublicUser | null>(null);
   const [rewards, setRewards] = useState<UserReward[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -149,7 +134,6 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     (nextToken: string | null, nextUser: PublicUser | null) => {
       setToken(nextToken);
       setUser(nextUser);
-      persist(nextToken, nextUser);
     },
     [],
   );
@@ -179,6 +163,42 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       /* network blip — keep existing */
     }
   }, [token, apply]);
+
+  // Boot probe: restore the in-memory session from the HttpOnly cookie
+  // if the browser still has one. Runs once on mount; `refresh()` then
+  // pulls a fresh user record once token is set. Hold `loading` high
+  // until the probe resolves so logged-in users don't flicker through
+  // a guest state on page reload.
+  useEffect(() => {
+    let cancelled = false;
+    purgeLegacyState();
+    setLoading(true);
+    const boot = async () => {
+      try {
+        const response = await fetch(`${API}?action=session`, {
+          method: "GET",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          token?: string;
+          user?: PublicUser;
+        };
+        if (cancelled) return;
+        if (data.token && data.user) {
+          apply(data.token, data.user);
+        }
+      } catch {
+        /* ignore — user simply isn't logged in */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [apply]);
 
   useEffect(() => {
     void refresh();
@@ -212,6 +232,15 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const logout = useCallback(() => {
+    // Best-effort: tell the server to clear the cookies. Don't await
+    // network success — user is logged out in-memory immediately even
+    // if the request fails.
+    void fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ action: "logout" }),
+    }).catch(() => {});
     apply(null, null);
   }, [apply]);
 
