@@ -356,14 +356,12 @@ We do **not** sell your personal data.
 
 ## How long we keep it
 
-| Category                        | Retention                                  |
-|---------------------------------|--------------------------------------------|
-| Order records                   | 5 years (BIR / accounting requirement)     |
-| Account profile                 | Until you delete the account               |
-| Newsletter subscription         | Until you unsubscribe                      |
-| Reviews                         | Until you ask us to remove them            |
-| Visitor heartbeats              | A few minutes, then deleted                |
-| Server logs / rate-limit data   | 30 days                                    |
+- **Order records** — 5 years (BIR / accounting requirement).
+- **Account profile** — until you delete the account.
+- **Newsletter subscription** — until you unsubscribe.
+- **Reviews** — until you ask us to remove them.
+- **Visitor heartbeats** — a few minutes, then deleted.
+- **Server logs / rate-limit data** — 30 days.
 
 ## Your rights under the Data Privacy Act
 
