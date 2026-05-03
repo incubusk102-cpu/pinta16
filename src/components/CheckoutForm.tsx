@@ -1142,7 +1142,7 @@ const CheckoutForm = () => {
                                                 touched.province &&
                                                 !!errors.province
                                               }
-                                              className="bg-background border-border/30 text-foreground font-body text-sm rounded-sm"
+                                              className="h-10 bg-background border-foreground/25 hover:border-foreground/50 text-foreground font-body text-sm rounded-sm"
                                             >
                                               <SelectValue placeholder="Select your province" />
                                             </SelectTrigger>

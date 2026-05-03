@@ -160,6 +160,18 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Radix Popper (Select, Popover, Dropdown, etc.) renders its content
+     into a portal at the end of <body>. The wrapper has no z-index of
+     its own, so the content gets buried under fixed-position drawers
+     (CartDrawer at z-85, CheckoutForm panel at z-95). Lift the wrapper
+     above those layers so dropdowns inside drawers/sheets actually
+     show up — without this, clicking a Select trigger inside the
+     checkout drawer looks like nothing happens, which reads as the
+     control being disabled. */
+  [data-radix-popper-content-wrapper] {
+    z-index: 100;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
   }
