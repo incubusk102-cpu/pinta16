@@ -1,5 +1,6 @@
 // /api/storefront-config — public read of announcement / free shipping /
 import { initRequestContext } from "./_lib/handler-wrapper.js";
+import { logError } from "./_lib/redact.js";
 // promo codes / chat config; admin write of all of the above.
 // KV namespace: STOREFRONT_CONFIG (single key "config" → JSON object).
 //
@@ -1973,7 +1974,7 @@ const handle = async ({ request, env }) => {
 
     return json(405, { error: "Method not allowed" });
   } catch (error) {
-    console.error("storefront-config error:", error);
+    logError("storefront-config error:", error);
     return json(500, { error: "Could not manage storefront config" });
   }
 };

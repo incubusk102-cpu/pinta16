@@ -1,5 +1,6 @@
 // /api/products — public list, admin-gated create/delete.
 import { initRequestContext } from "./_lib/handler-wrapper.js";
+import { logError } from "./_lib/redact.js";
 // KV namespace: PRODUCTS (single key "all-products" → JSON array).
 //
 // Cloudflare Pages Function port of netlify/functions/products.js. Same wire
@@ -151,7 +152,7 @@ const handle = async ({ request, env }) => {
 
     return json(405, { error: "Method not allowed" });
   } catch (error) {
-    console.error("products handler error:", error);
+    logError("products handler error:", error);
     return json(500, { error: "Could not manage products" });
   }
 };

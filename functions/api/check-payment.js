@@ -1,5 +1,6 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { logError } from "./_lib/redact.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -90,7 +91,7 @@ const handler = async (event) => {
 
     if (!response.ok) {
       const detail = await readPayMongoError(response);
-      console.error("PayMongo status error:", detail);
+      logError("PayMongo status error:", detail);
       return {
         statusCode: 500,
         headers: jsonHeaders,
@@ -105,7 +106,7 @@ const handler = async (event) => {
       body: JSON.stringify(result.data),
     };
   } catch (error) {
-    console.error("check-payment error:", error);
+    logError("check-payment error:", error);
     return {
       statusCode: 500,
       headers: jsonHeaders,

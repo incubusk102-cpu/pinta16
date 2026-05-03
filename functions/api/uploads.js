@@ -27,7 +27,20 @@ const json = (status, data, extraHeaders = {}) =>
 // pipeline targets ~800 KB JPEGs so 5 MB is generous headroom.
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-const ALLOWED_MIME_PREFIXES = ["image/"];
+// Strict allowlist of bitmap MIME types. We deliberately do NOT accept
+// `image/svg+xml` — SVG is XML and can carry inline `<script>` /
+// `<foreignObject>` payloads that execute when the file is rendered
+// same-origin under `/api/r/<key>`, which would turn the upload bucket
+// into a stored-XSS vector. Storefront product photos are bitmaps, so
+// this restriction has zero legitimate UX cost.
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+]);
 const ALLOWED_EXTENSIONS = {
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
@@ -67,10 +80,10 @@ export const onRequestPost = async ({ request, env }) => {
     .toLowerCase()
     .split(";")[0]
     .trim();
-  if (!ALLOWED_MIME_PREFIXES.some((p) => contentType.startsWith(p))) {
+  if (!ALLOWED_MIME_TYPES.has(contentType)) {
     return json(415, {
       error: "unsupported-media-type",
-      message: `Content-Type must be image/*, got ${contentType || "(empty)"}.`,
+      message: `Content-Type must be one of ${[...ALLOWED_MIME_TYPES].join(", ")}, got ${contentType || "(empty)"}.`,
     });
   }
 

@@ -17,6 +17,10 @@ export default function NewsletterForm({
   const { t } = useLocale();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  // Honeypot — bots blindly fill every input; humans never see this
+  // field (it's `display:none` + `aria-hidden` + `tabIndex={-1}`).
+  // A non-empty value at submit time means the visitor is a bot.
+  const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [message, setMessage] = useState<{
@@ -45,6 +49,12 @@ export default function NewsletterForm({
           email: email.trim(),
           name: name.trim(),
           source,
+          // Honeypot — server treats non-empty `website` as a bot
+          // submission and silently 200s. Sending the real (empty)
+          // value here keeps the wire shape stable and lets a future
+          // server change distinguish "form submitted with field"
+          // from "old client".
+          website,
           // Only included when Turnstile is enabled. Server falls open
           // (skips verification) if its secret key isn't set, so missing
           // token here is fine in dev / before dashboard widget exists.
@@ -117,6 +127,24 @@ export default function NewsletterForm({
         onChange={(e) => setName(e.target.value)}
         aria-label={t("newsletter.namePlaceholder")}
         className="mt-2 w-full px-3 py-2.5 bg-background border border-border rounded-sm text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40"
+      />
+      {/*
+        Honeypot — invisible to humans, irresistible to dumb bots.
+        `display:none` is the simplest reliable hide, but we also
+        belt-and-braces with aria-hidden + tabIndex=-1 + autocomplete
+        "off" so screen readers + keyboard users + browser autofill
+        all skip it. Bots that fill every input get bounced server-
+        side with a fake "already subscribed" response.
+      */}
+      <input
+        type="text"
+        name="website"
+        autoComplete="off"
+        tabIndex={-1}
+        aria-hidden="true"
+        value={website}
+        onChange={(e) => setWebsite(e.target.value)}
+        style={{ display: "none" }}
       />
       {isTurnstileEnabled() && (
         <div className="mt-2">

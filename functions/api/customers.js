@@ -2,6 +2,7 @@ import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { connectLambda, getStore } from "./_lib/kv-stores.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { logError } from "./_lib/redact.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -253,7 +254,7 @@ export const handler = async (event) => {
 
     return json(400, { error: "Unknown action" });
   } catch (err) {
-    console.error("customers handler error:", err);
+    logError("customers handler error:", err);
     return json(500, { error: "Internal error" });
   }
 };
