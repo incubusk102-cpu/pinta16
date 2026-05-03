@@ -4,7 +4,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import {
   useCart,
@@ -34,7 +34,9 @@ import ProfileEditor from "@/components/account/ProfileEditor";
 import AddressBook from "@/components/account/AddressBook";
 import MyOrders from "@/components/account/MyOrders";
 import AppreciationSection from "@/components/account/AppreciationSection";
-import OrderPushOptInPrompt from "@/components/OrderPushOptInPrompt";
+const OrderPushOptInPrompt = lazy(
+  () => import("@/components/OrderPushOptInPrompt"),
+);
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -498,7 +500,13 @@ function AccountPage() {
             here even if the customer dismissed the order-confirmation
             variant. */}
         <div id="account-notifications" className="scroll-mt-28">
-          <OrderPushOptInPrompt email={user.email} variant="inline" forceShow />
+          <Suspense>
+            <OrderPushOptInPrompt
+              email={user.email}
+              variant="inline"
+              forceShow
+            />
+          </Suspense>
         </div>
 
         <div className="bg-card/40 border border-border/60 rounded-xl p-5">
