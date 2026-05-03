@@ -1,0 +1,62 @@
+name: Marketing triggers
+
+# Calls POST /api/marketing-triggers/process every 6 hours.
+# Runs all enabled marketing email pipelines:
+#   - Review follow-up (delivered orders without reviews)
+#   - Winback / re-engagement (inactive customers)
+#   - Back-in-stock notifications (products marked available)
+#   - Price-drop alerts (newsletter subscribers)
+#
+# Uses the same BACKUP_TOKEN secret as the other cron workflows.
+
+on:
+  schedule:
+    # Every 6 hours — 00:00, 06:00, 12:00, 18:00 UTC
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you running an ad-hoc trigger sweep?"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketing-triggers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run marketing triggers
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+          BASE_URL: ${{ vars.BACKUP_BASE_URL || 'https://canvhub.com' }}
+        run: |
+          if [ -z "$BACKUP_TOKEN" ]; then
+            echo "::warning::BACKUP_TOKEN secret is not set — skipping."
+            exit 0
+          fi
+
+          http_code=$(curl --silent --show-error \
+            --max-time 120 \
+            --retry 2 --retry-delay 10 \
+            --header "Authorization: Bearer $BACKUP_TOKEN" \
+            --header "Content-Type: application/json" \
+            --request POST \
+            --write-out "%{http_code}" \
+            --output response.json \
+            "$BASE_URL/api/marketing-triggers/process")
+
+          cat response.json || true
+          echo ""
+          echo "HTTP $http_code"
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Marketing triggers returned HTTP $http_code"
+            exit 1
+          fi
