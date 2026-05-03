@@ -19,7 +19,7 @@
 
 import { makeStore } from "./kv-store.js";
 import { getCloudflareEnv } from "./context.js";
-import { getClientIp } from "./request-info.js";
+import { getClientCountry, getClientIp } from "./request-info.js";
 import { resolveRateLimit } from "./security-config.js";
 import { logSecurityEvent } from "./security-events.js";
 import { autobanIfNeeded } from "./handler-wrapper.js";
@@ -216,9 +216,11 @@ export const consumeRateLimit = async (
     // tagging that as "ip" would mislead the dashboard and feed a
     // non-IP value to autobanIfNeeded.
     const ip = getClientIp(event) || "";
+    const country = getClientCountry(event);
     void logSecurityEvent({
       type: "rate-limit",
       ip,
+      country,
       path: "",
       detail: `Rate limited: ${bucket} (${result.count}/${max})`,
       userAgent: "",

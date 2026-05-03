@@ -41,6 +41,14 @@ const extractClientIp = (request) => {
   return "";
 };
 
+const extractClientCountry = (request) => {
+  const headers = request?.headers;
+  if (!headers || typeof headers.get !== "function") return "";
+  const cc = (headers.get("cf-ipcountry") || "").trim().toUpperCase();
+  if (!cc || cc === "XX") return "";
+  return cc.slice(0, 4);
+};
+
 // Mirror Cloudflare env onto `process.env` so legacy code that reads
 // `process.env.X` (ported verbatim from the Netlify functions) keeps working
 // under the nodejs_compat flag without rewriting every reference. Idempotent.
@@ -117,12 +125,14 @@ export const initRequestContext = async ({ request, env }) => {
   const url = new URL(request.url);
 
   const ip = extractClientIp(request);
+  const country = extractClientCountry(request);
   const ua = request.headers?.get?.("user-agent") || "";
 
   if (isScannerProbe(url.pathname)) {
     void logSecurityEvent({
       type: "scanner",
       ip,
+      country,
       path: url.pathname,
       detail: "Vulnerability scanner probe",
       userAgent: ua,
@@ -135,6 +145,7 @@ export const initRequestContext = async ({ request, env }) => {
     void logSecurityEvent({
       type: "ip-blocked",
       ip,
+      country,
       path: url.pathname,
       detail: "Request from blocked IP",
       userAgent: ua,
@@ -153,6 +164,7 @@ export const wrapHandler =
     const url = new URL(request.url);
     const method = request.method;
     const ip = extractClientIp(request);
+    const country = extractClientCountry(request);
     const ua = request.headers?.get?.("user-agent") || "";
     if (
       (method === "POST" || method === "PUT" || method === "PATCH") &&
@@ -162,6 +174,7 @@ export const wrapHandler =
       void logSecurityEvent({
         type: "csrf",
         ip,
+        country,
         path: url.pathname,
         detail: `CSRF attempt: ${request.headers?.get?.("content-type") || "no content-type"}`,
         userAgent: ua,
@@ -180,6 +193,7 @@ export const wrapHandler =
         void logSecurityEvent({
           type: "body-too-large",
           ip,
+          country,
           path: url.pathname,
           detail: "Request body exceeded size limit",
           userAgent: ua,

@@ -32,6 +32,18 @@ export const getClientIp = (event) => {
 export const getUserAgent = (event) =>
   String(headerValue(event, "user-agent") || "").slice(0, 500);
 
+// Cloudflare resolves the request's source country and exposes it as the
+// `cf-ipcountry` header on every Pages Function invocation. Returns the
+// 2-letter ISO code (e.g. "PH") or "" when the header is missing or set
+// to "XX" (Tor / unknown). Always uppercase, never longer than 4 chars.
+export const getClientCountry = (event) => {
+  const cc = headerValue(event, "cf-ipcountry");
+  if (!cc) return "";
+  const trimmed = cc.trim().toUpperCase().slice(0, 4);
+  if (!trimmed || trimmed === "XX") return "";
+  return trimmed;
+};
+
 const detectBrowser = (ua) => {
   if (!ua) return "Unknown";
   if (/Edg\//i.test(ua)) {
