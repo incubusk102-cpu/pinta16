@@ -485,6 +485,32 @@ const CheckoutForm = () => {
     saveCheckoutDraft(form);
   }, [form, isSignedIn]);
 
+  // Sync the cart to the server for abandoned-cart recovery. Debounced
+  // to 2 s so we don't fire on every keystroke; only runs when the
+  // email is valid and the cart is non-empty.
+  useEffect(() => {
+    const email = form.email?.trim();
+    if (!email || !isValidEmail(email) || !items.length) return;
+    const timer = setTimeout(() => {
+      fetch("/api/abandoned-cart/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          name: form.fullName?.trim() || "",
+          items: items.map((i) => ({
+            id: i.id,
+            title: i.title,
+            price: i.price,
+            quantity: i.quantity,
+            image: i.image,
+          })),
+        }),
+      }).catch(() => {});
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [form.email, form.fullName, items]);
+
   const handlePayWithQR = async () => {
     if (!validate()) return;
     setIsCreatingPayment(true);
