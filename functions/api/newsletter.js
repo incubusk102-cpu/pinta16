@@ -205,6 +205,16 @@ const handle = async ({ request, env }) => {
         });
       }
       const body = parseBody(event.body);
+      // Honeypot — the form ships a hidden `<input name="website">`
+      // styled to be invisible / off-screen / aria-hidden, so a real
+      // user never types in it. Most form-spamming bots blindly fill
+      // every input, so a non-empty honeypot is a strong "this is a
+      // bot" signal. Return 200/already to look like a successful
+      // submit instead of leaking that we detected them — they'll
+      // think the email is on the list and stop retrying.
+      if (typeof body?.website === "string" && body.website.trim().length > 0) {
+        return json(200, { ok: true, already: true, voucher: null });
+      }
       // Verify Cloudflare Turnstile if configured. Falls open (skipped)
       // when TURNSTILE_SECRET_KEY isn't set, so this is safe to ship
       // before the dashboard widget is created.

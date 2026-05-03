@@ -8,6 +8,11 @@ import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
+import { logError, logWarn } from "./_lib/redact.js";
+import {
+  verifyTurnstileToken,
+  turnstileFailureResponse,
+} from "./_lib/turnstile.js";
 import {
   sendOrderEmail,
   sendNewOrderAdminAlert,
@@ -197,9 +202,9 @@ const incrementPromoUsage = async (event, code) => {
       if (write.modified) return;
       // CAS conflict — retry with a fresh read.
     }
-    console.warn("incrementPromoUsage: gave up after 5 CAS attempts", code);
+    logWarn("incrementPromoUsage: gave up after 5 CAS attempts", code);
   } catch (err) {
-    console.error("incrementPromoUsage failed:", err);
+    logError("incrementPromoUsage failed:", err);
   }
 };
 
@@ -254,7 +259,7 @@ const readStorefrontConfigDirect = async (event) => {
     const configStore = getStore(CONFIG_STORE_NAME);
     return await configStore.get(CONFIG_KEY, { type: "json" });
   } catch (err) {
-    console.error("readStorefrontConfigDirect failed:", err);
+    logError("readStorefrontConfigDirect failed:", err);
     return null;
   }
 };
@@ -852,6 +857,30 @@ export const handler = async (event) => {
           max: 10,
         });
         if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+        // Honeypot — checkout form ships a hidden `<input name="website">`
+        // (display:none + aria-hidden + tabIndex=-1) that real users
+        // never touch. A non-empty value at submit time is a strong
+        // "this is a bot" signal; respond with the same generic 400 the
+        // server returns for missing fields so the bot has no way to
+        // distinguish honeypot detection from a real validation error.
+        if (
+          typeof body.website === "string" &&
+          body.website.trim().length > 0
+        ) {
+          return json(400, { error: "Invalid order" });
+        }
+        // Cloudflare Turnstile — falls open (skipped) when
+        // TURNSTILE_SECRET_KEY is not configured, so this is safe to ship
+        // before the dashboard widget exists. When present, we still
+        // accept the request if the token is missing during the soft /
+        // off rollout phase (see _lib/turnstile.js + Admin → Security).
+        const tsToken =
+          typeof body.turnstileToken === "string" ? body.turnstileToken : "";
+        const ts = await verifyTurnstileToken(event, { token: tsToken });
+        if (!ts.allowed) {
+          const r = turnstileFailureResponse(ts.reason);
+          return json(r.statusCode, JSON.parse(r.body));
+        }
         // Vacation-mode hard guard: when the gallery owner has paused
         // checkout, refuse new orders with a friendly message instead of
         // accepting them silently. Soft-pause (vacationMode.enabled but
@@ -1052,7 +1081,7 @@ export const handler = async (event) => {
         try {
           await sendNewOrderAdminAlert({ order: safeOrder });
         } catch (err) {
-          console.warn("admin order alert failed:", err);
+          logWarn("admin order alert failed:", err);
         }
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
@@ -1065,7 +1094,7 @@ export const handler = async (event) => {
             order: safeOrder,
           });
         } catch (err) {
-          console.warn("first-order rewards hook failed:", err);
+          logWarn("first-order rewards hook failed:", err);
         }
         await appendAuditEvent(event, {
           type: "order.placed",
@@ -2122,7 +2151,7 @@ export const handler = async (event) => {
 
     return json(405, { error: "Method not allowed" });
   } catch (error) {
-    console.error("orders handler error:", error);
+    logError("orders handler error:", error);
     return json(500, { error: "Internal error" });
   }
 };

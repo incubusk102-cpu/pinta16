@@ -1,5 +1,6 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { logError } from "./_lib/redact.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -175,7 +176,7 @@ const handler = async (event) => {
       }),
     };
   } catch (error) {
-    console.error("create-payment error:", error);
+    logError("create-payment error:", error);
     return {
       statusCode: 500,
       headers: jsonHeaders,

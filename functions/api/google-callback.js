@@ -1,4 +1,5 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { logError } from "./_lib/redact.js";
 import crypto from "node:crypto";
 import {
   ensureSessionSecret,
@@ -205,7 +206,7 @@ export const handler = async (event) => {
     // through /login just to parse the fragment.
     return redirect(`${origin}/#auth=${encoded}`);
   } catch (error) {
-    console.error("google-callback handler error:", error);
+    logError("google-callback handler error:", error);
     return errorRedirect(event, "Internal error");
   }
 };

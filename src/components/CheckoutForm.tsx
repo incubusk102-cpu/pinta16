@@ -61,6 +61,7 @@ import {
   renderGoogleButton,
 } from "@/lib/google-signin";
 import PaymentModal from "./PaymentModal";
+import Turnstile, { isTurnstileEnabled } from "./Turnstile";
 import { createPayment } from "@/utils/payment.functions";
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
@@ -245,6 +246,22 @@ const CheckoutForm = () => {
   const [errors, setErrors] = useState<
     Partial<Record<keyof OrderInfo, string>>
   >({});
+  // Cloudflare Turnstile token captured by the widget at form bottom.
+  // Renewed automatically on expire / error. Forwarded to /api/orders
+  // so the server can reject scripted bot submissions before the
+  // PayMongo wire-fraud rate limit kicks in. When Turnstile is not
+  // enabled (no `VITE_TURNSTILE_SITE_KEY` configured), the widget
+  // renders nothing and `turnstileToken` stays null — server falls
+  // open in that mode.
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Honeypot — invisible to humans, visible to dumb form-spamming bots.
+  // A non-empty value at submit time is silently rejected server-side.
+  const [honeypot, setHoneypot] = useState("");
+  const handleTurnstileToken = useCallback(
+    (t: string) => setTurnstileToken(t),
+    [],
+  );
+  const handleTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
   // Track which fields the visitor has actually interacted with so we
   // only surface validation errors after blur — not on initial focus,
   // and not for fields they haven't reached yet.
@@ -601,6 +618,8 @@ const CheckoutForm = () => {
     placeOrder(sanitizedForm, {
       paymentIntentId: paymentIntentId ?? undefined,
       qrCodeImageUrl: qrCodeUrl,
+      turnstileToken,
+      honeypot,
     });
     setForm({
       fullName: "",
@@ -1390,6 +1409,35 @@ const CheckoutForm = () => {
                               {idx < 0 && null}
                             </div>
                           ),
+                        )}
+
+                        {/*
+                          Honeypot — invisible to humans (display:none +
+                          aria-hidden + tabIndex=-1 + autocomplete off),
+                          irresistible to dumb form-spamming bots. A
+                          non-empty value at submit is silently rejected
+                          server-side.
+                        */}
+                        <input
+                          type="text"
+                          name="website"
+                          autoComplete="off"
+                          tabIndex={-1}
+                          aria-hidden="true"
+                          value={honeypot}
+                          onChange={(e) => setHoneypot(e.target.value)}
+                          style={{ display: "none" }}
+                        />
+
+                        {isTurnstileEnabled() && (
+                          <div className="flex justify-center">
+                            <Turnstile
+                              action="checkout-place"
+                              appearance="interaction-only"
+                              onToken={handleTurnstileToken}
+                              onExpire={handleTurnstileExpire}
+                            />
+                          </div>
                         )}
 
                         {/* Pay with QR Ph Button */}

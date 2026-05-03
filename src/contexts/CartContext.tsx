@@ -219,7 +219,18 @@ interface CartContextType {
   orders: CompletedOrder[];
   placeOrder: (
     orderInfo: OrderInfo,
-    payment?: { paymentIntentId?: string; qrCodeImageUrl?: string | null },
+    payment?: {
+      paymentIntentId?: string;
+      qrCodeImageUrl?: string | null;
+      // Cloudflare Turnstile token captured by the CheckoutForm widget.
+      // Forwarded to /api/orders so the server can verify the order
+      // submission came from a real browser. Optional — when Turnstile
+      // is not configured, the server falls open.
+      turnstileToken?: string | null;
+      // Honeypot — must be empty. Wired through so future flows that
+      // don't want a hidden field can opt out by passing nothing.
+      honeypot?: string;
+    },
   ) => CompletedOrder;
   updateOrderStatus: (
     orderId: string,
@@ -593,7 +604,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const placeOrder = useCallback(
     (
       orderInfo: OrderInfo,
-      payment?: { paymentIntentId?: string; qrCodeImageUrl?: string | null },
+      payment?: {
+        paymentIntentId?: string;
+        qrCodeImageUrl?: string | null;
+        turnstileToken?: string | null;
+        honeypot?: string;
+      },
     ): CompletedOrder => {
       const order: CompletedOrder = {
         id: `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`,
@@ -621,7 +637,19 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "place", order }),
+        body: JSON.stringify({
+          action: "place",
+          order,
+          // Optional anti-abuse signals. Server falls open on both when
+          // they're missing or when Turnstile isn't configured, so
+          // these stay safe to send unconditionally.
+          ...(payment?.turnstileToken
+            ? { turnstileToken: payment.turnstileToken }
+            : {}),
+          ...(payment?.honeypot !== undefined
+            ? { website: payment.honeypot }
+            : {}),
+        }),
       })
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);

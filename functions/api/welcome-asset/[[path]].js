@@ -32,7 +32,14 @@ import { SECURITY_HEADERS } from "../_lib/security-headers.js";
 const CONFIG_KEY = "config";
 const PRODUCTS_KEY = "all-products";
 
-const DATA_URL_RE = /^data:(image\/[a-zA-Z0-9+.-]+);base64,([A-Za-z0-9+/=]+)$/;
+// Strict bitmap allowlist. SVG is intentionally excluded: it is XML and
+// can carry inline `<script>` / `<foreignObject>` payloads that execute
+// when fetched same-origin under /api/welcome-asset/<slot>, which would
+// turn this rehost endpoint into a stored-XSS sink for any admin who can
+// edit welcome / order-email assets. Bitmap-only matches what the admin
+// upload UI actually emits (jpeg/png/webp/avif/gif).
+const DATA_URL_RE =
+  /^data:(image\/(?:jpeg|jpg|png|webp|avif|gif));base64,([A-Za-z0-9+/=]+)$/;
 
 // Decode a base64 string into a Uint8Array. Workers don't have Buffer,
 // so we use atob and pack the chars into a typed array.

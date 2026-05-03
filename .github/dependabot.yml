@@ -1,0 +1,54 @@
+# Dependabot keeps npm and GitHub Actions deps fresh on a weekly cadence.
+# Patch + minor updates land as a single grouped PR per week per ecosystem
+# so we don't drown in 30 individual PRs whenever Vite / Tailwind / Radix
+# ship a release. Major bumps still arrive as their own PRs because they
+# usually need code review.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Manila"
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+          - "minor"
+      security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
+    ignore:
+      # @simplewebauthn/types is no longer published as a separate
+      # package; the types live inside @simplewebauthn/server now. The
+      # transitive entry in lockfile keeps surfacing as a "deprecated"
+      # warning — Dependabot can't fix it because it's pinned by an
+      # upstream package, so don't open a PR for it every week.
+      - dependency-name: "@simplewebauthn/types"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Manila"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "ci"

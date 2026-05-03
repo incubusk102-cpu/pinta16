@@ -1,5 +1,6 @@
 // /api/visitors — live visitor count and 24h hourly history.
 import { initRequestContext } from "./_lib/handler-wrapper.js";
+import { logError } from "./_lib/redact.js";
 // KV namespace: VISITORS (keys "heartbeats", "history-24h").
 
 import { makeStore } from "./_lib/kv-store.js";
@@ -183,7 +184,7 @@ const handle = async ({ request, env }) => {
 
     return json(405, { error: "Method not allowed" });
   } catch (error) {
-    console.error("visitors handler error:", error);
+    logError("visitors handler error:", error);
     return json(500, { error: "Could not record visitor" });
   }
 };

@@ -1,4 +1,5 @@
 import { autobanIfNeeded, wrapHandler } from "./_lib/handler-wrapper.js";
+import { logError } from "./_lib/redact.js";
 import {
   constantTimeEquals,
   ensureSessionSecret,
@@ -844,7 +845,7 @@ export const handler = async (event) => {
 
     return json(400, { error: "Unknown action" });
   } catch (error) {
-    console.error("admin-auth handler error:", error);
+    logError("admin-auth handler error:", error);
     return json(500, {
       error: "Internal error",
     });

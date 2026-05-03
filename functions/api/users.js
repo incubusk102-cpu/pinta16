@@ -1,4 +1,5 @@
 import { autobanIfNeeded, wrapHandler } from "./_lib/handler-wrapper.js";
+import { logError } from "./_lib/redact.js";
 import crypto from "node:crypto";
 import { isAuthenticated as isAdmin } from "./_lib/admin-auth.js";
 import {
@@ -789,7 +790,7 @@ export const handler = async (event) => {
 
     return json(400, { error: "Unknown action" });
   } catch (error) {
-    console.error("users handler error:", error);
+    logError("users handler error:", error);
     return json(500, { error: "Internal error" });
   }
 };
