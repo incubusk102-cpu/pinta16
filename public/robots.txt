@@ -3,7 +3,8 @@ Allow: /
 Disallow: /admin
 Disallow: /admin/
 Disallow: /api/
-Disallow: /.netlify/
 
-# Public sitemap (rendered dynamically from the catalogue).
+# Public sitemap (rendered dynamically from the catalogue
+# by functions/api/sitemap.js, served at /sitemap.xml via
+# the rewrite in public/_redirects).
 Sitemap: https://canvhub.com/sitemap.xml
