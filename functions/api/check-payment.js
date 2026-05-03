@@ -3,6 +3,7 @@ import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
+  "X-Content-Type-Options": "nosniff",
 };
 
 const parseBody = (body) => {
@@ -54,7 +55,12 @@ const handler = async (event) => {
   try {
     const { paymentIntentId } = parseBody(event.body);
 
-    if (!paymentIntentId || typeof paymentIntentId !== "string") {
+    if (
+      !paymentIntentId ||
+      typeof paymentIntentId !== "string" ||
+      paymentIntentId.length > 100 ||
+      !/^[a-zA-Z0-9_-]+$/.test(paymentIntentId)
+    ) {
       return {
         statusCode: 400,
         headers: jsonHeaders,
@@ -88,7 +94,7 @@ const handler = async (event) => {
       return {
         statusCode: 500,
         headers: jsonHeaders,
-        body: JSON.stringify({ error: "Status check failed", detail }),
+        body: JSON.stringify({ error: "Status check failed" }),
       };
     }
 

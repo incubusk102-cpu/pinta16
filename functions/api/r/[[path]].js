@@ -10,9 +10,29 @@
 
 const HEADERS_404 = {
   "Content-Type": "text/plain",
+  "X-Content-Type-Options": "nosniff",
   // Don't let CDNs cache a missing-image response for long.
   "Cache-Control": "public, max-age=60",
 };
+
+const SAFE_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+  "application/octet-stream",
+]);
+
+const hasPathTraversal = (key) =>
+  key.includes("..") ||
+  key.startsWith("/") ||
+  key.includes("\\") ||
+  key.includes("%2e") ||
+  key.includes("%2E") ||
+  key.includes("%00") ||
+  /[\x00-\x1f\x7f]/.test(key);
 
 export const onRequestGet = async ({ request, env, params }) => {
   if (!env.UPLOADS_BUCKET) {
@@ -24,7 +44,7 @@ export const onRequestGet = async ({ request, env, params }) => {
 
   const segments = Array.isArray(params?.path) ? params.path : [];
   const key = segments.join("/");
-  if (!key || key.includes("..") || key.startsWith("/")) {
+  if (!key || hasPathTraversal(key)) {
     return new Response("Not found", { status: 404, headers: HEADERS_404 });
   }
 
@@ -51,12 +71,14 @@ export const onRequestGet = async ({ request, env, params }) => {
   }
 
   const headers = new Headers();
-  // Object-level metadata wins; fall back to safe defaults.
-  if (object.httpMetadata?.contentType) {
-    headers.set("Content-Type", object.httpMetadata.contentType);
-  } else {
-    headers.set("Content-Type", "application/octet-stream");
-  }
+  // Object-level metadata wins; fall back to safe defaults. Force
+  // unrecognised types to application/octet-stream so the browser never
+  // renders uploaded content as HTML/JS.
+  const storedType = (object.httpMetadata?.contentType || "").toLowerCase();
+  const contentType = SAFE_CONTENT_TYPES.has(storedType)
+    ? storedType
+    : "application/octet-stream";
+  headers.set("Content-Type", contentType);
   headers.set(
     "Cache-Control",
     object.httpMetadata?.cacheControl || "public, max-age=31536000, immutable",
@@ -67,6 +89,12 @@ export const onRequestGet = async ({ request, env, params }) => {
   // Defence-in-depth: stop the browser from sniffing the body to a
   // different content type (e.g. interpreting an image as JS).
   headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Disposition", "inline");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  );
+  headers.set("Cross-Origin-Resource-Policy", "same-origin");
 
   return new Response(object.body, { status: 200, headers });
 };

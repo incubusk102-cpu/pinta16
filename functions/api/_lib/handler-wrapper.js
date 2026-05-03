@@ -15,7 +15,10 @@ import { isIpBlocked } from "./security-config.js";
 const jsonResponse = (status, body) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 
 const extractClientIp = (request) => {
@@ -50,6 +53,27 @@ const mirrorEnvToProcess = (env) => {
   }
 };
 
+// Common vulnerability scanner paths. Requests for these are rejected
+// immediately so the handler never runs. This catches Metasplitable-style
+// automated scanners probing for common server-side vulnerabilities.
+const SCANNER_PATH_PATTERN =
+  /(?:\.(?:php|asp|aspx|cgi|jsp|env|git|svn|bak|old|sql|tar|gz|zip|log|ini|conf|config|yml|yaml|xml|swp|DS_Store|htaccess|htpasswd)|\/(?:wp-admin|wp-login|wp-content|phpMyAdmin|phpmyadmin|pma|myadmin|admin\.php|xmlrpc|cgi-bin|\.well-known\/debug|server-status|server-info|debug|console|shell|eval|exec|cmd|command|\.env|actuator|druid|solr|jenkins|jmx|manager\/html)(?:\/|$))/i;
+
+const isScannerProbe = (pathname) => SCANNER_PATH_PATTERN.test(pathname);
+
+// Enforce that mutating requests include a JSON Content-Type. This blocks
+// cross-site form POSTs (CSRF via plain HTML forms) which browsers submit
+// as application/x-www-form-urlencoded or multipart/form-data. The only
+// exception is /api/google-callback which legitimately receives
+// application/x-www-form-urlencoded from Google's redirect flow, and
+// /api/uploads which receives raw image bytes.
+const CSRF_EXEMPT_PATHS = new Set(["/api/google-callback", "/api/uploads"]);
+
+const isJsonContentType = (request) => {
+  const ct = (request.headers.get("content-type") || "").toLowerCase();
+  return ct.startsWith("application/json");
+};
+
 // Shared preflight: sets per-request context, mirrors env onto process.env,
 // then enforces the IP block list from the Admin → Security panel. Returns a
 // Response when the request should be short-circuited (e.g. blocked IP), or
@@ -61,6 +85,13 @@ const mirrorEnvToProcess = (env) => {
 export const initRequestContext = async ({ request, env }) => {
   setCloudflareContext(env);
   mirrorEnvToProcess(env);
+
+  const url = new URL(request.url);
+
+  if (isScannerProbe(url.pathname)) {
+    return jsonResponse(404, { error: "Not found" });
+  }
+
   const ip = extractClientIp(request);
   if (ip && (await isIpBlocked(ip))) {
     return jsonResponse(403, { error: "Forbidden" });
@@ -73,6 +104,19 @@ export const wrapHandler =
   async ({ request, env }) => {
     const blocked = await initRequestContext({ request, env });
     if (blocked) return blocked;
+
+    const url = new URL(request.url);
+    const method = request.method;
+    if (
+      (method === "POST" || method === "PUT" || method === "PATCH") &&
+      !CSRF_EXEMPT_PATHS.has(url.pathname) &&
+      !isJsonContentType(request)
+    ) {
+      return jsonResponse(415, {
+        error: "Content-Type must be application/json",
+      });
+    }
+
     let event;
     try {
       event = await buildLambdaEvent(request);

@@ -20,7 +20,10 @@ const LIST_KEY = "subscribers";
 const jsonHeaders = { "Content-Type": "application/json" };
 
 const json = (status, body) =>
-  new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...jsonHeaders, "X-Content-Type-Options": "nosniff" },
+  });
 
 const isValidEmail = (s) =>
   typeof s === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());

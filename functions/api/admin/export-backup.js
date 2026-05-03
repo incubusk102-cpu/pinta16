@@ -55,10 +55,12 @@ const utf8 = new TextEncoder();
 
 const constantTimeEqual = (a, b) => {
   if (typeof a !== "string" || typeof b !== "string") return false;
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const la = a.length;
+  const lb = b.length;
+  const len = Math.max(la, lb);
+  let diff = la ^ lb;
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i % la) || 0) ^ (b.charCodeAt(i % lb) || 0);
   }
   return diff === 0;
 };

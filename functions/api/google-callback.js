@@ -61,6 +61,20 @@ const errorRedirect = (event, message) => {
   return redirect(url);
 };
 
+const ALLOWED_ORIGINS = [
+  "canvhub.com",
+  "www.canvhub.com",
+  "localhost",
+  "127.0.0.1",
+];
+
+const isAllowedHost = (host) => {
+  const lower = (host || "").toLowerCase().split(":")[0];
+  return ALLOWED_ORIGINS.some(
+    (allowed) => lower === allowed || lower.endsWith(`.${allowed}`),
+  );
+};
+
 const resolveOrigin = (event) => {
   const headers = event.headers || {};
   const proto =
@@ -70,7 +84,8 @@ const resolveOrigin = (event) => {
     headers["X-Forwarded-Host"] ||
     headers.host ||
     headers.Host;
-  if (!host) return "";
+  if (!host) return "https://canvhub.com";
+  if (!isAllowedHost(host)) return "https://canvhub.com";
   return `${proto}://${host}`;
 };
 
