@@ -6,6 +6,7 @@ import {
   ensureReferralCode,
   ensureSessionSecret,
   extractToken,
+  extractTokenWithSource,
   findUserById,
   findUserByReferralCode,
   getCurrentUserFromSession,
@@ -20,10 +21,18 @@ import {
   readUsers,
   runInactiveUserCleanup,
   sanitizeBirthday,
+  TOKEN_TTL_SECONDS,
+  USER_SESSION_COOKIE,
   verifyPassword,
   verifyTokenWithSecret,
   writeUsers,
 } from "./_lib/user-auth.js";
+import { clearCookieHeader, serializeCookie } from "./_lib/cookies.js";
+import {
+  CSRF_COOKIE_NAME,
+  generateCsrfToken,
+  verifyCsrf,
+} from "./_lib/csrf.js";
 import {
   computeActiveRewards,
   ensurePersonalReward,
@@ -81,6 +90,61 @@ const json = (statusCode, body) => ({
   headers: withSecurityHeaders(),
   body: JSON.stringify(body),
 });
+
+// Build the Set-Cookie pair we attach to user signup / login / Google
+// login responses. The session cookie is HttpOnly so JS can't read it
+// (XSS-safe); the CSRF cookie is non-HttpOnly so the SPA can echo the
+// value back as `X-CSRF-Token` on every state-changing request.
+const buildSessionCookies = (token, csrfToken) => [
+  serializeCookie(USER_SESSION_COOKIE, token, {
+    maxAgeSeconds: TOKEN_TTL_SECONDS,
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+  serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
+    maxAgeSeconds: TOKEN_TTL_SECONDS,
+    httpOnly: false,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+];
+
+const buildLogoutCookies = () => [
+  clearCookieHeader(USER_SESSION_COOKIE, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+  clearCookieHeader(CSRF_COOKIE_NAME, {
+    httpOnly: false,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+];
+
+// Wrap a `{ token, user }` body with the matching Set-Cookie pair so a
+// logged-in browser becomes cookie-authenticated immediately. Legacy
+// clients that read `token` from the body keep working.
+const sessionResponseFor = (token, user) => {
+  const csrfToken = generateCsrfToken();
+  return {
+    statusCode: 200,
+    headers: withSecurityHeaders(),
+    body: JSON.stringify({ token, csrfToken, user }),
+    cookies: buildSessionCookies(token, csrfToken),
+  };
+};
+
+const csrfBlocked = (event, source) =>
+  !verifyCsrf(event, {
+    method: event.httpMethod,
+    usingCookieAuth: source === "cookie",
+  });
 
 const parseBody = (body) => {
   if (!body) return {};
@@ -142,6 +206,21 @@ const sanitizeAddress = (raw) => {
 const getCurrentUser = async (event, store) =>
   getCurrentUserFromSession(event, store);
 
+// Pre-auth user-facing actions don't need CSRF protection because no
+// session cookie exists yet. CSRF is enforced on every other
+// state-changing action when authentication came from the cookie
+// (browsers auto-attach cookies; an attacker cross-site form would
+// otherwise replay the request as the victim). `Authorization: Bearer`
+// requests are exempt because the browser doesn't auto-attach that
+// header — only first-party JS can.
+const PRE_AUTH_USER_ACTIONS = new Set([
+  "google-login",
+  "signup",
+  "login",
+  "list", // GET-only admin path, but action= query string can hit it
+  "cleanup-now", // admin-only path, gated by isAdmin separately
+]);
+
 export const handler = async (event) => {
   try {
     const store = getUsersStore(event);
@@ -149,6 +228,61 @@ export const handler = async (event) => {
       (event.queryStringParameters && event.queryStringParameters.action) ||
       parseBody(event.body).action ||
       "";
+
+    // Boot probe used by the storefront SPA. Browsers auto-attach the
+    // HttpOnly session cookie; we echo the resolved token back in the
+    // body so the SPA can rehydrate its in-memory React state (the
+    // HttpOnly cookie itself isn't readable from JS). Also re-issues
+    // the CSRF cookie so a freshly booted tab gets a token it can echo
+    // on subsequent state-changing requests.
+    if (event.httpMethod === "GET" && action === "session") {
+      const { token } = extractTokenWithSource(event);
+      const user = await getCurrentUser(event, store);
+      if (!user || !token) return json(401, { error: "Not authenticated" });
+      const csrfToken = generateCsrfToken();
+      return {
+        statusCode: 200,
+        headers: withSecurityHeaders(),
+        body: JSON.stringify({
+          ok: true,
+          token,
+          csrfToken,
+          user: publicUser(user),
+        }),
+        cookies: [
+          serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
+            maxAgeSeconds: TOKEN_TTL_SECONDS,
+            httpOnly: false,
+            secure: true,
+            sameSite: "Strict",
+            path: "/",
+          }),
+        ],
+      };
+    }
+
+    // Idempotent server-side logout. Always 200, always clears cookies.
+    if (event.httpMethod === "POST" && action === "logout") {
+      return {
+        statusCode: 200,
+        headers: withSecurityHeaders(),
+        body: JSON.stringify({ ok: true }),
+        cookies: buildLogoutCookies(),
+      };
+    }
+
+    // CSRF guard for cookie-authenticated state-changing requests.
+    if (
+      event.httpMethod !== "GET" &&
+      event.httpMethod !== "HEAD" &&
+      event.httpMethod !== "OPTIONS" &&
+      !PRE_AUTH_USER_ACTIONS.has(action)
+    ) {
+      const { source } = extractTokenWithSource(event);
+      if (csrfBlocked(event, source)) {
+        return json(403, { error: "Invalid CSRF token" });
+      }
+    }
 
     if (event.httpMethod === "POST" && action === "google-login") {
       const limit = await consumeRateLimit(event, {
@@ -239,10 +373,7 @@ export const handler = async (event) => {
       if (isNewUser) {
         await fireWelcomeEmail(event, user, "google-login");
       }
-      return json(200, {
-        token: issueToken(user.id, secret),
-        user: publicUser(user),
-      });
+      return sessionResponseFor(issueToken(user.id, secret), publicUser(user));
     }
 
     if (event.httpMethod === "POST" && action === "signup") {
@@ -336,10 +467,7 @@ export const handler = async (event) => {
         ...captureRequestMeta(event),
       });
       await fireWelcomeEmail(event, user, "signup");
-      return json(200, {
-        token: issueToken(user.id, secret),
-        user: publicUser(user),
-      });
+      return sessionResponseFor(issueToken(user.id, secret), publicUser(user));
     }
 
     if (event.httpMethod === "POST" && action === "login") {
@@ -426,10 +554,7 @@ export const handler = async (event) => {
         detail: "Password OK",
         ...meta,
       });
-      return json(200, {
-        token: issueToken(user.id, secret),
-        user: publicUser(user),
-      });
+      return sessionResponseFor(issueToken(user.id, secret), publicUser(user));
     }
 
     if (event.httpMethod === "POST" && action === "heartbeat") {

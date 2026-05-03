@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 
-const STORAGE_KEY = "canvhub_admin_token";
+// Legacy localStorage key from the pre-Tier-3-#11 model. We deliberately
+// purge it on boot so any token left over from the old persistence path
+// can't be picked up — the only source of truth is now the HttpOnly
+// `cv_admin_session` cookie, rehydrated into in-memory React state via
+// the `?action=session` boot probe.
+const LEGACY_STORAGE_KEY = "canvhub_admin_token";
 const AUTH_API = "/api/admin-auth";
 
 export interface LoginPasswordResult {
@@ -54,23 +59,13 @@ const AdminAuthContext = createContext<AdminAuthContextValue | undefined>(
   undefined,
 );
 
-const readStoredToken = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const persistToken = (token: string | null) => {
+// One-time cleanup of the legacy localStorage entry. Runs in module
+// scope so it executes before any component reads the cookie value.
+// Idempotent — `removeItem` on a missing key is a no-op.
+const purgeLegacyToken = () => {
   if (typeof window === "undefined") return;
   try {
-    if (token) {
-      localStorage.setItem(STORAGE_KEY, token);
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     /* ignore */
   }
@@ -86,7 +81,11 @@ const parseError = async (response: Response, fallback: string) => {
 };
 
 export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(() => readStoredToken());
+  // Token lives only in React state. On reload we re-derive it from
+  // the HttpOnly session cookie via the `?action=session` boot probe.
+  // No localStorage, no sessionStorage — XSS can't steal what isn't
+  // persisted across the page lifetime.
+  const [token, setToken] = useState<string | null>(null);
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [gate, setGate] = useState<LoginGateInfo | null>(null);
@@ -116,12 +115,35 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [fetchGate]);
 
+  // Boot probe: try the cookie-backed session endpoint. If the browser
+  // still has a valid `cv_admin_session` cookie, the server echoes the
+  // resolved JWT back so we can rehydrate React state. 401 → not
+  // logged in (clean slate). Always run alongside the gate fetch.
+  const probeSession = useCallback(async (): Promise<string | null> => {
+    try {
+      const response = await fetch(`${AUTH_API}?action=session`, {
+        method: "GET",
+        credentials: "same-origin",
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as { token?: string };
+      return data.token || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const checkInitialized = async () => {
+    purgeLegacyToken();
+    const boot = async () => {
       try {
-        await fetchGate();
+        const [, sessionToken] = await Promise.all([
+          fetchGate(),
+          probeSession(),
+        ]);
         if (cancelled) return;
+        if (sessionToken) setToken(sessionToken);
       } catch {
         if (!cancelled) {
           setInitialized(null);
@@ -131,15 +153,14 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
         if (!cancelled) setLoading(false);
       }
     };
-    void checkInitialized();
+    void boot();
     return () => {
       cancelled = true;
     };
-  }, [fetchGate]);
+  }, [fetchGate, probeSession]);
 
   const setAuthToken = useCallback((next: string | null) => {
     setToken(next);
-    persistToken(next);
   }, []);
 
   const initPassword = useCallback(
@@ -259,6 +280,15 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   }, [setAuthToken]);
 
   const logout = useCallback(() => {
+    // Best-effort: tell the server to clear the cookies. We don't await
+    // network success — even if the request fails (offline, etc.) the
+    // user is logged out client-side immediately.
+    void fetch(AUTH_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ action: "logout" }),
+    }).catch(() => {});
     setAuthToken(null);
   }, [setAuthToken]);
 
@@ -345,4 +375,7 @@ export const useAdminAuth = () => {
   return ctx;
 };
 
-export const getAdminToken = () => readStoredToken();
+// Legacy export retained so any leftover non-React imports keep
+// type-checking. Always returns null now — the token is no longer
+// persisted, so callers can't read it from outside React state.
+export const getAdminToken = (): string | null => null;

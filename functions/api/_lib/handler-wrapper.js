@@ -16,6 +16,10 @@ import {
   getSecurityConfig,
 } from "./security-config.js";
 import { logSecurityEvent, shouldAutoban } from "./security-events.js";
+import { readCookie } from "./cookies.js";
+import { ADMIN_SESSION_COOKIE } from "./admin-auth.js";
+import { USER_SESSION_COOKIE } from "./user-auth.js";
+import { CSRF_COOKIE_NAME, verifyCsrf } from "./csrf.js";
 
 const jsonResponse = (status, body) =>
   new Response(JSON.stringify(body), {
@@ -81,6 +85,51 @@ const isScannerProbe = (pathname) => SCANNER_PATH_PATTERN.test(pathname);
 // application/x-www-form-urlencoded from Google's redirect flow, and
 // /api/uploads which receives raw image bytes.
 const CSRF_EXEMPT_PATHS = new Set(["/api/google-callback", "/api/uploads"]);
+
+// Endpoints that handle their own CSRF gate inline (because they need
+// finer-grained per-action exemptions, e.g. login / signup / passkey
+// challenge flows where no session cookie has been set yet). These
+// skip the wrapper-level CSRF check.
+const CSRF_INLINE_PATHS = new Set(["/api/admin-auth", "/api/users"]);
+
+// Pull a Lambda-style headers shim out of the inbound Pages request so
+// the cookie / CSRF helpers can reuse the existing event shape without
+// us having to thread a separate `Headers` reference through them.
+const buildHeadersShim = (request) => {
+  const out = {};
+  if (request?.headers && typeof request.headers.entries === "function") {
+    for (const [k, v] of request.headers.entries()) {
+      out[k.toLowerCase()] = v;
+    }
+  }
+  return out;
+};
+
+const STATE_CHANGING_METHOD_RE = /^(POST|PUT|PATCH|DELETE)$/;
+
+// Wrapper-level CSRF guard: any state-changing request that comes in
+// with a session cookie (admin or user) MUST also include a matching
+// `X-CSRF-Token` header. This catches every endpoint that relies on
+// `wrapHandler` — finer-grained exemptions live in the per-endpoint
+// handlers (see `CSRF_INLINE_PATHS`). Authorization-header auth is
+// exempt because the browser doesn't auto-attach that header.
+const isCsrfRejected = (request, pathname) => {
+  if (!STATE_CHANGING_METHOD_RE.test(request.method)) return false;
+  if (CSRF_INLINE_PATHS.has(pathname)) return false;
+  const headersShim = buildHeadersShim(request);
+  const eventLike = { headers: headersShim };
+  const adminCookie = readCookie(eventLike, ADMIN_SESSION_COOKIE);
+  const userCookie = readCookie(eventLike, USER_SESSION_COOKIE);
+  if (!adminCookie && !userCookie) return false;
+  // If the caller is also sending a Bearer header, we treat that as
+  // the authoritative auth and skip CSRF. Cookie may be a stale leftover.
+  const auth = headersShim.authorization || "";
+  if (auth.toLowerCase().startsWith("bearer ")) return false;
+  return !verifyCsrf(eventLike, {
+    method: request.method,
+    usingCookieAuth: true,
+  });
+};
 
 const isJsonContentType = (request) => {
   const ct = (request.headers.get("content-type") || "").toLowerCase();
@@ -183,6 +232,24 @@ export const wrapHandler =
       return jsonResponse(415, {
         error: "Content-Type must be application/json",
       });
+    }
+
+    // Double-submit CSRF check for cookie-authenticated state-changing
+    // requests. Endpoints under `CSRF_INLINE_PATHS` enforce their own
+    // gate (because they need per-action carve-outs for pre-auth flows
+    // like login). Endpoints with no session cookie don't need a CSRF
+    // check — anonymous requests can't be CSRF'd into anything privileged.
+    if (isCsrfRejected(request, url.pathname)) {
+      void logSecurityEvent({
+        type: "csrf",
+        ip,
+        country,
+        path: url.pathname,
+        detail: "Missing or mismatched X-CSRF-Token",
+        userAgent: ua,
+      });
+      void autobanIfNeeded(ip);
+      return jsonResponse(403, { error: "Invalid CSRF token" });
     }
 
     let event;

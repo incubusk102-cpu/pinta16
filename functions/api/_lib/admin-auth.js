@@ -13,6 +13,13 @@
 
 import { makeStore } from "./kv-store.js";
 import { requireKvBinding } from "./context.js";
+import { readCookie } from "./cookies.js";
+
+// HttpOnly cookie that carries the admin session JWT. Set on
+// init / login / 2FA / passkey / rotate, cleared on logout. Browsers
+// auto-attach it to same-origin requests, so handlers can authenticate
+// the request without the legacy `Authorization: Bearer` header.
+export const ADMIN_SESSION_COOKIE = "cv_admin_session";
 
 export const STORE_NAME = "admin-auth";
 export const CREDENTIALS_KEY = "credentials";
@@ -211,13 +218,36 @@ export const rotateSessionSecret = async (store) => {
   return secret;
 };
 
-export const extractToken = (event) => {
+// Pull the admin session token out of an inbound request. Accepts both
+// the legacy `Authorization: Bearer` header (used by curl / CI / the
+// in-memory React-state flow) and the HttpOnly `cv_admin_session`
+// cookie (set on login and auto-attached by the browser on every
+// same-origin request).
+//
+// We prefer the header when both are present so that explicit clients
+// — tests, scripts, the SPA's own authed fetches — opt into the legacy
+// path which is exempt from the CSRF double-submit check (they can't
+// be victims of a cross-site request forgery: the browser doesn't
+// auto-attach the `Authorization` header from a different origin).
+// Cross-site attacks land in the cookie path, where CSRF is enforced.
+//
+// Returns `{ token, source }` where source is "header" | "cookie" |
+// null. Callers that don't care about source can use `extractToken`.
+export const extractTokenWithSource = (event) => {
   const auth =
     event.headers?.authorization || event.headers?.Authorization || "";
-  if (typeof auth !== "string") return null;
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7).trim() || null;
+  if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
+    const value = auth.slice(7).trim();
+    if (value) return { token: value, source: "header" };
+  }
+  const cookie = readCookie(event, ADMIN_SESSION_COOKIE);
+  if (typeof cookie === "string" && cookie.length > 0) {
+    return { token: cookie, source: "cookie" };
+  }
+  return { token: null, source: null };
 };
+
+export const extractToken = (event) => extractTokenWithSource(event).token;
 
 export const isAuthenticated = async (event) => {
   const token = extractToken(event);
