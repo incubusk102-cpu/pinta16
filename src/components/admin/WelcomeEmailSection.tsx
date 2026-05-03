@@ -607,52 +607,37 @@ const escapeHtml = (s: string): string =>
 const isSafeColor = (value: string): boolean =>
   /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
 
-// Mirrors `isDarkEmailBg` in functions/api/_lib/email.js so the admin
-// preview picks the same dark/light logo variant as the actual sent
-// email.
-const isDarkEmailBg = (color: string | undefined): boolean => {
-  const hex = String(color || "")
-    .replace("#", "")
-    .trim();
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return false;
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-  return luminance < 0.5;
-};
+// URL of the brand C-logo PNG hosted on the Cloudflare Pages origin.
+// Kept identical to `DEFAULT_BRAND_LOGO_URL` in
+// functions/api/_lib/email.js so admin previews fetch the same asset
+// the sent email will fetch. The storefront PUBLIC_SITE_ORIGIN is
+// hardcoded to https://canvhub.com on the server; we mirror that here
+// rather than threading it through props because the brand logo is
+// the same logo regardless of who's previewing.
+const DEFAULT_BRAND_LOGO_URL = "https://canvhub.com/icon-512.png";
 
-// Mirrors `defaultBrandLogoHtml` in functions/api/_lib/email.js. The
-// medallion + wordmark colors auto-flip based on the template's card
-// background so the baked-in default logo always has contrast against
-// the email surface (gold "C" on dark frame for light bgs, gold tile
-// with dark "C" for the dark "gallery" template). Keep this
-// byte-identical to the server renderer or the in-browser preview will
+// Mirrors `defaultBrandLogoHtml` in functions/api/_lib/email.js. We
+// render only the brand C-logo PNG (warm-black rounded square + gold
+// medallion + italic-C cut-out, identical to the storefront favicon /
+// PWA icon at public/icon-512.png) — no "Canvas Hub" wordmark, no
+// "EST. 2026" tagline. `fromName` and `tpl` are accepted for back-
+// compat with the previous renderer; both are intentionally unused
+// because the brand mark is template-agnostic and the configurable
+// from-name is never displayed as a wordmark in the header. Keep this
+// byte-identical to the server renderer or the admin preview will
 // drift from the sent email.
 export const renderDefaultBrandLogoHtml = (
-  fromName: string,
-  tpl: { pageBg: string; cardBg: string },
+  _fromName: string,
+  _tpl: { pageBg: string; cardBg: string },
   headerAlign: "left" | "center",
 ): string => {
-  const isDark = isDarkEmailBg(tpl?.cardBg) || isDarkEmailBg(tpl?.pageBg);
-  const wordmarkColor = "#c4a86a";
-  const taglineColor = isDark ? "#a39676" : "#7a7468";
-  const medallionBg = isDark ? "#c4a86a" : "#181613";
-  const medallionLetter = isDark ? "#181613" : "#c4a86a";
   const tableAlign = headerAlign === "center" ? "center" : "left";
   const tableMargin = headerAlign === "center" ? "0 auto" : "0";
-  const safeName = escapeHtml(fromName || "Canvas Hub");
   return `
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
           <tr>
-            <td style="padding:0 14px 0 0;vertical-align:middle;">
-              <div style="width:48px;height:48px;background:${medallionBg};border-radius:50%;text-align:center;line-height:48px;mso-line-height-rule:exactly;">
-                <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:32px;line-height:48px;color:${medallionLetter};">C</span>
-              </div>
-            </td>
-            <td style="vertical-align:middle;">
-              <div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:26px;letter-spacing:0.02em;color:${wordmarkColor};line-height:1.1;">${safeName}</div>
-              <div style="font-family:Inter,Helvetica,Arial,sans-serif;font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:${taglineColor};margin-top:6px;">EST. 2026</div>
+            <td style="padding:0;line-height:0;font-size:0;">
+              <img src="${DEFAULT_BRAND_LOGO_URL}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
             </td>
           </tr>
         </table>`;
