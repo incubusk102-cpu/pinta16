@@ -1100,57 +1100,40 @@ const buildFooterLinksHtml = (welcome, accent) => {
         </table>`;
 };
 
-// Treat any hex color whose perceptual luminance falls below 0.5 as a
-// dark template background. Used to flip the baked-in default logo
-// between its dark-frame variant (for light backgrounds) and its
-// gold-on-dark variant (for the dark "gallery" template) so it never
-// disappears the way a single static logo would on the wrong canvas.
-const isDarkEmailBg = (color) => {
-  const hex = String(color || "")
-    .replace("#", "")
-    .trim();
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return false;
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-  return luminance < 0.5;
-};
+// Storefront URL for the baked-in brand C-logo PNG. Hosted on the
+// Cloudflare Pages origin so every email client can fetch it without
+// CORS / signature dance. Kept in sync with PUBLIC_SITE_ORIGIN above.
+const DEFAULT_BRAND_LOGO_URL = `${PUBLIC_SITE_ORIGIN}/icon-512.png`;
 
 /**
- * Render the baked-in default Canvas Hub identity used when no custom
- * logo has been uploaded. We render the brand "C" medallion + italic
- * "Canvas Hub" wordmark inline, in pure HTML+CSS, so it survives every
- * mainstream email client (Gmail mobile strips inline SVG; Outlook
- * strips border-radius but still shows a square gold tile, which still
- * reads as "Canvas Hub"). The medallion + wordmark colors auto-flip
- * based on the template's page/card background so the logo always has
- * contrast with whatever surface it sits on. Mirrored verbatim by the
- * admin email-section previews so the editor matches the sent email.
+ * Render the baked-in brand identity for the email header — just the
+ * gold "C" medallion sitting on the warm-black rounded square that
+ * matches the storefront's icon.svg / icon-512.png. We do NOT render
+ * the "Canvas Hub" wordmark or the EST. 2026 tagline anymore: the
+ * brand is the C, full stop, identical to the storefront favicon /
+ * PWA icon. Used everywhere a custom logoUrl hasn't been uploaded.
+ *
+ * Implementation: the canonical PNG is hosted at
+ * `${PUBLIC_SITE_ORIGIN}/icon-512.png` (Cloudflare Pages, public, CDN-
+ * cached, identical to the storefront brand mark). Email clients that
+ * block remote images fall back to the alt text "C" — never the words
+ * "Canvas Hub". `tpl` and `fromName` are accepted for back-compat
+ * with the previous medallion+wordmark renderer; both are now
+ * intentionally unused (the brand mark is template-agnostic and never
+ * uses the configurable from-name as a wordmark).
+ *
+ * Mirrored byte-for-byte by `renderDefaultBrandLogoHtml` in
+ * `src/components/admin/WelcomeEmailSection.tsx` so admin previews
+ * match the sent email.
  */
-const defaultBrandLogoHtml = (fromName, tpl, headerAlign) => {
-  const isDark = isDarkEmailBg(tpl?.cardBg) || isDarkEmailBg(tpl?.pageBg);
-  // Gold reads on both light + dark surfaces; we keep the wordmark
-  // gold across both variants and only flip the medallion's frame +
-  // letter so the silhouette inverts cleanly.
-  const wordmarkColor = "#c4a86a";
-  const taglineColor = isDark ? "#a39676" : "#7a7468";
-  const medallionBg = isDark ? "#c4a86a" : "#181613";
-  const medallionLetter = isDark ? "#181613" : "#c4a86a";
+const defaultBrandLogoHtml = (_fromName, _tpl, headerAlign) => {
   const tableAlign = headerAlign === "center" ? "center" : "left";
   const tableMargin = headerAlign === "center" ? "0 auto" : "0";
-  const safeName = escapeHtml(fromName || "Canvas Hub");
   return `
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
           <tr>
-            <td style="padding:0 14px 0 0;vertical-align:middle;">
-              <div style="width:48px;height:48px;background:${medallionBg};border-radius:50%;text-align:center;line-height:48px;mso-line-height-rule:exactly;">
-                <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:32px;line-height:48px;color:${medallionLetter};">C</span>
-              </div>
-            </td>
-            <td style="vertical-align:middle;">
-              <div style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:26px;letter-spacing:0.02em;color:${wordmarkColor};line-height:1.1;">${safeName}</div>
-              <div style="font-family:Inter,Helvetica,Arial,sans-serif;font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:${taglineColor};margin-top:6px;">EST. 2026</div>
+            <td style="padding:0;line-height:0;font-size:0;">
+              <img src="${DEFAULT_BRAND_LOGO_URL}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
             </td>
           </tr>
         </table>`;
