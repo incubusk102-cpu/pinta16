@@ -35,6 +35,7 @@ import {
   isPurchasable,
   type Availability,
 } from "@/lib/artworks";
+import { NotifyMeButton } from "@/components/NotifyMeButton";
 
 interface ProductReview {
   orderId: string;
@@ -549,6 +550,9 @@ function ProductPage() {
                 <Share2 className="w-4 h-4" />
                 Share
               </button>
+              {artwork.availability === "sold" && (
+                <NotifyMeButton productId={artwork.id} />
+              )}
               <Link
                 to="/"
                 hash="gallery"

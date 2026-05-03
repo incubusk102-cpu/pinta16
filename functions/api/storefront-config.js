@@ -839,6 +839,65 @@ const WELCOME10_PROMO_DEFAULT = {
   description: "Welcome offer for new visitors",
 };
 
+const DEFAULT_MARKETING_TRIGGERS = {
+  reviewFollowUp: {
+    enabled: true,
+    delayDays: 3,
+    subject: "How are you enjoying your painting?",
+    heading: "We\u2019d love your feedback",
+  },
+  winback: {
+    enabled: true,
+    delayDays: 60,
+    subject: "We miss you at Canvas Hub",
+    heading: "It\u2019s been a while",
+  },
+  backInStock: {
+    enabled: true,
+    subject: "Good news \u2014 {{title}} is back!",
+    heading: "Back in stock",
+  },
+  priceDrop: {
+    enabled: true,
+    subject: "Price drop: {{title}} is now {{price}}",
+    heading: "New sale alert",
+  },
+};
+
+const sanitizeTriggerBlock = (raw, defaults) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const result = { enabled: data.enabled !== false };
+  if ("delayDays" in defaults) {
+    const d = Math.floor(Number(data.delayDays) || 0);
+    result.delayDays = d >= 1 && d <= 180 ? d : defaults.delayDays;
+  }
+  result.subject = String(data.subject ?? defaults.subject).slice(0, 200);
+  result.heading = String(data.heading ?? defaults.heading).slice(0, 100);
+  return result;
+};
+
+const sanitizeMarketingTriggers = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    reviewFollowUp: sanitizeTriggerBlock(
+      data.reviewFollowUp,
+      DEFAULT_MARKETING_TRIGGERS.reviewFollowUp,
+    ),
+    winback: sanitizeTriggerBlock(
+      data.winback,
+      DEFAULT_MARKETING_TRIGGERS.winback,
+    ),
+    backInStock: sanitizeTriggerBlock(
+      data.backInStock,
+      DEFAULT_MARKETING_TRIGGERS.backInStock,
+    ),
+    priceDrop: sanitizeTriggerBlock(
+      data.priceDrop,
+      DEFAULT_MARKETING_TRIGGERS.priceDrop,
+    ),
+  };
+};
+
 const DEFAULT_ABANDONED_CART = {
   enabled: true,
   nudge1Minutes: 60,
@@ -980,6 +1039,7 @@ const DEFAULT_CONFIG = {
   orderPush: DEFAULT_ORDER_PUSH,
   newUserModal: DEFAULT_NEW_USER_MODAL,
   abandonedCart: DEFAULT_ABANDONED_CART,
+  marketingTriggers: DEFAULT_MARKETING_TRIGGERS,
 };
 
 const DEFAULT_DAILY_FEATURE = {
@@ -1298,6 +1358,7 @@ const sanitizeConfig = (raw) => {
       .filter(Boolean),
     newUserModal: sanitizeNewUserModal(data.newUserModal),
     abandonedCart: sanitizeAbandonedCart(data.abandonedCart),
+    marketingTriggers: sanitizeMarketingTriggers(data.marketingTriggers),
     dailyFeature: sanitizeDailyFeature(data.dailyFeature),
     thankYou: sanitizeThankYou(data.thankYou),
     vacationMode: sanitizeVacationMode(data.vacationMode),
@@ -1501,6 +1562,30 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           abandonedCart: { ...existing.abandonedCart, ...body.abandonedCart },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-marketing-triggers") {
+        const incoming =
+          body.marketingTriggers && typeof body.marketingTriggers === "object"
+            ? body.marketingTriggers
+            : {};
+        const merged = { ...existing.marketingTriggers };
+        for (const key of [
+          "reviewFollowUp",
+          "winback",
+          "backInStock",
+          "priceDrop",
+        ]) {
+          if (incoming[key] && typeof incoming[key] === "object") {
+            merged[key] = { ...(merged[key] || {}), ...incoming[key] };
+          }
+        }
+        const next = sanitizeConfig({
+          ...existing,
+          marketingTriggers: merged,
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });

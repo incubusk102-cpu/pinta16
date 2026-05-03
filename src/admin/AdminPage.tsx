@@ -51,6 +51,7 @@ import { UsersSection } from "@/components/admin/UsersSection";
 import { CustomersSection } from "@/components/admin/CustomersSection";
 import { AbandonedCartSection } from "@/components/admin/AbandonedCartSection";
 import { MarketingSection } from "@/components/admin/MarketingSection";
+import { MarketingTriggersSection } from "@/components/admin/MarketingTriggersSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
@@ -106,6 +107,7 @@ import {
   Upload,
   Users,
   Wallet,
+  Zap,
 } from "lucide-react";
 import {
   ORDER_STEPS,
@@ -127,6 +129,7 @@ type AdminSection =
   | "customers"
   | "marketing"
   | "abandonedCart"
+  | "marketingTriggers"
   | "storefront"
   | "hero"
   | "siteCopy"
@@ -151,6 +154,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   customers: "Customers",
   marketing: "Marketing",
   abandonedCart: "Cart recovery",
+  marketingTriggers: "Triggers",
   storefront: "Storefront",
   hero: "Hero slider",
   siteCopy: "Site copy",
@@ -548,6 +552,11 @@ const NAV_GROUPS: {
         key: "abandonedCart",
         icon: <ShoppingCart className="w-4 h-4" />,
         hint: "Cart recovery emails",
+      },
+      {
+        key: "marketingTriggers",
+        icon: <Zap className="w-4 h-4" />,
+        hint: "Review, winback, restock, price-drop",
       },
       {
         key: "storefront",
@@ -981,6 +990,7 @@ function AdminDashboard() {
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}
           {section === "abandonedCart" && <AbandonedCartSection />}
+          {section === "marketingTriggers" && <MarketingTriggersSection />}
           {section === "storefront" && <StorefrontSection />}
           {section === "hero" && <HeroSlidesSection />}
           {section === "siteCopy" && <SiteCopySection />}
