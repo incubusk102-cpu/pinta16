@@ -1606,47 +1606,72 @@ const CheckoutForm = () => {
                                     mode. Lives inline with the address
                                     fields so the buyer sees the live
                                     indicative range the moment they
-                                    pick a province. */}
-                                  {LALAMOVE_PAID_TO_RIDER && (
-                                    <div className="rounded-sm border border-foreground/15 bg-muted/30 p-3 space-y-1.5">
+                                    pick a province. When the buyer
+                                    crosses the admin-set free-shipping
+                                    threshold the panel flips to a
+                                    "we'll cover the rider fee on
+                                    delivery" promise. */}
+                                  {LALAMOVE_PAID_TO_RIDER &&
+                                  shippingIsWaived ? (
+                                    <div className="rounded-sm border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-1.5">
                                       <div className="flex items-center gap-1.5">
-                                        <Truck className="w-3.5 h-3.5 text-foreground/70" />
-                                        <p className="font-body text-xs text-foreground">
-                                          Delivery via{" "}
-                                          <span className="font-semibold">
-                                            Lalamove
-                                          </span>
+                                        <Truck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                        <p className="font-body text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
+                                          Free shipping unlocked
                                         </p>
                                       </div>
-                                      <p className="font-body text-[11px] leading-relaxed text-muted-foreground">
-                                        Once your order is ready we'll book a
-                                        Lalamove rider to your address. You pay
-                                        the rider directly in cash on delivery —
-                                        no shipping fee is charged at checkout.
+                                      <p className="font-body text-[11px] leading-relaxed text-foreground/80">
+                                        Your order qualifies for free shipping —
+                                        we'll cover the Lalamove rider fee on
+                                        delivery. Just hand the rider the order
+                                        slip; no out-of-pocket cash needed.
                                       </p>
-                                      {form.province && lalamoveRange && (
-                                        <p className="font-body text-[11px] text-foreground/80 pt-0.5">
-                                          Indicative fee for {form.province}:{" "}
-                                          <span className="font-semibold">
-                                            {formatLalamoveRange(lalamoveRange)}
-                                          </span>
-                                        </p>
-                                      )}
-                                      {form.province && !lalamoveRange && (
-                                        <p className="font-body text-[11px] text-foreground/80 pt-0.5">
-                                          Lalamove may not currently serve{" "}
-                                          {form.province}. We'll message you
-                                          with a rider's quote once your order
-                                          is confirmed.
-                                        </p>
-                                      )}
-                                      {!form.province && (
-                                        <p className="font-body text-[11px] text-muted-foreground italic pt-0.5">
-                                          Pick a province above to see the
-                                          indicative rider fee.
-                                        </p>
-                                      )}
                                     </div>
+                                  ) : (
+                                    LALAMOVE_PAID_TO_RIDER && (
+                                      <div className="rounded-sm border border-foreground/15 bg-muted/30 p-3 space-y-1.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <Truck className="w-3.5 h-3.5 text-foreground/70" />
+                                          <p className="font-body text-xs text-foreground">
+                                            Delivery via{" "}
+                                            <span className="font-semibold">
+                                              Lalamove
+                                            </span>
+                                          </p>
+                                        </div>
+                                        <p className="font-body text-[11px] leading-relaxed text-muted-foreground">
+                                          Once your order is ready we'll book a
+                                          Lalamove rider to your address. You
+                                          pay the rider directly in cash on
+                                          delivery — no shipping fee is charged
+                                          at checkout.
+                                        </p>
+                                        {form.province && lalamoveRange && (
+                                          <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                            Indicative fee for {form.province}:{" "}
+                                            <span className="font-semibold">
+                                              {formatLalamoveRange(
+                                                lalamoveRange,
+                                              )}
+                                            </span>
+                                          </p>
+                                        )}
+                                        {form.province && !lalamoveRange && (
+                                          <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                            Lalamove may not currently serve{" "}
+                                            {form.province}. We'll message you
+                                            with a rider's quote once your order
+                                            is confirmed.
+                                          </p>
+                                        )}
+                                        {!form.province && (
+                                          <p className="font-body text-[11px] text-muted-foreground italic pt-0.5">
+                                            Pick a province above to see the
+                                            indicative rider fee.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )
                                   )}
                                 </div>
                               )}
