@@ -13,7 +13,11 @@ import {
   type PromoCodeType,
 } from "@/contexts/StorefrontConfigContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
-import { getShippingFee, hasShippingRates } from "@/lib/shipment";
+import {
+  getShippingFee,
+  hasShippingRates,
+  LALAMOVE_PAID_TO_RIDER,
+} from "@/lib/shipment";
 import type { ShippingZone } from "@/lib/ph-regions";
 
 export interface CartItem {
@@ -573,16 +577,32 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   // back to the legacy flat fee (which can be ₱0 if the admin only set
   // the per-courier rates) and render a misleading "₱0 FREE" before the
   // shopper ever sees the courier picker.
+  //
+  // In Lalamove-paid-to-rider mode the cart never charges shipping at
+  // all — the rider quotes the actual fare on dispatch and the buyer
+  // pays them directly in cash. We collapse the entire shipping price
+  // model to ₱0 and turn off the "Free shipping over ₱X" progress bar
+  // (since there's nothing to waive).
   const ratesConfigured = hasShippingRates(config.shippingRates);
   const courierPicked = Boolean(
     checkoutShipping.courier && checkoutShipping.zone,
   );
-  const shippingFeePending = ratesConfigured && !courierPicked;
-  const baseShippingFee =
-    courierFee != null ? courierFee : shippingFeePending ? 0 : SHIPPING_FEE;
+  const shippingFeePending = LALAMOVE_PAID_TO_RIDER
+    ? false
+    : ratesConfigured && !courierPicked;
+  const baseShippingFee = LALAMOVE_PAID_TO_RIDER
+    ? 0
+    : courierFee != null
+      ? courierFee
+      : shippingFeePending
+        ? 0
+        : SHIPPING_FEE;
   const shippingFeeOriginal = baseShippingFee;
-  const shippingFee =
-    isFreeShipping || voucherFreeShipping ? 0 : baseShippingFee;
+  const shippingFee = LALAMOVE_PAID_TO_RIDER
+    ? 0
+    : isFreeShipping || voucherFreeShipping
+      ? 0
+      : baseShippingFee;
   const discount = useMemo((): number => {
     if (!voucher.applied) return 0;
     if (voucher.type === "percent") {
@@ -743,10 +763,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     [orders],
   );
 
-  const freeShippingThreshold = Number.isFinite(FREE_SHIPPING_THRESHOLD)
-    ? FREE_SHIPPING_THRESHOLD
-    : 0;
-  const freeShippingEnabled = config.freeShipping.enabled;
+  // The "Free shipping over ₱X" promo is meaningless in Lalamove-only
+  // mode (no shipping fee is ever charged), so we collapse both the
+  // threshold and the enable flag to zero/false. The cart drawer's
+  // progress bar checks both before rendering.
+  const freeShippingThreshold = LALAMOVE_PAID_TO_RIDER
+    ? 0
+    : Number.isFinite(FREE_SHIPPING_THRESHOLD)
+      ? FREE_SHIPPING_THRESHOLD
+      : 0;
+  const freeShippingEnabled = LALAMOVE_PAID_TO_RIDER
+    ? false
+    : config.freeShipping.enabled;
 
   // Memoise the context value so consumers don't re-render every time
   // a parent provider (e.g. polled storefront config or product list)

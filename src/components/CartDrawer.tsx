@@ -13,6 +13,7 @@ import { useEffect, useId, useState } from "react";
 import { useCart } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { LALAMOVE_PAID_TO_RIDER } from "@/lib/shipment";
 
 const CartDrawer = () => {
   const {
@@ -272,7 +273,14 @@ const CartDrawer = () => {
                   </div>
                   <div className="flex justify-between font-body text-xs text-muted-foreground">
                     <span>Shipping</span>
-                    {shippingFeePending ? (
+                    {LALAMOVE_PAID_TO_RIDER ? (
+                      <span className="text-foreground/80 text-right">
+                        Lalamove
+                        <span className="block text-[10px] text-muted-foreground">
+                          paid to rider on delivery
+                        </span>
+                      </span>
+                    ) : shippingFeePending ? (
                       <span className="text-foreground/70">
                         Pick a courier at checkout
                       </span>
@@ -299,9 +307,14 @@ const CartDrawer = () => {
                     <span>Total</span>
                     <span className="font-semibold">
                       ₱{total.toLocaleString()}
-                      {shippingFeePending && (
+                      {shippingFeePending && !LALAMOVE_PAID_TO_RIDER && (
                         <span className="font-body text-[10px] text-muted-foreground ml-1">
                           + shipping
+                        </span>
+                      )}
+                      {LALAMOVE_PAID_TO_RIDER && (
+                        <span className="font-body text-[10px] text-muted-foreground ml-1">
+                          + Lalamove fee
                         </span>
                       )}
                     </span>
