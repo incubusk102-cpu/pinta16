@@ -161,6 +161,175 @@ export const getLalamoveRange = (
   return LALAMOVE_RANGE_BY_PROVINCE[province.trim().toLowerCase()];
 };
 
+// ---------------------------------------------------------------------
+// Distance-based Lalamove fare estimate
+//
+// When the admin has filled in a warehouse origin + per-km rate, we can
+// give the customer a single peso figure ("Estimated Lalamove fare:
+// ₱185 — 5.4 km from our studio") instead of just a per-province band.
+// The math is a straight-line Haversine distance from the warehouse to
+// the buyer's province centroid (province capital coordinates) — it's
+// indicative only, the rider quotes the real fare on dispatch.
+//
+// Admin defaults match the live storefront origin (Bagong Silang,
+// Caloocan) and a conservative ₱25/km × ₱50 base fee + ₱100 minimum
+// (typical Lalamove sedan flag-down). Admin can override all of these
+// from /admin → Storefront → Lalamove fare estimate.
+// ---------------------------------------------------------------------
+
+export interface LalamoveFareConfig {
+  /**
+   * Master switch. When off, the checkout disclosure falls back to the
+   * legacy `LALAMOVE_RANGE_BY_PROVINCE` band. Admin can flip this to
+   * `true` once they've validated the per-km rate against actual rider
+   * receipts.
+   */
+  enabled: boolean;
+  /** Warehouse / studio coordinates (decimal degrees, WGS84). */
+  warehouseLat: number;
+  warehouseLng: number;
+  /** Human-readable origin label shown next to the fare estimate. */
+  warehouseLabel: string;
+  /** Peso per km, multiplied against straight-line distance. */
+  perKmRate: number;
+  /** Flat fee added on top of distance × rate. */
+  baseFee: number;
+  /** Floor — rider rarely accepts below this; ignored when 0. */
+  minFare: number;
+}
+
+export const DEFAULT_LALAMOVE_FARE: LalamoveFareConfig = {
+  enabled: true,
+  warehouseLat: 14.7406,
+  warehouseLng: 121.0269,
+  warehouseLabel: "Bagong Silang, Caloocan",
+  perKmRate: 25,
+  baseFee: 50,
+  minFare: 100,
+};
+
+// Province centroid (lowercased province name → [lat, lng]). Coordinates
+// are the province capital's centre — accurate enough for an indicative
+// fare since Lalamove's sedan rate is mostly linear in distance. Limited
+// to Luzon since that's where Lalamove can deliver from a fixed origin.
+export const PROVINCE_CENTROIDS: Record<string, [number, number]> = {
+  // NCR
+  "metro manila": [14.5995, 120.9842],
+  // Region III — Central Luzon
+  bulacan: [14.7942, 120.8794],
+  pampanga: [15.0794, 120.62],
+  bataan: [14.6418, 120.4818],
+  "nueva ecija": [15.5841, 120.9676],
+  tarlac: [15.4869, 120.5879],
+  zambales: [15.5081, 119.9798],
+  aurora: [15.7475, 121.5616],
+  // Region IV-A — CALABARZON
+  cavite: [14.4791, 120.897],
+  laguna: [14.1693, 121.2418],
+  rizal: [14.5879, 121.175],
+  batangas: [13.7565, 121.0583],
+  quezon: [13.9376, 121.6324],
+  // Region I — Ilocos
+  "ilocos norte": [18.1647, 120.7115],
+  "ilocos sur": [17.5757, 120.3869],
+  "la union": [16.6159, 120.3209],
+  pangasinan: [15.8949, 120.2863],
+  // Region II — Cagayan Valley
+  batanes: [20.4488, 121.9719],
+  cagayan: [17.6132, 121.7269],
+  isabela: [16.9754, 121.81],
+  "nueva vizcaya": [16.331, 121.1711],
+  quirino: [16.2729, 121.5375],
+  // CAR — Cordillera
+  abra: [17.5951, 120.7983],
+  apayao: [17.9897, 121.1828],
+  benguet: [16.4023, 120.5961],
+  ifugao: [16.832, 121.1719],
+  kalinga: [17.4748, 121.36],
+  "mountain province": [17.0747, 120.9893],
+  // Region V — Bicol
+  albay: [13.142, 123.7438],
+  "camarines norte": [14.1389, 122.7633],
+  "camarines sur": [13.5251, 123.3486],
+  catanduanes: [13.7089, 124.2422],
+  masbate: [12.366, 123.6217],
+  sorsogon: [12.9742, 124.0058],
+  // MIMAROPA — island provinces (still get a centroid so the estimate
+  // shows; the per-province "boat ride extra" note covers the gap)
+  marinduque: [13.4767, 121.9032],
+  "occidental mindoro": [13.1024, 121.0436],
+  "oriental mindoro": [13.4137, 121.1779],
+  palawan: [9.8349, 118.7384],
+  romblon: [12.5778, 122.2695],
+};
+
+const toRad = (deg: number): number => (deg * Math.PI) / 180;
+
+/** Great-circle distance between two WGS84 points, in km. */
+export const haversineKm = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number => {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+
+export interface LalamoveFareEstimate {
+  fare: number;
+  distanceKm: number;
+  warehouseLabel: string;
+  provinceLabel: string;
+}
+
+/**
+ * Compute a distance-based fare estimate from the configured warehouse
+ * origin to the buyer's province centroid. Returns `null` when the
+ * config is disabled, missing fields, or the province isn't on our
+ * Luzon centroid table (in which case the caller should fall back to
+ * the per-province range).
+ */
+export const computeLalamoveFareEstimate = (
+  cfg: LalamoveFareConfig | null | undefined,
+  province: string,
+): LalamoveFareEstimate | null => {
+  if (!cfg || !cfg.enabled) return null;
+  if (!Number.isFinite(cfg.warehouseLat) || !Number.isFinite(cfg.warehouseLng))
+    return null;
+  if (!Number.isFinite(cfg.perKmRate) || cfg.perKmRate <= 0) return null;
+  if (!province) return null;
+  const centroid = PROVINCE_CENTROIDS[province.trim().toLowerCase()];
+  if (!centroid) return null;
+  const distanceKm = haversineKm(
+    cfg.warehouseLat,
+    cfg.warehouseLng,
+    centroid[0],
+    centroid[1],
+  );
+  const raw = (cfg.baseFee || 0) + distanceKm * cfg.perKmRate;
+  const fare = Math.max(cfg.minFare || 0, Math.round(raw));
+  return {
+    fare,
+    distanceKm,
+    warehouseLabel: cfg.warehouseLabel || "our studio",
+    provinceLabel: province,
+  };
+};
+
+export const formatLalamoveFareEstimate = (
+  estimate: LalamoveFareEstimate,
+): string => {
+  const peso = `₱${estimate.fare.toLocaleString("en-PH")}`;
+  const km = estimate.distanceKm.toFixed(1);
+  return `${peso} (≈${km} km)`;
+};
+
 export const findCourierById = (id: string): CourierOption | undefined =>
   COURIERS.find((c) => c.id === id);
 

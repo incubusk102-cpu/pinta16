@@ -12,7 +12,12 @@ import {
   sanitizeChatFaqs,
   type ChatFaqItem,
 } from "@/lib/chat-faqs";
-import { DEFAULT_SHIPPING_RATES, type ShippingRate } from "@/lib/shipment";
+import {
+  DEFAULT_SHIPPING_RATES,
+  DEFAULT_LALAMOVE_FARE,
+  type ShippingRate,
+  type LalamoveFareConfig,
+} from "@/lib/shipment";
 import type { ShippingZone } from "@/lib/ph-regions";
 
 export type AnnouncementSize = "compact" | "normal" | "large";
@@ -208,6 +213,7 @@ export const DEFAULT_VACATION_MODE: VacationModeConfig = {
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
+  lalamoveFare: LalamoveFareConfig;
   shippingRates: ShippingRate[];
   promoCodes: PromoCodePublic[];
   chat: ChatConfig;
@@ -246,6 +252,7 @@ const DEFAULT_CONFIG: StorefrontConfig = {
     threshold: 8000,
     shippingFee: 500,
   },
+  lalamoveFare: DEFAULT_LALAMOVE_FARE,
   shippingRates: DEFAULT_SHIPPING_RATES,
   promoCodes: [],
   chat: {
@@ -396,6 +403,31 @@ const sanitizeShippingRates = (raw: unknown): ShippingRate[] => {
   return out;
 };
 
+const mergeLalamoveFare = (raw: unknown): LalamoveFareConfig => {
+  const data = (raw && typeof raw === "object" ? raw : {}) as Partial<
+    Record<keyof LalamoveFareConfig, unknown>
+  >;
+  const num = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  return {
+    enabled: data.enabled === false ? false : true,
+    warehouseLat: num(data.warehouseLat, DEFAULT_LALAMOVE_FARE.warehouseLat),
+    warehouseLng: num(data.warehouseLng, DEFAULT_LALAMOVE_FARE.warehouseLng),
+    warehouseLabel:
+      typeof data.warehouseLabel === "string" && data.warehouseLabel.trim()
+        ? data.warehouseLabel.trim().slice(0, 80)
+        : DEFAULT_LALAMOVE_FARE.warehouseLabel,
+    perKmRate: Math.max(
+      0,
+      num(data.perKmRate, DEFAULT_LALAMOVE_FARE.perKmRate),
+    ),
+    baseFee: Math.max(0, num(data.baseFee, DEFAULT_LALAMOVE_FARE.baseFee)),
+    minFare: Math.max(0, num(data.minFare, DEFAULT_LALAMOVE_FARE.minFare)),
+  };
+};
+
 const mergeSiteCopy = (raw: unknown): SiteCopy => {
   const data = (raw && typeof raw === "object" ? raw : {}) as Partial<{
     gallery: Partial<SiteCopySectionTwo>;
@@ -452,6 +484,7 @@ export const StorefrontConfigProvider = ({
             ...DEFAULT_CONFIG.freeShipping,
             ...data.config.freeShipping,
           },
+          lalamoveFare: mergeLalamoveFare(data.config.lalamoveFare),
           shippingRates: sanitizeShippingRates(data.config.shippingRates),
           promoCodes: Array.isArray(data.config.promoCodes)
             ? data.config.promoCodes
