@@ -6,6 +6,7 @@ import {
   type OrderRefund,
 } from "@/contexts/CartContext";
 import { toast } from "sonner";
+import { jsonAuthHeaders } from "@/lib/api";
 
 interface RefundBannerProps {
   orderId: string;
@@ -55,7 +56,7 @@ const RefundBanner = ({
       try {
         const res = await fetch("/api/orders", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: jsonAuthHeaders(),
           body: JSON.stringify({ action: "check-refund", orderId }),
         });
         if (!res.ok || cancelled) return;
@@ -94,7 +95,7 @@ const RefundBanner = ({
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
         body: JSON.stringify({ action: "check-refund", orderId }),
       });
       const data = await res.json().catch(() => ({}));

@@ -77,6 +77,7 @@ import {
 import PaymentModal from "./PaymentModal";
 import Turnstile, { isTurnstileEnabled } from "./Turnstile";
 import { createPayment } from "@/utils/payment.functions";
+import { jsonAuthHeaders } from "@/lib/api";
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
 // Per-tab draft of the guest checkout form. We persist on every change
@@ -614,7 +615,7 @@ const CheckoutForm = () => {
     const timer = setTimeout(() => {
       fetch("/api/abandoned-cart/sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
         body: JSON.stringify({
           email,
           name: form.fullName?.trim() || "",

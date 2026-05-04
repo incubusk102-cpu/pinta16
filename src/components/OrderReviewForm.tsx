@@ -8,6 +8,7 @@ import {
   useCart,
 } from "@/contexts/CartContext";
 import { compressImage } from "@/lib/imageCompress";
+import { jsonAuthHeaders } from "@/lib/api";
 
 interface OrderReviewFormProps {
   orderId: string;
@@ -99,7 +100,7 @@ const OrderReviewForm = ({
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
         body: JSON.stringify({ action: "submit-review", orderId, review }),
       });
       if (!res.ok) {
