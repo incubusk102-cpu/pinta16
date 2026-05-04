@@ -54,6 +54,13 @@ import {
   regionForProvince,
 } from "@/lib/ph-regions";
 import {
+  loadPhPsgcData,
+  getCachedPhPsgcData,
+  getCitiesForProvince,
+  getBarangaysForCity,
+  type PhPsgcData,
+} from "@/lib/ph-psgc";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -322,6 +329,34 @@ const CheckoutForm = () => {
   const provinceOptions = LALAMOVE_PAID_TO_RIDER
     ? LUZON_PROVINCES
     : ALL_PH_PROVINCES;
+  // PSGC dataset (cities + barangays) is dynamically imported on first
+  // mount so the ~190 KB chunk only lands when a customer reaches
+  // checkout — not on initial page load.
+  const [psgc, setPsgc] = useState<PhPsgcData | null>(getCachedPhPsgcData());
+  useEffect(() => {
+    if (psgc) return;
+    let cancelled = false;
+    loadPhPsgcData()
+      .then((data) => {
+        if (!cancelled) setPsgc(data);
+      })
+      .catch(() => {
+        // CDN hiccup / offline — leave psgc null. The UI falls back to
+        // showing the user's current value as the only option so they
+        // aren't blocked from completing checkout.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [psgc]);
+  const cityOptions = useMemo(
+    () => getCitiesForProvince(psgc, form.province || ""),
+    [psgc, form.province],
+  );
+  const barangayOptions = useMemo(
+    () => getBarangaysForCity(psgc, form.province || "", form.city || ""),
+    [psgc, form.province, form.city],
+  );
   // Per-province Lalamove fee range, recomputed whenever the buyer
   // changes their province. Used by the disclosure panel below the
   // address fields so they see the indicative range up front.
@@ -475,11 +510,15 @@ const CheckoutForm = () => {
           return "";
         case "province":
           return value.trim() ? "" : "Province is required";
+        case "city":
+          return value.trim() ? "" : "City / municipality is required";
+        case "barangay":
+          return value.trim() ? "" : "Barangay is required";
         case "address": {
           const t = value.trim();
-          if (!t) return "Complete address is required";
-          if (t.length < 10)
-            return "Please write a more detailed address (min 10 chars)";
+          if (!t) return "Street / building / unit is required";
+          if (t.length < 4)
+            return "Please write a more detailed street address (min 4 chars)";
           return "";
         }
         case "courier":
@@ -502,6 +541,8 @@ const CheckoutForm = () => {
         "email",
         "phone",
         "province",
+        "city",
+        "barangay",
         "address",
       ] as (keyof OrderInfo)[]
     ).forEach((key) => {
@@ -526,6 +567,8 @@ const CheckoutForm = () => {
       email: true,
       phone: true,
       province: true,
+      city: true,
+      barangay: true,
       address: true,
       courier: true,
     });
@@ -612,26 +655,32 @@ const CheckoutForm = () => {
 
   const handlePaymentSuccess = () => {
     setShowPayment(false);
-    // The simplified picker collects only Province + a single
-    // "Complete address" textarea. The freeform address text is
-    // mirrored into both the legacy `address` field (used by SMS /
-    // emails / receipts) and `addressLine1` (used by the waybill PDF
-    // and admin dashboard) so downstream rendering still works without
-    // a per-consumer migration. The structured city/barangay/postal
-    // fields are intentionally left blank — buyers found the multi-
-    // step picker confusing, and PH couriers route fine off the
-    // freeform line + province alone.
-    const completeAddress = (form.address || "").trim();
+    // Cascading PSGC picker collects Province → City → Barangay as
+    // structured fields, with a freeform "Street / building / unit"
+    // line. Both the structured fields and a composed one-liner are
+    // forwarded so couriers (Lalamove waybills, admin dashboard, SMS
+    // receipts) can read whichever shape they need.
+    const line1 = (form.address || "").trim();
+    const cityVal = (form.city || "").trim();
+    const barangayVal = (form.barangay || "").trim();
+    const provinceVal = (form.province || "").trim();
+    const composedAddress = [
+      line1,
+      barangayVal ? `Brgy. ${barangayVal}` : "",
+      [cityVal, provinceVal].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(", ");
     const sanitizedForm: OrderInfo = {
       fullName: sanitizeText(enforceMaxLength(form.fullName, 100)),
       email: sanitizeText(enforceMaxLength(form.email, 254)),
       phone: sanitizeText(enforceMaxLength(form.phone, 20)),
-      address: sanitizeText(enforceMaxLength(completeAddress, 500)),
-      city: "",
+      address: sanitizeText(enforceMaxLength(composedAddress, 500)),
+      city: sanitizeText(enforceMaxLength(cityVal, 100)),
       notes: sanitizeText(enforceMaxLength(form.notes, 500)),
-      addressLine1: sanitizeText(enforceMaxLength(completeAddress, 200)),
+      addressLine1: sanitizeText(enforceMaxLength(line1, 200)),
       addressLine2: "",
-      province: sanitizeText(enforceMaxLength(form.province || "", 100)),
+      province: sanitizeText(enforceMaxLength(provinceVal, 100)),
       postalCode: "",
       country: sanitizeText(
         enforceMaxLength(form.country || "Philippines", 100),
@@ -639,22 +688,18 @@ const CheckoutForm = () => {
       latitude: form.latitude ?? null,
       longitude: form.longitude ?? null,
       formattedAddress: sanitizeText(
-        enforceMaxLength(
-          form.formattedAddress ||
-            [completeAddress, form.province].filter(Boolean).join(", "),
-          500,
-        ),
+        enforceMaxLength(form.formattedAddress || composedAddress, 500),
       ),
       placeId: form.placeId,
       region: sanitizeText(
-        enforceMaxLength(regionForProvince(form.province || "") || "", 60),
+        enforceMaxLength(regionForProvince(provinceVal) || "", 60),
       ),
-      barangay: "",
+      barangay: sanitizeText(enforceMaxLength(barangayVal, 100)),
       landmark: "",
       courier: sanitizeText(enforceMaxLength(form.courier || "", 60)),
       shippingZone: sanitizeText(
         enforceMaxLength(
-          zoneForRegion(regionForProvince(form.province || "")) || "",
+          zoneForRegion(regionForProvince(provinceVal)) || "",
           40,
         ),
       ),
@@ -687,12 +732,12 @@ const CheckoutForm = () => {
         phone: sanitizedForm.phone,
         line1: sanitizedForm.addressLine1 || "",
         line2: "",
-        city: "",
+        city: sanitizedForm.city || "",
         province: sanitizedForm.province || "",
         postalCode: "",
         country: sanitizedForm.country || "Philippines",
         region: sanitizedForm.region || "",
-        barangay: "",
+        barangay: sanitizedForm.barangay || "",
         landmark: "",
         latitude: sanitizedForm.latitude ?? null,
         longitude: sanitizedForm.longitude ?? null,
@@ -761,62 +806,58 @@ const CheckoutForm = () => {
   const showSavedAddressPicker = savedAddresses.length >= 2;
   const activeSavedAddressId = useMemo(() => {
     if (!showSavedAddressPicker) return null;
-    // Saved-address pills now match on (province + freeform address)
-    // since the simplified picker no longer collects city / barangay /
-    // postal as separate fields. We compare against the same composed
-    // "complete address" string `applySavedAddress` writes into the
-    // form so the active pill highlights correctly after a tap.
-    const composeFromSaved = (a: SavedAddress) =>
-      [
-        a.line1,
-        a.line2,
-        a.barangay ? `Brgy. ${a.barangay}` : "",
-        a.city,
-        a.postalCode,
-        a.landmark ? `Landmark: ${a.landmark}` : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
-    const currentAddress = (form.address || "").trim().toLowerCase();
-    const currentProvince = (form.province || "").trim().toLowerCase();
-    const match = savedAddresses.find((a) => {
-      const composed = composeFromSaved(a).trim().toLowerCase();
-      const sameAddress = composed === currentAddress;
-      const sameProvince =
-        (a.province || "").trim().toLowerCase() === currentProvince;
-      return sameAddress && sameProvince;
-    });
+    // With cascading PSGC pickers we can match on the structured tuple
+    // (province + city + barangay + line1) directly — no more
+    // freeform-string composition. The pill highlights as soon as
+    // every tier of a saved address is reflected back into the form.
+    const norm = (s: string | undefined): string =>
+      (s || "").trim().toLowerCase();
+    const currentLine1 = norm(form.address);
+    const currentProvince = norm(form.province);
+    const currentCity = norm(form.city);
+    const currentBarangay = norm(form.barangay);
+    const match = savedAddresses.find(
+      (a) =>
+        norm(a.line1) === currentLine1 &&
+        norm(a.province) === currentProvince &&
+        norm(a.city) === currentCity &&
+        norm(a.barangay) === currentBarangay,
+    );
     return match?.id ?? null;
-  }, [savedAddresses, showSavedAddressPicker, form.address, form.province]);
+  }, [
+    savedAddresses,
+    showSavedAddressPicker,
+    form.address,
+    form.province,
+    form.city,
+    form.barangay,
+  ]);
   const applySavedAddress = useCallback((addr: SavedAddress): void => {
-    // Re-compose every saved structured field into a single freeform
-    // "complete address" string so the simplified textarea has
-    // something useful to populate — even for legacy address book
-    // entries that were saved through the old multi-field picker.
-    const composed = [
-      addr.line1,
-      addr.line2,
+    // Restore the structured PSGC fields directly from the saved
+    // address so the cascading dropdowns + street line all populate at
+    // once. Legacy entries missing city/barangay simply leave those
+    // tiers blank — the buyer re-picks them.
+    const line1 = [addr.line1, addr.line2].filter(Boolean).join(", ");
+    const formatted = [
+      line1,
       addr.barangay ? `Brgy. ${addr.barangay}` : "",
-      addr.city,
-      addr.postalCode,
-      addr.landmark ? `Landmark: ${addr.landmark}` : "",
+      [addr.city, addr.province].filter(Boolean).join(", "),
     ]
       .filter(Boolean)
       .join(", ");
-    const formatted = [composed, addr.province].filter(Boolean).join(", ");
     setForm((prev) => ({
       ...prev,
       fullName: addr.fullName || prev.fullName,
       phone: addr.phone || prev.phone,
-      address: composed,
-      addressLine1: composed,
+      address: line1,
+      addressLine1: line1,
       addressLine2: "",
-      city: "",
+      city: addr.city || "",
       province: addr.province || "",
-      postalCode: "",
+      postalCode: addr.postalCode || "",
       region: regionForProvince(addr.province || "") || addr.region || "",
-      barangay: "",
-      landmark: "",
+      barangay: addr.barangay || "",
+      landmark: addr.landmark || "",
       country: addr.country || "Philippines",
       latitude: addr.latitude ?? null,
       longitude: addr.longitude ?? null,
@@ -834,9 +875,26 @@ const CheckoutForm = () => {
       fullName: addr.fullName ? undefined : prev.fullName,
       phone: addr.phone ? undefined : prev.phone,
       province: addr.province ? undefined : prev.province,
-      address: composed ? undefined : prev.address,
+      city: addr.city ? undefined : prev.city,
+      barangay: addr.barangay ? undefined : prev.barangay,
+      address: line1 ? undefined : prev.address,
     }));
   }, []);
+
+  const composeFormattedAddress = (
+    line1: string,
+    barangay: string,
+    city: string,
+    province: string,
+  ): string => {
+    return [
+      line1.trim(),
+      barangay ? `Brgy. ${barangay}` : "",
+      [city, province].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(", ");
+  };
 
   const onProvinceChange = (province: string): void => {
     const region = regionForProvince(province);
@@ -846,16 +904,60 @@ const CheckoutForm = () => {
       province,
       region,
       shippingZone: zone || "",
-      // Refresh the formatted-address one-liner whenever the province
-      // changes so order receipts / SMS templates show the right
-      // "<address>, <province>" pairing without a second user action.
-      formattedAddress: [(prev.address || "").trim(), province]
-        .filter(Boolean)
-        .join(", "),
+      // Cascade reset: changing province invalidates the city + barangay
+      // the buyer previously picked since PSGC scopes those to province.
+      city: "",
+      barangay: "",
+      formattedAddress: composeFormattedAddress(
+        prev.address || "",
+        "",
+        "",
+        province,
+      ),
     }));
     setErrors((prev) => ({
       ...prev,
       province: province ? undefined : prev.province,
+      city: undefined,
+      barangay: undefined,
+    }));
+  };
+
+  const onCityChange = (city: string): void => {
+    setForm((prev) => ({
+      ...prev,
+      city,
+      // Cascade reset: changing city invalidates the previously-picked
+      // barangay (PSGC scopes barangays to city).
+      barangay: "",
+      formattedAddress: composeFormattedAddress(
+        prev.address || "",
+        "",
+        city,
+        prev.province || "",
+      ),
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      city: city ? undefined : prev.city,
+      barangay: undefined,
+    }));
+  };
+
+  const onBarangayChange = (barangay: string): void => {
+    setForm((prev) => ({
+      ...prev,
+      barangay,
+      formattedAddress: composeFormattedAddress(
+        prev.address || "",
+        barangay,
+        prev.city || "",
+        prev.province || "",
+      ),
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      barangay: barangay ? undefined : prev.barangay,
     }));
   };
 
@@ -864,13 +966,16 @@ const CheckoutForm = () => {
       ...prev,
       address: value,
       addressLine1: value,
-      formattedAddress: [value.trim(), prev.province || ""]
-        .filter(Boolean)
-        .join(", "),
+      formattedAddress: composeFormattedAddress(
+        value,
+        prev.barangay || "",
+        prev.city || "",
+        prev.province || "",
+      ),
     }));
     setErrors((prev) => ({
       ...prev,
-      address: value.trim().length >= 10 ? undefined : prev.address,
+      address: value.trim().length >= 4 ? undefined : prev.address,
     }));
   };
   // Preview of what the picked courier × region combo will charge,
@@ -1270,12 +1375,125 @@ const CheckoutForm = () => {
                                               </p>
                                             )}
                                         </div>
+                                        {/* City / Municipality cascades off
+                                          Province (PSGC). Disabled until a
+                                          province is picked; falls back to
+                                          showing the buyer's typed value as
+                                          the only option if PSGC fails to
+                                          load (so they aren't blocked). */}
+                                        <div>
+                                          <label
+                                            htmlFor="checkout-city"
+                                            className="font-body text-[11px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5 block"
+                                          >
+                                            City / Municipality{" "}
+                                            <span className="text-destructive">
+                                              *
+                                            </span>
+                                          </label>
+                                          <Select
+                                            value={form.city || ""}
+                                            onValueChange={(v) => {
+                                              onCityChange(v);
+                                              setTouched((prev) => ({
+                                                ...prev,
+                                                city: true,
+                                              }));
+                                            }}
+                                            disabled={
+                                              formLocked || !form.province
+                                            }
+                                          >
+                                            <SelectTrigger
+                                              id="checkout-city"
+                                              aria-invalid={
+                                                touched.city && !!errors.city
+                                              }
+                                              className="h-10 bg-background border-foreground/25 hover:border-foreground/50 text-foreground font-body text-sm rounded-sm"
+                                            >
+                                              <SelectValue
+                                                placeholder={
+                                                  !form.province
+                                                    ? "Pick a province first"
+                                                    : !psgc
+                                                      ? "Loading cities…"
+                                                      : cityOptions.length === 0
+                                                        ? "No cities found"
+                                                        : "Select your city / municipality"
+                                                }
+                                              />
+                                            </SelectTrigger>
+                                            <SelectContent className="max-h-72">
+                                              {cityOptions.map((c) => (
+                                                <SelectItem key={c} value={c}>
+                                                  {c}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                        {/* Barangay cascades off City. */}
+                                        <div>
+                                          <label
+                                            htmlFor="checkout-barangay"
+                                            className="font-body text-[11px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5 block"
+                                          >
+                                            Barangay{" "}
+                                            <span className="text-destructive">
+                                              *
+                                            </span>
+                                          </label>
+                                          <Select
+                                            value={form.barangay || ""}
+                                            onValueChange={(v) => {
+                                              onBarangayChange(v);
+                                              setTouched((prev) => ({
+                                                ...prev,
+                                                barangay: true,
+                                              }));
+                                            }}
+                                            disabled={formLocked || !form.city}
+                                          >
+                                            <SelectTrigger
+                                              id="checkout-barangay"
+                                              aria-invalid={
+                                                touched.barangay &&
+                                                !!errors.barangay
+                                              }
+                                              className="h-10 bg-background border-foreground/25 hover:border-foreground/50 text-foreground font-body text-sm rounded-sm"
+                                            >
+                                              <SelectValue
+                                                placeholder={
+                                                  !form.city
+                                                    ? "Pick a city first"
+                                                    : !psgc
+                                                      ? "Loading barangays…"
+                                                      : barangayOptions.length ===
+                                                          0
+                                                        ? "No barangays found"
+                                                        : "Select your barangay"
+                                                }
+                                              />
+                                            </SelectTrigger>
+                                            <SelectContent className="max-h-72">
+                                              {barangayOptions.map((b) => (
+                                                <SelectItem key={b} value={b}>
+                                                  {b}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                        {/* Street / building / unit / landmark
+                                          — the only freeform piece left, since
+                                          barangay/city/province above already
+                                          cover the structured PSGC tiers. */}
                                         <div>
                                           <label
                                             htmlFor="checkout-complete-address"
                                             className="font-body text-[11px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5 block"
                                           >
-                                            Complete address{" "}
+                                            Street, building, unit{" "}
                                             <span className="text-destructive">
                                               *
                                             </span>
@@ -1291,8 +1509,8 @@ const CheckoutForm = () => {
                                             onBlur={() =>
                                               handleFieldBlur("address")
                                             }
-                                            placeholder="House / unit no., street, barangay, city, postal code, landmark..."
-                                            rows={4}
+                                            placeholder="House / unit no., street, landmark..."
+                                            rows={3}
                                             maxLength={500}
                                             disabled={formLocked}
                                             aria-invalid={
@@ -1301,15 +1519,13 @@ const CheckoutForm = () => {
                                             }
                                             className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                                           />
-                                          <p className="font-body text-[10px] text-muted-foreground mt-1">
-                                            One field, your way — couriers route
-                                            off this and the province above.
-                                          </p>
                                         </div>
                                       </div>
                                     </fieldset>
                                     {[
                                       touched.province && errors.province,
+                                      touched.city && errors.city,
+                                      touched.barangay && errors.barangay,
                                       touched.address && errors.address,
                                     ]
                                       .filter(Boolean)
