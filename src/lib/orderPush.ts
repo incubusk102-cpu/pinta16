@@ -1,3 +1,5 @@
+import { jsonAuthHeaders } from "@/lib/api";
+
 // Client-side Web Push helpers for order-status notifications.
 //
 // The PWA service worker is registered separately by src/lib/pwa.ts at /sw.js.
@@ -163,7 +165,10 @@ export const subscribeToOrderPush = async (
   try {
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Sends X-CSRF-Token alongside Content-Type so the wrapper
+      // CSRF gate accepts the call when a user session cookie is
+      // attached (signed-in shoppers opting in to order pushes).
+      headers: jsonAuthHeaders(),
       body: JSON.stringify({
         email: trimmed,
         subscription: {
@@ -232,7 +237,7 @@ export const unsubscribeFromOrderPush = async (
     try {
       await fetch("/api/push/unsubscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
         body: JSON.stringify({ email: targetEmail, endpoint }),
       });
     } catch {
@@ -269,7 +274,7 @@ export const handlePushSubscriptionChangeMessages = () => {
     try {
       await fetch("/api/push/subscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
         body: JSON.stringify({
           email,
           subscription: event.data.subscription,
