@@ -36,6 +36,14 @@ const DEFAULT_SENDER: WaybillSender = {
 const A6_WIDTH = 105;
 const A6_HEIGHT = 148;
 
+const phpFormatter = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  maximumFractionDigits: 0,
+});
+
+const formatPhp = (n: number): string => phpFormatter.format(n);
+
 // Render a CODE128 barcode to a data URL using JsBarcode + an offscreen
 // canvas. Couriers consistently scan CODE128 so we don't need anything
 // fancier (Code39 / DataMatrix etc.) for sortation.
@@ -236,6 +244,20 @@ export const buildWaybillPdf = (
     cursorY += 3.6;
   });
 
+  // ----- Declared value -----
+  // Couriers (Lalamove especially) ask for a declared parcel value so
+  // they can size their handling-care policy / insurance against it.
+  // We declare the order subtotal (excludes shipping fee since the
+  // rider gets paid in cash on delivery separately).
+  const declaredValue = formatPhp(Number(order.subtotal) || 0);
+  cursorY += 1;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("DECLARED VALUE", 6, cursorY);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(declaredValue, A6_WIDTH - 6, cursorY, { align: "right" });
+
   // ----- Footer band: tracking + fragile stamp -----
   const footerY = A6_HEIGHT - 22;
   drawDashedDivider(doc, footerY);
@@ -295,4 +317,31 @@ export const downloadWaybillPdf = (
   const doc = buildWaybillPdf(order, options);
   doc.save(`${order.id}-waybill.pdf`);
   return doc;
+};
+
+// Build the waybill PDF and return its raw bytes encoded as a base64
+// string (no `data:` prefix). Used by the order-confirmation flow to
+// upload the PDF to the server so it can be attached to the customer
+// confirmation email.
+export const buildWaybillPdfBase64 = (
+  order: CompletedOrder,
+  options: WaybillOptions = {},
+): string | null => {
+  try {
+    const doc = buildWaybillPdf(order, options);
+    const buf = doc.output("arraybuffer") as ArrayBuffer;
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(
+        null,
+        Array.from(bytes.subarray(i, i + chunk)),
+      );
+    }
+    if (typeof btoa === "undefined") return null;
+    return btoa(binary);
+  } catch {
+    return null;
+  }
 };

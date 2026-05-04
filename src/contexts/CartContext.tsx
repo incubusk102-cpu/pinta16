@@ -674,23 +674,36 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       setIsOpen(false);
       setShowCheckout(false);
       setShowConfirmation(true);
-      fetch("/api/orders", {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-        body: JSON.stringify({
-          action: "place",
-          order,
-          // Optional anti-abuse signals. Server falls open on both when
-          // they're missing or when Turnstile isn't configured, so
-          // these stay safe to send unconditionally.
-          ...(payment?.turnstileToken
-            ? { turnstileToken: payment.turnstileToken }
-            : {}),
-          ...(payment?.honeypot !== undefined
-            ? { website: payment.honeypot }
-            : {}),
-        }),
-      })
+      // Generate the A6 waybill PDF on the client (jsPDF + JsBarcode
+      // both need `document` for the offscreen barcode canvas, so this
+      // can't run in the Worker) and ship it up as base64 alongside
+      // the order. The server forwards it as the email attachment on
+      // the confirmation mail. Falls back to `null` on any error so
+      // the order itself still posts even if PDF generation fails.
+      void import("@/lib/waybill")
+        .then(({ buildWaybillPdfBase64 }) => buildWaybillPdfBase64(order))
+        .catch(() => null)
+        .then((waybillPdfBase64) =>
+          fetch("/api/orders", {
+            method: "POST",
+            headers: jsonAuthHeaders(),
+            body: JSON.stringify({
+              action: "place",
+              order,
+              ...(waybillPdfBase64 ? { waybillPdfBase64 } : {}),
+              // Optional anti-abuse signals. Server falls open on both
+              // when they're missing or when Turnstile isn't
+              // configured, so these stay safe to send
+              // unconditionally.
+              ...(payment?.turnstileToken
+                ? { turnstileToken: payment.turnstileToken }
+                : {}),
+              ...(payment?.honeypot !== undefined
+                ? { website: payment.honeypot }
+                : {}),
+            }),
+          }),
+        )
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
         })
