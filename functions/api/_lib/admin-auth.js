@@ -14,6 +14,12 @@
 import { makeStore } from "./kv-store.js";
 import { requireKvBinding } from "./context.js";
 import { readCookie } from "./cookies.js";
+import {
+  argon2idHash,
+  argon2idVerify,
+  argon2idMatchesCurrentParams,
+  ARGON2ID_ALGO,
+} from "./argon2.js";
 
 // HttpOnly cookie that carries the admin session JWT. Set on
 // init / login / 2FA / passkey / rotate, cleared on logout. Browsers
@@ -89,20 +95,44 @@ const hmacSha256 = async (secret, data) => {
   return new Uint8Array(sig);
 };
 
-export const hashPassword = async (password) => {
-  const saltBytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
-  const salt = toHex(saltBytes);
-  const hashBytes = await pbkdf2Bytes(
-    password,
-    salt,
-    PBKDF2_ITERATIONS,
-    PBKDF2_KEYLEN,
-    PBKDF2_DIGEST,
-  );
-  return { salt, hash: toHex(hashBytes) };
+// All NEW passwords (initial admin set, password change, recovery
+// rotation) are hashed with argon2id. Returns a credential record
+// ready for `writeCredentials()`. The `updatedAt` field is added by
+// the caller so it can mirror the server clock.
+export const hashPassword = async (password) => argon2idHash(password);
+
+// Backwards-compatible verify. Dispatches on `record.algo`:
+//   - "argon2id" → argon2id RFC 9106 verify
+//   - undefined (legacy) or "pbkdf2" → PBKDF2-SHA256 100k verify against
+//                                       `record.salt` + `record.hash`
+//
+// Stored records before this change had shape `{ salt, hash, ... }`
+// with no `algo` field, so the absence of `algo` is the signal that
+// the record is PBKDF2. Any record written after this PR ships will
+// have `algo: "argon2id"`.
+//
+// We keep the legacy `(password, salt, hash)` signature working for
+// callers that haven't been updated yet — pass the third argument and
+// the function flips into PBKDF2 mode unconditionally. New callers
+// should pass the full credential record as the second argument.
+export const verifyPassword = async (password, recordOrSalt, legacyHash) => {
+  if (typeof legacyHash === "string") {
+    // Legacy 3-arg call site. Treat as raw PBKDF2.
+    return await pbkdf2Verify(password, recordOrSalt, legacyHash);
+  }
+  const record = recordOrSalt;
+  if (!record || typeof record !== "object") return false;
+  if (record.algo === ARGON2ID_ALGO) {
+    return argon2idVerify(password, record);
+  }
+  // Legacy record shape: { salt, hash } with no `algo`.
+  if (typeof record.salt === "string" && typeof record.hash === "string") {
+    return await pbkdf2Verify(password, record.salt, record.hash);
+  }
+  return false;
 };
 
-export const verifyPassword = async (password, salt, expectedHash) => {
+const pbkdf2Verify = async (password, salt, expectedHash) => {
   const hashBytes = await pbkdf2Bytes(
     password,
     salt,
@@ -113,6 +143,14 @@ export const verifyPassword = async (password, salt, expectedHash) => {
   const expected = fromHex(expectedHash);
   return constantTimeEqualBytes(expected, hashBytes);
 };
+
+// Should the caller transparently re-hash this credential after a
+// successful verify? Returns true for any record that is not already
+// argon2id at the current params (so legacy PBKDF2 records, and
+// argon2id records hashed with older `t/m/p` if we ever bump them,
+// silently roll forward on next login).
+export const passwordNeedsRehash = (record) =>
+  !argon2idMatchesCurrentParams(record);
 
 export const constantTimeEquals = async (a, b) => {
   const ha = await hmacSha256("constant-time-cmp", String(a));
