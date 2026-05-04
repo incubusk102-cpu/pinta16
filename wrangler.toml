@@ -129,10 +129,13 @@ preview_id = "e717d43c38a64b8bb4efc387710620a7"
 # and a "binding not bound" warning, and `logSecurityEvent` is a no-op —
 # so the rest of the API keeps working unchanged.
 #
-# [[kv_namespaces]]
-# binding = "SECURITY_EVENTS"
-# id = "REPLACE_WITH_PRODUCTION_NAMESPACE_ID"
-# preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
+# Same namespace is used for both production and preview because the
+# canvhub Pages project doesn't really exercise the preview environment;
+# split into two namespaces later if previews start carrying real data.
+[[kv_namespaces]]
+binding = "SECURITY_EVENTS"
+id = "67c757b425ee427b9c9bba0a16519ff7"
+preview_id = "67c757b425ee427b9c9bba0a16519ff7"
 
 # ---------------------------------------------------------------------------
 # ABANDONED_CARTS (optional)
