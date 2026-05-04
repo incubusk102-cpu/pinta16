@@ -1066,8 +1066,21 @@ export const handler = async (event) => {
         };
         // Send order-confirmation email and stamp delivery info onto the
         // notification entry. We persist after the email to capture the
-        // provider id / error.
-        await recordEmail(safeOrder, safeOrder.notifications[0]);
+        // provider id / error. Forward the client-built waybill PDF
+        // (base64) when present so it can be attached to the email.
+        const waybillPdfBase64 =
+          typeof body.waybillPdfBase64 === "string" &&
+          // Hard cap at ~3.5 MB base64 (≈2.6 MB raw) which is way over
+          // any sane A6 waybill size; protects sendgrid/brevo limits.
+          body.waybillPdfBase64.length > 0 &&
+          body.waybillPdfBase64.length < 3_500_000
+            ? body.waybillPdfBase64
+            : "";
+        await recordEmail(
+          safeOrder,
+          safeOrder.notifications[0],
+          waybillPdfBase64 ? { waybillPdfBase64 } : {},
+        );
         // Fire the parallel free Web Push channel. Almost always a no-op
         // here because the shopper hasn't opted in yet (the opt-in card
         // appears on the OrderConfirmation modal that's about to render).

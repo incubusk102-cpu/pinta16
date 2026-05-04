@@ -149,7 +149,16 @@ export const getEmailProvider = () => {
 export const isEmailConfigured = (purpose) =>
   Boolean(getEmailProvider()) && Boolean(resolveEmailEnv("FROM", purpose));
 
-async function sendViaResend({ from, to, subject, html, text, replyTo, bcc }) {
+async function sendViaResend({
+  from,
+  to,
+  subject,
+  html,
+  text,
+  replyTo,
+  bcc,
+  attachments,
+}) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -164,6 +173,16 @@ async function sendViaResend({ from, to, subject, html, text, replyTo, bcc }) {
       text,
       ...(replyTo ? { reply_to: replyTo } : {}),
       ...(bcc ? { bcc } : {}),
+      // Resend attachment shape: { filename, content (base64) }.
+      ...(Array.isArray(attachments) && attachments.length
+        ? {
+            attachments: attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              ...(a.contentType ? { content_type: a.contentType } : {}),
+            })),
+          }
+        : {}),
     }),
   });
   const data = await res.json().catch(() => ({}));
@@ -181,7 +200,16 @@ async function sendViaResend({ from, to, subject, html, text, replyTo, bcc }) {
   };
 }
 
-async function sendViaBrevo({ from, to, subject, html, text, replyTo, bcc }) {
+async function sendViaBrevo({
+  from,
+  to,
+  subject,
+  html,
+  text,
+  replyTo,
+  bcc,
+  attachments,
+}) {
   const parsedFrom = parseAddress(from);
   const recipients = (Array.isArray(to) ? to : [to]).map(parseAddress);
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -201,6 +229,15 @@ async function sendViaBrevo({ from, to, subject, html, text, replyTo, bcc }) {
       ...(bcc
         ? {
             bcc: (Array.isArray(bcc) ? bcc : [bcc]).map(parseAddress),
+          }
+        : {}),
+      // Brevo attachment shape: { name, content (base64) }.
+      ...(Array.isArray(attachments) && attachments.length
+        ? {
+            attachment: attachments.map((a) => ({
+              name: a.filename,
+              content: a.content,
+            })),
           }
         : {}),
     }),
@@ -234,6 +271,7 @@ export const sendEmail = async ({
   text,
   purpose,
   from: fromOverride,
+  attachments,
 }) => {
   if (!to || !subject) {
     return { delivered: false, skipped: true, reason: "missing fields" };
@@ -265,6 +303,7 @@ export const sendEmail = async ({
       text: text || stripTags(html),
       replyTo: resolveEmailEnv("REPLY_TO", purpose) || undefined,
       bcc: resolveEmailEnv("BCC", purpose) || undefined,
+      attachments: Array.isArray(attachments) ? attachments : undefined,
     });
   } catch (err) {
     return {
@@ -646,6 +685,21 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
       ? `${cfgName} <${cfgEmail}>`
       : cfgEmail
     : "";
+  // Attach the client-built waybill PDF (base64) when supplied. We
+  // only attach on the "confirmed" kind so subsequent status mails
+  // don't repeat the same file.
+  const waybillPdfBase64 =
+    typeof extra?.waybillPdfBase64 === "string" ? extra.waybillPdfBase64 : "";
+  const attachments =
+    kind === "confirmed" && waybillPdfBase64
+      ? [
+          {
+            filename: `${order?.id || "order"}-waybill.pdf`,
+            content: waybillPdfBase64,
+            contentType: "application/pdf",
+          },
+        ]
+      : undefined;
   return await sendEmail({
     to: recipient,
     subject: built.subject,
@@ -653,6 +707,7 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
     text: built.text,
     purpose: "order",
     from: configFrom || undefined,
+    attachments,
   });
 };
 
