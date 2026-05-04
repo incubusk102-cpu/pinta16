@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as AccountRouteImport } from "./routes/account";
 import { Route as AdminRouteImport } from "./routes/admin";
 import { Route as IndexRouteImport } from "./routes/index";
-import { Route as LoginRouteImport } from "./routes/login";
 import { Route as SignupRouteImport } from "./routes/signup";
 import { Route as ProductIdRouteImport } from "./routes/product.$id";
 import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
@@ -31,11 +30,6 @@ const AdminRoute = AdminRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const LoginRoute = LoginRouteImport.update({
-  id: "/login",
-  path: "/login",
   getParentRoute: () => rootRouteImport,
 } as any);
 const SignupRoute = SignupRouteImport.update({
@@ -63,7 +57,6 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/account": typeof AccountRoute;
   "/admin": typeof AdminRoute;
-  "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
@@ -73,7 +66,6 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/account": typeof AccountRoute;
   "/admin": typeof AdminRoute;
-  "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
@@ -84,7 +76,6 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/account": typeof AccountRoute;
   "/admin": typeof AdminRoute;
-  "/login": typeof LoginRoute;
   "/signup": typeof SignupRoute;
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
@@ -96,7 +87,6 @@ export interface FileRouteTypes {
     | "/"
     | "/account"
     | "/admin"
-    | "/login"
     | "/signup"
     | "/policy/$slug"
     | "/preview/$id"
@@ -106,7 +96,6 @@ export interface FileRouteTypes {
     | "/"
     | "/account"
     | "/admin"
-    | "/login"
     | "/signup"
     | "/policy/$slug"
     | "/preview/$id"
@@ -116,7 +105,6 @@ export interface FileRouteTypes {
     | "/"
     | "/account"
     | "/admin"
-    | "/login"
     | "/signup"
     | "/policy/$slug"
     | "/preview/$id"
@@ -127,7 +115,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   AccountRoute: typeof AccountRoute;
   AdminRoute: typeof AdminRoute;
-  LoginRoute: typeof LoginRoute;
   SignupRoute: typeof SignupRoute;
   PolicySlugRoute: typeof PolicySlugRoute;
   PreviewIdRoute: typeof PreviewIdRoute;
@@ -155,13 +142,6 @@ declare module "@tanstack/react-router" {
       path: "/";
       fullPath: "/";
       preLoaderRoute: typeof IndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/login": {
-      id: "/login";
-      path: "/login";
-      fullPath: "/login";
-      preLoaderRoute: typeof LoginRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/signup": {
@@ -199,7 +179,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
-  LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
   PolicySlugRoute: PolicySlugRoute,
   PreviewIdRoute: PreviewIdRoute,

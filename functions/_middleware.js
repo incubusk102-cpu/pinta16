@@ -256,7 +256,6 @@ export const onRequest = async ({ request, env, next }) => {
     url.pathname.startsWith("/policy/") ||
     url.pathname.startsWith("/preview/") ||
     url.pathname === "/account" ||
-    url.pathname === "/login" ||
     url.pathname === "/signup" ||
     url.pathname === "/admin";
   if (!isHtmlPath) {

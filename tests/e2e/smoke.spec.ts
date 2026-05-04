@@ -71,24 +71,13 @@ test.describe("public smoke", () => {
     expect(errors).toEqual([]);
   });
 
-  test("login page renders the sign-in heading", async ({ page }) => {
-    const errors = collectConsoleErrors(page);
-    await page.goto("/login");
-    // LoginPage renders `<h1>Sign in</h1>`. The Google Sign-In
-    // button can't be asserted against in a static-preview run
-    // because the GIS script is blocked by CSP / not initialised
-    // outside a real browser session, but the surrounding shell
-    // always renders.
-    const heading = page.getByRole("heading", { level: 1, name: /Sign in/i });
-    await expect(heading).toBeVisible({ timeout: 15_000 });
-    expect(errors).toEqual([]);
-  });
-
-  test("signup route redirects to login", async ({ page }) => {
+  test("signup route redirects to homepage", async ({ page }) => {
     await page.goto("/signup");
-    // SignupRedirect uses navigate({ to: "/login", replace: true }).
-    await expect(page).toHaveURL(/\/login\/?$/, { timeout: 15_000 });
-    const heading = page.getByRole("heading", { level: 1, name: /Sign in/i });
+    // /login + dedicated /signup pages were retired — sign-in is
+    // surfaced inline in the hamburger drawer instead. SignupRedirect
+    // now uses navigate({ to: "/", replace: true }).
+    await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+    const heading = page.locator("h1").first();
     await expect(heading).toBeVisible({ timeout: 15_000 });
   });
 
