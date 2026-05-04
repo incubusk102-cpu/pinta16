@@ -135,6 +135,19 @@ export interface CompletedOrder {
   orderInfo: OrderInfo;
   subtotal: number;
   shippingFee: number;
+  /**
+   * True when the order qualified for the admin-configured free-shipping
+   * threshold. In Lalamove-paid-to-rider mode the storefront fronts the
+   * rider fare on delivery for these orders; admin can match this flag
+   * against `subtotal` to verify before reimbursing.
+   */
+  freeShipping?: boolean;
+  /**
+   * Subtotal threshold (in PHP) that was active when the order was
+   * placed. Stored on the order so a later threshold change in admin
+   * doesn't retroactively re-classify historical orders.
+   */
+  freeShippingThreshold?: number;
   discount: number;
   total: number;
   estimatedCreationDays: string;
@@ -631,12 +644,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         honeypot?: string;
       },
     ): CompletedOrder => {
+      const orderQualifiesForFreeShipping =
+        config.freeShipping.enabled && isFreeShipping;
       const order: CompletedOrder = {
         id: `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`,
         items: [...items],
         orderInfo,
         subtotal,
         shippingFee,
+        freeShipping: orderQualifiesForFreeShipping || voucherFreeShipping,
+        freeShippingThreshold: config.freeShipping.enabled
+          ? config.freeShipping.threshold
+          : undefined,
         discount,
         total,
         estimatedCreationDays,
@@ -696,6 +715,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       orders,
       saveOrders,
       clearCart,
+      config.freeShipping.enabled,
+      config.freeShipping.threshold,
+      isFreeShipping,
+      voucherFreeShipping,
     ],
   );
 
@@ -763,18 +786,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     [orders],
   );
 
-  // The "Free shipping over ₱X" promo is meaningless in Lalamove-only
-  // mode (no shipping fee is ever charged), so we collapse both the
-  // threshold and the enable flag to zero/false. The cart drawer's
-  // progress bar checks both before rendering.
-  const freeShippingThreshold = LALAMOVE_PAID_TO_RIDER
-    ? 0
-    : Number.isFinite(FREE_SHIPPING_THRESHOLD)
-      ? FREE_SHIPPING_THRESHOLD
-      : 0;
-  const freeShippingEnabled = LALAMOVE_PAID_TO_RIDER
-    ? false
-    : config.freeShipping.enabled;
+  // Surface the admin-configured threshold to the cart drawer + checkout
+  // banner regardless of whether shipping is paid-to-rider. In Lalamove-
+  // paid-to-rider mode the storefront covers the rider fare on delivery
+  // for orders that hit the threshold; the admin reimburses or pre-books
+  // an account-paid Lalamove on behalf of the customer (the order record
+  // carries `freeShipping: true` so this is auditable).
+  const freeShippingThreshold = Number.isFinite(FREE_SHIPPING_THRESHOLD)
+    ? FREE_SHIPPING_THRESHOLD
+    : 0;
+  const freeShippingEnabled = config.freeShipping.enabled;
 
   // Memoise the context value so consumers don't re-render every time
   // a parent provider (e.g. polled storefront config or product list)
