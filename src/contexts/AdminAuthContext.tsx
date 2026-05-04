@@ -16,6 +16,14 @@ import {
 const LEGACY_STORAGE_KEY = "canvhub_admin_token";
 const AUTH_API = "/api/admin-auth";
 
+// Module-level mirror of the in-memory React token so non-React
+// callers (uploadImage, AbortController-driven fetches, ad-hoc
+// utilities) can still read it via `getAdminToken()` without
+// piping `useAdminAuth()` through every callsite. AdminAuthProvider
+// keeps this in sync with React state via a `useEffect`. Stays
+// `null` until login resolves and clears back to `null` on logout.
+let inMemoryAdminToken: string | null = null;
+
 export interface LoginPasswordResult {
   // When 2FA is *off*, we already have a session token and `requires2fa`
   // is false. When 2FA is *on*, the server returns a short-lived
@@ -162,6 +170,20 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   const setAuthToken = useCallback((next: string | null) => {
     setToken(next);
   }, []);
+
+  // Mirror the React token into the module-level ref so legacy
+  // `getAdminToken()` callers see the live value. Without this
+  // mirror every authed admin GET sends `Authorization: Bearer null`
+  // and the backend rejects with 401.
+  useEffect(() => {
+    inMemoryAdminToken = token;
+    return () => {
+      // On unmount (only happens when the provider itself unmounts,
+      // e.g. full SPA teardown) clear the ref so a future remount
+      // doesn't see a stale token.
+      inMemoryAdminToken = null;
+    };
+  }, [token]);
 
   const initPassword = useCallback(
     async (password: string, turnstileToken?: string) => {
@@ -375,7 +397,9 @@ export const useAdminAuth = () => {
   return ctx;
 };
 
-// Legacy export retained so any leftover non-React imports keep
-// type-checking. Always returns null now — the token is no longer
-// persisted, so callers can't read it from outside React state.
-export const getAdminToken = (): string | null => null;
+// Read the current admin token from the module-level mirror that
+// AdminAuthProvider keeps in sync with React state. Returns null
+// until login resolves (and after logout). Available to non-React
+// callers — utility code, AbortController-driven fetches — that
+// can't go through `useAdminAuth()`.
+export const getAdminToken = (): string | null => inMemoryAdminToken;
