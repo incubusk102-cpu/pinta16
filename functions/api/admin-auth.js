@@ -10,6 +10,7 @@ import {
   hashPassword,
   issueToken,
   MIN_PASSWORD_LENGTH,
+  passwordNeedsRehash,
   readCredentials,
   rotateSessionSecret,
   TOKEN_TTL_SECONDS,
@@ -308,10 +309,9 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = await hashPassword(password);
+      const credentialsRecord = await hashPassword(password);
       const written = await writeCredentialsIfNew(store, {
-        salt,
-        hash,
+        ...credentialsRecord,
         updatedAt: new Date().toISOString(),
       });
       if (!written) {
@@ -429,11 +429,7 @@ export const handler = async (event) => {
       const recoveryPassword = (
         process.env.ADMIN_RECOVERY_PASSWORD || ""
       ).trim();
-      const matchesStored = await verifyPassword(
-        password,
-        credentials.salt,
-        credentials.hash,
-      );
+      const matchesStored = await verifyPassword(password, credentials);
       const matchesRecovery =
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
         (await constantTimeEquals(password, recoveryPassword));
@@ -479,6 +475,32 @@ export const handler = async (event) => {
           challengeToken,
           recoveryAvailable: totp.recoveryHashes.length > 0,
         });
+      }
+
+      // Transparent rehash: if the credential is using legacy PBKDF2
+      // (or argon2id at older params), upgrade it to the current
+      // argon2id params using the password the user just proved they
+      // know. Best-effort — a write failure must not block login, so
+      // we swallow errors and try again on next login.
+      if (matchesStored && passwordNeedsRehash(credentials)) {
+        try {
+          const upgraded = await hashPassword(password);
+          await writeCredentials(store, {
+            ...upgraded,
+            updatedAt: new Date().toISOString(),
+          });
+          await appendAuditEvent(event, {
+            type: "admin.password",
+            outcome: "rehashed",
+            subject: "admin",
+            detail: `Password silently re-hashed: ${
+              credentials.algo || "pbkdf2"
+            } → argon2id`,
+            ...meta,
+          });
+        } catch (err) {
+          logError("argon2id transparent rehash failed:", err);
+        }
       }
 
       await appendAuditEvent(event, {
@@ -782,11 +804,7 @@ export const handler = async (event) => {
         return json(409, { error: "Admin password not set" });
       }
       const password = String(body.password || "");
-      const ok = await verifyPassword(
-        password,
-        credentials.salt,
-        credentials.hash,
-      );
+      const ok = await verifyPassword(password, credentials);
       if (!ok) {
         return json(401, { error: "Incorrect password" });
       }
@@ -825,11 +843,7 @@ export const handler = async (event) => {
         return json(409, { error: "Admin password not set" });
       }
       const password = String(body.password || "");
-      const ok = await verifyPassword(
-        password,
-        credentials.salt,
-        credentials.hash,
-      );
+      const ok = await verifyPassword(password, credentials);
       if (!ok) {
         return json(401, { error: "Incorrect password" });
       }
@@ -869,8 +883,7 @@ export const handler = async (event) => {
       const recoveryPw = (process.env.ADMIN_RECOVERY_PASSWORD || "").trim();
       const currentMatchesStored = await verifyPassword(
         currentPassword,
-        credentials.salt,
-        credentials.hash,
+        credentials,
       );
       const currentMatchesRecovery =
         recoveryPw.length >= MIN_PASSWORD_LENGTH &&
@@ -884,10 +897,9 @@ export const handler = async (event) => {
         });
       }
 
-      const { salt, hash } = await hashPassword(newPassword);
+      const newCredentials = await hashPassword(newPassword);
       await writeCredentials(store, {
-        salt,
-        hash,
+        ...newCredentials,
         updatedAt: new Date().toISOString(),
       });
       const newSecret = await rotateSessionSecret(store);
@@ -971,11 +983,7 @@ export const handler = async (event) => {
       const recoveryPassword = (
         process.env.ADMIN_RECOVERY_PASSWORD || ""
       ).trim();
-      const matchesStored = await verifyPassword(
-        password,
-        credentials.salt,
-        credentials.hash,
-      );
+      const matchesStored = await verifyPassword(password, credentials);
       const matchesRecovery =
         recoveryPassword.length >= MIN_PASSWORD_LENGTH &&
         (await constantTimeEquals(password, recoveryPassword));
