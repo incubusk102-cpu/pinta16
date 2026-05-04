@@ -88,9 +88,22 @@ const CSRF_EXEMPT_PATHS = new Set(["/api/google-callback", "/api/uploads"]);
 
 // Endpoints that handle their own CSRF gate inline (because they need
 // finer-grained per-action exemptions, e.g. login / signup / passkey
-// challenge flows where no session cookie has been set yet). These
-// skip the wrapper-level CSRF check.
-const CSRF_INLINE_PATHS = new Set(["/api/admin-auth", "/api/users"]);
+// challenge flows where no session cookie has been set yet) OR have an
+// alternative CSRF protection model (signed third-party token verified
+// inside the handler). These skip the wrapper-level CSRF check.
+//
+// `/api/google-callback` is in here because Google's redirect flow
+// form-POSTs to us from accounts.google.com, so the browser never
+// attaches our `cv_csrf` cookie/header. The protection is the signed
+// Google ID token (`credential` field) — it's verified against the
+// google tokeninfo endpoint and the `aud` claim is checked against our
+// client_id, so a replay or forgery from a different site is rejected
+// before any state changes.
+const CSRF_INLINE_PATHS = new Set([
+  "/api/admin-auth",
+  "/api/users",
+  "/api/google-callback",
+]);
 
 // Pull a Lambda-style headers shim out of the inbound Pages request so
 // the cookie / CSRF helpers can reuse the existing event shape without
