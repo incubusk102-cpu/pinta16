@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { useLocale } from "@/contexts/LocaleContext";
+import { jsonAuthHeaders } from "@/lib/api";
 import Turnstile, { isTurnstileEnabled } from "./Turnstile";
 
 interface Props {
@@ -44,7 +45,8 @@ export default function NewsletterForm({
     try {
       const res = await fetch("/api/newsletter", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({
           email: email.trim(),
           name: name.trim(),
