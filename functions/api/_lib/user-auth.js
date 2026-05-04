@@ -147,7 +147,14 @@ export const extractTokenWithSource = (event) => {
     event.headers?.authorization || event.headers?.Authorization || "";
   if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
     const value = auth.slice(7).trim();
-    if (value) return { token: value, source: "header" };
+    // SPAs that build the header before their token state has
+    // hydrated will send the literal strings "null" / "undefined"
+    // here. Treat those as missing so we fall through to the
+    // cookie path instead of failing the JWT verify with a
+    // misleading 401.
+    if (value && value !== "null" && value !== "undefined") {
+      return { token: value, source: "header" };
+    }
   }
   const cookie = readCookie(event, USER_SESSION_COOKIE);
   if (typeof cookie === "string" && cookie.length > 0) {
