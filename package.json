@@ -69,7 +69,7 @@
     "input-otp": "^1.4.2",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
-    "lucide-react": "^0.575.0",
+    "lucide-react": "^1.14.0",
     "maplibre-gl": "^5.24.0",
     "path": "^0.12.7",
     "qrcode.react": "^4.2.0",
