@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { jsonAuthHeaders } from "@/lib/api";
 import { useRouterState } from "@tanstack/react-router";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import type { ChatFaqItem } from "@/lib/chat-faqs";
@@ -372,7 +373,8 @@ export default function ChatWidget() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({
           action: "start",
           name: trimmedName,
@@ -409,7 +411,8 @@ export default function ChatWidget() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({
           action: "send",
           id: handle.id,

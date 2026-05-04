@@ -94,6 +94,20 @@ export default function OrderPushOptInPrompt({
       });
     } else if (res.reason === "unsupported") {
       toast.error("Not supported on this browser");
+    } else if (res.reason === "cf-challenge") {
+      // Cloudflare Bot Fight Mode interstitial. A full reload picks up a
+      // fresh challenge cookie which usually clears it; tell the user to
+      // try that rather than showing the cryptic underlying status code.
+      toast.error("Couldn't enable notifications", {
+        description:
+          "Please refresh the page and try again. If it keeps happening, contact support.",
+      });
+    } else if (res.reason === "csrf-stale") {
+      // Stale CSRF cookie — almost always means the session ticked over
+      // between page load and the click. A reload re-issues the token.
+      toast.error("Session expired", {
+        description: "Please refresh the page and try again.",
+      });
     } else {
       toast.error("Couldn't enable notifications", {
         description: res.reason || "Please try again in a moment.",

@@ -52,6 +52,15 @@ export const authHeaders = (): Record<string, string> => {
 
 // Public: helper for building a typical JSON POST headers object.
 // Combines `Content-Type: application/json` with the CSRF token.
+//
+// IMPORTANT: use this for *every* state-changing same-origin fetch, even
+// ones that look anonymous (newsletter signup, push subscribe, chat
+// start, "notify me when in stock"). The Pages Functions wrapper
+// (`functions/api/_lib/handler-wrapper.js → isCsrfRejected`) auto-rejects
+// 403 the moment a session cookie is present without a matching
+// `X-CSRF-Token` header — and any logged-in shopper has that cookie. A
+// hardcoded `Content-Type: application/json` works fine for guests but
+// silently breaks for logged-in users, which is hard to spot in QA.
 export const jsonAuthHeaders = (): Record<string, string> => ({
   "Content-Type": "application/json",
   ...authHeaders(),

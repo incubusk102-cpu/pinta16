@@ -8,8 +8,49 @@
 //     shopper's email so the server can fan out future order-status pushes,
 //   - and gives the rest of the app a tidy `subscribeToOrderPush(email)` /
 //     `unsubscribeFromOrderPush(email)` to call.
+//
+// Every state-changing POST uses jsonAuthHeaders() so the wrapper-level
+// CSRF gate (handler-wrapper.js → isCsrfRejected) accepts the request when
+// the shopper happens to be logged in (HttpOnly cv_user_session cookie
+// present). Without the header those POSTs return a wrapper 403 that
+// surfaces as a cryptic `server-403` toast on /order-confirmation.
+
+import { jsonAuthHeaders } from "./api";
 
 const PUSH_LS_KEY = "canvhub.orderPush.email";
+
+// Translate a non-OK fetch Response into a UI-friendly reason string.
+// - HTML 403 with `cf-mitigated: challenge` → "cf-challenge" (Cloudflare
+//   Bot Fight Mode interstitial — page reload usually clears it)
+// - JSON 403 mentioning "csrf" → "csrf-stale" (cookie/session expired
+//   between page load and click; reload picks up a fresh token)
+// - Everything else → "server-<status>" (preserves the legacy shape so
+//   downstream callers / Sentry breadcrumbs keep their grouping).
+const readServerErrorReason = async (res: Response): Promise<string> => {
+  const status = res.status;
+  const cfMitigated = res.headers.get("cf-mitigated") || "";
+  if (cfMitigated.toLowerCase() === "challenge") {
+    return "cf-challenge";
+  }
+  let bodyText = "";
+  try {
+    bodyText = await res.text();
+  } catch {
+    bodyText = "";
+  }
+  // Cloudflare BFM challenge pages are HTML even on /api/* paths.
+  if (
+    status === 403 &&
+    bodyText.length > 0 &&
+    bodyText.trimStart().startsWith("<")
+  ) {
+    return "cf-challenge";
+  }
+  if (status === 403 && /csrf/i.test(bodyText)) {
+    return "csrf-stale";
+  }
+  return `server-${status}`;
+};
 
 export interface OrderPushState {
   supported: boolean;
@@ -163,7 +204,8 @@ export const subscribeToOrderPush = async (
   try {
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonAuthHeaders(),
+      credentials: "same-origin",
       body: JSON.stringify({
         email: trimmed,
         subscription: {
@@ -173,7 +215,7 @@ export const subscribeToOrderPush = async (
       }),
     });
     if (!res.ok) {
-      return { ok: false, reason: `server-${res.status}` };
+      return { ok: false, reason: await readServerErrorReason(res) };
     }
   } catch (err) {
     return {
@@ -232,7 +274,8 @@ export const unsubscribeFromOrderPush = async (
     try {
       await fetch("/api/push/unsubscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({ email: targetEmail, endpoint }),
       });
     } catch {
@@ -269,7 +312,8 @@ export const handlePushSubscriptionChangeMessages = () => {
     try {
       await fetch("/api/push/subscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({
           email,
           subscription: event.data.subscription,

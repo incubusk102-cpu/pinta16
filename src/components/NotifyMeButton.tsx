@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Bell } from "lucide-react";
 import { toast } from "sonner";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+import { jsonAuthHeaders } from "@/lib/api";
 
 interface NotifyMeButtonProps {
   productId: string;
@@ -24,7 +25,8 @@ export function NotifyMeButton({ productId }: NotifyMeButtonProps) {
     try {
       const res = await fetch("/api/marketing-triggers/notify-me", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({ email: trimmed, productId }),
       });
       if (!res.ok) {

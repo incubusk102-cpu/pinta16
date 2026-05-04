@@ -13,6 +13,7 @@ import GoogleNavSignIn from "@/components/GoogleNavSignIn";
 import { useHeroSlides, type HeroSlide } from "@/contexts/HeroSlidesContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+import { jsonAuthHeaders } from "@/lib/api";
 import { startWelcomeBonus } from "@/lib/welcomeBonus";
 
 // localStorage key — once the visitor closes / accepts the modal we
@@ -239,7 +240,8 @@ export default function NewUserModal() {
     try {
       const res = await fetch("/api/newsletter", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
+        credentials: "same-origin",
         body: JSON.stringify({
           email: email.trim(),
           source: "newuser-modal",
