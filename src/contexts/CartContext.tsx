@@ -18,6 +18,7 @@ import {
   hasShippingRates,
   LALAMOVE_PAID_TO_RIDER,
 } from "@/lib/shipment";
+import { jsonAuthHeaders } from "@/lib/api";
 import type { ShippingZone } from "@/lib/ph-regions";
 
 export interface CartItem {
@@ -675,7 +676,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       setShowConfirmation(true);
       fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonAuthHeaders(),
         body: JSON.stringify({
           action: "place",
           order,

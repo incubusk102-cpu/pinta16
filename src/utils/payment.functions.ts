@@ -1,3 +1,5 @@
+import { jsonAuthHeaders } from "@/lib/api";
+
 interface CreatePaymentData {
   amount: number;
   description?: string;
@@ -13,7 +15,7 @@ interface CreatePaymentData {
 export async function createPayment({ data }: { data: CreatePaymentData }) {
   const res = await fetch("/api/create-payment", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -35,7 +37,7 @@ export async function checkPaymentStatus({
 }) {
   const res = await fetch("/api/check-payment", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify(data),
   });
 
