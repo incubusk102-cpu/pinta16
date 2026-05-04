@@ -41,7 +41,125 @@ export const COURIERS: CourierOption[] = [
 // Couriers that are eligible to be picked at checkout for actual
 // nationwide delivery — pickup-style options are excluded so customers
 // don't accidentally choose them and then expect a real shipping fee.
-export const SHIPPABLE_COURIER_IDS = ["j&t", "jrs", "lbc", "ninjavan", "flash"];
+export const SHIPPABLE_COURIER_IDS = [
+  "j&t",
+  "jrs",
+  "lbc",
+  "ninjavan",
+  "flash",
+  "lalamove",
+];
+
+// canvhub currently has no fixed warehouse address, so we don't try to
+// price shipping at checkout. Every order ships via Lalamove and the
+// customer pays the rider directly in cash on delivery. The cart total
+// excludes shipping; the checkout disclosure tells the buyer up front
+// what range to expect for their province (see LALAMOVE_RANGE_BY_PROVINCE
+// below) so there are no surprises when the rider arrives.
+//
+// Flip this back to `false` if a fixed origin is added later — the
+// existing per-courier × per-zone rate table will take over again.
+export const LALAMOVE_PAID_TO_RIDER = true;
+export const LALAMOVE_COURIER_ID = "lalamove";
+
+// Indicative Lalamove fee range (in pesos) by Luzon province, derived
+// from Lalamove's published intra-city sedan fare table
+// (₱100 base + ₱13/km after 2 km) plus a typical detour factor and
+// driver acceptance margin for inter-province trips. These are
+// *expectation-setters* shown on the checkout screen, NOT a price the
+// site charges — the rider quotes the actual fare on dispatch.
+//
+// Buckets:
+//   metro_manila   — within MM, sedan-route                     ₱100–₱250
+//   adjacent       — Cavite/Laguna/Rizal/Bulacan/Pampanga       ₱250–₱500
+//   greater_luzon  — Batangas/Tarlac/N.Ecija/Zambales/Aurora    ₱400–₱700
+//   far_luzon      — Bicol/Ilocos/Cagayan Valley/Cordillera     ₱700–₱1500+
+//   mimaropa       — island provinces (Mindoro/Palawan/Romblon) ₱1000+ (boat)
+export interface LalamoveRange {
+  min: number;
+  max: number;
+  // Optional badge appended after the price range on the disclosure
+  // panel ("≈" / "boat ride extra" etc).
+  note?: string;
+}
+
+const RANGE_MM: LalamoveRange = { min: 100, max: 250 };
+const RANGE_ADJACENT: LalamoveRange = { min: 250, max: 500 };
+const RANGE_GREATER: LalamoveRange = { min: 400, max: 700 };
+const RANGE_FAR: LalamoveRange = { min: 700, max: 1500, note: "long route" };
+const RANGE_MIMAROPA: LalamoveRange = {
+  min: 1000,
+  max: 2500,
+  note: "boat ride extra",
+};
+
+// Province (lowercase, trimmed) → fee range. Anything not listed falls
+// back to the "outside Luzon" message ("Lalamove doesn't currently
+// serve this province — contact us for a quote.").
+export const LALAMOVE_RANGE_BY_PROVINCE: Record<string, LalamoveRange> = {
+  // NCR
+  "metro manila": RANGE_MM,
+  // Region III — Central Luzon (adjacent / greater)
+  bulacan: RANGE_ADJACENT,
+  pampanga: RANGE_ADJACENT,
+  bataan: RANGE_GREATER,
+  "nueva ecija": RANGE_GREATER,
+  tarlac: RANGE_GREATER,
+  zambales: RANGE_GREATER,
+  aurora: RANGE_FAR,
+  // Region IV-A — CALABARZON (adjacent / greater)
+  cavite: RANGE_ADJACENT,
+  laguna: RANGE_ADJACENT,
+  rizal: RANGE_ADJACENT,
+  batangas: RANGE_GREATER,
+  quezon: RANGE_GREATER,
+  // Region I — Ilocos
+  "ilocos norte": RANGE_FAR,
+  "ilocos sur": RANGE_FAR,
+  "la union": RANGE_FAR,
+  pangasinan: RANGE_FAR,
+  // Region II — Cagayan Valley
+  batanes: RANGE_FAR,
+  cagayan: RANGE_FAR,
+  isabela: RANGE_FAR,
+  "nueva vizcaya": RANGE_FAR,
+  quirino: RANGE_FAR,
+  // CAR — Cordillera
+  abra: RANGE_FAR,
+  apayao: RANGE_FAR,
+  benguet: RANGE_FAR,
+  ifugao: RANGE_FAR,
+  kalinga: RANGE_FAR,
+  "mountain province": RANGE_FAR,
+  // Region V — Bicol
+  albay: RANGE_FAR,
+  "camarines norte": RANGE_FAR,
+  "camarines sur": RANGE_FAR,
+  catanduanes: RANGE_FAR,
+  masbate: RANGE_FAR,
+  sorsogon: RANGE_FAR,
+  // MIMAROPA — island provinces (Lalamove typically stops at Batangas
+  // pier; rider flag-down + RoRo costs are extra hence the wider band)
+  marinduque: RANGE_MIMAROPA,
+  "occidental mindoro": RANGE_MIMAROPA,
+  "oriental mindoro": RANGE_MIMAROPA,
+  palawan: RANGE_MIMAROPA,
+  romblon: RANGE_MIMAROPA,
+};
+
+export const formatLalamoveRange = (range: LalamoveRange): string => {
+  const min = `₱${range.min.toLocaleString("en-PH")}`;
+  const max = `₱${range.max.toLocaleString("en-PH")}`;
+  const note = range.note ? ` (${range.note})` : "";
+  return `${min}–${max}${note}`;
+};
+
+export const getLalamoveRange = (
+  province: string,
+): LalamoveRange | undefined => {
+  if (!province) return undefined;
+  return LALAMOVE_RANGE_BY_PROVINCE[province.trim().toLowerCase()];
+};
 
 export const findCourierById = (id: string): CourierOption | undefined =>
   COURIERS.find((c) => c.id === id);

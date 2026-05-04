@@ -352,14 +352,27 @@ const renderItemsTable = (items = []) => {
   `;
 };
 
-const renderTotals = (order) => `
+// When the storefront is in Lalamove-paid-to-rider mode the order's
+// `shippingFee` is 0 because the rider's fee is collected separately
+// in cash on delivery. We swap the standard "Shipping: ₱X" row for a
+// clearer note so the buyer doesn't think delivery is free.
+const isLalamoveOrder = (order) => {
+  const courier = String(order?.orderInfo?.courier || "").toLowerCase();
+  return courier === "lalamove";
+};
+
+const renderTotals = (order) => {
+  const lalamovePaidToRider =
+    isLalamoveOrder(order) && (Number(order?.shippingFee) || 0) === 0;
+  const shippingRow = lalamovePaidToRider
+    ? `<tr><td style="color:#7a7468;">Shipping</td><td style="text-align:right;color:#7a7468;font-style:italic;">Lalamove — paid to rider on delivery</td></tr>`
+    : order.shippingFee
+      ? `<tr><td style="color:#7a7468;">Shipping</td><td style="text-align:right;">${formatPHP(order.shippingFee)}</td></tr>`
+      : "";
+  return `
   <table role="presentation" width="100%" style="font-size:13px;">
     <tr><td style="color:#7a7468;">Subtotal</td><td style="text-align:right;">${formatPHP(order.subtotal)}</td></tr>
-    ${
-      order.shippingFee
-        ? `<tr><td style="color:#7a7468;">Shipping</td><td style="text-align:right;">${formatPHP(order.shippingFee)}</td></tr>`
-        : ""
-    }
+    ${shippingRow}
     ${
       order.discount
         ? `<tr><td style="color:#7a7468;">Discount${order.voucherCode ? ` (${escapeHtml(order.voucherCode)})` : ""}</td><td style="text-align:right;">- ${formatPHP(order.discount)}</td></tr>`
@@ -368,6 +381,7 @@ const renderTotals = (order) => `
     <tr><td style="padding-top:8px;font-weight:600;">Total</td><td style="padding-top:8px;text-align:right;font-weight:600;">${formatPHP(order.total)}</td></tr>
   </table>
 `;
+};
 
 // Substitute {{placeholder}} tokens in admin-edited template strings.
 // Returns a plain (un-escaped) string suitable for use as the email

@@ -40,12 +40,17 @@ import {
   SHIPPABLE_COURIER_IDS,
   hasShippingRates,
   getShippingFee,
+  LALAMOVE_PAID_TO_RIDER,
+  LALAMOVE_COURIER_ID,
+  formatLalamoveRange,
+  getLalamoveRange,
 } from "@/lib/shipment";
 import {
   zoneForRegion,
   zoneLabel,
   isValidPhMobile,
   ALL_PH_PROVINCES,
+  LUZON_PROVINCES,
   regionForProvince,
 } from "@/lib/ph-regions";
 import {
@@ -170,7 +175,11 @@ const buildSignedInForm = (
     region: prev.region || addr?.region || "",
     barangay: prev.barangay || addr?.barangay || "",
     landmark: prev.landmark || addr?.landmark || "",
-    courier: prev.courier || "",
+    // In Lalamove-paid-to-rider mode the courier is locked at the form
+    // level so the order record always carries it, even when the
+    // signed-in path rebuilds the form from a saved address.
+    courier:
+      prev.courier || (LALAMOVE_PAID_TO_RIDER ? LALAMOVE_COURIER_ID : ""),
     shippingZone: prev.shippingZone || "",
   };
 };
@@ -227,6 +236,11 @@ const CheckoutForm = () => {
       city: "",
       notes: "",
       country: "Philippines",
+      // Lalamove-only mode hides the courier picker, so we lock the
+      // courier field at form-construction time. The cart total still
+      // excludes shipping (see CartContext); we just want the order
+      // record to carry the courier so admin-side rendering matches.
+      ...(LALAMOVE_PAID_TO_RIDER ? { courier: LALAMOVE_COURIER_ID } : {}),
     };
     if (isSignedIn) {
       return buildSignedInForm(user, {
@@ -236,12 +250,17 @@ const CheckoutForm = () => {
         address: "",
         city: "",
         notes: "",
+        ...(LALAMOVE_PAID_TO_RIDER ? { courier: LALAMOVE_COURIER_ID } : {}),
       });
     }
     // Guest path: hydrate from any persisted draft so a refresh / tab
     // close / back-to-cart doesn't wipe the visitor's typing.
     const draft = loadCheckoutDraft();
-    return draft ? { ...blankGuest, ...draft } : blankGuest;
+    const merged = draft ? { ...blankGuest, ...draft } : blankGuest;
+    if (LALAMOVE_PAID_TO_RIDER) {
+      merged.courier = LALAMOVE_COURIER_ID;
+    }
+    return merged;
   });
   const [errors, setErrors] = useState<
     Partial<Record<keyof OrderInfo, string>>
@@ -274,7 +293,12 @@ const CheckoutForm = () => {
   // (b) those that actually have at least one configured rate when the
   // admin has set up rates. If no rates are configured, we still expose
   // the shippable couriers but the cart falls back to the legacy fee.
+  //
+  // In Lalamove-paid-to-rider mode the courier is locked and the
+  // dropdown is hidden, so we collapse this to an empty list and the
+  // dropdown JSX gates on `courierOptions.length > 0` below.
   const courierOptions = useMemo(() => {
+    if (LALAMOVE_PAID_TO_RIDER) return [];
     const baseline = COURIERS.filter((c) =>
       SHIPPABLE_COURIER_IDS.includes(c.id),
     );
@@ -293,6 +317,18 @@ const CheckoutForm = () => {
       zone: zoneForRegion(form.region || ""),
     });
   }, [form.courier, form.region, setCheckoutShipping]);
+  // Province dropdown source — narrowed to Luzon only when shipping is
+  // Lalamove-paid-to-rider (Lalamove can't deliver inter-island).
+  const provinceOptions = LALAMOVE_PAID_TO_RIDER
+    ? LUZON_PROVINCES
+    : ALL_PH_PROVINCES;
+  // Per-province Lalamove fee range, recomputed whenever the buyer
+  // changes their province. Used by the disclosure panel below the
+  // address fields so they see the indicative range up front.
+  const lalamoveRange = useMemo(() => {
+    if (!LALAMOVE_PAID_TO_RIDER) return null;
+    return getLalamoveRange(form.province || "") ?? null;
+  }, [form.province]);
   // Mobile-only collapse state for the order summary so the form fields
   // aren't pushed below the fold on small screens. Defaults to expanded
   // on first render; the visitor can collapse with a tap.
@@ -309,6 +345,7 @@ const CheckoutForm = () => {
   useEffect(() => {
     if (showCheckout) {
       if (isSignedIn) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing pattern: drawer-open event re-syncs the auth-derived view + form with the latest user state. A one-shot setState here is intentional.
         setCheckoutMode("signed_in");
         setForm((prev) => buildSignedInForm(user, prev));
       } else {
@@ -471,7 +508,14 @@ const CheckoutForm = () => {
       const err = validateField(key, (form[key] as string) || "");
       if (err) newErrors[key] = err;
     });
-    if (ratesConfigured && !(form.courier || "").trim()) {
+    // Courier is required only when the buyer can actually pick one. In
+    // Lalamove-paid-to-rider mode the courier is auto-set to "lalamove"
+    // and the picker is hidden, so we never block submit on it.
+    if (
+      !LALAMOVE_PAID_TO_RIDER &&
+      ratesConfigured &&
+      !(form.courier || "").trim()
+    ) {
       newErrors.courier = "Pick a courier";
     }
     setErrors(newErrors);
@@ -1013,7 +1057,14 @@ const CheckoutForm = () => {
                             </div>
                             <div className="flex justify-between font-body text-xs text-muted-foreground">
                               <span>Shipping</span>
-                              {shippingFeePending ? (
+                              {LALAMOVE_PAID_TO_RIDER ? (
+                                <span className="text-foreground/80 text-right">
+                                  Lalamove
+                                  <span className="block text-[10px] text-muted-foreground">
+                                    paid to rider on delivery
+                                  </span>
+                                </span>
+                              ) : shippingFeePending ? (
                                 <span className="text-foreground/70">
                                   Pick a courier below
                                 </span>
@@ -1048,9 +1099,15 @@ const CheckoutForm = () => {
                               <span>Total</span>
                               <span className="font-semibold">
                                 ₱{total.toLocaleString()}
-                                {shippingFeePending && (
+                                {shippingFeePending &&
+                                  !LALAMOVE_PAID_TO_RIDER && (
+                                    <span className="font-body text-[10px] text-muted-foreground ml-1">
+                                      + shipping
+                                    </span>
+                                  )}
+                                {LALAMOVE_PAID_TO_RIDER && (
                                   <span className="font-body text-[10px] text-muted-foreground ml-1">
-                                    + shipping
+                                    + Lalamove fee
                                   </span>
                                 )}
                               </span>
@@ -1192,25 +1249,26 @@ const CheckoutForm = () => {
                                               <SelectValue placeholder="Select your province" />
                                             </SelectTrigger>
                                             <SelectContent className="max-h-72">
-                                              {ALL_PH_PROVINCES.map((p) => (
+                                              {provinceOptions.map((p) => (
                                                 <SelectItem key={p} value={p}>
                                                   {p}
                                                 </SelectItem>
                                               ))}
                                             </SelectContent>
                                           </Select>
-                                          {form.province && (
-                                            <p className="font-body text-[10px] text-muted-foreground mt-1">
-                                              Shipping zone:{" "}
-                                              {zoneLabel(
-                                                zoneForRegion(
-                                                  regionForProvince(
-                                                    form.province,
+                                          {form.province &&
+                                            !LALAMOVE_PAID_TO_RIDER && (
+                                              <p className="font-body text-[10px] text-muted-foreground mt-1">
+                                                Shipping zone:{" "}
+                                                {zoneLabel(
+                                                  zoneForRegion(
+                                                    regionForProvince(
+                                                      form.province,
+                                                    ),
                                                   ),
-                                                ),
-                                              )}
-                                            </p>
-                                          )}
+                                                )}
+                                              </p>
+                                            )}
                                         </div>
                                         <div>
                                           <label
@@ -1269,7 +1327,11 @@ const CheckoutForm = () => {
                                     per-courier × per-zone fee. Hidden
                                     when no shippable couriers are
                                     available so the legacy flat rate
-                                    just applies. */}
+                                    just applies. Hidden entirely in
+                                    Lalamove-paid-to-rider mode (where
+                                    the courier is locked and the
+                                    disclosure panel below replaces
+                                    the per-courier fee preview). */}
                                   {courierOptions.length > 0 && (
                                     <div>
                                       <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
@@ -1318,6 +1380,54 @@ const CheckoutForm = () => {
                                       {touched.courier && errors.courier && (
                                         <p className="font-body text-[10px] text-destructive mt-1">
                                           {errors.courier}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                  {/* Lalamove paid-to-rider disclosure
+                                    — replaces the courier picker when
+                                    the storefront is in single-courier
+                                    mode. Lives inline with the address
+                                    fields so the buyer sees the live
+                                    indicative range the moment they
+                                    pick a province. */}
+                                  {LALAMOVE_PAID_TO_RIDER && (
+                                    <div className="rounded-sm border border-foreground/15 bg-muted/30 p-3 space-y-1.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <Truck className="w-3.5 h-3.5 text-foreground/70" />
+                                        <p className="font-body text-xs text-foreground">
+                                          Delivery via{" "}
+                                          <span className="font-semibold">
+                                            Lalamove
+                                          </span>
+                                        </p>
+                                      </div>
+                                      <p className="font-body text-[11px] leading-relaxed text-muted-foreground">
+                                        Once your order is ready we'll book a
+                                        Lalamove rider to your address. You pay
+                                        the rider directly in cash on delivery —
+                                        no shipping fee is charged at checkout.
+                                      </p>
+                                      {form.province && lalamoveRange && (
+                                        <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                          Indicative fee for {form.province}:{" "}
+                                          <span className="font-semibold">
+                                            {formatLalamoveRange(lalamoveRange)}
+                                          </span>
+                                        </p>
+                                      )}
+                                      {form.province && !lalamoveRange && (
+                                        <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                          Lalamove may not currently serve{" "}
+                                          {form.province}. We'll message you
+                                          with a rider's quote once your order
+                                          is confirmed.
+                                        </p>
+                                      )}
+                                      {!form.province && (
+                                        <p className="font-body text-[11px] text-muted-foreground italic pt-0.5">
+                                          Pick a province above to see the
+                                          indicative rider fee.
                                         </p>
                                       )}
                                     </div>

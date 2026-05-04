@@ -222,6 +222,19 @@ export const ALL_PH_PROVINCES: string[] = Array.from(
   new Set(PH_REGIONS.flatMap((r) => r.provinces)),
 ).sort((a, b) => a.localeCompare(b));
 
+// Luzon-only province list (NCR + Luzon mainland + MIMAROPA islands).
+// Visayas and Mindanao are excluded entirely. Used by checkout when
+// the storefront is in Lalamove-only mode — Lalamove can't deliver
+// inter-island, so we hide non-Luzon provinces from the dropdown
+// instead of letting customers pick them and then bouncing the order.
+export const LUZON_PROVINCES: string[] = Array.from(
+  new Set(
+    PH_REGIONS.filter(
+      (r) => r.zone === "metro_manila" || r.zone === "luzon",
+    ).flatMap((r) => r.provinces),
+  ),
+).sort((a, b) => a.localeCompare(b));
+
 // Reverse map province → region. Built lazily once because the
 // PH_REGIONS list is static. Lookups are O(1) after first call.
 let provinceToRegionId: Map<string, string> | null = null;
