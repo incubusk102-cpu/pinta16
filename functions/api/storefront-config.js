@@ -972,6 +972,15 @@ const DEFAULT_CONFIG = {
     threshold: 8000,
     shippingFee: 500,
   },
+  lalamoveFare: {
+    enabled: true,
+    warehouseLat: 14.7406,
+    warehouseLng: 121.0269,
+    warehouseLabel: "Bagong Silang, Caloocan",
+    perKmRate: 25,
+    baseFee: 50,
+    minFare: 100,
+  },
   shippingRates: [
     {
       courierId: "j&t",
@@ -1224,6 +1233,10 @@ const sanitizeConfig = (raw) => {
     data.freeShipping && typeof data.freeShipping === "object"
       ? data.freeShipping
       : {};
+  const lalamoveFareRaw =
+    data.lalamoveFare && typeof data.lalamoveFare === "object"
+      ? data.lalamoveFare
+      : {};
   const promoCodes = Array.isArray(data.promoCodes) ? data.promoCodes : [];
   const chatRaw = data.chat && typeof data.chat === "object" ? data.chat : {};
   const faqsExplicit = Array.isArray(chatRaw.faqs);
@@ -1281,6 +1294,42 @@ const sanitizeConfig = (raw) => {
       shippingFee: Math.max(
         0,
         Math.floor(Number(freeShipping.shippingFee) || 0),
+      ),
+    },
+    lalamoveFare: {
+      enabled: lalamoveFareRaw.enabled !== false,
+      // Clamp lat/lng to PH-ish bounds so a stray paste can't move the
+      // origin to the other side of the planet. Falls back to default
+      // when missing or NaN.
+      warehouseLat: (() => {
+        const n = Number(lalamoveFareRaw.warehouseLat);
+        if (!Number.isFinite(n) || n < 4 || n > 22)
+          return DEFAULT_CONFIG.lalamoveFare.warehouseLat;
+        return Math.round(n * 1e6) / 1e6;
+      })(),
+      warehouseLng: (() => {
+        const n = Number(lalamoveFareRaw.warehouseLng);
+        if (!Number.isFinite(n) || n < 116 || n > 127)
+          return DEFAULT_CONFIG.lalamoveFare.warehouseLng;
+        return Math.round(n * 1e6) / 1e6;
+      })(),
+      warehouseLabel: String(
+        lalamoveFareRaw.warehouseLabel ??
+          DEFAULT_CONFIG.lalamoveFare.warehouseLabel,
+      )
+        .trim()
+        .slice(0, 80),
+      perKmRate: Math.max(
+        0,
+        Math.min(500, Math.round(Number(lalamoveFareRaw.perKmRate) || 0)),
+      ),
+      baseFee: Math.max(
+        0,
+        Math.min(2000, Math.round(Number(lalamoveFareRaw.baseFee) || 0)),
+      ),
+      minFare: Math.max(
+        0,
+        Math.min(2000, Math.round(Number(lalamoveFareRaw.minFare) || 0)),
       ),
     },
     shippingRates: sanitizeShippingRates(
@@ -1468,6 +1517,10 @@ const publicView = (config) => {
   return {
     announcement: config.announcement,
     freeShipping: config.freeShipping,
+    lalamoveFare:
+      config.lalamoveFare && typeof config.lalamoveFare === "object"
+        ? config.lalamoveFare
+        : DEFAULT_CONFIG.lalamoveFare,
     shippingRates: Array.isArray(config.shippingRates)
       ? config.shippingRates
       : [],
@@ -1798,6 +1851,18 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           freeShipping: { ...existing.freeShipping, ...body.freeShipping },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-lalamove-fare") {
+        const next = sanitizeConfig({
+          ...existing,
+          lalamoveFare: {
+            ...(existing.lalamoveFare || DEFAULT_CONFIG.lalamoveFare),
+            ...(body.lalamoveFare || {}),
+          },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });

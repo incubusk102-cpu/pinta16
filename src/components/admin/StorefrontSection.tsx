@@ -14,7 +14,9 @@ import {
 import {
   COURIERS,
   DEFAULT_SHIPPING_RATES,
+  DEFAULT_LALAMOVE_FARE,
   type ShippingRate,
+  type LalamoveFareConfig,
 } from "@/lib/shipment";
 import { SHIPPING_ZONES } from "@/lib/ph-regions";
 import { Button } from "@/components/ui/button";
@@ -119,6 +121,7 @@ interface AdminConfig {
     threshold: number;
     shippingFee: number;
   };
+  lalamoveFare: LalamoveFareConfig;
   shippingRates: ShippingRate[];
   promoCodes: AdminPromo[];
   chat: {
@@ -162,6 +165,7 @@ const DEFAULTS: AdminConfig = {
     threshold: 8000,
     shippingFee: 500,
   },
+  lalamoveFare: DEFAULT_LALAMOVE_FARE,
   shippingRates: DEFAULT_SHIPPING_RATES,
   promoCodes: [],
   chat: {
@@ -512,6 +516,199 @@ function FreeShippingRuleSection({
   );
 }
 
+interface LalamoveFareSectionProps {
+  lalamoveFare: AdminConfig["lalamoveFare"];
+  onChange: (next: Partial<AdminConfig["lalamoveFare"]>) => void;
+  onReset: () => void;
+  onSave: () => void;
+  saving: boolean;
+}
+
+function LalamoveFareSection({
+  lalamoveFare,
+  onChange,
+  onReset,
+  onSave,
+  saving,
+}: LalamoveFareSectionProps) {
+  const {
+    enabled,
+    warehouseLat,
+    warehouseLng,
+    warehouseLabel,
+    perKmRate,
+    baseFee,
+    minFare,
+  } = lalamoveFare;
+
+  // Sample distance from Bagong Silang, Caloocan to Imus (Cavite) ≈ 35 km.
+  // Useful sanity-check for the admin: at ₱25/km + ₱50 base fee + ₱100
+  // floor → ₱925, which is in the right ballpark for Lalamove sedan
+  // intra-CALABARZON.
+  const previewKm = 35;
+  const previewFare = Math.max(
+    minFare,
+    Math.round(baseFee + previewKm * perKmRate),
+  );
+
+  return (
+    <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <PackageOpen className="w-4 h-4 text-primary" />
+        <h2 className="font-display text-lg">Lalamove fare estimate</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Show buyers a single-peso Lalamove fare estimate at checkout based on
+        straight-line distance from your studio × your per-km rate + a base fee.
+        Distance is computed from your warehouse coordinates to the buyer's
+        province centroid (Luzon only). When this is off, the checkout falls
+        back to the per-province range you have today.
+      </p>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border border-border/40 bg-background/30 p-3 mb-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Show distance-based estimate</p>
+          <p className="text-xs text-muted-foreground">
+            Customer-facing toggle — turn off if your rate is wildly out of sync
+            with what riders are quoting.
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => onChange({ enabled: v })}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div>
+          <Label className="text-xs">Warehouse / studio label</Label>
+          <Input
+            type="text"
+            value={warehouseLabel}
+            maxLength={80}
+            placeholder="Bagong Silang, Caloocan"
+            onChange={(e) => onChange({ warehouseLabel: e.target.value })}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Shown next to the fare ("from <i>{warehouseLabel || "…"}</i>").
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-xs">Latitude</Label>
+            <Input
+              type="number"
+              step="0.000001"
+              inputMode="decimal"
+              value={Number.isFinite(warehouseLat) ? warehouseLat : ""}
+              onChange={(e) =>
+                onChange({ warehouseLat: Number(e.target.value) })
+              }
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Longitude</Label>
+            <Input
+              type="number"
+              step="0.000001"
+              inputMode="decimal"
+              value={Number.isFinite(warehouseLng) ? warehouseLng : ""}
+              onChange={(e) =>
+                onChange({ warehouseLng: Number(e.target.value) })
+              }
+            />
+          </div>
+          <p className="col-span-2 text-[11px] text-muted-foreground">
+            Pick coordinates from Google Maps: right-click the studio's location
+            → click the lat/lng to copy. Must be inside the Philippines (4–22°N,
+            116–127°E).
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div>
+          <Label className="text-xs">Per-km rate (₱)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={500}
+            step={1}
+            inputMode="numeric"
+            value={Number.isFinite(perKmRate) ? perKmRate : 0}
+            onChange={(e) => onChange({ perKmRate: Number(e.target.value) })}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Lalamove sedan ≈ ₱13/km; bump for inter-city detours.
+          </p>
+        </div>
+        <div>
+          <Label className="text-xs">Base fee (₱)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={2000}
+            step={5}
+            inputMode="numeric"
+            value={Number.isFinite(baseFee) ? baseFee : 0}
+            onChange={(e) => onChange({ baseFee: Number(e.target.value) })}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Flat add-on (flag-down + handling).
+          </p>
+        </div>
+        <div>
+          <Label className="text-xs">Minimum fare (₱)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={2000}
+            step={5}
+            inputMode="numeric"
+            value={Number.isFinite(minFare) ? minFare : 0}
+            onChange={(e) => onChange({ minFare: Number(e.target.value) })}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Floor for short-distance trips.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border/40 bg-background/30 p-3 mb-4 text-xs">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+          Sanity check
+        </p>
+        <p className="text-foreground/90">
+          {warehouseLabel || "your studio"} → Imus, Cavite (≈{previewKm} km
+          straight-line) →{" "}
+          <span className="font-semibold">
+            ₱{previewFare.toLocaleString("en-PH")}
+          </span>{" "}
+          ({baseFee.toLocaleString("en-PH")} base + {previewKm} ×{" "}
+          {perKmRate.toLocaleString("en-PH")}, floor ₱
+          {minFare.toLocaleString("en-PH")})
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 mt-4">
+        <Button variant="outline" size="sm" onClick={onReset}>
+          Reset to defaults
+        </Button>
+        <Button size="sm" onClick={onSave} disabled={saving}>
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            "Save Lalamove fare"
+          )}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 export function StorefrontSection() {
   const { token } = useAdminAuth();
   const { refresh } = useStorefrontConfig();
@@ -575,6 +772,13 @@ export function StorefrontSection() {
           freeShipping: {
             ...DEFAULTS.freeShipping,
             ...data.config.freeShipping,
+          },
+          lalamoveFare: {
+            ...DEFAULTS.lalamoveFare,
+            ...(data.config.lalamoveFare &&
+            typeof data.config.lalamoveFare === "object"
+              ? data.config.lalamoveFare
+              : {}),
           },
           shippingRates: Array.isArray(data.config.shippingRates)
             ? (data.config.shippingRates as ShippingRate[])
@@ -680,6 +884,21 @@ export function StorefrontSection() {
         freeShipping: cfg.freeShipping,
       });
       toast.success("Shipping rule saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveLalamoveFare = async () => {
+    setSaving("lalamove-fare");
+    try {
+      await post({
+        action: "update-lalamove-fare",
+        lalamoveFare: cfg.lalamoveFare,
+      });
+      toast.success("Lalamove fare saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
@@ -1540,6 +1759,25 @@ export function StorefrontSection() {
         saving={saving === "shipping"}
         previewSubtotal={previewSubtotal}
         onPreviewSubtotalChange={setPreviewSubtotal}
+      />
+
+      {/* Distance-based Lalamove fare estimate */}
+      <LalamoveFareSection
+        lalamoveFare={cfg.lalamoveFare}
+        onChange={(next) =>
+          setCfg((c) => ({
+            ...c,
+            lalamoveFare: { ...c.lalamoveFare, ...next },
+          }))
+        }
+        onReset={() =>
+          setCfg((c) => ({
+            ...c,
+            lalamoveFare: { ...DEFAULTS.lalamoveFare },
+          }))
+        }
+        onSave={() => void handleSaveLalamoveFare()}
+        saving={saving === "lalamove-fare"}
       />
 
       {/* Per-courier × per-zone shipping rates */}

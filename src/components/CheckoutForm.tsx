@@ -44,6 +44,8 @@ import {
   LALAMOVE_COURIER_ID,
   formatLalamoveRange,
   getLalamoveRange,
+  computeLalamoveFareEstimate,
+  formatLalamoveFareEstimate,
 } from "@/lib/shipment";
 import {
   zoneForRegion,
@@ -364,6 +366,18 @@ const CheckoutForm = () => {
     if (!LALAMOVE_PAID_TO_RIDER) return null;
     return getLalamoveRange(form.province || "") ?? null;
   }, [form.province]);
+  // Distance-based fare estimate (Haversine warehouse → province
+  // centroid × admin-set ₱/km + base fee). Returned only when the admin
+  // has the feature enabled AND the buyer's province is in our Luzon
+  // centroid table; otherwise the panel falls back to the per-province
+  // range above.
+  const lalamoveFareEstimate = useMemo(() => {
+    if (!LALAMOVE_PAID_TO_RIDER) return null;
+    return computeLalamoveFareEstimate(
+      storefrontConfig.lalamoveFare,
+      form.province || "",
+    );
+  }, [storefrontConfig.lalamoveFare, form.province]);
   // Mobile-only collapse state for the order summary so the form fields
   // aren't pushed below the fold on small screens. Defaults to expanded
   // on first render; the visitor can collapse with a tap.
@@ -380,7 +394,9 @@ const CheckoutForm = () => {
   useEffect(() => {
     if (showCheckout) {
       if (isSignedIn) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing pattern: drawer-open event re-syncs the auth-derived view + form with the latest user state. A one-shot setState here is intentional.
+        // Pre-existing pattern: drawer-open event re-syncs the
+        // auth-derived view + form with the latest user state. A
+        // one-shot setState here is intentional.
         setCheckoutMode("signed_in");
         setForm((prev) => buildSignedInForm(user, prev));
       } else {
@@ -1626,6 +1642,58 @@ const CheckoutForm = () => {
                                         delivery. Just hand the rider the order
                                         slip; no out-of-pocket cash needed.
                                       </p>
+                                      {form.province &&
+                                        lalamoveFareEstimate && (
+                                          <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                            Estimated rider fee from{" "}
+                                            {
+                                              lalamoveFareEstimate.warehouseLabel
+                                            }
+                                            :{" "}
+                                            <span className="font-semibold">
+                                              {formatLalamoveFareEstimate(
+                                                lalamoveFareEstimate,
+                                              )}
+                                            </span>
+                                            {lalamoveRange && (
+                                              <span className="text-muted-foreground">
+                                                {" "}
+                                                · typical{" "}
+                                                {formatLalamoveRange(
+                                                  lalamoveRange,
+                                                )}
+                                              </span>
+                                            )}
+                                          </p>
+                                        )}
+                                      {form.province &&
+                                        !lalamoveFareEstimate &&
+                                        lalamoveRange && (
+                                          <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                            Indicative fee for {form.province}:{" "}
+                                            <span className="font-semibold">
+                                              {formatLalamoveRange(
+                                                lalamoveRange,
+                                              )}
+                                            </span>
+                                          </p>
+                                        )}
+                                      {form.province &&
+                                        !lalamoveFareEstimate &&
+                                        !lalamoveRange && (
+                                          <p className="font-body text-[11px] text-foreground/80 pt-0.5">
+                                            Lalamove may not currently serve{" "}
+                                            {form.province}. We'll message you
+                                            with a rider's quote once your order
+                                            is confirmed.
+                                          </p>
+                                        )}
+                                      {!form.province && (
+                                        <p className="font-body text-[11px] text-muted-foreground italic pt-0.5">
+                                          Pick a province above to see the
+                                          indicative rider fee.
+                                        </p>
+                                      )}
                                     </div>
                                   ) : (
                                     LALAMOVE_PAID_TO_RIDER && (
