@@ -433,15 +433,16 @@ function AccountPage() {
 
   useEffect(() => {
     if (token) return;
-    // If the user is no longer on /account (e.g. they just signed out from
-    // the nav drawer, which navigates to "/"), don't bounce them to /login.
+    // Visitors hitting /account without a session get bounced to the
+    // homepage. The hamburger drawer surfaces the inline "Continue
+    // with Google" button there — no dedicated /login page.
     if (pathname !== "/account") return;
     const storedToken =
       typeof window !== "undefined"
         ? localStorage.getItem("canvhub_user_token")
         : null;
     if (!storedToken) {
-      void navigate({ to: "/login" });
+      void navigate({ to: "/" });
     }
   }, [token, navigate, pathname]);
 

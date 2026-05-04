@@ -8,10 +8,13 @@ export const Route = createFileRoute("/signup")({
   }),
 });
 
+// Sign-up has no dedicated page; it happens inline through Google. Send
+// visitors to the homepage where the hamburger drawer surfaces the
+// "Continue with Google" button.
 function SignupRedirect() {
   const navigate = useNavigate();
   useEffect(() => {
-    void navigate({ to: "/login", replace: true });
+    void navigate({ to: "/", replace: true });
   }, [navigate]);
   return null;
 }

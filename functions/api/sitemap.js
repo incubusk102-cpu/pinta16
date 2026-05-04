@@ -18,8 +18,6 @@ const xmlEscape = (s = "") =>
 const STATIC_PATHS = [
   { path: "/", priority: "1.0", changefreq: "daily" },
   { path: "/account", priority: "0.4", changefreq: "weekly" },
-  { path: "/login", priority: "0.2", changefreq: "yearly" },
-  { path: "/signup", priority: "0.2", changefreq: "yearly" },
 ];
 
 export const onRequestGet = async ({ request, env }) => {

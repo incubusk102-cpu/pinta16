@@ -2,8 +2,8 @@ name: Playwright smoke
 
 # Runs the public-facing smoke suite (`tests/e2e/smoke.spec.ts`) against
 # a local `vite preview` of the freshly-built SPA. The tests exercise
-# only routes that work without Pages Functions (`/`, `/login`,
-# `/signup`, `/policy/$slug`) — anything that needs the live API
+# only routes that work without Pages Functions (`/`, `/signup`,
+# `/policy/$slug`) — anything that needs the live API
 # (cart → checkout → PayMongo) is documented in the spec and meant to
 # be run ad-hoc with `BASE_URL=https://canvhub.com npm run test:e2e`.
 #
