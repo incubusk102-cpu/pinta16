@@ -527,7 +527,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
             const res = await fetch("/api/orders", {
               method: "POST",
               headers: jsonAuthHeaders(),
-              body: JSON.stringify({ action: "place", order }),
+              // The original /place needs Turnstile, which is
+              // single-use and long since consumed for these stuck
+              // orders. /resync uses the user-session cookie instead
+              // and skips the bot check.
+              body: JSON.stringify({ action: "resync", order }),
             });
             if (res.ok || res.status === 409) {
               markOrderSyncedRef.current(order.id);
@@ -945,7 +949,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         const res = await fetch("/api/orders", {
           method: "POST",
           headers: jsonAuthHeaders(),
-          body: JSON.stringify({ action: "place", order }),
+          body: JSON.stringify({ action: "resync", order }),
         });
         if (res.ok || res.status === 409) {
           markOrderSyncedRef.current(orderId);

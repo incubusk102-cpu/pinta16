@@ -850,6 +850,141 @@ export const handler = async (event) => {
       const body = parseBody(event.body);
       const action = body.action;
 
+      // Customer-initiated resync of an order whose original /place
+      // POST never reached the server (Cloudflare challenge, body-size
+      // cap, network blip during checkout). The original Turnstile
+      // token has long since been consumed, so the regular `place`
+      // path will reject the retry with "Verification failed". We
+      // bypass Turnstile here by requiring (a) a valid user session
+      // cookie and (b) that the buyer email on the order matches the
+      // signed-in user — abusers without a real Google login can't
+      // hit this path. Rate-limited and idempotent like `place`.
+      if (action === "resync") {
+        const user = await getCurrentUserFromSession(event);
+        if (!user) {
+          return json(401, { error: "Sign in to retry the order" });
+        }
+        const limit = await consumeRateLimit(event, {
+          bucket: "orders-resync",
+          windowMs: 60_000,
+          max: 5,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+        const order = body.order;
+        if (!order?.items?.length) {
+          return json(400, { error: "Invalid order" });
+        }
+        const info = order.orderInfo;
+        if (
+          !info ||
+          typeof info.fullName !== "string" ||
+          !info.fullName.trim() ||
+          typeof info.email !== "string" ||
+          !info.email.trim() ||
+          typeof info.phone !== "string" ||
+          !info.phone.trim() ||
+          typeof info.address !== "string" ||
+          !info.address.trim() ||
+          typeof info.city !== "string" ||
+          !info.city.trim()
+        ) {
+          return json(400, { error: "Order is missing required information" });
+        }
+        if (normalizeEmail(info.email) !== normalizeEmail(user.email)) {
+          return json(403, {
+            error:
+              "This order isn't on your account; ask support to recover it.",
+          });
+        }
+        const orderId =
+          typeof order.id === "string" && /^ORD-[A-Z0-9]+$/.test(order.id)
+            ? order.id
+            : null;
+        if (!orderId) {
+          return json(400, { error: "Invalid order ID" });
+        }
+        const orders = await readOrders(store);
+        if (orders.some((o) => o.id === orderId)) {
+          return json(409, { error: "Order already saved" });
+        }
+        const safeItems = order.items.slice(0, 50).map((item) => ({
+          id: String(item.id || "").slice(0, 100),
+          title: String(item.title || "").slice(0, 300),
+          price: Number(item.price) || 0,
+          quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+          image:
+            typeof item.image === "string" ? item.image.slice(0, 2000) : "",
+        }));
+        const meta = captureRequestMeta(event);
+        const safeOrder = {
+          id: orderId,
+          items: safeItems,
+          orderInfo: {
+            fullName: String(info.fullName).slice(0, 200),
+            email: String(info.email).slice(0, 200),
+            phone: String(info.phone).slice(0, 50),
+            address: String(info.address).slice(0, 500),
+            city: String(info.city).slice(0, 200),
+            notes: String(info.notes || "").slice(0, 1000),
+            ...(typeof info.region === "string"
+              ? { region: info.region.slice(0, 60) }
+              : {}),
+            ...(typeof info.province === "string"
+              ? { province: info.province.slice(0, 120) }
+              : {}),
+            ...(typeof info.barangay === "string"
+              ? { barangay: info.barangay.slice(0, 120) }
+              : {}),
+          },
+          subtotal: Number(order.subtotal) || 0,
+          shippingFee: Number(order.shippingFee) || 0,
+          freeShipping: Boolean(order.freeShipping),
+          discount: Number(order.discount) || 0,
+          total: Number(order.total) || 0,
+          estimatedCreationDays:
+            typeof order.estimatedCreationDays === "string"
+              ? order.estimatedCreationDays.slice(0, 60)
+              : "",
+          createdAt: order.createdAt || new Date().toISOString(),
+          status: [
+            "confirmed",
+            "in_progress",
+            "out_for_delivery",
+            "received",
+          ].includes(order.status)
+            ? order.status
+            : "confirmed",
+          paymentIntentId:
+            typeof order.paymentIntentId === "string"
+              ? order.paymentIntentId.slice(0, 200)
+              : "",
+          voucherCode:
+            typeof order.voucherCode === "string"
+              ? order.voucherCode.toUpperCase().slice(0, 30)
+              : "",
+          notifications: [],
+          serverSynced: true,
+          activityLog: [
+            {
+              at: new Date().toISOString(),
+              type: "placed",
+              actor: "customer-resync",
+              detail: "Recovered via customer Sync now",
+              ...meta,
+            },
+          ],
+        };
+        await store.setJSON(ORDERS_KEY, [safeOrder, ...orders]);
+        await appendAuditEvent(event, {
+          type: "order.resync",
+          outcome: "success",
+          subject: safeOrder.id,
+          detail: `Resynced by ${user.email}`,
+          ...meta,
+        });
+        return json(200, { order: safeOrder });
+      }
+
       if (action === "place") {
         const limit = await consumeRateLimit(event, {
           bucket: "orders-place",
