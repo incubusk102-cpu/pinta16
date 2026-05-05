@@ -7,6 +7,11 @@
 import crypto from "node:crypto";
 import { makeStore } from "./kv-store.js";
 import { requireKvBinding, getCloudflareEnv } from "./context.js";
+import {
+  loadWelcomeEmailConfig,
+  prepareReactChromeConfigForExternal,
+} from "./email.js";
+import { renderInactiveDeletionEmail } from "../../../src/emails/render.ts";
 
 export const STORE_NAME = "users";
 export const USERS_KEY = "users-by-email";
@@ -239,14 +244,11 @@ export const getCurrentUserFromSession = async (event, usersStore) => {
   return findUserById(users, payload.sub);
 };
 
-const escapeHtml = (input) =>
-  String(input ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
+// Sends a "we deleted your inactive account" notification through the
+// shared React Email pipeline so this admin-triggered email lines up
+// visually with the welcome / order / voucher emails (same C monogram
+// header, palette, footer). Previously rendered as a bare-bones <div>
+// with no chrome and didn't even use the configured From address.
 export const sendInactiveDeletionEmail = async (user) => {
   const env = getCloudflareEnv();
   const apiKey = env.RESEND_API_KEY || "";
@@ -255,20 +257,18 @@ export const sendInactiveDeletionEmail = async (user) => {
   if (!apiKey) {
     return { skipped: true, reason: "no-api-key" };
   }
-  const subject = "Your Canvas Hub account was removed for inactivity";
-  const safeName = escapeHtml(user.name || "there");
-  const safeEmail = escapeHtml(user.email || "");
-  const safeSignup = `${escapeHtml(siteUrl)}/signup`;
-  const html = `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:auto;padding:24px;color:#222">
-      <h2 style="margin:0 0 16px">Hi ${safeName},</h2>
-      <p>Your Canvas Hub account (<strong>${safeEmail}</strong>) was removed
-      because it has been inactive for ${INACTIVE_DAYS} days.</p>
-      <p>If this was a mistake, you're welcome to sign up again any time at
-      <a href="${safeSignup}">${safeSignup}</a>.</p>
-      <p style="margin-top:24px;color:#666;font-size:12px">— Canvas Hub</p>
-    </div>
-  `.trim();
+  // Reuse the welcome-email subtree for chrome (logo / banner / palette
+  // / fonts / footer). Account-cleanup mail is a customer-facing
+  // brand-marketing touchpoint, so it belongs in the welcome-flavour
+  // chrome rather than the admin-alert / order chrome.
+  const welcome = await loadWelcomeEmailConfig();
+  const config = prepareReactChromeConfigForExternal(welcome, "welcome");
+  const built = await renderInactiveDeletionEmail({
+    user: { name: user?.name, email: user?.email },
+    inactiveDays: INACTIVE_DAYS,
+    signupUrl: `${siteUrl.replace(/\/+$/, "")}/signup`,
+    config,
+  });
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -276,7 +276,13 @@ export const sendInactiveDeletionEmail = async (user) => {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to: [user.email], subject, html }),
+      body: JSON.stringify({
+        from,
+        to: [user.email],
+        subject: built.subject,
+        html: built.html,
+        text: built.text,
+      }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
