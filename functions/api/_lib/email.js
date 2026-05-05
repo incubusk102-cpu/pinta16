@@ -37,6 +37,73 @@ import {
 
 const envOf = (name) => getCloudflareEnv()[name] || "";
 
+// Match every <img …> tag whose src is a base64 data: URI for a
+// supported bitmap MIME. Captures: full src attribute (group 1),
+// MIME minor type (group 2), base64 payload (group 3).
+//
+// We anchor on the `src=` attribute rather than just the data: URI
+// itself so we can do a clean string replace on the attribute later.
+const INLINE_DATA_IMG_RE =
+  /src=(?:"|')(data:image\/(png|jpeg|jpg|gif|webp);base64,([A-Za-z0-9+/=]+))(?:"|')/g;
+
+// Stable, dependency-free 32-bit FNV-1a hash. Used to derive a short
+// unique Content-ID for each unique base64 payload so identical
+// images (e.g. the same footer icon used twice) collapse to a single
+// MIME part instead of being attached twice.
+const fnv1a = (s) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+};
+
+/**
+ * Walk the rendered email HTML, replace every inline `data:image/…`
+ * src with `cid:<id>` and emit a matching CID-attachment for the
+ * MIME multipart/related body. Returns `{ html, cidAttachments }`.
+ *
+ * Why: Gmail (and most consumer email clients in 2025) does not
+ * reliably render `<img src="data:image/…;base64,…">` tags. Either
+ * the image rewriter strips the src entirely or it fails to fetch
+ * the data URL through Google's image proxy, leaving the recipient
+ * with a broken-image icon. Shipping the same bytes as a CID
+ * attachment (multipart/related) is the documented, supported path
+ * — Resend exposes it via `attachments[].content_id`.
+ *
+ * Idempotent: HTML that contains zero inline data URIs is returned
+ * unchanged with an empty attachments array. Identical payloads
+ * collapse to one attachment via the FNV-1a hash so the resulting
+ * MIME body stays small even when the same icon appears 12 times.
+ *
+ * Pure: no I/O, no env access — safe to call from any context.
+ */
+export const transformInlineImagesToCidAttachments = (html) => {
+  if (typeof html !== "string" || !html.includes("data:image/")) {
+    return { html, cidAttachments: [] };
+  }
+  const seen = new Map();
+  const transformed = html.replace(
+    INLINE_DATA_IMG_RE,
+    (_match, _full, mimeMinor, b64) => {
+      const id = fnv1a(b64);
+      if (!seen.has(id)) {
+        const minor = mimeMinor === "jpg" ? "jpeg" : mimeMinor;
+        seen.set(id, {
+          contentId: id,
+          filename: `inline-${id}.${minor === "jpeg" ? "jpg" : minor}`,
+          contentType: `image/${minor}`,
+          content: b64,
+          inline: true,
+        });
+      }
+      return `src="cid:${id}"`;
+    },
+  );
+  return { html: transformed, cidAttachments: Array.from(seen.values()) };
+};
+
 /**
  * Resolve an EMAIL_* env var, preferring the per-purpose override
  * (EMAIL_<NAME>_<PURPOSE>) when set, otherwise the bare EMAIL_<NAME>.
@@ -178,12 +245,16 @@ async function sendViaResend({
       ...(replyTo ? { reply_to: replyTo } : {}),
       ...(bcc ? { bcc } : {}),
       // Resend attachment shape: { filename, content (base64) }.
+      // Inline images use `content_id` to match `<img src="cid:…">`
+      // references in the rendered HTML and are emitted as
+      // multipart/related parts by Resend.
       ...(Array.isArray(attachments) && attachments.length
         ? {
             attachments: attachments.map((a) => ({
               filename: a.filename,
               content: a.content,
               ...(a.contentType ? { content_type: a.contentType } : {}),
+              ...(a.contentId ? { content_id: a.contentId } : {}),
             })),
           }
         : {}),
@@ -298,16 +369,38 @@ export const sendEmail = async ({
     };
   }
   const provider = PROVIDERS[providerKey];
+
+  // Convert any inline `data:image/…;base64,…` <img> srcs in the
+  // rendered HTML to `cid:<id>` references and emit matching CID
+  // attachments. Gmail and most consumer mail clients in 2025 do
+  // not reliably render inline data: URIs (the image rewriter
+  // strips them), so anything we want to ship as part of the
+  // brand chrome (default C-logo, footer social icons, …) has to
+  // ride as a multipart/related CID part. Resend supports this
+  // natively via `attachments[].content_id`. Brevo doesn't expose
+  // CID inlining anymore (deprecated in API v3) — those payloads
+  // will arrive as plain attachments instead, which is harmless
+  // (the email body is still readable; the icons just don't show).
+  // Plain attachments (e.g. the order waybill PDF) are preserved
+  // as-is and merged with any newly extracted CID parts.
+  const { html: cidHtml, cidAttachments } =
+    transformInlineImagesToCidAttachments(html);
+  const callerAttachments = Array.isArray(attachments) ? attachments : [];
+  const mergedAttachments =
+    cidAttachments.length || callerAttachments.length
+      ? [...callerAttachments, ...cidAttachments]
+      : undefined;
+
   try {
     return await provider.send({
       from,
       to,
       subject,
-      html,
-      text: text || stripTags(html),
+      html: cidHtml,
+      text: text || stripTags(cidHtml),
       replyTo: resolveEmailEnv("REPLY_TO", purpose) || undefined,
       bcc: resolveEmailEnv("BCC", purpose) || undefined,
-      attachments: Array.isArray(attachments) ? attachments : undefined,
+      attachments: mergedAttachments,
     });
   } catch (err) {
     return {

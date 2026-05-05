@@ -203,7 +203,7 @@ const collectInlineDefaults = () => {
       kind: "inline",
       url: truncateUrl(DEFAULT_BRAND_LOGO_DATA_URI),
       ok: true,
-      note: "Inlined as data: URI in the email body. No upstream fetch — cannot be blocked.",
+      note: "Shipped as a CID attachment (multipart/related) — Gmail / iCloud / Outlook all render it. Not affected by Bot Fight Mode.",
     },
   ];
   for (const slug of Object.keys(FOOTER_ICON_DATA_URIS).sort()) {
@@ -213,7 +213,7 @@ const collectInlineDefaults = () => {
       kind: "inline",
       url: truncateUrl(FOOTER_ICON_DATA_URIS[slug]),
       ok: true,
-      note: "Inlined as data: URI in the email body.",
+      note: "Shipped as a CID attachment.",
     });
   }
   return items;
