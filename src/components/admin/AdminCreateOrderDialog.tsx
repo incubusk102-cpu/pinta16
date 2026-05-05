@@ -161,7 +161,7 @@ function ProductPicker({
             ) : null}
             <span className="flex flex-col min-w-0">
               <span className="truncate text-sm">
-                {value.title || "Pick a painting…"}
+                {value.title || "Pick a product…"}
               </span>
               {linked && linkedArtwork ? (
                 <span className="truncate text-xs text-muted-foreground">
@@ -513,7 +513,7 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
                 className="grid grid-cols-12 gap-2 items-end border rounded-md p-2"
               >
                 <div className="col-span-12 sm:col-span-5">
-                  <Label htmlFor={`item-title-${idx}`}>Painting</Label>
+                  <Label htmlFor={`item-title-${idx}`}>Product</Label>
                   <ProductPicker
                     inputId={`item-title-${idx}`}
                     value={item}
