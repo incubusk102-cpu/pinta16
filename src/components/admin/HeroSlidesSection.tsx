@@ -7,6 +7,7 @@ import {
   Loader2,
   Plus,
   Save,
+  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -24,6 +25,11 @@ import {
 } from "@/contexts/HeroSlidesContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 import { compressImage } from "@/lib/imageCompress";
+import {
+  HERO_TEMPLATES,
+  HERO_TEMPLATE_BY_ID,
+  type HeroTemplateId,
+} from "./heroSlideTemplates";
 
 const MAX_SLIDES = 8;
 // Original file ceiling before compression. Server still caps the encoded
@@ -119,6 +125,36 @@ export function HeroSlidesSection() {
     setDraftSlides((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     );
+  };
+
+  // Apply a curated template to a slide. Image / enabled are preserved
+  // so admins can experiment with copy without losing the upload they
+  // just dropped in. The custom template clears the text fields back
+  // to blank so it's a true "start over" affordance.
+  const applyTemplate = (id: string, templateId: HeroTemplateId) => {
+    const tpl = HERO_TEMPLATE_BY_ID[templateId];
+    if (!tpl) return;
+    updateSlide(id, { ...tpl.fields });
+  };
+
+  // Best-effort match: a slide is "on" template T iff every text field
+  // is exactly equal to T's preset values. Falls through to "custom"
+  // when nothing matches so the dropdown stays meaningful.
+  const detectTemplate = (slide: AdminSlide): HeroTemplateId => {
+    for (const tpl of HERO_TEMPLATES) {
+      const f = tpl.fields;
+      if (
+        slide.eyebrow === f.eyebrow &&
+        slide.headline === f.headline &&
+        slide.subtext === f.subtext &&
+        slide.ctaLabel === f.ctaLabel &&
+        slide.ctaHref === f.ctaHref &&
+        slide.align === f.align
+      ) {
+        return tpl.id;
+      }
+    }
+    return "custom";
   };
 
   const addSlide = () => {
@@ -422,6 +458,37 @@ export function HeroSlidesSection() {
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   </div>
+                </div>
+                {/* Curated content presets — fill eyebrow/headline/
+                    subtext/CTA/align in one click. Leaves image and
+                    enabled state untouched so admins keep their
+                    upload. Selecting "Custom" clears the text fields
+                    back to blank. */}
+                <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-3 space-y-2">
+                  <Label
+                    htmlFor={`template-${slide.id}`}
+                    className="text-xs flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    Use template
+                  </Label>
+                  <select
+                    id={`template-${slide.id}`}
+                    value={detectTemplate(slide)}
+                    onChange={(e) =>
+                      applyTemplate(slide.id, e.target.value as HeroTemplateId)
+                    }
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                  >
+                    {HERO_TEMPLATES.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {HERO_TEMPLATE_BY_ID[detectTemplate(slide)].hint}
+                  </p>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-2">
                   <div>

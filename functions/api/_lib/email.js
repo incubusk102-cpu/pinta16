@@ -34,6 +34,13 @@ import {
   DEFAULT_BRAND_LOGO_DATA_URI,
   FOOTER_ICON_DATA_URIS,
 } from "./email-assets-data.js";
+import {
+  renderInactiveDeletionEmail as reactRenderInactiveDeletionEmail,
+  renderNewOrderAdminAlert as reactRenderNewOrderAdminAlert,
+  renderOrderEmail as reactRenderOrderEmail,
+  renderVoucherEmail as reactRenderVoucherEmail,
+  renderWelcomeEmail as reactRenderWelcomeEmail,
+} from "../../../src/emails/render.ts";
 
 const envOf = (name) => getCloudflareEnv()[name] || "";
 
@@ -591,150 +598,30 @@ const resolveOrderKindConfig = (orderEmail, kind) => {
  * include shipment / refund-specific values. `orderEmail` is the
  * admin-edited storefront-config.orderEmail subtree (optional — when
  * absent the renderer falls back to the hard-coded chrome / copy).
+ *
+ * Renders via the React Email pipeline in `src/emails/templates/OrderEmail`
+ * so all 7 order kinds (confirmed / in_progress / out_for_delivery /
+ * received / refund_*) share the same BaseEmail chrome with the welcome /
+ * admin-alert / voucher / inactive-deletion emails.
+ *
+ * Async because @react-email/render returns a Promise — callers must
+ * `await buildOrderEmail(...)`.
  */
-export const buildOrderEmail = (kind, order, extra = {}, orderEmail = null) => {
-  const id = String(order.id || "");
-  const fullName =
-    String(order.orderInfo?.fullName || "").trim() || "Collector";
-  const firstName = fullName.split(/\s+/)[0] || fullName;
-  const itemCount = Array.isArray(order.items) ? order.items.length : 0;
-  const itemPlural = itemCount > 1 ? "s" : "";
-  const totalFormatted = formatPHP(order.total);
-
-  const trackUrl = extra.trackingUrl || extra.shipment?.trackingUrl || "";
-  const courier = extra.courier || extra.shipment?.courier || "";
-  const trackingNumber =
-    extra.trackingNumber || extra.shipment?.trackingNumber || "";
-  const refundAmountRaw = extra.refundAmount ?? order.refund?.amount ?? 0;
-  const refundAmount = formatPHP(refundAmountRaw);
-  const failureMessage = extra.failureMessage
-    ? `: ${extra.failureMessage}`
-    : "";
-
-  const vars = {
-    name: fullName,
-    firstName,
-    orderId: id,
-    total: totalFormatted,
-    itemCount: String(itemCount),
-    itemPlural,
-    courier,
-    trackingNumber,
-    refundAmount,
-    failureMessage,
-  };
-
-  const tpl = resolveOrderKindConfig(orderEmail, kind);
-
-  const subject = substituteOrderTemplate(tpl.subject, vars);
-  const heading = substituteOrderTemplate(tpl.heading, vars);
-  const introHtml = renderOrderIntroHtml(tpl.intro, vars);
-
-  const itemsHtml = renderItemsTable(order.items);
-  const totalsHtml = renderTotals(order);
-
-  // Auto-rendered shipment line for out_for_delivery (and any kind that
-  // happens to have shipment data attached). Sits between the intro and
-  // the items table so admins don't need to bake it into every kind's
-  // intro template.
-  const shipmentLine =
-    courier || trackingNumber
-      ? `<p style="margin:0 0 12px;color:#7a7468;font-size:13px;">${
-          courier ? `Shipped via <strong>${escapeHtml(courier)}</strong>` : ""
-        }${courier && trackingNumber ? " &mdash; " : ""}${
-          trackingNumber
-            ? `tracking <code>${escapeHtml(trackingNumber)}</code>`
-            : ""
-        }.</p>`
-      : "";
-
-  // Shared chrome: track-shipment button (out_for_delivery only). Uses
-  // the admin-edited button label + button style; falls back to a black
-  // pill when no orderEmail config is loaded.
-  const trackButtonText =
-    (orderEmail && typeof orderEmail.trackButtonText === "string"
-      ? orderEmail.trackButtonText
-      : "") || "Track shipment";
-  const buttonStyle = String(orderEmail?.buttonStyle || "filled").toLowerCase();
-  const primary = isSafeColor(orderEmail?.primaryColor)
-    ? orderEmail.primaryColor
-    : "#1c1c1c";
-  const trackingBlock =
-    trackUrl && isSafeUrl(trackUrl)
-      ? `<p style="margin:16px 0;">${renderActionLink({
-          label: trackButtonText,
-          url: trackUrl,
-          primary,
-          style: buttonStyle,
-        })}</p>`
-      : "";
-
-  // Surface a "Write a review" CTA on the delivered (`received`) email
-  // so customers don't have to remember to come back to leave a rating.
-  // The existing reviewButtonText config (admin-editable, sanitized in
-  // storefront-config.js) was previously stored but never rendered;
-  // this block plumbs it through. Deep-links into /account?track=<id>
-  // so OrderTracker auto-loads the order and shows the review form.
-  const reviewButtonText =
-    (orderEmail && typeof orderEmail.reviewButtonText === "string"
-      ? orderEmail.reviewButtonText
-      : "") || "Write a review";
-  const reviewUrl = kind === "received" ? buildOrderTrackUrl(id) : "";
-  const reviewBlock =
-    reviewUrl && isSafeUrl(reviewUrl)
-      ? `<p style="margin:16px 0;">${renderActionLink({
-          label: reviewButtonText,
-          url: reviewUrl,
-          primary,
-          style: buttonStyle,
-        })}</p>`
-      : "";
-
-  // Section divider (admin-tunable). Mirrors the welcome email's chrome
-  // so order + welcome can share a visual identity.
-  const accent = isSafeColor(orderEmail?.accentColor)
-    ? orderEmail.accentColor
-    : "#7a7468";
-  const divider = sectionDividerHtml(orderEmail || {}, accent);
-
-  const bodyHtml = `
-    ${introHtml}
-    <p style="margin:0 0 12px;color:${accent};font-size:12px;letter-spacing:0.05em;">Order ${escapeHtml(id)}</p>
-    ${shipmentLine}
-    ${divider}
-    ${itemsHtml}
-    ${totalsHtml}
-    ${trackingBlock}
-    ${reviewBlock}
-    <p style="margin:24px 0 0;font-size:12px;color:${accent};">
-      Questions? Just reply to this email.
-    </p>
-  `;
-
-  const introText = stripTags(introHtml);
-  const text = stripTags(
-    `${heading}\n\n${introText}\n\nOrder ${id}\nTotal ${totalFormatted}${
-      trackUrl ? `\nTrack: ${trackUrl}` : ""
-    }`,
-  );
-
-  // Always render through the shared branded chrome (logo / banner /
-  // palette / template / footer links). When no admin config is saved we
-  // use sensible defaults so order emails look professional out of the
-  // box — never fall back to the plain-text wrapper.
+export const buildOrderEmail = async (
+  kind,
+  order,
+  extra = {},
+  orderEmail = null,
+) => {
   const effectiveConfig = orderEmail || DEFAULT_ORDER_CHROME;
-  const html = wrapWelcomeHtml(
-    {
-      ...effectiveConfig,
-      // Route order-channel uploads through dedicated asset slots so
-      // they don't collide with welcome's logo/banner.
-      _logoSlot: "order-logo",
-      _bannerSlot: "order-banner",
-    },
-    bodyHtml,
-  );
-
-  return { subject, html, text };
+  const config = prepareReactChromeConfig(effectiveConfig, "order");
+  const rendered = await reactRenderOrderEmail({
+    kind,
+    order,
+    extra: extra || {},
+    config,
+  });
+  return rendered;
 };
 
 /**
@@ -774,7 +661,7 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
   if (kindCfg && kindCfg.enabled === false) {
     return { delivered: false, skipped: true, reason: "kind disabled" };
   }
-  const built = buildOrderEmail(kind, order, extra || {}, orderEmail);
+  const built = await buildOrderEmail(kind, order, extra || {}, orderEmail);
   // Resolve the from address: storefront config → env var → fallback.
   // The orderEmail config (admin-editable) carries fromName + fromEmail
   // which we format as "Name <email>". This lets the admin set
@@ -866,7 +753,7 @@ export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
         },
       }
     : null;
-  const built = buildOrderEmail(
+  const built = await buildOrderEmail(
     safeKind,
     fakeOrder,
     fakeExtra,
@@ -915,72 +802,14 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
   if (!isEmailConfigured("order")) {
     return { delivered: false, skipped: true, reason: "not configured" };
   }
-  const id = String(order?.id || "");
-  const customer =
-    String(order?.orderInfo?.fullName || "").trim() || "Anonymous guest";
-  const customerEmail = String(order?.orderInfo?.email || "").trim();
-  const customerPhone = String(order?.orderInfo?.phone || "").trim();
-  const total = formatPHP(order?.total);
-  const itemCount = Array.isArray(order?.items) ? order.items.length : 0;
-  const itemPlural = itemCount === 1 ? "" : "s";
-  const itemRows = (order?.items || [])
-    .slice(0, 20)
-    .map(
-      (it) =>
-        `<tr><td style="padding:6px 8px;border-bottom:1px solid #efece4;">${escapeHtml(
-          it.title || "Item",
-        )} &times; ${Number(it.quantity) || 1}</td><td style="padding:6px 8px;border-bottom:1px solid #efece4;text-align:right;">${formatPHP(
-          (Number(it.price) || 0) * (Number(it.quantity) || 1),
-        )}</td></tr>`,
-    )
-    .join("");
-  const subject = `New order ${id} — ${total}`;
-  const adminLink = `${PUBLIC_SITE_ORIGIN}/admin?order=${encodeURIComponent(id)}`;
-
   // Resolve the same chrome the customer-facing order emails use so the
   // admin alert lands in the inbox with matching logo / palette / fonts /
-  // footer. Previously this rendered through the legacy plain wrapHtml
-  // wrapper and looked visually disconnected from the customer copy that
-  // arrived seconds later.
+  // footer. Renders through the same React Email NewOrderAdminAlert
+  // template so the alert and the customer copy that arrive seconds
+  // later are visually identical.
   const effectiveConfig = orderEmail || DEFAULT_ORDER_CHROME;
-  const accent = isSafeColor(effectiveConfig.accentColor)
-    ? effectiveConfig.accentColor
-    : "#7a7468";
-  const primary = isSafeColor(effectiveConfig.primaryColor)
-    ? effectiveConfig.primaryColor
-    : "#1c1c1c";
-  const buttonStyle = String(
-    effectiveConfig.buttonStyle || "filled",
-  ).toLowerCase();
-  const adminButton = renderActionLink({
-    label: "Open in admin",
-    url: adminLink,
-    primary,
-    style: buttonStyle,
-  });
-
-  const bodyHtml = `
-    <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:${accent};">New order received</p>
-    <p style="margin:0 0 12px;">A new order just came in.</p>
-    <p style="margin:0 0 4px;"><strong>Order:</strong> <code style="background:#f5f3ee;padding:2px 6px;border-radius:3px;">${escapeHtml(id)}</code></p>
-    <p style="margin:0 0 4px;"><strong>Customer:</strong> ${escapeHtml(customer)}</p>
-    ${customerEmail ? `<p style="margin:0 0 4px;"><strong>Email:</strong> <a href="mailto:${escapeHtml(customerEmail)}" style="color:${primary};">${escapeHtml(customerEmail)}</a></p>` : ""}
-    ${customerPhone ? `<p style="margin:0 0 4px;"><strong>Phone:</strong> ${escapeHtml(customerPhone)}</p>` : ""}
-    <p style="margin:0 0 12px;"><strong>Items:</strong> ${itemCount} item${itemPlural} &middot; <strong>Total:</strong> ${total}</p>
-    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;color:${primary};margin:0 0 16px;">
-      ${itemRows}
-    </table>
-    <p style="margin:16px 0;">${adminButton}</p>
-  `;
-
-  const html = wrapWelcomeHtml(
-    {
-      ...effectiveConfig,
-      _logoSlot: "order-logo",
-      _bannerSlot: "order-banner",
-    },
-    bodyHtml,
-  );
+  const config = prepareReactChromeConfig(effectiveConfig, "order");
+  const built = await reactRenderNewOrderAdminAlert({ order, config });
 
   // Resolve the same from-address the customer copies use so admin
   // inbox threading groups them together (Gmail/Outlook collapse by
@@ -995,16 +824,9 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
 
   return await sendEmail({
     to: recipient,
-    subject,
-    html,
-    text:
-      `New order ${id}\n\n` +
-      `Customer: ${customer}\n` +
-      (customerEmail ? `Email: ${customerEmail}\n` : "") +
-      (customerPhone ? `Phone: ${customerPhone}\n` : "") +
-      `Items: ${itemCount}\n` +
-      `Total: ${total}\n\n` +
-      `Open: ${adminLink}\n`,
+    subject: built.subject,
+    html: built.html,
+    text: built.text,
     purpose: "order",
     from: configFrom || undefined,
   });
@@ -1070,6 +892,68 @@ const rehostEmailImage = (welcome, _slot, value) => {
   if (!trimmed) return "";
   if (trimmed.startsWith("/")) return `${resolveBaseUrl(welcome)}${trimmed}`;
   return trimmed;
+};
+
+/**
+ * Pre-rehost the chrome-relevant URLs (logo, banner) on the config doc
+ * so the React Email render path receives plain HTTPS URLs instead of
+ * inline data:image/png;base64,... blobs (which Gmail/Outlook routinely
+ * truncate or strip). Returns a *new* object — input is untouched.
+ *
+ * Order emails go through the dedicated `order-logo` / `order-banner`
+ * slots so they don't collide with the welcome email's slots.
+ *
+ * Exported so callers outside email.js (newsletter.js, user-auth.js)
+ * can use the same prep + rehosting before invoking the React render
+ * functions directly.
+ */
+const prepareReactChromeConfig = (rawConfig, channel) => {
+  const cfg = rawConfig || {};
+  const logoSlot = channel === "order" ? "order-logo" : "logo";
+  const bannerSlot = channel === "order" ? "order-banner" : "banner";
+  return {
+    ...cfg,
+    logoUrl: rehostEmailImage(cfg, logoSlot, cfg.logoUrl),
+    bannerUrl: rehostEmailImage(cfg, bannerSlot, cfg.bannerUrl),
+  };
+};
+
+// External-facing alias so newsletter.js / user-auth.js can prep their
+// chrome the same way without reaching into internal helpers.
+export const prepareReactChromeConfigForExternal = prepareReactChromeConfig;
+
+/**
+ * Pre-rehost the welcome-email-specific URLs (avatar + product/custom
+ * thumbnails) so the React Email render path receives plain HTTPS URLs
+ * for every <Img> tag.
+ */
+const prepareReactWelcomeProducts = (welcome, products) => {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  return products.map((p) => {
+    const id = String(p?.id || "");
+    if (p && p.__custom) {
+      return {
+        ...p,
+        imageUrl: rehostEmailImage(
+          welcome,
+          `custom/${encodeURIComponent(id)}`,
+          p.imageUrl,
+        ),
+      };
+    }
+    const rawImg = productThumbnailUrl(p);
+    const price = p && p.salePrice && p.salePrice > 0 ? p.salePrice : p?.price;
+    return {
+      id,
+      title: String(p?.title || "Untitled"),
+      imageUrl: rehostEmailImage(
+        welcome,
+        `product/${encodeURIComponent(id)}`,
+        rawImg,
+      ),
+      price: Number(price) || 0,
+    };
+  });
 };
 
 // Footer link URLs additionally allow tel: for phone numbers, but Gmail
@@ -1647,76 +1531,21 @@ const formatProductsText = (welcome, products) => {
  *   - discount:   { headline, code, description, expiresAt } already resolved
  *                 from either a linked promo code or the inline draft.
  */
-export const buildWelcomeEmail = (welcome, user, context = {}) => {
-  const vars = buildTemplateVars(user);
-  const subject = renderTemplateString(welcome.subject, vars).slice(0, 240);
-  const bodyText = renderTemplateString(welcome.body, vars);
-  const signature = String(welcome.signature || "").trim();
-
-  // Guard against the common authoring mistake where the body's last
-  // paragraph already ends with the same sender line that's also stored
-  // as the signature (e.g. body finishes with "The Canvas Hub team" and
-  // signature is "The Canvas Hub team" — we'd otherwise render it
-  // twice). Compare line-by-line, case-insensitive, after trimming.
-  const normalize = (s) => s.replace(/\s+/g, " ").trim().toLowerCase();
-  const signatureLines = signature.split(/\n+/).map(normalize).filter(Boolean);
-  const bodyLines = bodyText.split(/\n+/).map(normalize).filter(Boolean);
-  const signatureDuplicatesBody =
-    signatureLines.length > 0 &&
-    signatureLines.every((line) => bodyLines.includes(line));
-
-  const paragraphsHtml = bodyText
-    .split(/\n{2,}/)
-    .map((para) => para.trim())
-    .filter(Boolean)
-    .map(
-      (para) =>
-        `<p style="margin:0 0 12px;white-space:pre-line;">${escapeHtml(para)}</p>`,
-    )
-    .join("");
-
-  const signatureHtml =
-    signature && !signatureDuplicatesBody
-      ? `<p style="margin:24px 0 0;color:#7a7468;font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
-      : "";
-
-  const avatarHtml = buildAvatarHtml(welcome);
-
-  const productsHtml = buildProductsHtml(welcome, context.products);
-  const discountHtml = buildDiscountHtml(welcome, context.discount);
-  const ctaHtml = ctaButtonHtml(welcome);
-
-  // Walk the section blocks in order, dropping empty ones, and join
-  // with the configured divider (line / brush / none) between them.
-  // This avoids stamping dividers above empty blocks (e.g. when the
-  // discount or products section is disabled).
-  const accentColor = isSafeColor(welcome.accentColor)
-    ? welcome.accentColor
-    : "#7a7468";
-  const divider = sectionDividerHtml(welcome, accentColor);
-  const blocks = [paragraphsHtml, discountHtml, productsHtml, ctaHtml].filter(
-    (block) => block && block.trim(),
-  );
-  const sectionsHtml = divider ? blocks.join(divider) : blocks.join("");
-
-  const contentHtml = `
-    ${sectionsHtml}
-    ${avatarHtml}
-    ${signatureHtml}
-  `;
-
-  const text =
-    `${bodyText}` +
-    formatDiscountText(context.discount) +
-    formatProductsText(welcome, context.products) +
-    (signature && !signatureDuplicatesBody ? `\n\n${signature}` : "") +
-    formatFooterLinksText(welcome);
-
-  return {
-    subject,
-    html: wrapWelcomeHtml(welcome, contentHtml),
-    text,
+export const buildWelcomeEmail = async (welcome, user, context = {}) => {
+  // Pre-rehost admin-uploaded images so the React Email pipeline always
+  // receives plain HTTPS URLs (Gmail / Outlook strip data: URLs).
+  const config = {
+    ...prepareReactChromeConfig(welcome, "welcome"),
+    avatarUrl: rehostEmailImage(welcome, "avatar", welcome?.avatarUrl),
   };
+  const products = prepareReactWelcomeProducts(welcome, context.products);
+  const rendered = await reactRenderWelcomeEmail({
+    config,
+    user: user || { email: "" },
+    discount: context.discount || null,
+    products,
+  });
+  return rendered;
 };
 
 /**
@@ -1847,7 +1676,7 @@ export const sendWelcomeEmail = async ({ welcome, user, override }) => {
     loadWelcomeEmailProducts(welcome.products),
     resolveWelcomeEmailDiscount(welcome.discount),
   ]);
-  const built = buildWelcomeEmail(welcome, user || { email: recipient }, {
+  const built = await buildWelcomeEmail(welcome, user || { email: recipient }, {
     products,
     discount,
   });
