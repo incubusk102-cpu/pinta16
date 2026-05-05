@@ -43,8 +43,13 @@ const envOf = (name) => getCloudflareEnv()[name] || "";
 //
 // We anchor on the `src=` attribute rather than just the data: URI
 // itself so we can do a clean string replace on the attribute later.
+//
+// Allowed minor MIME types match the welcome-asset endpoint's
+// allowlist (jpeg/jpg/png/webp/avif/gif). SVG is intentionally
+// excluded — it is XML and can carry inline `<script>` payloads
+// that would execute inside an email client's renderer.
 const INLINE_DATA_IMG_RE =
-  /src=(?:"|')(data:image\/(png|jpeg|jpg|gif|webp);base64,([A-Za-z0-9+/=]+))(?:"|')/g;
+  /src=(?:"|')(data:image\/(png|jpeg|jpg|gif|webp|avif);base64,([A-Za-z0-9+/=]+))(?:"|')/g;
 
 // Stable, dependency-free 32-bit FNV-1a hash. Used to derive a short
 // unique Content-ID for each unique base64 payload so identical
@@ -1018,9 +1023,6 @@ const isSafeUrl = (value) =>
   typeof value === "string" &&
   /^(https?:\/\/|mailto:|data:image\/)/i.test(value.trim());
 
-const isDataImageUrl = (value) =>
-  typeof value === "string" && /^data:image\//i.test(value.trim());
-
 // Resolve the storefront origin we should use for absolute URLs in the
 // rendered email (logo / banner / product image hosting). Prefers the
 // admin-configured CTA URL, falls back to the production origin.
@@ -1035,31 +1037,36 @@ const resolveBaseUrl = (welcome) => {
   }
 };
 
-// Quick non-cryptographic 32-bit hash → hex. Just enough entropy to
-// bust Gmail's image proxy cache when an admin re-uploads the same
-// slot, without pulling in crypto.subtle (which is async).
-const shortHash = (input) => {
-  let h = 0x811c9dc5;
-  const s = String(input);
-  for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  // Fold to 32-bit unsigned and hex-stringify.
-  return (h >>> 0).toString(16).padStart(8, "0");
-};
-
-// Convert a data: image URL into a hosted /api/welcome-asset/<slot>
-// URL that Gmail will actually fetch. Non-data URLs are returned
-// untouched so admins who paste an HTTPS URL keep working.
-const rehostEmailImage = (welcome, slot, value) => {
+// Resolve an admin-uploaded image (logo / banner / avatar /
+// per-product thumbnail) into the URL the email <img> tag should
+// carry.
+//
+// Strategy: emit the data: URI **as-is**. The send pipeline in
+// `sendEmail` runs `transformInlineImagesToCidAttachments` over the
+// rendered HTML right before handing it to Resend, which extracts
+// every `<img src="data:image/…">` into a CID-referenced
+// multipart/related attachment. Net effect: the email body Resend
+// transmits contains short `<img src="cid:<id>">` references, the
+// bytes ride alongside as proper attachments, and Gmail / iCloud /
+// Outlook all render them inline.
+//
+// The previous implementation pointed at `/api/welcome-asset/<slot>`
+// instead, which kept the body small but required Cloudflare to
+// successfully serve the bytes to Gmail's image proxy. Cloudflare
+// Bot Fight Mode now intermittently challenges that proxy, leaving
+// the recipient with broken-image icons. CID attachments sidestep
+// the network fetch entirely and are not sensitive to dashboard
+// security toggles.
+//
+// Non-data values (admins who paste an HTTPS URL) are returned
+// untouched so externally-hosted images keep working as before.
+//
+// `welcome` and `slot` are unused in the new path but kept in the
+// signature so call sites stay readable and so we can quickly
+// re-enable the rehost path if a deliverability regression appears.
+const rehostEmailImage = (_welcome, _slot, value) => {
   if (!value) return "";
-  const trimmed = String(value).trim();
-  if (!trimmed) return "";
-  if (!isDataImageUrl(trimmed)) return trimmed;
-  const base = resolveBaseUrl(welcome);
-  const v = shortHash(trimmed);
-  return `${base}/api/welcome-asset/${slot}?v=${v}`;
+  return String(value).trim();
 };
 
 // Footer link URLs additionally allow tel: for phone numbers, but Gmail
