@@ -36,6 +36,18 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
       "@typescript-eslint/no-unused-vars": "off",
+      // The eslint-plugin-react-hooks v7 (May 2026 dependabot bump)
+      // turned on a handful of React Compiler-flavoured rules in its
+      // recommended preset. They flag legitimate, pre-existing
+      // patterns across the codebase (server-state subscriptions that
+      // setState inside Promise callbacks, useMemo bodies the
+      // compiler cannot analyse). Until those call sites migrate to
+      // react-query / are refactored, we keep the rules as warnings
+      // so they still surface in editor squiggles and `npm run lint`
+      // output but don't block pre-commit on otherwise-passing
+      // changes.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
     },
   },
   eslintPluginPrettier,
