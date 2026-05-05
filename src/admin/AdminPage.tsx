@@ -117,7 +117,13 @@ import {
   type OrderShipment,
 } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
-import { COURIERS, buildTrackingUrl } from "@/lib/shipment";
+import {
+  COURIERS,
+  buildTrackingUrl,
+  LALAMOVE_PAID_TO_RIDER,
+  getLalamoveRange,
+  formatLalamoveRange,
+} from "@/lib/shipment";
 import { linkifyMessage } from "@/lib/chat-format";
 type AdminSection =
   | "dashboard"
@@ -3434,8 +3440,11 @@ function OrdersSection() {
                       Shipping:{" "}
                       <span className="text-foreground">
                         {order.freeShipping
-                          ? "Free"
-                          : `₱${order.shippingFee.toLocaleString()}`}
+                          ? "Free (we cover rider fee)"
+                          : order.orderInfo?.courier === "lalamove" &&
+                              order.shippingFee === 0
+                            ? "Paid to rider"
+                            : `₱${order.shippingFee.toLocaleString()}`}
                       </span>
                     </span>
                   )}
@@ -3449,6 +3458,25 @@ function OrdersSection() {
                   )}
                 </div>
               )}
+              {LALAMOVE_PAID_TO_RIDER &&
+                order.orderInfo?.courier === "lalamove" &&
+                order.orderInfo?.province && (
+                  <div className="text-muted-foreground pt-0.5">
+                    {(() => {
+                      const range = getLalamoveRange(
+                        order.orderInfo.province || "",
+                      );
+                      return range ? (
+                        <span>
+                          Est. rider fare:{" "}
+                          <span className="text-foreground">
+                            {formatLalamoveRange(range)}
+                          </span>
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
               {order.orderInfo?.notes && (
                 <div className="pt-1 border-t border-border/30">
                   <span className="text-muted-foreground">Notes: </span>
