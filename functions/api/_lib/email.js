@@ -1064,9 +1064,12 @@ const resolveBaseUrl = (welcome) => {
 // `welcome` and `slot` are unused in the new path but kept in the
 // signature so call sites stay readable and so we can quickly
 // re-enable the rehost path if a deliverability regression appears.
-const rehostEmailImage = (_welcome, _slot, value) => {
+const rehostEmailImage = (welcome, _slot, value) => {
   if (!value) return "";
-  return String(value).trim();
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("/")) return `${resolveBaseUrl(welcome)}${trimmed}`;
+  return trimmed;
 };
 
 // Footer link URLs additionally allow tel: for phone numbers, but Gmail

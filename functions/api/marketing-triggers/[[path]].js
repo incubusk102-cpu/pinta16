@@ -455,9 +455,14 @@ const processBackInStock = async (cfg, chrome, optouts, sent, metaStore) => {
       const unsubUrl = `${PUBLIC_SITE}/api/marketing-triggers/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubToken}`;
       const productUrl = `${PUBLIC_SITE}/gallery/${encodeURIComponent(productId)}`;
 
+      const rawImg =
+        (product.images && product.images[0]?.url) || product.image || "";
+      const imgSrc = rawImg.startsWith("/")
+        ? `${PUBLIC_SITE}${rawImg}`
+        : rawImg;
       const imageHtml =
-        product.images && product.images[0]
-          ? `<p style="margin:0 0 16px;text-align:center;"><img src="${escapeHtml(product.images[0])}" alt="${escapeHtml(title)}" style="max-width:280px;border-radius:4px;" /></p>`
+        imgSrc && /^https?:\/\//i.test(imgSrc)
+          ? `<p style="margin:0 0 16px;text-align:center;"><img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(title)}" style="max-width:280px;border-radius:4px;" /></p>`
           : "";
 
       const bodyHtml = `
@@ -539,7 +544,7 @@ const processPriceDrop = async (cfg, chrome, optouts, sent, metaStore) => {
         title: p.title || "Untitled",
         price: currentPrice,
         prevPrice,
-        image: (p.images && p.images[0]) || "",
+        image: (p.images && p.images[0]?.url) || p.image || "",
       });
     }
   }
