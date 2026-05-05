@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
 import {
@@ -110,6 +110,7 @@ const GallerySection = () => {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterAvailability, setFilterAvailability] = useState<string>("all");
   const [filterPrice, setFilterPrice] = useState<string>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { products } = useProducts();
   const { user } = useUserAuth();
   const { config } = useStorefrontConfig();
@@ -181,6 +182,13 @@ const GallerySection = () => {
     filterAvailability !== "all" ||
     filterPrice !== "all";
 
+  // Count of active dropdown filters (search box has its own clear affordance,
+  // sort isn't really a "filter") — used for the mobile Filters toggle badge.
+  const activeFilterCount =
+    (filterCategory !== "all" ? 1 : 0) +
+    (filterAvailability !== "all" ? 1 : 0) +
+    (filterPrice !== "all" ? 1 : 0);
+
   const clearFilters = () => {
     setQuery("");
     setFilterCategory("all");
@@ -232,7 +240,30 @@ const GallerySection = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end sm:justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            aria-controls="gallery-filter-row"
+            className="sm:hidden flex w-fit mx-auto items-center justify-center gap-2 font-body text-[11px] tracking-[0.2em] uppercase text-foreground border border-border/60 rounded-sm px-4 py-2 hover:bg-accent transition-colors"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-foreground text-background font-body text-[10px] tracking-normal">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+
+          <div
+            id="gallery-filter-row"
+            className={`${filtersOpen ? "grid grid-cols-2" : "hidden"} sm:flex sm:flex-wrap items-end sm:justify-center gap-3`}
+          >
             <div className="flex flex-col gap-1 min-w-0">
               <label
                 htmlFor="filter-category"
@@ -374,7 +405,7 @@ const GallerySection = () => {
           )}
         </div>
       ) : (
-        <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 sm:gap-6 md:gap-8 space-y-4 sm:space-y-6 md:space-y-8">
+        <div className="columns-2 sm:columns-2 lg:columns-3 gap-3 sm:gap-6 md:gap-8 space-y-3 sm:space-y-6 md:space-y-8">
           {sortedArtworks.map((art, index) => (
             <ArtworkCard
               key={art.id}
