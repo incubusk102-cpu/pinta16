@@ -64,6 +64,7 @@ import { NewUserModalSection } from "@/components/admin/NewUserModalSection";
 import { AppreciationSection } from "@/components/admin/AppreciationSection";
 import { SecuritySection } from "@/components/admin/SecuritySection";
 import ExportPanel from "@/admin/ExportPanel";
+import AdminMobileUploadFAB from "@/components/admin/AdminMobileUploadFAB";
 import {
   ArrowLeft,
   Activity,
@@ -176,6 +177,15 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   security: "Security",
   settings: "Settings",
 };
+
+const ADMIN_SECTION_KEYS = Object.keys(SECTION_LABELS) as AdminSection[];
+const isAdminSection = (s: string | null | undefined): s is AdminSection =>
+  typeof s === "string" &&
+  (ADMIN_SECTION_KEYS as readonly string[]).includes(s);
+
+const SECTION_STORAGE_KEY = "canvhub_admin_last_section_v1";
+const SIDEBAR_COLLAPSED_KEY = "canvhub_admin_sidebar_collapsed_v1";
+const BADGE_REFRESH_INTERVAL_MS = 60_000;
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -611,14 +621,35 @@ const NAV_GROUPS: {
   },
 ];
 
+interface SidebarBadgeCounts {
+  pendingShipOut: number;
+  unreadChats: number;
+  reviewsWaitingReply: number;
+}
+
+const badgeForSection = (
+  key: AdminSection,
+  counts: SidebarBadgeCounts | null | undefined,
+): number | undefined => {
+  if (!counts) return undefined;
+  if (key === "orders" && counts.pendingShipOut > 0)
+    return counts.pendingShipOut;
+  if (key === "messages" && counts.unreadChats > 0) return counts.unreadChats;
+  if (key === "reviews" && counts.reviewsWaitingReply > 0)
+    return counts.reviewsWaitingReply;
+  return undefined;
+};
+
 function SidebarNav({
   section,
   navigate,
   collapsed,
+  badgeCounts,
 }: {
   section: AdminSection;
   navigate: (s: AdminSection) => void;
   collapsed?: boolean;
+  badgeCounts?: SidebarBadgeCounts | null;
 }) {
   return (
     <nav className="flex flex-col gap-4">
@@ -639,6 +670,7 @@ function SidebarNav({
                 onClick={() => navigate(item.key)}
                 hint={collapsed ? "" : item.hint}
                 collapsed={collapsed}
+                badge={badgeForSection(item.key, badgeCounts)}
               />
             ))}
           </div>
@@ -760,21 +792,151 @@ function CommandPalette({
 function AdminDashboard() {
   const { logout } = useAdminAuth();
   const { products } = useProducts();
-  const [section, setSection] = useState<AdminSection>("dashboard");
+  // Initial section is taken from `?section=` first (so refresh / shared
+  // links land where the operator expects), falling back to the last
+  // section saved in localStorage, then Dashboard.
+  const [section, setSection] = useState<AdminSection>(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const fromUrl = new URLSearchParams(window.location.search).get("section");
+    if (isAdminSection(fromUrl)) return fromUrl;
+    try {
+      const fromStorage = window.localStorage.getItem(SECTION_STORAGE_KEY);
+      if (isAdminSection(fromStorage)) return fromStorage;
+    } catch {
+      // localStorage may be disabled — fall through to default.
+    }
+    return "dashboard";
+  });
   const [navOpen, setNavOpen] = useState(false);
-  // Default the sidebar to collapsed (icon-only) on tablet-sized viewports
-  // so the dashboard's main content has room to breathe at 768–1024 px.
-  // Desktop users (≥1024 px) get the full-width sidebar by default. The
-  // user can still toggle either way with Ctrl+B.
+  // Sidebar collapsed state is sticky: respect a saved preference if the
+  // operator has manually toggled it before. Otherwise fall back to the
+  // tablet heuristic (collapsed below 1024 px so the content can breathe).
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
+    try {
+      const saved = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (saved === "true") return true;
+      if (saved === "false") return false;
+    } catch {
+      // ignore
+    }
     return window.innerWidth < 1024;
   });
 
-  const navigate = (next: AdminSection) => {
+  const navigate = useCallback((next: AdminSection) => {
     setSection(next);
     setNavOpen(false);
-  };
+  }, []);
+
+  // Keep the URL and localStorage in sync with the active section so a
+  // refresh or shared `/admin?section=orders` link returns the operator
+  // to where they were.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(SECTION_STORAGE_KEY, section);
+    } catch {
+      // ignore
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (section === "dashboard") {
+      params.delete("section");
+    } else {
+      params.set("section", section);
+    }
+    const qs = params.toString();
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      window.history.replaceState(null, "", next);
+    }
+  }, [section]);
+
+  // Browser back / forward should swap sections too.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      const fromUrl = new URLSearchParams(window.location.search).get(
+        "section",
+      );
+      setSection(isAdminSection(fromUrl) ? fromUrl : "dashboard");
+    };
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  // Persist sidebar preference.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        SIDEBAR_COLLAPSED_KEY,
+        String(sidebarCollapsed),
+      );
+    } catch {
+      // ignore
+    }
+  }, [sidebarCollapsed]);
+
+  // Pending-work counts for the sidebar nav badges. Reuses the same
+  // endpoints the dashboard widget already calls so there's no new
+  // backend surface. Failures are silent — the badges are progressive
+  // enhancement and the nav stays usable without them.
+  const [badgeCounts, setBadgeCounts] = useState<{
+    pendingShipOut: number;
+    unreadChats: number;
+    reviewsWaitingReply: number;
+  } | null>(null);
+
+  const refreshBadgeCounts = useCallback(async () => {
+    const token = getAdminToken();
+    if (!token) return;
+    try {
+      const [summaryRes, chatRes] = await Promise.all([
+        fetch("/api/orders?metrics=summary", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch("/api/chat?action=list", {
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => null),
+      ]);
+      if (!summaryRes.ok) return;
+      const summaryData = (await summaryRes.json()) as {
+        summary?: OrdersSummary;
+      };
+      let unread = 0;
+      if (chatRes && chatRes.ok) {
+        const chatData = (await chatRes.json()) as {
+          threads?: ChatThreadIndexEntry[];
+        };
+        const threads = Array.isArray(chatData.threads) ? chatData.threads : [];
+        unread = threads.filter(isThreadUnread).length;
+      }
+      setBadgeCounts({
+        pendingShipOut: summaryData.summary?.pendingShipOutCount ?? 0,
+        unreadChats: unread,
+        reviewsWaitingReply: summaryData.summary?.reviewsWaitingReplyCount ?? 0,
+      });
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshBadgeCounts();
+    const interval = setInterval(
+      () => void refreshBadgeCounts(),
+      BADGE_REFRESH_INTERVAL_MS,
+    );
+    return () => clearInterval(interval);
+  }, [refreshBadgeCounts]);
+
+  // Refresh once whenever the operator switches sections — covers the
+  // common case of marking an order shipped then jumping somewhere
+  // else: the badge updates immediately instead of waiting up to 60s.
+  useEffect(() => {
+    void refreshBadgeCounts();
+  }, [section, refreshBadgeCounts]);
 
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
 
@@ -868,6 +1030,7 @@ function AdminDashboard() {
             section={section}
             navigate={navigate}
             collapsed={sidebarCollapsed}
+            badgeCounts={badgeCounts}
           />
         </div>
         <div
@@ -963,7 +1126,11 @@ function AdminDashboard() {
               </SheetTitle>
             </SheetHeader>
             <div className="mt-6 overflow-y-auto">
-              <SidebarNav section={section} navigate={navigate} />
+              <SidebarNav
+                section={section}
+                navigate={navigate}
+                badgeCounts={badgeCounts}
+              />
             </div>
             <div className="mt-8 pt-6 border-t border-border/60 text-xs text-muted-foreground space-y-2">
               <Link
@@ -1019,6 +1186,8 @@ function AdminDashboard() {
         onClose={() => setCmdPaletteOpen(false)}
         onNavigate={navigate}
       />
+
+      {section === "products" && <AdminMobileUploadFAB />}
     </div>
   );
 }
@@ -1030,6 +1199,7 @@ function NavLink({
   onClick,
   hint,
   collapsed,
+  badge,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -1037,13 +1207,23 @@ function NavLink({
   onClick: () => void;
   hint?: string;
   collapsed?: boolean;
+  badge?: number;
 }) {
+  const showBadge = typeof badge === "number" && badge > 0;
+  const badgeLabel = showBadge && badge > 99 ? "99+" : String(badge ?? "");
+  const tooltip = collapsed
+    ? `${label}${hint ? ` — ${hint}` : ""}${
+        showBadge ? ` (${badgeLabel} pending)` : ""
+      }`
+    : showBadge
+      ? `${badgeLabel} pending`
+      : undefined;
   return (
     <button
       type="button"
       onClick={onClick}
-      title={collapsed ? `${label}${hint ? ` — ${hint}` : ""}` : undefined}
-      className={`flex items-center gap-3 rounded-lg text-left transition-all duration-150 ${
+      title={tooltip}
+      className={`relative flex items-center gap-3 rounded-lg text-left transition-all duration-150 ${
         collapsed ? "px-0 py-2 justify-center" : "px-3 py-2"
       } ${
         active
@@ -1052,12 +1232,28 @@ function NavLink({
       }`}
     >
       <span
-        className={`flex-shrink-0 transition-colors ${active ? "text-primary" : "text-muted-foreground"}`}
+        className={`relative flex-shrink-0 transition-colors ${active ? "text-primary" : "text-muted-foreground"}`}
       >
         {icon}
+        {collapsed && showBadge && (
+          <span
+            aria-hidden="true"
+            className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground font-body text-[9px] leading-none tracking-normal"
+          >
+            {badgeLabel}
+          </span>
+        )}
       </span>
       <span className="flex-1 text-sm font-medium">{label}</span>
-      {hint && (
+      {!collapsed && showBadge && (
+        <span
+          aria-label={`${badgeLabel} pending`}
+          className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground font-body text-[10px] leading-none tracking-normal"
+        >
+          {badgeLabel}
+        </span>
+      )}
+      {!collapsed && !showBadge && hint && (
         <span className="text-[10px] text-muted-foreground">{hint}</span>
       )}
     </button>
@@ -1302,7 +1498,10 @@ function ProductsSection() {
   return (
     <>
       <div className="grid lg:grid-cols-[1fr_1.2fr] gap-8">
-        <section className="bg-card/40 border border-border/60 rounded-xl p-6 h-fit lg:sticky lg:top-24">
+        <section
+          id="upload-product-form"
+          className="bg-card/40 border border-border/60 rounded-xl p-6 h-fit lg:sticky lg:top-24 scroll-mt-24"
+        >
           <div className="flex items-center gap-2 mb-6">
             <Plus className="w-5 h-5 text-primary" />
             <h2 className="font-display text-lg">Upload product</h2>
