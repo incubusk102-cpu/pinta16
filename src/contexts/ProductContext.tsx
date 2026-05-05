@@ -156,6 +156,14 @@ export const getDiscountPercent = (product: {
 
 interface ProductContextType {
   products: Product[];
+  /**
+   * `true` after the first `/api/products` GET resolves (success OR
+   * failure). Pages that look up a product by id should treat
+   * `undefined` artwork as "still loading" until this flips to true,
+   * so a deep-linked detail page (or a phone with an empty local
+   * cache) doesn't flash a 404 before the network response lands.
+   */
+  productsLoaded: boolean;
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
@@ -195,6 +203,10 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     sortProducts(readStoredProducts()),
   );
   const productsRef = useRef<Product[]>(products);
+  // `productsLoaded` flips to true once the first `/api/products`
+  // response (success or failure) lands, so consumers can tell the
+  // difference between "still fetching" and "fetched, no match".
+  const [productsLoaded, setProductsLoaded] = useState(false);
 
   const persistProducts = useCallback((nextProducts: Product[]) => {
     if (typeof window === "undefined") return;
@@ -250,6 +262,13 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
       // Local development falls back to browser storage.
     } finally {
       if (loadAbortRef.current === controller) loadAbortRef.current = null;
+      // Either way, the first attempt has completed — flip
+      // `productsLoaded` so consumers stop showing a loading state.
+      // Aborts (a newer load superseded us) don't count as a
+      // completed load, so check the controller is still ours.
+      if (!controller.signal.aborted) {
+        setProductsLoaded(true);
+      }
     }
   }, [persistProducts]);
 
@@ -539,6 +558,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     <ProductContext.Provider
       value={{
         products,
+        productsLoaded,
         addProduct,
         updateProduct,
         deleteProduct,

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Heart,
+  Loader2,
   ShoppingCart,
   Star,
   Share2,
@@ -79,7 +80,7 @@ const availabilityBadgeClass: Record<Availability, string> = {
 
 function ProductPage() {
   const { id } = Route.useParams();
-  const { products } = useProducts();
+  const { products, productsLoaded } = useProducts();
   const artwork = useMemo(() => findArtworkById(id, products), [id, products]);
 
   const [activeImage, setActiveImage] = useState(0);
@@ -237,6 +238,29 @@ function ProductPage() {
   }, [artwork, ratingStats]);
 
   if (!artwork) {
+    // While the first /api/products fetch is still in flight (e.g. a
+    // deep-linked product page on a phone with an empty local cache),
+    // show a neutral loading state. Only render the 404 once we've
+    // actually loaded products and confirmed nothing matches this id.
+    if (!productsLoaded) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <GalleryNav />
+          <div
+            className="flex-1 flex items-center justify-center px-6 py-32"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="max-w-md text-center">
+              <Loader2 className="mx-auto mb-4 h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="font-body text-xs tracking-[0.3em] uppercase text-muted-foreground">
+                Loading painting…
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex flex-col">
         <GalleryNav />
