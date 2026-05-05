@@ -734,6 +734,7 @@ export function StorefrontSection() {
     | "promo"
     | "chat"
     | "vacation"
+    | "lalamove-fare"
   >(null);
 
   // Free-shipping rule preview — admin-only state used to show what

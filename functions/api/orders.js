@@ -1139,6 +1139,123 @@ export const handler = async (event) => {
         return json(200, { order: safeOrder });
       }
 
+      // Admin-only manual order entry. Used to recover orders whose
+      // client-side POST never reached the server (Cloudflare challenge,
+      // body-size cap, network blip). Bypasses voucher / Turnstile /
+      // honeypot / CSRF checks because the admin is already
+      // authenticated; we still validate the order shape so the
+      // resulting record is well-formed.
+      if (action === "admin-create") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const order = body.order;
+        if (!order || typeof order !== "object") {
+          return json(400, { error: "Missing order body" });
+        }
+        if (!Array.isArray(order.items) || order.items.length === 0) {
+          return json(400, { error: "Order has no items" });
+        }
+        const info = order.orderInfo;
+        if (
+          !info ||
+          typeof info !== "object" ||
+          !info.fullName ||
+          !info.email ||
+          !info.phone ||
+          !info.address ||
+          !info.city
+        ) {
+          return json(400, { error: "Order is missing required information" });
+        }
+        const orderId =
+          typeof order.id === "string" && /^ORD-[A-Z0-9]+$/.test(order.id)
+            ? order.id
+            : `ORD-${crypto.randomUUID().split("-")[0].toUpperCase()}`;
+        const orders = await readOrders(store);
+        if (orders.some((o) => o.id === orderId)) {
+          return json(409, { error: "Order already exists" });
+        }
+        const safeItems = order.items.slice(0, 50).map((item) => ({
+          id: String(item.id || "").slice(0, 100),
+          title: String(item.title || "").slice(0, 300),
+          price: Number(item.price) || 0,
+          quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+          image:
+            typeof item.image === "string" ? item.image.slice(0, 2000) : "",
+        }));
+        const meta = captureRequestMeta(event);
+        const status = [
+          "confirmed",
+          "in_progress",
+          "out_for_delivery",
+          "received",
+        ].includes(order.status)
+          ? order.status
+          : "confirmed";
+        const safeOrder = {
+          id: orderId,
+          items: safeItems,
+          orderInfo: {
+            fullName: String(info.fullName).slice(0, 200),
+            email: String(info.email).slice(0, 200),
+            phone: String(info.phone).slice(0, 50),
+            address: String(info.address).slice(0, 500),
+            city: String(info.city).slice(0, 200),
+            notes: String(info.notes || "").slice(0, 1000),
+            ...(typeof info.region === "string"
+              ? { region: info.region.slice(0, 60) }
+              : {}),
+            ...(typeof info.province === "string"
+              ? { province: info.province.slice(0, 120) }
+              : {}),
+            ...(typeof info.barangay === "string"
+              ? { barangay: info.barangay.slice(0, 120) }
+              : {}),
+          },
+          subtotal: Number(order.subtotal) || 0,
+          shippingFee: Number(order.shippingFee) || 0,
+          freeShipping: Boolean(order.freeShipping),
+          discount: Number(order.discount) || 0,
+          total: Number(order.total) || 0,
+          estimatedCreationDays:
+            typeof order.estimatedCreationDays === "string"
+              ? order.estimatedCreationDays.slice(0, 60)
+              : "",
+          createdAt: order.createdAt || new Date().toISOString(),
+          status,
+          paymentIntentId:
+            typeof order.paymentIntentId === "string"
+              ? order.paymentIntentId.slice(0, 200)
+              : "",
+          voucherCode:
+            typeof order.voucherCode === "string"
+              ? order.voucherCode.toUpperCase().slice(0, 30)
+              : "",
+          notifications: [],
+          serverSynced: true,
+          activityLog: [
+            {
+              at: new Date().toISOString(),
+              type: "placed",
+              actor: "admin",
+              detail: "Created manually by admin",
+              ...meta,
+            },
+          ],
+        };
+        const next = [safeOrder, ...orders];
+        await store.setJSON(ORDERS_KEY, next);
+        await appendAuditEvent(event, {
+          type: "order.admin-create",
+          outcome: "success",
+          subject: safeOrder.id,
+          detail: `Manual order ₱${safeOrder.total.toLocaleString()}`,
+          ...meta,
+        });
+        return json(200, { order: safeOrder });
+      }
+
       if (action === "update-status") {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });

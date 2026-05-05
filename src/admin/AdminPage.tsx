@@ -43,6 +43,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
+import { AdminCreateOrderDialog } from "@/components/admin/AdminCreateOrderDialog";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
@@ -2521,6 +2522,7 @@ function OrdersSection() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>("all");
   const [sortKey, setSortKey] = useState<OrderSortKey>("newest");
+  const [createOpen, setCreateOpen] = useState(false);
   const [resendingKey, setResendingKey] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<{
     configured: boolean;
@@ -3173,13 +3175,29 @@ function OrdersSection() {
             : ""}
           )
         </h2>
-        <Button variant="ghost" size="sm" onClick={() => void fetchOrders()}>
-          <RefreshCw
-            className={`w-3.5 h-3.5 mr-1 ${loadingOrders ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Create order
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void fetchOrders()}>
+            <RefreshCw
+              className={`w-3.5 h-3.5 mr-1 ${loadingOrders ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      <AdminCreateOrderDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => void fetchOrders()}
+      />
 
       <div className="flex gap-2 flex-wrap">
         <Input
