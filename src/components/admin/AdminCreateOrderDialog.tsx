@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +26,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { toast } from "sonner";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import { useProducts } from "@/contexts/ProductContext";
+import { getAllArtworks, type DisplayArtwork } from "@/lib/artworks";
+import ImageWithFallback from "@/components/ImageWithFallback";
+import { cn } from "@/lib/utils";
 
 /**
  * Manual order entry for the admin. Used to recover orders whose
@@ -39,10 +63,18 @@ interface Props {
 }
 
 interface ItemDraft {
+  // The id of the linked artwork (e.g. "default-rice-field-guardians"
+  // for a stock piece, "product-<uuid>" for an upload). Empty for
+  // free-text custom items — those won't be reviewable since reviews
+  // key off productId, but the manual order itself still saves fine.
   id: string;
   title: string;
   price: string;
   quantity: string;
+  // Thumbnail captured at order time so the order tracker / review
+  // prompt has something to show even if the underlying product is
+  // later edited or deleted.
+  image: string;
 }
 
 const newItem = (): ItemDraft => ({
@@ -50,11 +82,192 @@ const newItem = (): ItemDraft => ({
   title: "",
   price: "",
   quantity: "1",
+  image: "",
 });
 
 const ORDER_ID_RE = /^ORD-[A-Z0-9]+$/;
 
+const formatPHP = (n: number) =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    maximumFractionDigits: 0,
+  }).format(n);
+
+interface ProductPickerProps {
+  value: ItemDraft;
+  artworks: DisplayArtwork[];
+  onPick: (artwork: DisplayArtwork) => void;
+  onClearLink: () => void;
+  onTitleChange: (title: string) => void;
+  inputId: string;
+}
+
+/**
+ * Searchable product picker for the manual-order form. Selecting an
+ * artwork populates the item's id, title, price, and image so the
+ * order item is linked to a real product — that's what makes it
+ * reviewable from the customer's order tracker. We still allow free
+ * text (the "Use as custom item" affordance + an editable title field
+ * once linked) so admins can record one-off commissions that aren't
+ * in the catalog yet.
+ */
+function ProductPicker({
+  value,
+  artworks,
+  onPick,
+  onClearLink,
+  onTitleChange,
+  inputId,
+}: ProductPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const linked = Boolean(value.id);
+  const linkedArtwork = useMemo(
+    () => (linked ? artworks.find((a) => a.id === value.id) : undefined),
+    [artworks, linked, value.id],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return artworks;
+    return artworks.filter(
+      (a) =>
+        a.title.toLowerCase().includes(q) || a.medium.toLowerCase().includes(q),
+    );
+  }, [artworks, search]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={inputId}
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "h-auto min-h-10 w-full justify-between text-left font-normal py-1.5 px-2",
+            !linked && !value.title && "text-muted-foreground",
+          )}
+        >
+          <span className="flex items-center gap-2 min-w-0 flex-1">
+            {linked && linkedArtwork?.image ? (
+              <ImageWithFallback
+                src={linkedArtwork.image}
+                alt=""
+                className="w-9 h-9 object-cover rounded-sm shrink-0"
+              />
+            ) : null}
+            <span className="flex flex-col min-w-0">
+              <span className="truncate text-sm">
+                {value.title || "Pick a painting…"}
+              </span>
+              {linked && linkedArtwork ? (
+                <span className="truncate text-xs text-muted-foreground">
+                  {formatPHP(linkedArtwork.salePrice ?? linkedArtwork.price)}
+                  {linkedArtwork.availability !== "available"
+                    ? ` · ${linkedArtwork.availability}`
+                    : ""}
+                </span>
+              ) : value.title && !linked ? (
+                <span className="truncate text-xs text-muted-foreground">
+                  Custom item · not reviewable
+                </span>
+              ) : null}
+            </span>
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="p-0 w-[--radix-popover-trigger-width] min-w-[20rem]"
+        align="start"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search by title or medium…"
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {search.trim() ? (
+                <button
+                  type="button"
+                  className="w-full px-2 py-1.5 text-left text-sm hover:bg-accent rounded-sm flex items-center gap-2"
+                  onClick={() => {
+                    onClearLink();
+                    onTitleChange(search.trim());
+                    setOpen(false);
+                  }}
+                >
+                  <Pencil className="w-3.5 h-3.5 shrink-0" />
+                  Use "{search.trim()}" as a custom item
+                </button>
+              ) : (
+                "Type to search the catalog."
+              )}
+            </CommandEmpty>
+            <CommandGroup>
+              {filtered.map((art) => {
+                const selected = value.id === art.id;
+                const effectivePrice = art.salePrice ?? art.price;
+                return (
+                  <CommandItem
+                    key={art.id}
+                    value={art.id}
+                    onSelect={() => {
+                      onPick(art);
+                      setOpen(false);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Check
+                      className={cn(
+                        "w-4 h-4 shrink-0",
+                        selected ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {art.image ? (
+                      <ImageWithFallback
+                        src={art.image}
+                        alt=""
+                        className="w-9 h-9 object-cover rounded-sm shrink-0"
+                      />
+                    ) : (
+                      <span className="w-9 h-9 rounded-sm bg-muted shrink-0" />
+                    )}
+                    <span className="flex flex-col min-w-0 flex-1">
+                      <span className="truncate text-sm">{art.title}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {formatPHP(effectivePrice)}
+                        {art.availability !== "available"
+                          ? ` · ${art.availability}`
+                          : ""}
+                        {art.isCustom ? " · upload" : " · stock"}
+                      </span>
+                    </span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
+  const { products } = useProducts();
+  // Defaults + uploads, with `replacesDefaultId` overrides applied,
+  // sorted the same way as the storefront. Drafts and other non-
+  // available pieces are kept in the list so admins can record
+  // legacy / pre-launch orders, but their availability is shown in
+  // the row so it's obvious when a piece is sold or unlisted.
+  const artworks = useMemo(() => getAllArtworks(products), [products]);
+
   const [orderId, setOrderId] = useState("");
   const [createdAt, setCreatedAt] = useState("");
   const [status, setStatus] = useState<string>("confirmed");
@@ -112,10 +325,16 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
       const orderPayload = {
         ...(orderId ? { id: orderId } : {}),
         items: items.map((it) => ({
+          // `id` is what links this line to a real product so the
+          // customer can leave a review later. Empty for free-text
+          // custom items.
           id: it.id,
           title: it.title.trim(),
           price: Number(it.price) || 0,
           quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
+          // Captured at order time so the order tracker has a
+          // thumbnail even if the product is later edited or removed.
+          image: it.image,
         })),
         orderInfo: {
           fullName: fullName.trim(),
@@ -293,22 +512,48 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
                 key={idx}
                 className="grid grid-cols-12 gap-2 items-end border rounded-md p-2"
               >
-                <div className="col-span-5">
-                  <Label htmlFor={`item-title-${idx}`}>Title</Label>
-                  <Input
-                    id={`item-title-${idx}`}
-                    value={item.title}
-                    onChange={(e) =>
+                <div className="col-span-12 sm:col-span-5">
+                  <Label htmlFor={`item-title-${idx}`}>Painting</Label>
+                  <ProductPicker
+                    inputId={`item-title-${idx}`}
+                    value={item}
+                    artworks={artworks}
+                    onPick={(art) =>
+                      // Linking an order line to a real artwork is
+                      // what unlocks the review flow downstream — the
+                      // customer's order tracker matches reviews to
+                      // products by this id.
                       setItems((prev) =>
                         prev.map((it, i) =>
-                          i === idx ? { ...it, title: e.target.value } : it,
+                          i === idx
+                            ? {
+                                ...it,
+                                id: art.id,
+                                title: art.title,
+                                image: art.image,
+                                price: String(art.salePrice ?? art.price),
+                              }
+                            : it,
                         ),
                       )
                     }
-                    placeholder="Blossoming Pink Tulips Stylized Floral Art"
+                    onClearLink={() =>
+                      setItems((prev) =>
+                        prev.map((it, i) =>
+                          i === idx ? { ...it, id: "", image: "" } : it,
+                        ),
+                      )
+                    }
+                    onTitleChange={(title) =>
+                      setItems((prev) =>
+                        prev.map((it, i) =>
+                          i === idx ? { ...it, title } : it,
+                        ),
+                      )
+                    }
                   />
                 </div>
-                <div className="col-span-3">
+                <div className="col-span-5 sm:col-span-3">
                   <Label htmlFor={`item-price-${idx}`}>Price (₱)</Label>
                   <Input
                     id={`item-price-${idx}`}
@@ -324,7 +569,7 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
                     }
                   />
                 </div>
-                <div className="col-span-3">
+                <div className="col-span-5 sm:col-span-3">
                   <Label htmlFor={`item-qty-${idx}`}>Qty</Label>
                   <Input
                     id={`item-qty-${idx}`}
@@ -340,7 +585,7 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
                     }
                   />
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-2 sm:col-span-1 flex justify-end">
                   <Button
                     type="button"
                     size="icon"
