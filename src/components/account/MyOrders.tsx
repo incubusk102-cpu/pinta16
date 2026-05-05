@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Filter, Package, Search, X } from "lucide-react";
+import { Filter, Package, RefreshCw, Search, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -33,12 +34,38 @@ const isWithin = (iso: string, fromIso?: string, toIso?: string) => {
 };
 
 export default function MyOrders() {
-  const { orders, viewOrder } = useCart();
+  const { orders, viewOrder, resyncOrder, orderNeedsSync } = useCart();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  // Per-order resync UI state — captures the latest server error so
+  // the customer can see exactly why their order isn't showing in
+  // admin yet, plus a "syncing" flag for the spinner.
+  const [syncErrors, setSyncErrors] = useState<Record<string, string>>({});
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  const handleResync = async (orderId: string) => {
+    setSyncingId(orderId);
+    const result = await resyncOrder(orderId);
+    setSyncingId(null);
+    if (result.ok) {
+      setSyncErrors((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+      toast.success(`Synced ${orderId} to the server`);
+    } else {
+      const detail =
+        result.status !== undefined
+          ? `${result.error} (HTTP ${result.status})`
+          : result.error;
+      setSyncErrors((prev) => ({ ...prev, [orderId]: detail }));
+      toast.error(`Couldn't sync ${orderId}: ${detail}`);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -175,33 +202,65 @@ export default function MyOrders() {
         </p>
       ) : (
         <ul className="divide-y divide-border/30">
-          {filtered.map((o) => (
-            <li key={o.id}>
-              <button
-                type="button"
-                onClick={() => viewOrder(o.id)}
-                className="w-full py-3 flex items-start justify-between gap-3 text-left rounded-md -mx-2 px-2 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 transition-colors"
-                aria-label={`View journey for order ${o.id}`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{o.id}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {o.items.map((i) => i.title).join(", ")}
+          {filtered.map((o) => {
+            const needsSync = orderNeedsSync(o);
+            const lastError = syncErrors[o.id];
+            const isSyncing = syncingId === o.id;
+            return (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => viewOrder(o.id)}
+                  className="w-full py-3 flex items-start justify-between gap-3 text-left rounded-md -mx-2 px-2 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 transition-colors"
+                  aria-label={`View journey for order ${o.id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{o.id}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {o.items.map((i) => i.title).join(", ")}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {new Date(o.createdAt).toLocaleString()} ·{" "}
+                      <span className="text-foreground/80">
+                        {STATUS_LABEL[o.status]}
+                      </span>
+                      {o.shipment?.courier ? ` · ${o.shipment.courier}` : ""}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold whitespace-nowrap">
+                    ₱{o.total.toLocaleString()}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {new Date(o.createdAt).toLocaleString()} ·{" "}
-                    <span className="text-foreground/80">
-                      {STATUS_LABEL[o.status]}
-                    </span>
-                    {o.shipment?.courier ? ` · ${o.shipment.courier}` : ""}
-                  </p>
-                </div>
-                <p className="text-sm font-semibold whitespace-nowrap">
-                  ₱{o.total.toLocaleString()}
-                </p>
-              </button>
-            </li>
-          ))}
+                </button>
+                {needsSync && (
+                  <div className="mt-1 mb-2 -mx-2 px-2 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium text-amber-200">
+                        Pending sync to server
+                      </p>
+                      <p className="text-[11px] text-amber-100/80 break-words">
+                        {lastError
+                          ? `Last error: ${lastError}`
+                          : "This order is saved on this device but hasn't reached the server yet."}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSyncing}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleResync(o.id);
+                      }}
+                      className="h-7 px-2 text-[11px] shrink-0"
+                    >
+                      {isSyncing ? "Syncing…" : "Sync now"}
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

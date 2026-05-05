@@ -188,7 +188,7 @@ export interface CompletedOrder {
  * it now would just bounce off the server's duplicate-id guard.
  */
 const NEEDS_SYNC_LEGACY_WINDOW_MS = 24 * 60 * 60 * 1000;
-const orderNeedsSync = (o: CompletedOrder): boolean => {
+export const orderNeedsSync = (o: CompletedOrder): boolean => {
   if (o.serverSynced === true) return false;
   if (o.serverSynced === false) return true;
   const createdMs = Date.parse(o.createdAt);
@@ -292,6 +292,18 @@ interface CartContextType {
   showConfirmation: boolean;
   setShowConfirmation: (show: boolean) => void;
   viewOrder: (orderId: string) => void;
+  // Manually re-attempt the place POST for a single order. Returns
+  // `{ ok: true }` if the server now has it, or `{ ok: false, error,
+  // status }` so the UI can show what went wrong. Used by
+  // `MyOrders` to surface a "Sync to server" button next to any
+  // pending-sync order.
+  resyncOrder: (
+    orderId: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string; status?: number }>;
+  // True when this order is in `serverSynced: false` state (i.e. the
+  // SPA placed it locally but the server hasn't acked yet). Lets the
+  // UI render a diagnostic chip + retry button.
+  orderNeedsSync: (order: CompletedOrder) => boolean;
   // Customer's checkout courier/zone selection. CheckoutForm calls
   // `setCheckoutShipping` so the cart total reflects the fee from the
   // shipping rates table.
@@ -917,6 +929,48 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     [orders],
   );
 
+  // Manually re-attempt the place POST for a single order. Surfaces the
+  // server's actual error so `MyOrders` can show a useful diagnostic
+  // chip ("Server says: voucher self-redemption not allowed") instead
+  // of silently retrying forever in the background.
+  const resyncOrder = useCallback(
+    async (
+      orderId: string,
+    ): Promise<
+      { ok: true } | { ok: false; error: string; status?: number }
+    > => {
+      const order = ordersRef.current.find((o) => o.id === orderId);
+      if (!order) return { ok: false, error: "Order not found locally" };
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: jsonAuthHeaders(),
+          body: JSON.stringify({ action: "place", order }),
+        });
+        if (res.ok || res.status === 409) {
+          markOrderSyncedRef.current(orderId);
+          return { ok: true };
+        }
+        let serverError = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data && typeof data.error === "string") {
+            serverError = data.error;
+          }
+        } catch {
+          /* response wasn't JSON */
+        }
+        return { ok: false, error: serverError, status: res.status };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Network error",
+        };
+      }
+    },
+    [],
+  );
+
   // Surface the admin-configured threshold to the cart drawer + checkout
   // banner regardless of whether shipping is paid-to-rider. In Lalamove-
   // paid-to-rider mode the storefront covers the rider fare on delivery
@@ -967,6 +1021,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       setShowCheckout,
       lastOrder,
       viewOrder,
+      resyncOrder,
+      orderNeedsSync,
       showConfirmation,
       setShowConfirmation,
       checkoutCourier: checkoutShipping.courier,
@@ -1006,6 +1062,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       showCheckout,
       lastOrder,
       viewOrder,
+      resyncOrder,
       showConfirmation,
       checkoutShipping.courier,
       checkoutShipping.zone,
