@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { compressImage } from "@/lib/imageCompress";
+import { EmailImageHealthCard } from "@/components/admin/EmailImageHealthCard";
 
 export interface WelcomeCustomItem {
   id: string;
@@ -608,13 +609,14 @@ const isSafeColor = (value: string): boolean =>
   /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
 
 // URL of the brand C-logo PNG hosted on the Cloudflare Pages origin.
-// Kept identical to `DEFAULT_BRAND_LOGO_URL` in
-// functions/api/_lib/email.js so admin previews fetch the same asset
-// the sent email will fetch. The storefront PUBLIC_SITE_ORIGIN is
-// hardcoded to https://canvhub.com on the server; we mirror that here
-// rather than threading it through props because the brand logo is
-// the same logo regardless of who's previewing.
-const DEFAULT_BRAND_LOGO_URL = "https://canvhub.com/icon-512.png";
+// The admin preview runs in the browser and can fetch the asset
+// directly; the SENT email renderer in
+// functions/api/_lib/email.js inlines the same PNG as a base64 data:
+// URI to bypass Cloudflare's bot challenge for email image proxies.
+// Both surfaces resolve to the same `public/icon-512.png` on disk so
+// the rendered logo is byte-identical regardless of where the admin
+// is previewing.
+const DEFAULT_BRAND_LOGO_URL = "/icon-512.png";
 
 // Mirrors `defaultBrandLogoHtml` in functions/api/_lib/email.js. We
 // render only the brand C-logo PNG (warm-black rounded square + gold
@@ -1425,6 +1427,8 @@ export const WelcomeEmailSection = () => {
           />
         </div>
       </header>
+
+      <EmailImageHealthCard />
 
       <section className="rounded-md border border-border/60 bg-card/30 p-4 space-y-3">
         <div className="flex items-center gap-2">

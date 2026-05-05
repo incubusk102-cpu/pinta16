@@ -30,6 +30,10 @@
 
 import { getCloudflareEnv } from "./context.js";
 import { getStore } from "./kv-stores.js";
+import {
+  DEFAULT_BRAND_LOGO_DATA_URI,
+  FOOTER_ICON_DATA_URIS,
+} from "./email-assets-data.js";
 
 const envOf = (name) => getCloudflareEnv()[name] || "";
 
@@ -1101,29 +1105,33 @@ const renderActionLink = ({ label, url, primary, style }) => {
   return `<a href="${safeUrl}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;border-radius:4px;${baseLabelStyle}">${safeLabel}</a>`;
 };
 
-// Map a footer link "kind" (instagram, tiktok, mail, …) to the public
-// PNG hosted under /public/email-icons. We use absolute URLs because
-// most email clients won't load /relative paths and Gmail blocks data:
-// image URIs.
-const FOOTER_ICON_FILES = {
-  instagram: "instagram.png",
-  facebook: "facebook.png",
-  tiktok: "tiktok.png",
-  x: "x.png",
-  twitter: "x.png",
-  youtube: "youtube.png",
-  pinterest: "pinterest.png",
-  threads: "threads.png",
-  mail: "mail.png",
-  phone: "phone.png",
-  globe: "globe.png",
-  headphones: "headphones.png",
-  custom: "custom.png",
+// Map a footer link "kind" (instagram, tiktok, mail, …) to a small
+// inlined PNG generated at build time from /public/email-icons/. We
+// inline the bytes as data: URIs (instead of hot-linking the file on
+// canvhub.com) so a Cloudflare bot challenge — which can intermittently
+// 403 image-proxy fetches from Gmail / iCloud / Outlook — never breaks
+// the rendered footer. Source PNGs and base64 strings are kept in sync
+// by `npm run generate:email-assets`. The slug "twitter" is a synonym
+// for "x" and shares the same icon.
+const FOOTER_ICON_SLUGS = {
+  instagram: "instagram",
+  facebook: "facebook",
+  tiktok: "tiktok",
+  x: "x",
+  twitter: "x",
+  youtube: "youtube",
+  pinterest: "pinterest",
+  threads: "threads",
+  mail: "mail",
+  phone: "phone",
+  globe: "globe",
+  headphones: "headphones",
+  custom: "custom",
 };
 
-const footerIconUrl = (welcome, kind) => {
-  const file = FOOTER_ICON_FILES[kind] || FOOTER_ICON_FILES.custom;
-  return `${resolveBaseUrl(welcome)}/email-icons/${file}`;
+const footerIconUrl = (_welcome, kind) => {
+  const slug = FOOTER_ICON_SLUGS[kind] || FOOTER_ICON_SLUGS.custom;
+  return FOOTER_ICON_DATA_URIS[slug] || FOOTER_ICON_DATA_URIS.custom;
 };
 
 // Plain-text fallback. Email clients that fall back to text/plain still
@@ -1169,11 +1177,6 @@ const buildFooterLinksHtml = (welcome, accent) => {
         </table>`;
 };
 
-// Storefront URL for the baked-in brand C-logo PNG. Hosted on the
-// Cloudflare Pages origin so every email client can fetch it without
-// CORS / signature dance. Kept in sync with PUBLIC_SITE_ORIGIN above.
-const DEFAULT_BRAND_LOGO_URL = `${PUBLIC_SITE_ORIGIN}/icon-512.png`;
-
 /**
  * Render the baked-in brand identity for the email header — just the
  * gold "C" medallion sitting on the warm-black rounded square that
@@ -1182,14 +1185,16 @@ const DEFAULT_BRAND_LOGO_URL = `${PUBLIC_SITE_ORIGIN}/icon-512.png`;
  * brand is the C, full stop, identical to the storefront favicon /
  * PWA icon. Used everywhere a custom logoUrl hasn't been uploaded.
  *
- * Implementation: the canonical PNG is hosted at
- * `${PUBLIC_SITE_ORIGIN}/icon-512.png` (Cloudflare Pages, public, CDN-
- * cached, identical to the storefront brand mark). Email clients that
- * block remote images fall back to the alt text "C" — never the words
- * "Canvas Hub". `tpl` and `fromName` are accepted for back-compat
- * with the previous medallion+wordmark renderer; both are now
- * intentionally unused (the brand mark is template-agnostic and never
- * uses the configurable from-name as a wordmark).
+ * Implementation: the PNG is inlined as a base64 data: URI by
+ * scripts/generate-email-assets.mjs at build time. Inlining avoids a
+ * round-trip back to canvhub.com — which can fail intermittently when
+ * Cloudflare's bot challenge is enabled — and keeps the email
+ * self-contained. Email clients that block data: URIs (rare in 2026,
+ * but possible on legacy Outlook) fall back to the alt text "C" —
+ * never the words "Canvas Hub". `tpl` and `fromName` are accepted for
+ * back-compat with the previous medallion+wordmark renderer; both are
+ * now intentionally unused (the brand mark is template-agnostic and
+ * never uses the configurable from-name as a wordmark).
  *
  * Mirrored byte-for-byte by `renderDefaultBrandLogoHtml` in
  * `src/components/admin/WelcomeEmailSection.tsx` so admin previews
@@ -1202,7 +1207,7 @@ const defaultBrandLogoHtml = (_fromName, _tpl, headerAlign) => {
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
           <tr>
             <td style="padding:0;line-height:0;font-size:0;">
-              <img src="${DEFAULT_BRAND_LOGO_URL}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
+              <img src="${DEFAULT_BRAND_LOGO_DATA_URI}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
             </td>
           </tr>
         </table>`;

@@ -33,6 +33,7 @@ import {
   type WelcomeFooterLinkKind,
   renderDefaultBrandLogoHtml,
 } from "@/components/admin/WelcomeEmailSection";
+import { EmailImageHealthCard } from "@/components/admin/EmailImageHealthCard";
 
 // Mirrors functions/api/_lib/email.js ORDER_EMAIL_KINDS — kept in sync by
 // hand. Each kind maps to exactly one notification stage in orders.js.
@@ -755,6 +756,8 @@ export const OrderEmailSection = () => {
           onCheckedChange={(v) => update("enabled", v)}
         />
       </div>
+
+      <EmailImageHealthCard />
 
       <div className="grid lg:grid-cols-[2fr_3fr] gap-6">
         {/* Left column: per-kind editor + chrome controls */}

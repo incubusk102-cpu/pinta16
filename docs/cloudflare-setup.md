@@ -18,6 +18,42 @@ it ever reaches the Pages Functions.
 
 That's it. No code change, no risk.
 
+> **Watch out — Bot Fight Mode breaks email images.**
+>
+> Gmail, iCloud, Outlook, and most other email clients fetch image URLs
+> through a server-side image proxy when the recipient opens the email.
+> Bot Fight Mode (and Under Attack mode) returns an HTTP 403 with
+> `cf-mitigated: challenge` to those proxies because they can't solve
+> the JS challenge, which leaves the recipient with broken-image
+> placeholders in their order confirmation / in-progress / shipped /
+> delivered emails.
+>
+> Two ways to handle this without disabling Bot Fight Mode globally:
+>
+> 1. **WAF Skip rule (recommended).** `Security → WAF → Custom rules →
+Create rule`, name it `Skip BFM for email assets`, set
+>    _When incoming requests match…_ to:
+>
+>    ```
+>    (http.request.uri.path matches "^/(icon-512\\.png|email-icons/|api/welcome-asset/)")
+>    ```
+>
+>    and set the action to **Skip → Browser Integrity Check, Bot Fight
+>    Mode**. Save and deploy.
+>
+> 2. **Switch to Super Bot Fight Mode with Verified Bots = Allow.**
+>    `Security → Bots → Configure Super Bot Fight Mode`. Set
+>    _Likely automated_ and _Definitely automated_ to your desired
+>    action, then under _Verified bots_ pick **Allow**. Gmail / Apple /
+>    Outlook image proxies are on Cloudflare's verified-bots list and
+>    will be passed through. (This requires a paid plan; the free
+>    Bot Fight Mode does not have this toggle.)
+>
+> The **Email image health** card in Admin → Order email / Welcome
+> email probes every image URL the email renderer references and reports
+> any path that's still being challenged, so you can verify the rule is
+> working before sending a real customer email.
+
 ## 2. WAF Managed Rules (5 minutes)
 
 Blocks known SQL-injection / XSS / bad-bot signatures at the edge.
@@ -180,7 +216,7 @@ so you can review who tweaked what.
 - `functions/api/_lib/lambda-event.js` — 5 MB body-size cap with a 413
   response, applied to every Function via the wrapper.
 - `functions/api/_lib/security-config.js` + `src/components/admin/
-  SecuritySection.tsx` — read/write the live config in `SECURITY_CONFIG`
+SecuritySection.tsx` — read/write the live config in `SECURITY_CONFIG`
   KV. Defaults match the hardcoded values shipped in #204 / #206 so the
   binding is safe to add or remove.
 - `npm audit` clean (postcss bumped to 8.5.10+).
