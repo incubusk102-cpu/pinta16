@@ -890,7 +890,12 @@ const rehostEmailImage = (welcome, slot, value) => {
   if (!value) return "";
   const trimmed = String(value).trim();
   if (!trimmed) return "";
-  if (!isDataImageUrl(trimmed)) return trimmed;
+  if (!isDataImageUrl(trimmed)) {
+    // Relative paths (e.g. /images/paintings/...) need the storefront
+    // origin prepended so email clients can fetch them.
+    if (trimmed.startsWith("/")) return `${resolveBaseUrl(welcome)}${trimmed}`;
+    return trimmed;
+  }
   const base = resolveBaseUrl(welcome);
   const v = shortHash(trimmed);
   return `${base}/api/welcome-asset/${slot}?v=${v}`;
