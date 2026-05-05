@@ -28,21 +28,18 @@ export interface WaybillOptions {
 }
 
 const DEFAULT_SENDER: WaybillSender = {
-  name: "Pinta",
+  name: "Canvas Hub",
   phone: "+63 917 000 0000",
-  address: "Pinta Studio, Manila, Philippines",
+  address: "Canvas Hub Studio, Manila, Philippines",
 };
 
 const A6_WIDTH = 105;
 const A6_HEIGHT = 148;
 
-const phpFormatter = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-  maximumFractionDigits: 0,
-});
-
-const formatPhp = (n: number): string => phpFormatter.format(n);
+// jsPDF's built-in helvetica lacks the ₱ glyph (U+20B1), causing it
+// to render as garbled characters. Use a plain "PHP" prefix instead.
+const formatPhp = (n: number): string =>
+  `PHP ${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 
 // Render a CODE128 barcode to a data URL using JsBarcode + an offscreen
 // canvas. Couriers consistently scan CODE128 so we don't need anything
@@ -170,36 +167,43 @@ export const buildWaybillPdf = (
   const sender = options.sender || DEFAULT_SENDER;
   const doc = new jsPDF({ unit: "mm", format: [A6_WIDTH, A6_HEIGHT] });
 
-  // ----- Header band: courier + payment badge -----
+  // ----- Header band: brand + courier + payment badge -----
   doc.setFillColor(20, 20, 20);
-  doc.rect(0, 0, A6_WIDTH, 14, "F");
+  doc.rect(0, 0, A6_WIDTH, 20, "F");
+  // Brand name — Times italic is the closest jsPDF built-in to the
+  // site's EB Garamond italic logo font.
+  doc.setTextColor(196, 168, 106); // gold #c4a86a
+  doc.setFont("times", "bolditalic");
+  doc.setFontSize(13);
+  doc.text("Canvas Hub", 6, 8);
+  // Courier name below the brand
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text(courierLabel(order), 6, 9);
+  doc.setFontSize(10);
+  doc.text(courierLabel(order), 6, 15);
   const badge = options.paymentBadge ?? detectPaymentBadge(order);
   if (badge) {
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(A6_WIDTH - 26, 3, 20, 8, 1.5, 1.5, "F");
+    doc.roundedRect(A6_WIDTH - 26, 6, 20, 8, 1.5, 1.5, "F");
     doc.setTextColor(20, 20, 20);
     doc.setFontSize(9);
-    doc.text(badge, A6_WIDTH - 16, 8.5, { align: "center" });
+    doc.text(badge, A6_WIDTH - 16, 11.5, { align: "center" });
   }
 
   // ----- Barcode + order id -----
   doc.setTextColor(0, 0, 0);
   const barcode = buildBarcodeDataUrl(order.id);
   if (barcode) {
-    doc.addImage(barcode, "PNG", 10, 17, A6_WIDTH - 20, 18);
+    doc.addImage(barcode, "PNG", 10, 23, A6_WIDTH - 20, 18);
   } else {
-    drawCenteredText(doc, "[barcode unavailable]", 27, 8);
+    drawCenteredText(doc, "[barcode unavailable]", 33, 8);
   }
-  drawCenteredText(doc, order.id, 38, 11, true);
+  drawCenteredText(doc, order.id, 44, 11, true);
 
-  drawDashedDivider(doc, 42);
+  drawDashedDivider(doc, 48);
 
   // ----- Recipient block -----
-  let cursorY = 47;
+  let cursorY = 53;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.text("DELIVER TO", 6, cursorY);
