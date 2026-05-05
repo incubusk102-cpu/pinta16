@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle,
@@ -10,6 +10,8 @@ import {
   Bell,
   Star,
   Search,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
@@ -27,9 +29,17 @@ const formatNotificationDate = (iso: string) => {
 };
 
 const OrderConfirmation = () => {
-  const { showConfirmation, setShowConfirmation, lastOrder, getOrderReviews } =
-    useCart();
+  const {
+    showConfirmation,
+    setShowConfirmation,
+    lastOrder,
+    getOrderReviews,
+    orderNeedsSync,
+    resyncOrder,
+  } = useCart();
   const seenNotificationsRef = useRef<Set<string>>(new Set());
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!lastOrder?.notifications?.length) return;
@@ -61,6 +71,30 @@ const OrderConfirmation = () => {
   );
 
   const closeConfirmation = () => setShowConfirmation(false);
+
+  // True between "PayMongo charged the buyer" and "our server saved
+  // the order". When this is true the modal swaps the cheery
+  // confirmation hero for an amber "payment received but order needs
+  // to finish saving" panel so the buyer always knows their money
+  // landed even if our /api/orders POST hasn't acknowledged yet.
+  const pendingSync = orderNeedsSync(lastOrder);
+
+  const handleRetrySync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    const result = await resyncOrder(lastOrder.id);
+    setSyncing(false);
+    if (result.ok) {
+      toast.success("Order saved on the server");
+    } else {
+      const detail =
+        result.status !== undefined
+          ? `${result.error} (HTTP ${result.status})`
+          : result.error;
+      setSyncError(detail);
+      toast.error(`Couldn't finish saving the order: ${detail}`);
+    }
+  };
 
   const copyOrderId = () => {
     navigator.clipboard.writeText(lastOrder.id).then(() => {
@@ -97,14 +131,60 @@ const OrderConfirmation = () => {
                     delay: 0.2,
                   }}
                 >
-                  <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
+                  {pendingSync ? (
+                    <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-amber-500" />
+                  ) : (
+                    <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
+                  )}
                 </motion.div>
                 <h2 className="font-display text-2xl text-foreground mb-2">
-                  Order Confirmed!
+                  {pendingSync
+                    ? "Payment received — finishing your order"
+                    : "Order Confirmed!"}
                 </h2>
                 <p className="font-body text-sm text-muted-foreground mb-4">
-                  Thank you for your purchase
+                  {pendingSync
+                    ? "Your payment went through. We're still saving the order on our side."
+                    : "Thank you for your purchase"}
                 </p>
+                {pendingSync && (
+                  <div className="mx-auto mb-4 max-w-sm w-full text-left p-4 bg-amber-500/10 border border-amber-500/40 rounded-sm space-y-2">
+                    <p className="font-body text-xs text-amber-600 dark:text-amber-300">
+                      Don't worry — your card was charged exactly once and we'll
+                      keep retrying automatically. You can also tap
+                      <strong> Retry now</strong> below to push the order to our
+                      server, or email{" "}
+                      <a
+                        href={`mailto:support@canvhub.com?subject=Order%20${lastOrder.id}%20stuck&body=Order%20ID%3A%20${lastOrder.id}%0APayment%20ID%3A%20${lastOrder.paymentIntentId ?? "(none)"}%0A`}
+                        className="underline"
+                      >
+                        support@canvhub.com
+                      </a>{" "}
+                      with the IDs below — we'll fix it manually.
+                    </p>
+                    {lastOrder.paymentIntentId && (
+                      <p className="font-mono text-[11px] text-foreground/80 break-all">
+                        Payment ID: {lastOrder.paymentIntentId}
+                      </p>
+                    )}
+                    {syncError && (
+                      <p className="font-body text-[11px] text-red-600 dark:text-red-300">
+                        Last error: {syncError}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleRetrySync()}
+                      disabled={syncing}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-sm border border-amber-500/60 hover:bg-amber-500/10 disabled:opacity-60"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`}
+                      />
+                      {syncing ? "Retrying…" : "Retry now"}
+                    </button>
+                  </div>
+                )}
                 {/* Order ID hero. The ID is the only handle a guest has
                     on their order — we surface it big, mono-spaced, and
                     one-tap copyable so they can save it before closing
