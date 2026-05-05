@@ -1305,7 +1305,7 @@ function ProductsSection() {
         <section className="bg-card/40 border border-border/60 rounded-xl p-6 h-fit lg:sticky lg:top-24">
           <div className="flex items-center gap-2 mb-6">
             <Plus className="w-5 h-5 text-primary" />
-            <h2 className="font-display text-lg">Upload a painting</h2>
+            <h2 className="font-display text-lg">Upload product</h2>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
