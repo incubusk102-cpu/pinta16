@@ -165,7 +165,36 @@ export interface CompletedOrder {
   shipment?: OrderShipment;
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];
+  /**
+   * Local sync state. `false` means the SPA tried to POST this order to
+   * `/api/orders` but the request never confirmed (network blip, edge
+   * challenge, body-size rejection, anything). `true` means the server
+   * acknowledged it. `undefined` is a legacy order from before this
+   * field existed — treated as synced unless `createdAt` is recent.
+   *
+   * The boot effect in `CartProvider` retries every order with
+   * `serverSynced === false` until it sticks, so a buyer who gets the
+   * confirmation modal but had their POST silently fail will still
+   * see the order in `/admin` after their next visit.
+   */
+  serverSynced?: boolean;
 }
+
+/**
+ * An order is treated as "needs to be re-POSTed to the server" when it
+ * was explicitly flagged as un-synced, OR when it's a fresh-looking
+ * legacy order (created within the last 24h) that predates the flag.
+ * Anything older is assumed to have been synced long ago — re-POSTing
+ * it now would just bounce off the server's duplicate-id guard.
+ */
+const NEEDS_SYNC_LEGACY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const orderNeedsSync = (o: CompletedOrder): boolean => {
+  if (o.serverSynced === true) return false;
+  if (o.serverSynced === false) return true;
+  const createdMs = Date.parse(o.createdAt);
+  if (!Number.isFinite(createdMs)) return false;
+  return Date.now() - createdMs < NEEDS_SYNC_LEGACY_WINDOW_MS;
+};
 
 export const REVIEW_MIN_CHARS = 0;
 export const REVIEW_MAX_IMAGES = 5;
@@ -421,6 +450,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   // user-change effect can persist the previous user's state to its
   // own bucket before swapping to the new user's cache.
   const ordersOwnerRef = useRef<string | null>(userEmail);
+  // Latest snapshot of `orders`, kept in sync via an effect below. Used
+  // by the long-running async retry loop and the server-merge effect
+  // so they read fresh data without re-running every time `orders`
+  // changes (which would cause an infinite re-fetch loop).
+  const ordersRef = useRef<CompletedOrder[]>([]);
+  // Stable callable that flips `serverSynced: true` on a single order.
+  // We hand it to the POST handler via a ref so the closure inside
+  // `placeOrder` doesn't have to re-read state, and so the boot
+  // retry effect can mark orders synced from outside the React render.
+  const markOrderSyncedRef = useRef<(orderId: string) => void>(() => {});
 
   // Customer's checkout shipping selection — used to look up the
   // per-courier × per-zone fee in the shipping rates table. CheckoutForm
@@ -439,6 +478,59 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     },
     [userEmail],
   );
+
+  // Keep `ordersRef` and `markOrderSyncedRef` in sync with the latest
+  // state + scope so that async POST callbacks always see the freshest
+  // data, no matter how long they took to resolve.
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+  useEffect(() => {
+    markOrderSyncedRef.current = (orderId: string) => {
+      const next = ordersRef.current.map((o) =>
+        o.id === orderId ? { ...o, serverSynced: true } : o,
+      );
+      ordersRef.current = next;
+      setOrders(next);
+      writeOrdersToStorage(userEmail, next);
+    };
+  }, [userEmail]);
+
+  // Boot-time retry: on every mount, scan local orders for any that
+  // never confirmed with the server (`serverSynced === false`, or a
+  // legacy order created within the last 24h that predates the flag)
+  // and POST them again. The server's duplicate-id guard makes this
+  // idempotent — a 409 means it's already there, so we still flip
+  // the flag and stop retrying. This recovers orders whose original
+  // POST was eaten by an edge challenge or similar.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const pending = ordersRef.current.filter(orderNeedsSync);
+        for (const order of pending) {
+          if (cancelled) return;
+          try {
+            const res = await fetch("/api/orders", {
+              method: "POST",
+              headers: jsonAuthHeaders(),
+              body: JSON.stringify({ action: "place", order }),
+            });
+            if (res.ok || res.status === 409) {
+              markOrderSyncedRef.current(order.id);
+            }
+          } catch {
+            /* leave for the next boot */
+          }
+        }
+      })();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   // Keep `/account → My Orders` honest across login / logout / Google
   // account-switch on the same browser:
@@ -469,7 +561,20 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         };
         if (cancelled) return;
         if (ordersOwnerRef.current !== userEmail) return;
-        const next = Array.isArray(data?.orders) ? data.orders : [];
+        const serverOrders = Array.isArray(data?.orders) ? data.orders : [];
+        // Don't blow away local orders that haven't reached the server
+        // yet — otherwise a failed POST followed by a sign-in would
+        // erase the buyer's confirmation entirely. Pending orders stay
+        // at the head of the list (they're newer than anything on the
+        // server by definition) so the boot retry effect can drain
+        // them on the next tick.
+        const serverIds = new Set(
+          serverOrders.map((o: CompletedOrder) => o.id),
+        );
+        const pendingLocal = ordersRef.current.filter(
+          (o) => !serverIds.has(o.id) && orderNeedsSync(o),
+        );
+        const next = [...pendingLocal, ...serverOrders];
         setOrders(next);
         writeOrdersToStorage(userEmail, next);
       } catch {
@@ -666,6 +771,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         qrCodeImageUrl: payment?.qrCodeImageUrl ?? undefined,
         voucherCode: voucher.applied ? voucher.code : undefined,
         notifications: [],
+        // Flip to true once the server-side POST below confirms. If the
+        // POST silently fails (Cloudflare challenge, body-size cap,
+        // network blip), the boot retry effect picks the order up and
+        // re-POSTs on the next page load until it sticks.
+        serverSynced: false,
       };
       const newOrders = [order, ...orders];
       saveOrders(newOrders);
@@ -705,13 +815,20 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           }),
         )
         .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // 200 = first-time accept. 409 = server already has this id
+          // (e.g. retry succeeded earlier in this same session). Both
+          // mean the order is on the server — flip the flag and stop
+          // retrying it.
+          if (!res.ok && res.status !== 409) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          markOrderSyncedRef.current(order.id);
         })
         .catch((err) => {
           console.error("Order sync failed:", err);
           import("sonner").then(({ toast }) =>
             toast.warning(
-              "Order saved locally but could not sync to server. It will appear in your tracking once connectivity is restored.",
+              "Order saved on this device but could not reach the server. We'll auto-retry the next time you open the site.",
             ),
           );
         });
