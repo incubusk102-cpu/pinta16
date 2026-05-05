@@ -21,7 +21,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
-          className="font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground mb-6"
+          className="font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground mb-4 sm:mb-6"
         >
           Affordable Art, Authentic Stories
         </motion.p>
@@ -29,7 +29,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2, delay: 0.5 }}
-          className="font-logo text-4xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
+          className="font-logo text-5xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
         >
           Canvas Hub
         </motion.h1>
@@ -38,7 +38,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.7 }}
-          className="font-body text-sm text-muted-foreground max-w-md mb-12 leading-relaxed"
+          className="font-body text-sm text-muted-foreground max-w-md mb-8 sm:mb-12 leading-relaxed"
         >
           Discover hand-crafted paintings that transform spaces. Each piece
           tells a story, crafted with passion and precision.

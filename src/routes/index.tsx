@@ -9,6 +9,7 @@ import ReviewsSection from "@/components/ReviewsSection";
 import ContactSection from "@/components/ContactSection";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
+import MobileBackToCollection from "@/components/MobileBackToCollection";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import RecommendedRow from "@/components/RecommendedRow";
 import VisitorTicker from "@/components/VisitorTicker";
@@ -79,6 +80,7 @@ function Index() {
       <ContactSection />
       <CartDrawer />
       <CheckoutForm />
+      <MobileBackToCollection />
     </div>
   );
 }
