@@ -106,6 +106,7 @@ import {
   Undo2,
   Upload,
   Users,
+  MapPin,
   Wallet,
   Zap,
 } from "lucide-react";
@@ -3374,18 +3375,87 @@ function OrdersSection() {
               ))}
             </div>
 
-            {/* Delivery info */}
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              <p>
-                Ship to: {order.orderInfo?.address ?? "—"},{" "}
-                {order.orderInfo?.city ?? "—"} · Phone:{" "}
-                {order.orderInfo?.phone ?? "—"}
-              </p>
-              {order.orderInfo?.notes && (
-                <p>
-                  <span className="text-foreground/70">Customer notes:</span>{" "}
-                  {order.orderInfo.notes}
+            {/* Shipping details */}
+            <div className="text-xs space-y-1.5 p-3 bg-muted/30 border border-border/40 rounded-md">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <MapPin className="w-3.5 h-3.5" />
+                Shipping details
+              </div>
+              <div className="space-y-0.5 text-foreground/80">
+                <p className="font-medium text-foreground">
+                  {order.orderInfo?.fullName ?? "—"}
                 </p>
+                <p>{order.orderInfo?.phone ?? "—"}</p>
+                {order.orderInfo?.addressLine1 && (
+                  <p>{order.orderInfo.addressLine1}</p>
+                )}
+                {order.orderInfo?.addressLine2 && (
+                  <p>{order.orderInfo.addressLine2}</p>
+                )}
+                {order.orderInfo?.barangay && (
+                  <p>Brgy. {order.orderInfo.barangay}</p>
+                )}
+                <p>
+                  {order.orderInfo?.city ?? "—"}
+                  {order.orderInfo?.province
+                    ? `, ${order.orderInfo.province}`
+                    : ""}
+                  {order.orderInfo?.postalCode
+                    ? ` ${order.orderInfo.postalCode}`
+                    : ""}
+                </p>
+                {order.orderInfo?.region && (
+                  <p className="text-muted-foreground">
+                    {order.orderInfo.region}
+                  </p>
+                )}
+                {order.orderInfo?.landmark && (
+                  <p className="text-muted-foreground italic">
+                    Landmark: {order.orderInfo.landmark}
+                  </p>
+                )}
+                {!order.orderInfo?.addressLine1 && order.orderInfo?.address && (
+                  <p>{order.orderInfo.address}</p>
+                )}
+              </div>
+              {(order.orderInfo?.courier || order.shippingFee != null) && (
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-border/30 text-muted-foreground">
+                  {order.orderInfo?.courier && (
+                    <span>
+                      Courier:{" "}
+                      <span className="text-foreground">
+                        {COURIERS.find((c) => c.id === order.orderInfo?.courier)
+                          ?.label || order.orderInfo.courier}
+                      </span>
+                    </span>
+                  )}
+                  {order.shippingFee != null && (
+                    <span>
+                      Shipping:{" "}
+                      <span className="text-foreground">
+                        {order.freeShipping
+                          ? "Free"
+                          : `₱${order.shippingFee.toLocaleString()}`}
+                      </span>
+                    </span>
+                  )}
+                  {order.orderInfo?.shippingZone && (
+                    <span>
+                      Zone:{" "}
+                      <span className="text-foreground">
+                        {order.orderInfo.shippingZone}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              )}
+              {order.orderInfo?.notes && (
+                <div className="pt-1 border-t border-border/30">
+                  <span className="text-muted-foreground">Notes: </span>
+                  <span className="text-foreground/80">
+                    {order.orderInfo.notes}
+                  </span>
+                </div>
               )}
             </div>
 
