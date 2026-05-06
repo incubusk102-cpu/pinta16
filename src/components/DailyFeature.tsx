@@ -20,7 +20,7 @@ const DailyFeature = () => {
   const { config, loading } = useStorefrontConfig();
   const { products } = useProducts();
   const [copied, setCopied] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   const today = config.dailyFeatureToday;
 
@@ -63,25 +63,51 @@ const DailyFeature = () => {
     >
       <div className="container mx-auto px-4">
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial="hidden"
+          whileInView="visible"
           viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.4 }}
+          variants={{
+            hidden: {},
+            visible: {
+              transition: { staggerChildren: 0.18, delayChildren: 0.05 },
+            },
+          }}
           className="grid md:grid-cols-2 gap-6 md:gap-10 items-center max-w-5xl mx-auto rounded-lg border border-border/60 bg-card/70 backdrop-blur p-5 md:p-8 shadow-sm"
         >
-          <Link
-            to="/product/$id"
-            params={{ id: artwork.id }}
-            className="block aspect-square overflow-hidden rounded-md bg-muted"
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, x: -48 },
+              visible: {
+                opacity: 1,
+                x: 0,
+                transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
+              },
+            }}
           >
-            <img
-              src={image}
-              alt={artwork.title}
-              loading="lazy"
-              className="w-full h-full object-cover transition-transform duration-500 hover:scale-[1.03]"
-            />
-          </Link>
-          <div className="flex flex-col gap-4">
+            <Link
+              to="/product/$id"
+              params={{ id: artwork.id }}
+              className="block aspect-square overflow-hidden rounded-md bg-muted"
+            >
+              <img
+                src={image}
+                alt={artwork.title}
+                loading="lazy"
+                className="w-full h-full object-cover transition-transform duration-500 hover:scale-[1.03]"
+              />
+            </Link>
+          </motion.div>
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, x: 48 },
+              visible: {
+                opacity: 1,
+                x: 0,
+                transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
+              },
+            }}
+            className="flex flex-col gap-4"
+          >
             <div className="inline-flex items-center gap-2 self-start text-[10px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300">
               <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
               {headline}
@@ -139,7 +165,7 @@ const DailyFeature = () => {
             >
               View this piece
             </Link>
-          </div>
+          </motion.div>
         </motion.div>
       </div>
     </section>

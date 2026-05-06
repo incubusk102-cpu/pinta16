@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import SplitText from "@/components/motion/SplitText";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
@@ -211,9 +212,16 @@ const GallerySection = () => {
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
           {galleryCopy.eyebrow}
         </p>
-        <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
+        <SplitText
+          as="h2"
+          by="word"
+          stagger={0.07}
+          duration={0.85}
+          yFrom={32}
+          className="font-display text-3xl md:text-4xl text-gradient-elegant"
+        >
           {galleryCopy.title}
-        </h2>
+        </SplitText>
       </motion.div>
 
       {isLoggedIn && (
