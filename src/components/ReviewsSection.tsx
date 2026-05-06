@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
+import SectionReveal from "@/components/motion/SectionReveal";
+import SplitText from "@/components/motion/SplitText";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 
 interface PublishedReview {
@@ -71,23 +73,39 @@ const ReviewsSection = () => {
   const avg = totalRating / reviews.length;
 
   return (
-    <section
+    <SectionReveal
+      as="section"
       id="reviews"
+      from="right"
+      distance={70}
+      duration={0.95}
+      staggerChildren={0.1}
       className="py-16 sm:py-24 md:py-32 px-4 sm:px-6 md:px-12 max-w-6xl mx-auto"
     >
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.8 }}
+        variants={{
+          hidden: { opacity: 0, y: 24 },
+          visible: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
+          },
+        }}
         className="text-center mb-12"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
           {reviewsCopy.eyebrow}
         </p>
-        <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant mb-4">
+        <SplitText
+          as="h2"
+          by="word"
+          stagger={0.07}
+          duration={0.85}
+          yFrom={28}
+          className="font-display text-3xl md:text-4xl text-gradient-elegant mb-4"
+        >
           {reviewsCopy.title}
-        </h2>
+        </SplitText>
         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Stars rating={Math.round(avg)} />
           <span className="font-medium text-foreground">{avg.toFixed(1)}</span>
@@ -155,7 +173,7 @@ const ReviewsSection = () => {
           </motion.article>
         ))}
       </div>
-    </section>
+    </SectionReveal>
   );
 };
 

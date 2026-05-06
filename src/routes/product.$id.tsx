@@ -23,6 +23,7 @@ import ZoomableImage from "@/components/ZoomableImage";
 import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import MagneticButton from "@/components/MagneticButton";
+import SplitText from "@/components/motion/SplitText";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { addStamp } from "@/lib/passport";
 import {
@@ -467,9 +468,16 @@ function ProductPage() {
                 {artwork.medium} · {artwork.year}
                 {artwork.category ? ` · ${artwork.category}` : ""}
               </p>
-              <h1 className="font-display text-3xl md:text-4xl text-foreground mb-3">
+              <SplitText
+                as="h1"
+                by="word"
+                stagger={0.06}
+                duration={0.85}
+                yFrom={28}
+                className="font-display text-3xl md:text-4xl text-foreground mb-3"
+              >
                 {artwork.title}
-              </h1>
+              </SplitText>
               {artwork.dimensions && (
                 <p className="font-body text-xs tracking-[0.2em] uppercase text-muted-foreground">
                   Dimensions · {artwork.dimensions}

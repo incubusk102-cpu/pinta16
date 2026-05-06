@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin } from "lucide-react";
 import NewsletterForm from "@/components/NewsletterForm";
+import SectionReveal from "@/components/motion/SectionReveal";
+import SplitText from "@/components/motion/SplitText";
 import { useLocale } from "@/contexts/LocaleContext";
 import {
   DEFAULT_SITE_COPY,
@@ -24,23 +26,39 @@ const ContactSection = () => {
       ? t("contact.heading")
       : contactCopy.title;
   return (
-    <section
+    <SectionReveal
+      as="section"
       id="contact"
+      from="bottom"
+      distance={50}
+      duration={0.95}
+      staggerChildren={0.12}
       className="py-16 sm:py-24 md:py-32 px-4 sm:px-6 md:px-12 max-w-4xl mx-auto"
     >
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.8 }}
+        variants={{
+          hidden: { opacity: 0, y: 24 },
+          visible: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
+          },
+        }}
         className="text-center mb-12"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
           {eyebrowText}
         </p>
-        <h2 className="font-display text-3xl md:text-4xl text-gradient-elegant">
+        <SplitText
+          as="h2"
+          by="word"
+          stagger={0.07}
+          duration={0.85}
+          yFrom={28}
+          className="font-display text-3xl md:text-4xl text-gradient-elegant"
+        >
           {titleText}
-        </h2>
+        </SplitText>
       </motion.div>
       <motion.div
         initial={{ opacity: 0, y: 30 }}
@@ -82,7 +100,7 @@ const ContactSection = () => {
         </h3>
         <NewsletterForm source="footer" />
       </motion.div>
-    </section>
+    </SectionReveal>
   );
 };
 

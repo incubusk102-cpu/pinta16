@@ -2,6 +2,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import BrushDivider from "@/components/decor/BrushDivider";
 import MagneticButton from "@/components/MagneticButton";
+import SplitText from "@/components/motion/SplitText";
 
 const HeroSection = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -30,14 +31,17 @@ const HeroSection = () => {
         >
           Affordable Art, Authentic Stories
         </motion.p>
-        <motion.h1
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.2, delay: 0.5 }}
+        <SplitText
+          as="h1"
+          by="letter"
+          stagger={0.05}
+          duration={0.9}
+          yFrom={48}
+          delay={0.45}
           className="font-logo text-5xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
         >
           Canvas Hub
-        </motion.h1>
+        </SplitText>
         <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
         <motion.p
           initial={{ opacity: 0, y: 30 }}
