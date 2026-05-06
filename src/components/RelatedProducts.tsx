@@ -41,9 +41,14 @@ export default function RelatedProducts({
     // `findArtworkById` (which returns the merged default's id), so linking
     // to them would 404. Their customizations are already reflected in the
     // default they replace.
+    // Compare against the raw uuid carved out of the display id (the page
+    // route receives `product-<uuid>`, but `p.id` is the bare `<uuid>`).
+    const currentRawId = currentId.startsWith("product-")
+      ? currentId.slice("product-".length)
+      : currentId;
     const others = products.filter(
       (p) =>
-        p.id !== currentId &&
+        p.id !== currentRawId &&
         p.availability !== "draft" &&
         !p.replacesDefaultId,
     );
@@ -76,7 +81,7 @@ export default function RelatedProducts({
             <Link
               key={p.id}
               to="/product/$id"
-              params={{ id: p.id }}
+              params={{ id: `product-${p.id}` }}
               className="group block"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">

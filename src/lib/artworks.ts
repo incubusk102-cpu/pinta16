@@ -306,5 +306,13 @@ export const findArtworkById = (
   id: string,
   products: Product[],
 ): DisplayArtwork | undefined => {
-  return getAllArtworks(products).find((art) => art.id === id);
+  const all = getAllArtworks(products);
+  // Direct match against the display id (`product-<uuid>` for uploads,
+  // `default-<slug>` for stock artworks).
+  const direct = all.find((art) => art.id === id);
+  if (direct) return direct;
+  // Back-compat: older code paths (and any deep-links / shared URLs from
+  // before the display-id rename) sometimes use the raw product uuid.
+  // Map that to the corresponding `product-<uuid>` artwork.
+  return all.find((art) => art.id === `product-${id}`);
 };

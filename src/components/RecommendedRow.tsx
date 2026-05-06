@@ -28,7 +28,14 @@ const RecommendedRow = () => {
 
   const { topCategory, picks } = useMemo(() => {
     if (recentIds.length === 0) return { topCategory: "", picks: [] };
+    // `recentIds` are artwork display ids (`product-<uuid>` for uploads,
+    // `default-<slug>` for stock pieces). For matching against `products`
+    // (raw uuids only), strip the `product-` prefix; default-* entries
+    // simply won't match and contribute no category signal.
     const recent = recentIds
+      .map((id) =>
+        id.startsWith("product-") ? id.slice("product-".length) : id,
+      )
       .map((id) => products.find((p) => p.id === id))
       .filter((p): p is NonNullable<typeof p> => Boolean(p));
     const counts = new Map<string, number>();
@@ -46,12 +53,17 @@ const RecommendedRow = () => {
       }
     }
     if (!topCategory) return { topCategory: "", picks: [] };
-    const recentSet = new Set(recentIds);
+    const recentRawIds = new Set(
+      recentIds.map((id) =>
+        id.startsWith("product-") ? id.slice("product-".length) : id,
+      ),
+    );
     const picks = products
       .filter(
         (p) =>
           (p.category || "").trim() === topCategory &&
-          !recentSet.has(p.id) &&
+          !recentRawIds.has(p.id) &&
+          !p.replacesDefaultId &&
           (p.availability ?? "available") === "available",
       )
       .slice(0, LIMIT);
@@ -77,7 +89,7 @@ const RecommendedRow = () => {
             <Link
               key={p.id}
               to="/product/$id"
-              params={{ id: p.id }}
+              params={{ id: `product-${p.id}` }}
               className="group flex-none w-[160px] md:w-[180px] snap-start"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
