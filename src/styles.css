@@ -47,8 +47,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-display: 'Playfair Display', serif;
-  --font-body: 'Inter', sans-serif;
+  --font-display: "Playfair Display", serif;
+  --font-body: "Inter", sans-serif;
 }
 
 :root {
@@ -172,7 +172,12 @@
     z-index: 100;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-display);
   }
 
@@ -190,7 +195,7 @@
     font-family: var(--font-body);
   }
   .font-logo {
-    font-family: 'EB Garamond', Georgia, 'Playfair Display', serif;
+    font-family: "EB Garamond", Georgia, "Playfair Display", serif;
     font-style: italic;
     color: var(--logo-color);
   }
@@ -233,7 +238,9 @@
   }
 
   .hover-lift {
-    transition: transform 0.6s var(--transition-smooth), box-shadow 0.6s var(--transition-smooth);
+    transition:
+      transform 0.6s var(--transition-smooth),
+      box-shadow 0.6s var(--transition-smooth);
   }
   .hover-lift:hover {
     transform: translateY(-4px);
@@ -329,7 +336,8 @@
     display: inline-flex;
     gap: 3rem;
     padding-left: 100%;
-    animation: announcement-marquee-left var(--ann-duration, 18s) linear infinite;
+    animation: announcement-marquee-left var(--ann-duration, 18s) linear
+      infinite;
     will-change: transform;
   }
   .announcement-marquee-track[data-direction="right"] {
@@ -429,6 +437,31 @@
     }
     .announcement-typewriter {
       border-right: 0;
+    }
+  }
+
+  /* Continuously-scrolling painting strip (PaintingMarquee).
+     Renders thumbnails twice in the DOM so translating by -50% loops
+     seamlessly. Pauses on hover/focus-within (set via the component's
+     class list, not here, so `:hover` cascade order stays predictable
+     when the strip is offscreen). Reduced-motion users get a static
+     row that stops at the natural overflow boundary. */
+  .painting-marquee-track {
+    animation: painting-marquee-scroll linear infinite;
+    will-change: transform;
+  }
+  @keyframes painting-marquee-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .painting-marquee-track {
+      animation: none !important;
+      transform: none !important;
     }
   }
 }

@@ -136,8 +136,11 @@ const ArtworkCard = ({
       ref={cardRef}
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.6, delay: index * 0.1 }}
+      viewport={{ once: true, margin: "-40px" }}
+      // Stagger only within a row of three. Without the modulo a card
+      // at index 50 would queue 5 s of delay and just sit invisible
+      // until the user wonders if the page broke.
+      transition={{ duration: 0.55, delay: (index % 3) * 0.08 }}
       className="break-inside-avoid group cursor-pointer [perspective:1200px]"
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
