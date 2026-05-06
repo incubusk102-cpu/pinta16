@@ -12,11 +12,43 @@ This repo is **a single Cloudflare Pages deployment** that ships:
 1. A React 19 SPA built with Vite (`src/`, output to `dist/`).
 2. A JSON API as Pages Functions (`functions/api/*`).
 3. 14 KV namespaces for persistent state (`wrangler.toml`).
+4. A Cloudflare D1 (SQLite) database for relational queries / analytics
+   (optional binding — when not configured, the site falls back to KV
+   alone). See "Hybrid KV + D1 architecture" below.
 
 There is **no Node.js server, no Docker, no Postgres**, and no
 separate "back-end" repo. Anything that needs to persist past a page
-load lives in KV; anything that needs Node-only APIs runs as a Pages
-Function on the Workers runtime, not in the SPA bundle.
+load lives in KV (source of truth) or D1 (queryable mirror);
+anything that needs Node-only APIs runs as a Pages Function on the
+Workers runtime, not in the SPA bundle.
+
+### Hybrid KV + D1 architecture
+
+KV stays as the source of truth for:
+
+- Public-facing reads (`PRODUCTS`, `STOREFRONT_CONFIG`, `HERO_SLIDES`,
+  `POLICIES`) — single-key lookups served from the global edge cache.
+- Singletons and config (`SECURITY_CONFIG`, `ADMIN_AUTH`, `RATE_LIMITS`).
+- Volatile / TTL data (`VISITORS`, `ABANDONED_CARTS`).
+
+D1 is the queryable mirror for:
+
+- `orders` + `order_items` — JOIN-able rows for revenue / category reports.
+- `customers` — aggregated LTV, total orders, last-order timestamps.
+- `products` — kept in sync with the `PRODUCTS` KV namespace so order
+  items can JOIN against category, price, stock count.
+
+Write path: API handlers persist to KV first (the hot path) and then
+fire-and-forget mirror to D1 via the helpers in `_lib/d1.js`. D1 failures
+never block the KV write or the user response. If `env.DB` is not bound,
+all D1 helpers are no-ops — the site keeps working unchanged.
+
+Read path: public pages read from KV (fast, edge-cached). Admin
+analytics / CRM / reports read from D1 (`/api/admin/d1?action=...`).
+
+To enable D1: see the comment block in `wrangler.toml` and run
+`npx wrangler d1 migrations apply canvhub`. Free tier (5 GB / 5M reads /
+100k writes per day) is more than enough at canvhub's scale.
 
 When adding a feature:
 
@@ -174,7 +206,10 @@ A few opinions baked into the codebase that are easy to miss:
 - Do not use `getattr`-style dynamic property access in TypeScript
   (`obj[someStringVariable]` without a typed key). Add the union
   type and let TS verify.
-- Do not introduce a database. KV is enough.
+- Do not introduce a _new_ database engine. The hybrid KV + D1 setup
+  (Cloudflare's native primitives) covers every use case the site has.
+  Don't reach for Postgres, MySQL, MongoDB, Redis, etc. — extend the
+  D1 schema or add a KV namespace instead.
 - Do not amend / force-push merged commits on `main`.
 
 ## Runbooks for common operator tasks
