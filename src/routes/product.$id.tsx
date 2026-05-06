@@ -22,6 +22,7 @@ import RecentlyViewed from "@/components/RecentlyViewed";
 import ZoomableImage from "@/components/ZoomableImage";
 import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
+import MagneticButton from "@/components/MagneticButton";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { addStamp } from "@/lib/passport";
 import {
@@ -497,12 +498,13 @@ function ProductPage() {
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
+              <MagneticButton
                 ref={addToCartButtonRef}
                 type="button"
                 onClick={handleAdd}
                 disabled={!purchasable}
-                className={`inline-flex items-center gap-2 px-8 py-3 font-body text-xs tracking-[0.2em] uppercase transition-all duration-300 rounded-sm ${
+                strength={purchasable ? 8 : 0}
+                className={`inline-flex items-center gap-2 px-8 py-3 font-body text-xs tracking-[0.2em] uppercase transition-colors duration-300 rounded-sm ${
                   purchasable
                     ? "bg-foreground text-background hover:bg-foreground/90"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
@@ -512,7 +514,7 @@ function ProductPage() {
                 {purchasable
                   ? "Add to cart"
                   : `${AVAILABILITY_LABEL[artwork.availability]}`}
-              </button>
+              </MagneticButton>
               <button
                 type="button"
                 onClick={() => {

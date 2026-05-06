@@ -20,6 +20,7 @@ import WelcomeBackToast from "@/components/WelcomeBackToast";
 import WelcomeBonusCountdown from "@/components/WelcomeBonusCountdown";
 import ArtistThankYou from "@/components/ArtistThankYou";
 import SiteFooter from "@/components/SiteFooter";
+import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -136,18 +137,20 @@ function RootComponent() {
                   <HeroSlidesProvider>
                     <ProductProvider>
                       <CartProvider>
-                        <HeartbeatBridge />
-                        <ReferralCaptureBridge />
-                        <GoogleAuthHashBridge />
-                        <ConditionalAnnouncementBar />
-                        <Outlet />
-                        <ConditionalSiteFooter />
-                        <ConditionalOrderConfirmation />
-                        <ChatWidget />
-                        <NewUserModal />
-                        <PwaPrompts />
-                        <ConditionalVisitorDelight />
-                        <Toaster richColors position="top-right" />
+                        <SmoothScrollProvider>
+                          <HeartbeatBridge />
+                          <ReferralCaptureBridge />
+                          <GoogleAuthHashBridge />
+                          <ConditionalAnnouncementBar />
+                          <Outlet />
+                          <ConditionalSiteFooter />
+                          <ConditionalOrderConfirmation />
+                          <ChatWidget />
+                          <NewUserModal />
+                          <PwaPrompts />
+                          <ConditionalVisitorDelight />
+                          <Toaster richColors position="top-right" />
+                        </SmoothScrollProvider>
                       </CartProvider>
                     </ProductProvider>
                   </HeroSlidesProvider>

@@ -469,3 +469,25 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* Lenis smooth-scroll wrapper. The library adds these classes to
+   <html> when active; the rules below let Lenis own scrolling
+   without clashing with the native `scroll-behavior: smooth` above
+   or with iframes. When Lenis is NOT active (touch devices, admin,
+   reduced-motion) the native rule keeps applying. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+html.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+html.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+html.lenis.lenis-stopped {
+  overflow: hidden;
+}
+html.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}

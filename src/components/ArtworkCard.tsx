@@ -134,13 +134,20 @@ const ArtworkCard = ({
   return (
     <motion.div
       ref={cardRef}
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 56 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-40px" }}
-      // Stagger only within a row of three. Without the modulo a card
-      // at index 50 would queue 5 s of delay and just sit invisible
-      // until the user wonders if the page broke.
-      transition={{ duration: 0.55, delay: (index % 3) * 0.08 }}
+      viewport={{ once: true, margin: "-60px" }}
+      // Apple-style choreographed reveal: small horizontal sweep
+      // (column-based stagger so a row appears left-to-right) plus an
+      // out-expo curve for the smooth "lifts and settles" feel. The
+      // modulo keeps the longest delay capped at 0.16 s so a card
+      // 50 down the masonry doesn't sit invisible queueing five
+      // seconds of stagger.
+      transition={{
+        duration: 0.85,
+        delay: (index % 3) * 0.08,
+        ease: [0.16, 1, 0.3, 1],
+      }}
       className="break-inside-avoid group cursor-pointer [perspective:1200px]"
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}

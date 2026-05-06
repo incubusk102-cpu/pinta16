@@ -107,7 +107,13 @@ const GalleryNav = () => {
   const onIndex = pathname === "/";
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 50);
+    // Engage backdrop-blur as soon as the visitor leaves the top of
+    // the page (8 px = the apple.com threshold) instead of waiting
+    // for 50 px of scroll. Combined with the longer transition below,
+    // the nav fades cleanly into a frosted-glass bar as the hero
+    // disappears under it.
+    const handleScroll = () => setScrolled(window.scrollY > 8);
+    handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -193,10 +199,10 @@ const GalleryNav = () => {
 
   return (
     <motion.nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-700 ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,backdrop-filter,border-color,box-shadow] duration-500 ease-out ${
         scrolled
-          ? "bg-background/80 backdrop-blur-xl border-b border-border/10"
-          : ""
+          ? "bg-background/70 supports-[backdrop-filter]:bg-background/55 backdrop-blur-xl backdrop-saturate-150 border-b border-border/15 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]"
+          : "bg-transparent border-b border-transparent"
       }`}
       initial={{ y: -100 }}
       animate={{ y: 0 }}
