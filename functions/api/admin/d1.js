@@ -4,6 +4,7 @@
 // GET  ?action=revenue   → Revenue summary (this month, last month, all-time).
 // GET  ?action=top-products → Top 10 products by revenue.
 // GET  ?action=customers-summary → Customer count, avg LTV, repeat rate.
+// POST ?action=apply-schema → Bootstrap the schema (idempotent, IF NOT EXISTS).
 // POST ?action=backfill  → Walk ORDERS KV and mirror all orders into D1.
 // POST ?action=backfill-products → Mirror all products (defaults + uploads) into D1.
 //
@@ -19,6 +20,7 @@ import {
   mirrorOrderToD1,
   mirrorProductToD1,
 } from "../_lib/d1.js";
+import { D1_SCHEMA_STATEMENTS } from "../_lib/d1-schema.js";
 import { connectLambda, getStore } from "../_lib/kv-stores.js";
 
 const json = (status, body) =>
@@ -50,16 +52,37 @@ export const onRequestGet = async ({ request, env }) => {
     if (!isD1Available()) {
       return json(200, {
         available: false,
+        schemaApplied: false,
         message:
           "D1 binding (env.DB) not configured. Create the database in Cloudflare dashboard and add the binding.",
       });
     }
+    // Probe sqlite_master for our expected tables.
+    const tables = ["customers", "orders", "order_items", "products"];
+    const present = await d1All(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?, ?, ?)`,
+      tables,
+    );
+    const presentSet = new Set(
+      (present?.results || []).map((r) => r.name).filter(Boolean),
+    );
+    const schemaApplied = tables.every((t) => presentSet.has(t));
+
+    if (!schemaApplied) {
+      return json(200, {
+        available: true,
+        schemaApplied: false,
+        message:
+          "D1 binding is connected but tables are missing. POST /api/admin/d1?action=apply-schema to bootstrap.",
+        existingTables: Array.from(presentSet),
+      });
+    }
     const counts = {};
-    for (const table of ["customers", "orders", "order_items", "products"]) {
+    for (const table of tables) {
       const row = await d1First(`SELECT COUNT(*) as cnt FROM ${table}`);
       counts[table] = row?.cnt ?? 0;
     }
-    return json(200, { available: true, tables: counts });
+    return json(200, { available: true, schemaApplied: true, tables: counts });
   }
 
   if (action === "revenue") {
@@ -150,6 +173,24 @@ export const onRequestPost = async ({ request, env }) => {
   if (!isD1Available()) {
     return json(503, {
       error: "D1 binding not available. Create the database first.",
+    });
+  }
+
+  if (action === "apply-schema") {
+    // Idempotent: every statement is CREATE … IF NOT EXISTS, so re-running is a no-op.
+    const db = getD1();
+    const stmts = D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql));
+    try {
+      await db.batch(stmts);
+    } catch (err) {
+      return json(500, {
+        error: "Failed to apply schema",
+        detail: err?.message || String(err),
+      });
+    }
+    return json(200, {
+      success: true,
+      statementsExecuted: D1_SCHEMA_STATEMENTS.length,
     });
   }
 

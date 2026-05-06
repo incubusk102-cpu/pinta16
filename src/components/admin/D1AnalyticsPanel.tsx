@@ -32,8 +32,10 @@ interface TopProduct {
 
 interface D1Status {
   available: boolean;
+  schemaApplied?: boolean;
   message?: string;
   tables?: Record<string, number>;
+  existingTables?: string[];
 }
 
 const formatPHP = (n: number) =>
@@ -63,6 +65,8 @@ export function D1AnalyticsPanel() {
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState<string | null>(null);
+  const [applyingSchema, setApplyingSchema] = useState(false);
+  const [schemaResult, setSchemaResult] = useState<string | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -87,6 +91,39 @@ export function D1AnalyticsPanel() {
       // Silently degrade — D1 panel is optional.
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runApplySchema = async () => {
+    setApplyingSchema(true);
+    setSchemaResult(null);
+    try {
+      const token = getAdminToken();
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+      const res = await fetch("/api/admin/d1?action=apply-schema", {
+        method: "POST",
+        headers,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSchemaResult(
+          `Schema applied: ${data.statementsExecuted} statements executed`,
+        );
+        void fetchAll();
+      } else {
+        setSchemaResult(
+          `Schema apply failed: ${data.error || "unknown error"}${data.detail ? ` — ${data.detail}` : ""}`,
+        );
+      }
+    } catch (err) {
+      setSchemaResult(
+        `Schema apply error: ${err instanceof Error ? err.message : "unknown"}`,
+      );
+    } finally {
+      setApplyingSchema(false);
     }
   };
 
@@ -159,6 +196,55 @@ export function D1AnalyticsPanel() {
   }
 
   if (!status?.available) return null;
+
+  // D1 binding present, but tables not yet created — offer one-click bootstrap.
+  if (status.available && status.schemaApplied === false) {
+    return (
+      <div className="border border-border/40 rounded-lg p-4 bg-card/40 space-y-3">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Database className="w-4 h-4" />
+          <span className="text-[11px] uppercase tracking-wider">
+            SQL Analytics (D1)
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+            Connected — schema not applied
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          The D1 binding is live but the tables don&apos;t exist yet. Click
+          below to create the schema (idempotent, safe to re-run).
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => void runApplySchema()}
+            disabled={applyingSchema}
+            className="h-8 text-xs"
+          >
+            {applyingSchema ? "Applying schema…" : "Apply schema"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void fetchAll()}
+            disabled={loading}
+            className="h-8 text-xs"
+          >
+            <RefreshCw
+              className={`w-3 h-3 mr-1 ${loading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+        </div>
+        {schemaResult && (
+          <div className="text-xs p-2 rounded bg-muted/50 text-muted-foreground">
+            {schemaResult}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="border border-border/40 rounded-lg p-4 bg-card/40 space-y-4">

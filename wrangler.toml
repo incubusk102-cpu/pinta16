@@ -187,11 +187,11 @@ preview_id = "67c757b425ee427b9c9bba0a16519ff7"
 # Until the binding exists, all D1 helpers gracefully return null/no-op —
 # the site keeps working exactly as before on KV alone.
 #
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "canvhub"
-# database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
-# migrations_dir = "migrations"
+[[d1_databases]]
+binding = "DB"
+database_name = "canvhub"
+database_id = "68b3022d-91ff-4847-9412-a8cce8bdd508"
+migrations_dir = "migrations"
 
 # ---------------------------------------------------------------------------
 # R2 bucket binding (optional)
