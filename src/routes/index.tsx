@@ -13,6 +13,7 @@ import MobileBackToCollection from "@/components/MobileBackToCollection";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import RecommendedRow from "@/components/RecommendedRow";
 import VisitorTicker from "@/components/VisitorTicker";
+import PaintingMarquee from "@/components/PaintingMarquee";
 import ThankYouWall from "@/components/ThankYouWall";
 import DailyFeature from "@/components/DailyFeature";
 import Ornament from "@/components/decor/Ornament";
@@ -58,6 +59,7 @@ function Index() {
     <div className="smooth-scroll">
       {user && <GalleryNav />}
       {!user && <HeroOrFallback />}
+      <PaintingMarquee />
       <VisitorTicker />
       <DailyFeature />
       <GallerySection />
