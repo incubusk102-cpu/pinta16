@@ -17,6 +17,7 @@ import GalleryNav from "@/components/GalleryNav";
 import CartDrawer from "@/components/CartDrawer";
 import CheckoutForm from "@/components/CheckoutForm";
 import RelatedProducts from "@/components/RelatedProducts";
+import SimilarPaintingsRail from "@/components/SimilarPaintingsRail";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import ZoomableImage from "@/components/ZoomableImage";
 import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
@@ -611,6 +612,7 @@ function ProductPage() {
 
         <ProductReviews loading={reviewsLoading} reviews={reviews} />
 
+        <SimilarPaintingsRail currentId={artwork.id} />
         <RelatedProducts currentId={artwork.id} />
         <RecentlyViewed excludeId={artwork.id} />
       </main>

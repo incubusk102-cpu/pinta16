@@ -15,6 +15,11 @@ This repo is **a single Cloudflare Pages deployment** that ships:
 4. A Cloudflare D1 (SQLite) database for relational queries / analytics
    (optional binding — when not configured, the site falls back to KV
    alone). See "Hybrid KV + D1 architecture" below.
+5. A Turso (libSQL) database for **native vector search only** — powers
+   the "More like this" rail on the product page. Optional and null-safe:
+   when `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` are not set, the rail
+   silently falls back to the rule-based `RelatedProducts` component.
+   See "Turso, the vector-only carve-out" below.
 
 There is **no Node.js server, no Docker, no Postgres**, and no
 separate "back-end" repo. Anything that needs to persist past a page
@@ -49,6 +54,38 @@ analytics / CRM / reports read from D1 (`/api/admin/d1?action=...`).
 To enable D1: see the comment block in `wrangler.toml` and run
 `npx wrangler d1 migrations apply canvhub`. Free tier (5 GB / 5M reads /
 100k writes per day) is more than enough at canvhub's scale.
+
+### Turso, the vector-only carve-out
+
+D1 is plain SQLite — no vector index, no `vector_top_k`. For semantic
+similarity ("More like this" recommendations on the product page) we
+use [Turso](https://turso.tech) (libSQL), which has native vector
+support via `F32_BLOB(N)` columns and DiskANN indexes.
+
+Turso is the **only** non-Cloudflare database in the stack and is
+intentionally limited to one job: storing painting embeddings and
+serving top-k similarity queries. Everything else (orders, customers,
+products, config, analytics, …) still goes through KV + D1.
+
+How it's wired:
+
+- `_lib/turso.js` — null-safe libSQL HTTP client (~150 LOC, no deps).
+  Returns `null` when `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` are
+  unset.
+- `_lib/embeddings.js` — Workers AI text embeddings via
+  `@cf/baai/bge-base-en-v1.5` (768-dim).
+- `_lib/turso-schema.js` — single table `paintings_vec` with an
+  `F32_BLOB(768)` column and a `libsql_vector_idx` DiskANN index.
+- `functions/api/products/[id]/similar.js` — public `GET` returning
+  the top-k similar paintings.
+- `functions/api/admin/turso.js` — admin: `?action=status`,
+  `?action=apply-schema`, `?action=embed-all`.
+- `src/components/SimilarPaintingsRail.tsx` — front-end rail; quietly
+  falls back to the existing `RelatedProducts` rule-based rail when
+  Turso isn't configured.
+
+To enable: see the Turso block in `wrangler.toml`. Free tier (500 DBs,
+9 GB storage, 1B row reads/month) covers canvhub indefinitely.
 
 When adding a feature:
 
@@ -209,7 +246,13 @@ A few opinions baked into the codebase that are easy to miss:
 - Do not introduce a _new_ database engine. The hybrid KV + D1 setup
   (Cloudflare's native primitives) covers every use case the site has.
   Don't reach for Postgres, MySQL, MongoDB, Redis, etc. — extend the
-  D1 schema or add a KV namespace instead.
+  D1 schema or add a KV namespace instead. **Single carve-out:**
+  [Turso](https://turso.tech) (libSQL) is allowed for **vector search
+  only** — the "More like this" rail and any future semantic-search
+  features — because Cloudflare D1 (plain SQLite) does not support
+  vector indexes. The Turso integration is null-safe (if the env vars
+  aren't configured the site falls back cleanly to D1+KV). Anything
+  non-vector still goes through KV + D1.
 - Do not amend / force-push merged commits on `main`.
 
 ## Runbooks for common operator tasks

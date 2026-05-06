@@ -215,3 +215,51 @@ migrations_dir = "migrations"
 # binding = "UPLOADS_BUCKET"
 # bucket_name = "canvhub-uploads"
 # preview_bucket_name = "canvhub-uploads-preview"
+
+# ---------------------------------------------------------------------------
+# Workers AI binding (used by the Turso vector-search "More like this" rail)
+#
+# Powers `_lib/embeddings.js` — generates 768-dim text embeddings via
+# `@cf/baai/bge-base-en-v1.5` (free up to 10k Neurons/day, more than enough
+# for embedding a few hundred paintings + the occasional admin re-run).
+#
+# When this binding is missing, the admin "Generate embeddings" button
+# returns a 503 explaining how to enable it; the public similar-paintings
+# endpoint silently returns `{ available: false, similar: [] }` and the
+# product page falls back to its existing rule-based "You might also like"
+# section.
+#
+# To enable: add a Workers AI binding in
+#   Workers & Pages → canvhub → Settings → Functions → Workers AI bindings
+#   Variable name: AI
+# Then `git push` to redeploy with the binding active.
+[ai]
+binding = "AI"
+
+# ---------------------------------------------------------------------------
+# Turso (libSQL) — vector search ONLY
+#
+# Turso is the *only* exception to the "no new database engine" rule in
+# AGENTS.md, and it exists to host a single feature: native vector
+# similarity search for the "More like this" rail on the product page.
+# Everything else (orders, customers, products, config, …) still goes
+# through KV (source of truth) + D1 (relational mirror).
+#
+# Turso is bound via plain environment variables, not a wrangler.toml
+# binding, because the libSQL HTTP client (`_lib/turso.js`) talks over
+# HTTPS — there is no native Pages binding for it.
+#
+# To enable in production:
+#   1. Create the database at https://turso.tech (free tier covers
+#      canvhub indefinitely): Dashboard → Create database → name `canvhub`,
+#      region closest to PH (e.g. `aws-ap-southeast-1` Singapore).
+#   2. Generate an auth token: Tokens tab → Create Token → Full access.
+#   3. Add both to Cloudflare Pages → Settings → Environment variables:
+#        TURSO_DATABASE_URL  (plaintext) — e.g. libsql://canvhub-XXXX.turso.io
+#        TURSO_AUTH_TOKEN    (encrypted) — long JWT starting with `eyJ…`
+#   4. `git push` (CI redeploys with the env vars active).
+#   5. In `/admin → Vector Search (Turso)` panel: click "Apply schema"
+#      then "Generate embeddings" to populate the index.
+#
+# Until the env vars are set, every Turso helper is a no-op — the site
+# keeps working unchanged on KV+D1 alone.

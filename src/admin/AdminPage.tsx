@@ -47,6 +47,7 @@ import {
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { AdminCreateOrderDialog } from "@/components/admin/AdminCreateOrderDialog";
 import { D1AnalyticsPanel } from "@/components/admin/D1AnalyticsPanel";
+import { TursoVectorPanel } from "@/components/admin/TursoVectorPanel";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
@@ -2364,6 +2365,7 @@ function DashboardSection({
       />
 
       <D1AnalyticsPanel />
+      <TursoVectorPanel />
 
       {/* Recent activity feed */}
       {recentActivity.length > 0 && (
