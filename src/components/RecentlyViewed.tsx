@@ -1,11 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import {
-  getDiscountPercent,
-  getEffectivePrice,
-  useProducts,
-} from "@/contexts/ProductContext";
+import { useProducts } from "@/contexts/ProductContext";
+import { getStorefrontArtworks } from "@/lib/artworks";
 import {
   clearRecentlyViewed,
   getRecentlyViewed,
@@ -29,10 +26,15 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
     };
   }, []);
 
+  // Resolve recent ids against the merged display catalogue (defaults +
+  // uploads). Recent ids are display ids (e.g. `product-<uuid>` or
+  // `default-<slug>`), and `getStorefrontArtworks` returns artworks keyed
+  // by the same display id, so this lookup works for both kinds.
+  const artworks = useMemo(() => getStorefrontArtworks(products), [products]);
   const visible = ids
     .filter((id) => id !== excludeId)
-    .map((id) => products.find((p) => p.id === id))
-    .filter((p): p is NonNullable<typeof p> => Boolean(p))
+    .map((id) => artworks.find((art) => art.id === id))
+    .filter((art): art is NonNullable<typeof art> => Boolean(art))
     .slice(0, limit);
 
   if (visible.length === 0) return null;
@@ -53,44 +55,51 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
         </button>
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
-        {visible.map((p) => {
-          const discount = getDiscountPercent(p);
+        {visible.map((art) => {
+          const effective =
+            typeof art.salePrice === "number" && art.salePrice < art.price
+              ? art.salePrice
+              : art.price;
+          const discount =
+            effective < art.price
+              ? Math.round(((art.price - effective) / art.price) * 100)
+              : 0;
           return (
             <Link
-              key={p.id}
+              key={art.id}
               to="/product/$id"
-              params={{ id: p.id }}
+              params={{ id: art.id }}
               className="group flex-none w-[160px] md:w-[180px] snap-start"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
                 <img
-                  src={p.image}
-                  alt={p.title}
+                  src={art.image}
+                  alt={art.title}
                   loading="lazy"
                   decoding="async"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                {discount > 0 && p.availability === "available" && (
+                {discount > 0 && art.availability === "available" && (
                   <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
                     {discount}% OFF
                   </span>
                 )}
               </div>
               <p className="mt-2 font-display text-sm text-foreground line-clamp-1">
-                {p.title}
+                {art.title}
               </p>
               <p className="font-body text-xs tracking-[0.15em] uppercase text-muted-foreground">
                 {discount > 0 ? (
                   <>
                     <span className="line-through mr-1 opacity-60">
-                      ₱{p.price.toLocaleString()}
+                      ₱{art.price.toLocaleString()}
                     </span>
                     <span className="text-foreground">
-                      ₱{getEffectivePrice(p).toLocaleString()}
+                      ₱{effective.toLocaleString()}
                     </span>
                   </>
                 ) : (
-                  <>₱{getEffectivePrice(p).toLocaleString()}</>
+                  <>₱{effective.toLocaleString()}</>
                 )}
               </p>
             </Link>
