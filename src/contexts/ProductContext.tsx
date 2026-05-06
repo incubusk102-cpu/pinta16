@@ -210,7 +210,45 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
   const persistProducts = useCallback((nextProducts: Product[]) => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextProducts));
+    // The cache is purely an offline accelerator — KV is the source of
+    // truth and a fresh `/api/products` fetch happens on every page
+    // load. So a quota error must never surface; just degrade
+    // gracefully. A few uploads with R2 unavailable produce ~2 MB of
+    // base64 each, which blows past the ~5 MB localStorage cap on most
+    // browsers and used to crash the admin page on the next render.
+    const writeOrIgnore = (payload: string): boolean => {
+      try {
+        localStorage.setItem(STORAGE_KEY, payload);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (writeOrIgnore(JSON.stringify(nextProducts))) return;
+    // Quota exceeded — try again with embedded base64 image data
+    // stripped, so at least metadata + http(s) URLs still survive a
+    // page reload while we wait for the next /api/products fetch.
+    const stripped = nextProducts.map((p) => {
+      const out: Product = { ...p };
+      if (out.image && out.image.startsWith("data:")) out.image = "";
+      if (out.mockup && out.mockup.startsWith("data:")) out.mockup = undefined;
+      if (out.images) {
+        out.images = out.images
+          .map((img) =>
+            img.url && img.url.startsWith("data:") ? { ...img, url: "" } : img,
+          )
+          .filter((img) => img.url);
+      }
+      return out;
+    });
+    if (writeOrIgnore(JSON.stringify(stripped))) return;
+    // Still too big — clear the key entirely. Next /api/products
+    // response will repopulate it (or the next persist will fit).
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Nothing more we can do here.
+    }
   }, []);
 
   const setAndPersistProducts = useCallback(
