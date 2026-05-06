@@ -1,4 +1,9 @@
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useScroll,
+  useTransform,
+} from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
@@ -125,6 +130,17 @@ const HeroSlider = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const reduced = prefersReducedMotion();
 
+  // Apple-style parallax: as the visitor scrolls past the hero, the
+  // image continues to drift downward at half speed while the overlay
+  // text rises at a slightly faster speed than the page. Adds depth
+  // without competing with the painting itself.
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end start"],
+  });
+  const imageY = useTransform(scrollYProgress, [0, 1], ["0%", "20%"]);
+  const overlayY = useTransform(scrollYProgress, [0, 1], [0, -60]);
+
   const count = slides.length;
 
   const next = useCallback(() => {
@@ -248,6 +264,7 @@ const HeroSlider = () => {
                 duration: showKenBurns ? settings.intervalMs / 1000 + 1 : 0,
                 ease: "linear",
               }}
+              style={reduced ? undefined : { y: imageY }}
               draggable={false}
               // The first slide is the LCP element on the homepage; load
               // it eagerly with high fetch priority. Subsequent slides
@@ -261,7 +278,12 @@ const HeroSlider = () => {
           )}
           {/* readability overlay — gradient bottom-up */}
           <div className="absolute inset-0 bg-gradient-to-t from-background/85 via-background/45 to-background/15" />
-          <SlideContent slide={slide} active />
+          <motion.div
+            className="absolute inset-0"
+            style={reduced ? undefined : { y: overlayY }}
+          >
+            <SlideContent slide={slide} active />
+          </motion.div>
         </motion.div>
       </AnimatePresence>
 
