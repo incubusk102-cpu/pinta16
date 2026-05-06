@@ -13,6 +13,12 @@ export interface ProductImage {
   url: string;
   fileName?: string;
   bytes?: number;
+  /**
+   * Lowercase hex SHA-256 of the compressed image bytes. Set by the
+   * upload pipeline; absent on legacy entries (those fall back to
+   * title-only dedupe). See `src/lib/imageHash.ts`.
+   */
+  hash?: string;
 }
 
 export const PRODUCT_MAX_IMAGES = 5;
@@ -37,6 +43,13 @@ export interface Product {
   imageBytes?: number;
   mockupFileName?: string;
   mockupBytes?: number;
+  /**
+   * Hex SHA-256 of the primary image bytes, mirrored from
+   * `images[0].hash`. Stored at the top level so the dedupe check on
+   * a new upload can compare without rehydrating each image entry.
+   * Absent on legacy products that pre-date the hashing pipeline.
+   */
+  imageHash?: string;
   availability?: ProductAvailability;
   /**
    * When set, this custom product overrides a default (built-in) artwork with
@@ -110,6 +123,7 @@ export const buildImageFields = (
   | "mockupFileName"
   | "mockupBytes"
   | "images"
+  | "imageHash"
 > => {
   const trimmed = images.slice(0, PRODUCT_MAX_IMAGES);
   const [first, second] = trimmed;
@@ -121,6 +135,7 @@ export const buildImageFields = (
     mockupFileName: second?.fileName,
     mockupBytes: second?.bytes,
     images: trimmed,
+    imageHash: first?.hash,
   };
 };
 
