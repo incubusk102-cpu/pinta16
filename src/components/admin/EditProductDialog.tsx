@@ -24,12 +24,18 @@ import {
   getProductImages,
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
+  useProducts,
   type Product,
   type ProductAvailability,
   type ProductImage,
 } from "@/contexts/ProductContext";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
-import { AVAILABILITY_OPTIONS, getAvailability } from "@/lib/artworks";
+import {
+  AVAILABILITY_OPTIONS,
+  defaultArtworks,
+  getAvailability,
+} from "@/lib/artworks";
+import { findUploadDuplicate } from "@/lib/imageHash";
 
 interface Props {
   product: Product | null;
@@ -39,6 +45,7 @@ interface Props {
 }
 
 export function EditProductDialog({ product, open, onClose, onSave }: Props) {
+  const { products } = useProducts();
   const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("");
@@ -95,6 +102,34 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
 
+    // Block edits that would collide with another gallery entry.
+    // Self-exclusion is by `product.id`; the matching default-artwork
+    // (when this product `replacesDefaultId` one) is also excluded so
+    // re-saving an override doesn't false-positive against itself.
+    const trimmedTitle = title.trim();
+    const candidateHash = images[0]?.hash;
+    const duplicate = findUploadDuplicate(
+      { title: trimmedTitle, imageHash: candidateHash },
+      [
+        ...products.map((p) => ({
+          id: p.id,
+          title: p.title,
+          imageHash: p.imageHash,
+        })),
+        ...defaultArtworks
+          .filter((a) => a.id !== product.replacesDefaultId)
+          .map((a) => ({ id: a.id, title: a.title })),
+      ],
+      product.id,
+    );
+    if (duplicate) {
+      return toast.error(
+        duplicate.kind === "title"
+          ? `"${duplicate.matchedTitle}" is already in the gallery — pick a different title.`
+          : `That image is already in the gallery as "${duplicate.matchedTitle}".`,
+      );
+    }
+
     setSaving(true);
     try {
       const salePriceNum = Number(salePrice);
@@ -108,7 +143,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
       }
       await onSave(product.id, {
         ...buildImageFields(images),
-        title: title.trim(),
+        title: trimmedTitle,
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
         price: priceNum,

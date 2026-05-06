@@ -17,8 +17,10 @@ import {
 import {
   AVAILABILITY_LABEL,
   AVAILABILITY_OPTIONS,
+  defaultArtworks,
   getAvailability,
 } from "@/lib/artworks";
+import { findUploadDuplicate } from "@/lib/imageHash";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1344,6 +1346,31 @@ function ProductsSection() {
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
 
+    // Block uploads that would duplicate something already in the
+    // gallery (custom uploads or stock catalog) — by exact image hash
+    // or by case-insensitive title. Stock defaults don't have hashes,
+    // so they only contribute to the title check.
+    const trimmedTitle = title.trim();
+    const candidateHash = images[0]?.hash;
+    const duplicate = findUploadDuplicate(
+      { title: trimmedTitle, imageHash: candidateHash },
+      [
+        ...products.map((p) => ({
+          id: p.id,
+          title: p.title,
+          imageHash: p.imageHash,
+        })),
+        ...defaultArtworks.map((a) => ({ id: a.id, title: a.title })),
+      ],
+    );
+    if (duplicate) {
+      return toast.error(
+        duplicate.kind === "title"
+          ? `"${duplicate.matchedTitle}" is already in the gallery — pick a different title.`
+          : `That image is already in the gallery as "${duplicate.matchedTitle}".`,
+      );
+    }
+
     setSubmitting(true);
 
     const salePriceNum = Number(salePrice);
@@ -1353,7 +1380,7 @@ function ProductsSection() {
     try {
       await addProduct({
         ...buildImageFields(images),
-        title: title.trim(),
+        title: trimmedTitle,
         medium: medium.trim() || "Mixed Media",
         year: year.trim() || String(new Date().getFullYear()),
         price: priceNum,
@@ -1363,7 +1390,7 @@ function ProductsSection() {
         dimensions: dimensions.trim() || undefined,
         availability,
       });
-      toast.success(`"${title.trim()}" added to the collection`);
+      toast.success(`"${trimmedTitle}" added to the collection`);
       reset();
     } catch (error) {
       toast.error(
