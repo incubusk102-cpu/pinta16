@@ -29,6 +29,7 @@ import {
   writeUsers,
 } from "./_lib/user-auth.js";
 import { ensurePersonalReward } from "./_lib/personal-rewards.js";
+import { mirrorOrderToD1, isD1Available } from "./_lib/d1.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -1233,6 +1234,13 @@ export const handler = async (event) => {
         }
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
+        // D1 write-through: mirror order into SQL for analytics/CRM.
+        // Best effort — never blocks the KV write or the response.
+        try {
+          if (isD1Available()) await mirrorOrderToD1(safeOrder);
+        } catch (e) {
+          logWarn("D1 mirror failed (place):", e);
+        }
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
         }
@@ -1381,6 +1389,12 @@ export const handler = async (event) => {
         };
         const next = [safeOrder, ...orders];
         await store.setJSON(ORDERS_KEY, next);
+        // D1 write-through for admin-created orders.
+        try {
+          if (isD1Available()) await mirrorOrderToD1(safeOrder);
+        } catch (e) {
+          logWarn("D1 mirror failed (admin-create):", e);
+        }
         await appendAuditEvent(event, {
           type: "order.admin-create",
           outcome: "success",
@@ -1466,6 +1480,14 @@ export const handler = async (event) => {
         }
         orders[idx] = { ...existing, status, notifications, activityLog };
         await store.setJSON(ORDERS_KEY, orders);
+        // D1 write-through: update the order status in SQL.
+        if (statusChanged) {
+          try {
+            if (isD1Available()) await mirrorOrderToD1(orders[idx]);
+          } catch (e) {
+            logWarn("D1 mirror failed (update-status):", e);
+          }
+        }
         // Return the latest notification so the admin UI can show email
         // delivery feedback (delivered / skipped / error).
         const latestNote = statusChanged

@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/popover";
 import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { AdminCreateOrderDialog } from "@/components/admin/AdminCreateOrderDialog";
+import { D1AnalyticsPanel } from "@/components/admin/D1AnalyticsPanel";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
@@ -2361,6 +2362,8 @@ function DashboardSection({
         onChangeDays={setAnalyticsDays}
         loading={loading}
       />
+
+      <D1AnalyticsPanel />
 
       {/* Recent activity feed */}
       {recentActivity.length > 0 && (

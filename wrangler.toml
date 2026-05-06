@@ -163,6 +163,37 @@ preview_id = "67c757b425ee427b9c9bba0a16519ff7"
 # preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
 
 # ---------------------------------------------------------------------------
+# D1 database binding (hybrid KV+SQL architecture)
+#
+# D1 is a managed SQLite database that runs on the same Cloudflare edge as
+# this Pages deployment. It coexists with KV: KV remains the source of truth
+# for fast public reads (products, config, hero slides); D1 enables SQL
+# queries, JOINs, and aggregations for the admin panel (analytics, CRM,
+# inventory reports).
+#
+# Free tier: 5 GB storage, 5 million reads/day, 100k writes/day — more than
+# enough for canvhub's traffic at any realistic scale.
+#
+# To enable:
+#   1. Create the database in the Cloudflare dashboard:
+#      Workers & Pages → D1 → Create database → name: `canvhub`
+#   2. Copy the Database ID and paste it below.
+#   3. Run the migration:  npx wrangler d1 migrations apply canvhub
+#   4. Add the D1 binding in Cloudflare Pages dashboard:
+#      Workers & Pages → canvhub → Settings → Functions → D1 database bindings
+#      Variable name: DB   Database: canvhub
+#   5. `git push` (CI redeploys with the binding active).
+#
+# Until the binding exists, all D1 helpers gracefully return null/no-op —
+# the site keeps working exactly as before on KV alone.
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "canvhub"
+# database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+# migrations_dir = "migrations"
+
+# ---------------------------------------------------------------------------
 # R2 bucket binding (optional)
 #
 # When this binding is present, admin product photo uploads write to R2
