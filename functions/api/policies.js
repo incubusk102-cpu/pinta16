@@ -166,9 +166,11 @@ support@canvhub.com · +63 956 468 5351`,
     body: `# Shipping Policy
 
 ## Where we ship
-We currently ship throughout the **Philippines**. International shipping is
-available on request — please email support@canvhub.com **before** ordering so
-we can quote the carrier, lead time and any duties.
+We currently ship **within Luzon only**, via **Lalamove** courier. Visayas,
+Mindanao and other parts of the Philippines are not currently serviceable.
+International shipping is available on request — please email
+support@canvhub.com **before** ordering so we can quote the carrier, lead time
+and any duties.
 
 ## Lead time
 - **Ready-to-ship pieces:** dispatched within **2–4 business days** of cleared
@@ -181,15 +183,18 @@ We'll always confirm the expected timeline in your order confirmation. Delays
 caused by force majeure (typhoons, courier outages, customs inspections) are
 beyond our control, but we'll keep you updated.
 
-## Couriers & tracking
-We work with **J&T Express, LBC, Ninja Van** and other reputable Philippine
-couriers depending on destination. A tracking number is added to your order
-page on /account as soon as it's dispatched.
+## Courier & tracking
+Every order ships via **Lalamove**. Once the rider accepts the booking you'll
+get the live Lalamove tracking link by email and SMS, and the same link is
+attached to your order page on /account.
 
 ## Fees
-Shipping is calculated at checkout based on destination, weight and dimensions.
-**Free shipping** applies automatically to qualifying orders above the
-threshold shown on the storefront (currently **₱2,500**).
+Shipping is **paid directly to the Lalamove rider in cash on delivery**. The
+cart total at checkout excludes the rider fare; we show an estimated peso
+range for your province on the checkout screen so there are no surprises when
+the rider arrives. Bulky or oversized canvases (over 30 × 40 inches) may need
+a larger Lalamove vehicle and a higher fare — we'll confirm by email before
+booking the rider.
 
 ## Packaging
 Every painting ships with corner protectors, a moisture-resistant inner wrap

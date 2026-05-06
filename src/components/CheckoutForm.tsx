@@ -502,8 +502,24 @@ const CheckoutForm = () => {
             return "Use a PH mobile (09XX XXX XXXX) or +63 9XX XXX XXXX";
           }
           return "";
-        case "province":
-          return value.trim() ? "" : "Province is required";
+        case "province": {
+          const trimmed = value.trim();
+          if (!trimmed) return "Province is required";
+          // Lalamove can only book riders within Luzon. A saved address
+          // (or hand-typed value) for Visayas / Mindanao would otherwise
+          // pass field-level validation, fall through to submit, and only
+          // bounce server-side. Block it inline here so the buyer sees
+          // the error next to the field they need to fix.
+          if (
+            LALAMOVE_PAID_TO_RIDER &&
+            !LUZON_PROVINCES.some(
+              (p) => p.toLowerCase() === trimmed.toLowerCase(),
+            )
+          ) {
+            return "We currently ship within Luzon only — please pick a Luzon province";
+          }
+          return "";
+        }
         case "city":
           return value.trim() ? "" : "City / municipality is required";
         case "barangay":

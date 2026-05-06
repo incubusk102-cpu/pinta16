@@ -38,17 +38,14 @@ export const COURIERS: CourierOption[] = [
   { id: "other", label: "Other / Self-pickup" },
 ];
 
-// Couriers that are eligible to be picked at checkout for actual
-// nationwide delivery — pickup-style options are excluded so customers
-// don't accidentally choose them and then expect a real shipping fee.
-export const SHIPPABLE_COURIER_IDS = [
-  "j&t",
-  "jrs",
-  "lbc",
-  "ninjavan",
-  "flash",
-  "lalamove",
-];
+// Couriers that are eligible to be picked at checkout. canvhub now ships
+// every order via Lalamove within Luzon — the rider quotes the fare on
+// dispatch and the buyer pays in cash on delivery. The other entries in
+// `COURIERS` (J&T / JRS / LBC / Ninja Van / Flash) are kept around so the
+// account / order-history pages can still resolve tracking links for
+// historical orders that shipped through those couriers, but new buyers
+// can no longer pick them at checkout.
+export const SHIPPABLE_COURIER_IDS = ["lalamove"];
 
 // canvhub currently has no fixed warehouse address, so we don't try to
 // price shipping at checkout. Every order ships via Lalamove and the

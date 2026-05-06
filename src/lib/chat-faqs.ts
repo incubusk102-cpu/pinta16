@@ -16,7 +16,7 @@ export const DEFAULT_CHAT_FAQS: ChatFaqItem[] = [
     id: "shipping",
     question: "Shipping & delivery",
     answer:
-      "We ship nationwide via LBC or J&T Express. Orders are packed within 2–3 business days and usually arrive within 5–7 business days. You'll get a tracking number by email as soon as it ships.",
+      "We deliver within Luzon via Lalamove. Orders are packed within 2–3 business days, and dispatch is same-day once the rider accepts. You'll see live tracking in the Lalamove app and pay the rider directly in cash on delivery.",
   },
   {
     id: "returns",

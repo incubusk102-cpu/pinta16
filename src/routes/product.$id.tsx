@@ -608,7 +608,8 @@ function ProductPage() {
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
                   Shipping
                 </span>
-                Insured nationwide delivery (JRS / J&T / LBC) with tracking.
+                Lalamove courier within Luzon — live tracking, fare paid to the
+                rider on delivery.
               </p>
               <p>
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">

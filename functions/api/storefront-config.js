@@ -55,7 +55,7 @@ const DEFAULT_CHAT_FAQS = [
     id: "shipping",
     question: "Shipping & delivery",
     answer:
-      "We ship nationwide via LBC or J&T Express. Orders are packed within 2\u20133 business days and usually arrive within 5\u20137 business days. You'll get a tracking number by email as soon as it ships.",
+      "We deliver within Luzon via Lalamove. Orders are packed within 2\u20133 business days, and dispatch is same-day once the rider accepts. You'll see live tracking in the Lalamove app and pay the rider directly in cash on delivery.",
   },
   {
     id: "returns",
@@ -1021,8 +1021,8 @@ const DEFAULT_CONFIG = {
   savedReplies: [
     {
       id: "shipped",
-      label: "Order shipped — LBC",
-      body: "Hi! Your painting just shipped via LBC today. Tracking number coming through email shortly. Thanks again for the order — can't wait for it to reach you.",
+      label: "Order shipped — Lalamove",
+      body: "Hi! Your painting just went out via Lalamove today. You'll get the rider's tracking link in your inbox shortly — please have the cash fare ready on delivery. Thanks again for the order!",
     },
     {
       id: "awb",

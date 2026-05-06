@@ -203,8 +203,9 @@ Refund and replacement requests:
 
 const SHIPPING = `## Where we ship
 
-Canvas Hub currently ships **within the Philippines** to all
-provinces and major cities. International shipping is available on
+Canvas Hub ships **within Luzon only**, via **Lalamove** courier.
+Visayas, Mindanao, and other parts of the Philippines are not
+currently serviceable. International shipping is available on
 request — email
 [support@canvhub.com](mailto:support@canvhub.com) before placing the
 order and we will quote a courier and a fee.
@@ -217,37 +218,43 @@ should expect is:
 - **Production:** 7–14 business days, depending on canvas size and
   complexity. The estimated window for your specific painting is
   shown on the product page and again at checkout.
-- **Transit:**
-  - Metro Manila: 1–3 business days after dispatch
-  - Luzon (outside Metro Manila): 3–5 business days
-  - Visayas / Mindanao: 5–7 business days
-  - Remote islands and Palawan: up to 10 business days
+- **Dispatch:** same-day once production is complete and the
+  Lalamove rider accepts the booking. Orders confirmed before noon
+  typically dispatch the same business day; later orders go out the
+  next business day.
+- **Transit (Lalamove):**
+  - Metro Manila: same-day on most routes
+  - Adjacent provinces (Cavite, Laguna, Rizal, Bulacan, Pampanga):
+    same-day or next-day depending on rider availability
+  - Greater / far Luzon: typically 1–2 days, longer for the
+    northern regions and MIMAROPA (boat ride extra)
 
-Same-day couriers (Lalamove, Grab Express) are available for Metro
-Manila customers who select that option at checkout.
+## Courier we use
 
-## Couriers we use
-
-We hand off shipments to one of:
-
-- **J&T Express**
-- **JRS Express**
-- **LBC Express**
-- **Ninja Van**
-- **Flash Express**
-- **Lalamove** (same-day, Metro Manila only)
-- **Grab Express** (same-day, Metro Manila only)
-
-You will receive a tracking number by email when your painting
-ships.
+Every order ships via **Lalamove**. You will receive the rider's
+live tracking link by email and SMS once the booking is confirmed.
 
 ## Shipping fees
 
-Shipping is calculated at checkout based on courier and delivery
-zone. Bulky or oversized canvases (anything over 30 × 40 inches)
-may carry a surcharge — we will email you to confirm before
-charging. Free shipping promotions, when offered, are noted on the
-product page or in the shopping cart.
+Shipping is **paid directly to the Lalamove rider in cash on
+delivery** — your cart total at checkout excludes the rider fare.
+We show an estimated peso range for your province on the checkout
+page so there are no surprises when the rider arrives. The rider
+quotes the actual fare on dispatch.
+
+Bulky or oversized canvases (anything over 30 × 40 inches) may
+require a larger Lalamove vehicle (sedan → SUV / van) which carries
+a higher fare — we will email you to confirm before booking the
+rider.
+
+## Areas we don't serve
+
+Some far-flung Luzon provinces (e.g. Batanes) and the MIMAROPA
+island provinces (Mindoro, Palawan, Romblon, Marinduque) may not
+have reliable Lalamove coverage from our origin. If your address is
+in one of these areas, please email
+[support@canvhub.com](mailto:support@canvhub.com) so we can quote
+an alternative carrier before you place the order.
 
 ## Packaging
 
@@ -342,8 +349,10 @@ We share the minimum necessary personal data with:
 - **Cloudflare** — hosting (Cloudflare Pages, Workers, KV, R2),
   analytics, bot mitigation. Data may transit Cloudflare's
   global network.
-- **Couriers** — name, address, phone for delivery (J&T, JRS,
-  LBC, Ninja Van, Flash, Lalamove, Grab Express).
+- **Lalamove** — name, address, phone for the on-demand courier
+  delivery within Luzon. (Historical orders that shipped before our
+  Lalamove-only switch may also have been handed off to J&T, JRS,
+  LBC, Ninja Van, Flash, or Grab Express.)
 - **Google** — only if you choose to sign in with Google;
   in that case Google handles the OAuth exchange and we receive
   your email and profile photo.
