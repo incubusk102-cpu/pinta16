@@ -3,6 +3,7 @@ import { useRef } from "react";
 import BrushDivider from "@/components/decor/BrushDivider";
 import MagneticButton from "@/components/MagneticButton";
 import SplitText from "@/components/motion/SplitText";
+import { GoldenCMark } from "@/components/GoldenCMark";
 
 const HeroSection = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -31,6 +32,29 @@ const HeroSection = () => {
         >
           Affordable Art, Authentic Stories
         </motion.p>
+        {/* Slow-spinning gold C above the wordmark.
+            Same source-of-truth component the admin sidebar / auth
+            gate use, opted into the spinning variant. The rotation is
+            applied to the `<svg>` root (HTML transform semantics) so
+            it pivots cleanly in place on every browser including
+            Android Chrome / Brave — no `<g>` + `transform-box: view-
+            box` interaction here, which is the bug PRs #322/#323
+            walked through for the splash mark. The fade-in matches
+            the eyebrow + wordmark choreography so the C settles in
+            at the same beat as the rest of the hero. */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 0.35 }}
+          className="mb-3 sm:mb-4"
+        >
+          <GoldenCMark
+            spin
+            size={56}
+            ariaLabel="Canvas Hub"
+            className="sm:w-16 sm:h-16"
+          />
+        </motion.div>
         <SplitText
           as="h1"
           by="letter"
