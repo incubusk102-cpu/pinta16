@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
-import HeroSection from "@/components/HeroSection";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import GallerySection from "@/components/GallerySection";
@@ -41,11 +40,18 @@ export const Route = createFileRoute("/")({
 
 function HeroOrFallback() {
   const { slides, loading } = useHeroSlides();
-  // While loading or when no admin slides are configured, fall back to
-  // the original static hero (eyebrow + Canvas Hub + brush divider +
-  // tagline + View Collection). When admin uploads slides via
-  // /admin → Hero slider, those replace the static hero.
-  if (loading || slides.length === 0) return <HeroSection />;
+  // The static hero (eyebrow + brush divider + body + "View Collection"
+  // button) was removed per the May 7 design call. When admin has no
+  // slides configured (or is still loading), the homepage now drops
+  // straight into the marquee + gallery and we keep only an `sr-only`
+  // <h1> so the smoke suite (`tests/e2e/smoke.spec.ts` asserts
+  // `page.locator("h1").first()` visible on `/`), document outline,
+  // and SEO crawlers all still find a heading. Once admin uploads
+  // slides via /admin → Hero slider, those render in place of the
+  // sr-only h1.
+  if (loading || slides.length === 0) {
+    return <h1 className="sr-only">Canvas Hub</h1>;
+  }
   return <HeroSlider />;
 }
 
