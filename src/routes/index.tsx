@@ -1,22 +1,41 @@
+import { lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import GallerySection from "@/components/GallerySection";
-import AboutSection from "@/components/AboutSection";
-import ReviewsSection from "@/components/ReviewsSection";
-import ContactSection from "@/components/ContactSection";
-import CartDrawer from "@/components/CartDrawer";
-import CheckoutForm from "@/components/CheckoutForm";
-import MobileBackToCollection from "@/components/MobileBackToCollection";
-import RecentlyViewed from "@/components/RecentlyViewed";
-import RecommendedRow from "@/components/RecommendedRow";
 import VisitorTicker from "@/components/VisitorTicker";
 import PaintingMarquee from "@/components/PaintingMarquee";
-import ThankYouWall from "@/components/ThankYouWall";
 import DailyFeature from "@/components/DailyFeature";
 import Ornament from "@/components/decor/Ornament";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+
+// Below-the-fold sections — split out of the main entry chunk via
+// React.lazy so the homepage's first paint downloads less JS. Each
+// import becomes its own chunk and starts downloading in parallel
+// once the entry mounts; <Suspense fallback={null}> keeps the slot
+// empty until the chunk lands rather than showing a placeholder
+// flash. The customer can't see these sections at first paint
+// anyway (they're below the gallery), so the small render delay is
+// invisible. Above-the-fold components (PaintingMarquee, VisitorTicker,
+// DailyFeature, GallerySection) stay eager so the gallery is
+// interactive on first paint.
+const RecommendedRow = lazy(() => import("@/components/RecommendedRow"));
+const RecentlyViewed = lazy(() => import("@/components/RecentlyViewed"));
+const AboutSection = lazy(() => import("@/components/AboutSection"));
+const ThankYouWall = lazy(() => import("@/components/ThankYouWall"));
+const ReviewsSection = lazy(() => import("@/components/ReviewsSection"));
+const ContactSection = lazy(() => import("@/components/ContactSection"));
+// CartDrawer / CheckoutForm / MobileBackToCollection are conditional
+// UI (drawers + a sticky mobile back-to-collection button) that only
+// reveal themselves on user interaction. Lazy + their own Suspense so
+// they don't wait on AboutSection / ReviewsSection / ContactSection's
+// chunks before they can mount and listen for cart-open events.
+const CartDrawer = lazy(() => import("@/components/CartDrawer"));
+const CheckoutForm = lazy(() => import("@/components/CheckoutForm"));
+const MobileBackToCollection = lazy(
+  () => import("@/components/MobileBackToCollection"),
+);
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -69,26 +88,30 @@ function Index() {
       <VisitorTicker />
       <DailyFeature />
       <GallerySection />
-      <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
-        <RecommendedRow />
-        <RecentlyViewed />
-      </section>
-      <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
-        <Ornament label="The studio" />
-      </div>
-      <AboutSection />
-      <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
-        <Ornament label="Voices" />
-      </div>
-      <ThankYouWall />
-      <ReviewsSection />
-      <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
-        <Ornament label="Stay in touch" />
-      </div>
-      <ContactSection />
-      <CartDrawer />
-      <CheckoutForm />
-      <MobileBackToCollection />
+      <Suspense fallback={null}>
+        <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
+          <RecommendedRow />
+          <RecentlyViewed />
+        </section>
+        <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+          <Ornament label="The studio" />
+        </div>
+        <AboutSection />
+        <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+          <Ornament label="Voices" />
+        </div>
+        <ThankYouWall />
+        <ReviewsSection />
+        <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+          <Ornament label="Stay in touch" />
+        </div>
+        <ContactSection />
+      </Suspense>
+      <Suspense fallback={null}>
+        <CartDrawer />
+        <CheckoutForm />
+        <MobileBackToCollection />
+      </Suspense>
     </div>
   );
 }

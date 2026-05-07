@@ -158,6 +158,7 @@
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   /* Radix Popper (Select, Popover, Dropdown, etc.) renders its content
