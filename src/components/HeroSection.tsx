@@ -1,5 +1,4 @@
 import { motion, useScroll, useTransform } from "framer-motion";
-import { Loader2 } from "lucide-react";
 import { useRef } from "react";
 import BrushDivider from "@/components/decor/BrushDivider";
 import MagneticButton from "@/components/MagneticButton";
@@ -31,24 +30,6 @@ const HeroSection = () => {
         >
           Affordable Art, Authentic Stories
         </motion.p>
-        {/* Loader-style spinner — copied verbatim from the admin auth-
-            context's loading state at the top of `AdminPage`:
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            Same lucide glyph, same Tailwind classes, so the hero's
-            "loading C" matches admin's loading C exactly. Wrapped in
-            a motion.div so the entrance fades in alongside the
-            eyebrow + body + button choreography rather than popping
-            in instantly. */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.35 }}
-          className="mb-4 md:mb-6"
-          role="status"
-          aria-label="Loading"
-        >
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </motion.div>
         {/* Wordmark intentionally hidden visually per the design call to
             drop the visible "Canvas Hub" lockup from the hero, but the
             <h1> is preserved for screen readers, the smoke suite (which

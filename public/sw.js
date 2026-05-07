@@ -15,14 +15,11 @@
 // dropped). Content-hashed Vite assets normally make this unnecessary,
 // but bump it whenever the SW logic itself changes or when we ship a
 // fix that users on stale chunks must pick up immediately. Last bump:
-// v9 (splash rotation: drops the v8 caches that on existing devices
-// still hold the pre-fix /splash.css and /splash.js — the v8 bump in
-// PR #322 was insufficient on its own because the v7 SW kept serving
-// the old assets cache-first while v8 was still installing on the
-// user's first reload after deploy. PR #323 also adds a `?v=N` cache-
-// busting token to the splash references in index.html so the SW
-// asset bucket misses on the new URL even before v9 takes over).
-const VERSION = "v9";
+// v10 (splash removal: index.html no longer references /splash.css or
+// /splash.js, and both files are deleted from /public. Bumping the SW
+// VERSION drops the v9 ASSETS bucket so existing devices stop serving
+// the now-orphaned files cache-first on first reload after deploy).
+const VERSION = "v10";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
