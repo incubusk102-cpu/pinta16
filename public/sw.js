@@ -9,7 +9,14 @@
  *  - All other requests: pass through.
  */
 
-const VERSION = "v6";
+// Bump this when a deployed fix needs to invalidate every previously cached
+// asset on existing devices (the activate handler deletes any cache whose
+// name doesn't include the current VERSION, so older v* buckets get
+// dropped). Content-hashed Vite assets normally make this unnecessary,
+// but bump it whenever the SW logic itself changes or when we ship a
+// fix that users on stale chunks must pick up immediately. Last bump:
+// v7 (admin variant generation fix — see PR #318).
+const VERSION = "v7";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
