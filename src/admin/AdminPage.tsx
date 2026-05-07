@@ -133,6 +133,7 @@ import {
   formatLalamoveRange,
 } from "@/lib/shipment";
 import { linkifyMessage } from "@/lib/chat-format";
+import { GoldenCMark } from "@/components/GoldenCMark";
 type AdminSection =
   | "dashboard"
   | "products"
@@ -194,38 +195,6 @@ const SIDEBAR_COLLAPSED_KEY = "canvhub_admin_sidebar_collapsed_v1";
 const BADGE_REFRESH_INTERVAL_MS = 60_000;
 
 const MIN_PASSWORD_LENGTH = 8;
-
-function GoldenCMark({ size = 32 }: { size?: number }) {
-  return (
-    <svg
-      viewBox="0 0 40 40"
-      width={size}
-      height={size}
-      className="shrink-0"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <linearGradient id="gold-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#e8d48b" />
-          <stop offset="50%" stopColor="#c4a86a" />
-          <stop offset="100%" stopColor="#a08542" />
-        </linearGradient>
-      </defs>
-      <text
-        x="20"
-        y="31"
-        textAnchor="middle"
-        fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
-        fontSize="34"
-        fontStyle="italic"
-        fontWeight={600}
-        fill="url(#gold-grad)"
-      >
-        C
-      </text>
-    </svg>
-  );
-}
 
 function AdminPage() {
   const { token, initialized, loading } = useAdminAuth();
