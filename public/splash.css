@@ -36,6 +36,34 @@
   }
 }
 
-/* Rotation is driven by an SVG <animateTransform> below for maximum
-   cross-browser/mobile compatibility (CSS transform-box: fill-box is
-   flaky on Android Chrome/Brave for SVG groups). */
+/* CSS-driven rotation. Applied to the outer <g class="splash-spin">.
+   `transform-box: view-box` makes `transform-origin` resolve in viewBox
+   user units (the SVG viewBox is 0 0 512 512), so 256px is the centre.
+   The path inside is already translated so its bbox centre coincides
+   with (256, 256) — see index.html — so the C spins in place rather than
+   orbiting around an offset pivot.
+   `transform-box: fill-box` was tried previously and was flaky on
+   Android Chrome/Brave (the bbox of an empty <g> can read as 0,0,0,0
+   mid-paint). `view-box` is well-supported on Chrome 64+/Firefox 55+/
+   Safari 11.1+ and references a fixed viewport box, so it doesn't suffer
+   the same race. CSS transforms on SVG also get GPU compositing, which
+   keeps the spin at 60fps even when the main thread is busy bootstrapping
+   the React bundle (where SMIL was visibly stuttering on mobile Chrome). */
+.splash-spin {
+  transform-box: view-box;
+  transform-origin: 256px 256px;
+  animation: splash-spin 1.8s linear infinite;
+  will-change: transform;
+}
+
+@keyframes splash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-spin {
+    animation: none;
+  }
+}
