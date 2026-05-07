@@ -11,7 +11,27 @@
 
 import { initRequestContext } from "./_lib/handler-wrapper.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
-import { buildLambdaEvent } from "./_lib/lambda-event.js";
+
+// Build a minimal Lambda-style event from request *headers only*. We
+// deliberately do NOT use `buildLambdaEvent(request)` here because it
+// calls `await request.text()` to populate `event.body`, which fully
+// consumes the request stream. This handler then needs to call
+// `await request.arrayBuffer()` to read the binary image bytes — and
+// reading a Body twice throws "Body has already been used. It can
+// only be used once. Use tee() first if you need to read it twice."
+// in the Workers runtime, which surfaced to operators as "R2 upload
+// failed: Body has already been used" on every variant.
+//
+// `isAuthenticated()` only ever inspects `event.headers` (Authorization
+// header / `cv_admin_session` cookie), so a header-only shim is
+// sufficient and leaves the body untouched for the R2 read below.
+const buildHeadersOnlyEvent = (request) => {
+  const headers = {};
+  for (const [key, value] of request.headers.entries()) {
+    headers[key.toLowerCase()] = value;
+  }
+  return { headers };
+};
 
 const json = (status, data, extraHeaders = {}) =>
   new Response(JSON.stringify(data), {
@@ -60,7 +80,9 @@ export const onRequestPost = async ({ request, env }) => {
   if (blocked) return blocked;
 
   // Admin-gated: same Bearer-token check as every other admin endpoint.
-  const event = await buildLambdaEvent(request);
+  // We pass a header-only event shim to keep `request` body intact for
+  // the binary read below (see `buildHeadersOnlyEvent` for context).
+  const event = buildHeadersOnlyEvent(request);
   const authed = await isAuthenticated(event).catch(() => false);
   if (!authed) {
     return json(401, { error: "Unauthorized" });
