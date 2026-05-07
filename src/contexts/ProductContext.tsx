@@ -339,7 +339,15 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
     void loadProducts();
 
-    const POLL_MS = 30_000;
+    // 5 min cadence — at 30s, every poll round-trips ~5–10 MB of base64-
+    // encoded product images (because R2 isn't configured yet, so images
+    // ride inline in the products payload), which on a phone on cellular
+    // burns ~600 MB/hour per active tab and stutters the main thread.
+    // Mutations broadcast via `canvhub_products` BroadcastChannel and the
+    // visibility/online listeners below already trigger a refetch, so a
+    // long base poll is purely belt-and-braces against missed broadcasts
+    // (e.g. another admin in a different browser).
+    const POLL_MS = 300_000;
     const poll = () => {
       if (document.visibilityState !== "visible") return;
       void loadProducts();

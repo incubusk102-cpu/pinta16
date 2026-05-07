@@ -56,6 +56,17 @@
 # `frame-ancestors 'none'` is the CSP-3 equivalent of X-Frame-Options:
 # DENY (kept above for legacy browsers).
 
+# Vite emits content-hashed filenames for every JS / CSS bundle (e.g.
+# `index-Di3Ho0Ic.js`). Hashed filenames are content-addressed: the
+# bytes for a given URL never change, so the browser can keep them
+# forever. Without this header Cloudflare's default
+# `Cache-Control: public, max-age=14400, must-revalidate` makes every
+# repeat visit revalidate the whole hashed bundle list (304s, but
+# still a round-trip). `immutable` skips revalidation entirely. If a
+# bundle's contents change, the hash changes and a new URL is fetched.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /api/*
   Cache-Control: no-store
   X-Content-Type-Options: nosniff

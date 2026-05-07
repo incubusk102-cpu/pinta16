@@ -1,16 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, Quote } from "lucide-react";
-
-interface PublishedReview {
-  orderId: string;
-  rating: number;
-  text: string;
-  customerName: string;
-  customerCity?: string;
-  productTitle?: string;
-  submittedAt: string;
-}
+import { usePublishedReviews } from "@/hooks/usePublishedReviews";
 
 const ROTATE_MS = 8000;
 
@@ -36,26 +27,8 @@ const Stars = ({ rating }: { rating: number }) => (
  * screen. Hides itself when there are fewer than two reviews to rotate.
  */
 const ThankYouWall = () => {
-  const [reviews, setReviews] = useState<PublishedReview[]>([]);
+  const { reviews } = usePublishedReviews();
   const [idx, setIdx] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/orders?reviews=published");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        if (Array.isArray(data.reviews)) setReviews(data.reviews);
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (reviews.length <= 1) return;
