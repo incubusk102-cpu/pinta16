@@ -53,25 +53,6 @@
       href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap"
     />
 
-    <!-- Splash screen styles. Loaded as an external sheet so the
-         document's CSP can drop `'unsafe-inline'` from `style-src`
-         in a follow-up without behaviour changes.
-
-         The `?v=` query is a cache-busting token: /splash.css and
-         /splash.js are served by the service worker (sw.js) using a
-         cache-first strategy on `isAssetRequest`, which means every
-         existing device keeps returning the previously-cached file
-         indefinitely. Bumping the SW VERSION alone does not help on
-         the first reload after a deploy (the old SW is still in
-         control until the new one finishes install + activate + claim,
-         by which point the page has already painted with stale CSS).
-         A different URL forces a cache miss in the SW asset bucket
-         (cache.match() is search-aware by default), so the SW falls
-         through to the network and serves the fresh file even on the
-         very first reload. Bump this token together with the SW
-         VERSION any time /splash.css or /splash.js change. -->
-    <link rel="stylesheet" href="/splash.css?v=2" />
-
     <!-- Structured data for Google. `<script type="application/ld+json">`
          is treated as data, not script, by browsers, so it is not
          subject to `script-src` CSP enforcement. Two top-level entities:
@@ -117,75 +98,6 @@
     </script>
   </head>
   <body>
-    <div id="splash" role="status" aria-label="Loading Canvas Hub">
-      <svg
-        viewBox="0 0 512 512"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <!-- Faint background ring (static visual frame) -->
-        <circle
-          cx="256"
-          cy="256"
-          r="220"
-          fill="none"
-          stroke="#c4a86a"
-          stroke-width="3"
-          stroke-opacity="0.12"
-        />
-        <!-- Rotating italic C from EB Garamond, gold fill.
-             Rotation is an SVG-native <animateTransform> (SMIL) around
-             the explicit viewBox pivot (256, 256). The previous CSS
-             implementation relied on `transform-box: view-box` /
-             `transform-origin: 256px 256px`, which does not apply
-             reliably to <g> elements on shipped Android Chrome / Brave
-             builds — the rotation pivot collapsed to viewBox (0, 0)
-             and the C swung through the lower-right quadrant instead
-             of spinning in place. SMIL's `from`/`to` rotate values
-             carry their pivot in viewBox user units, with zero
-             dependency on `transform-box` / `transform-origin`, so it
-             pivots exactly where we ask on every browser.
-             Reduced-motion is handled in /splash.js by stripping the
-             <animateTransform> element when matchMedia reports
-             `(prefers-reduced-motion: reduce)` (SMIL ignores CSS
-             media queries).
-             The inner <g> translate centers the path's bounding box at
-             the viewBox midpoint (256, 256) so the C rotates in place
-             instead of orbiting around an offset pivot. The path's bbox
-             is (96, -14, 628.72, 677); its bbox-center in font coords is
-             (410.36, 324.5). After scale(0.5, -0.5) the half-width / -half-
-             height is (205.18, -162.25), so the centering translate is
-             (256 - 205.18, 256 + 162.25) = (50.82, 418.25). -->
-        <g>
-          <animateTransform
-            attributeName="transform"
-            attributeType="XML"
-            type="rotate"
-            from="0 256 256"
-            to="360 256 256"
-            dur="1.8s"
-            repeatCount="indefinite"
-          />
-          <g
-            transform="translate(50.82 418.25) scale(0.50 -0.50)"
-            fill="#c4a86a"
-          >
-            <path
-              d="M384 -14C435 -14 452 11 472 11C492 11 502 -11 512 -9C523 -7 576 115 576 138C576 149 575 157 569 157C564 157 558 149 552 139C513 76 465 23 402 23C294 23 180 110 180 228C180 432 326 628 519 628C558 628 596 616 613 593C634 565 628 523 622 493C620 481 625 467 637 467C644 467 653 477 655 487C664 532 700 599 722 629C726 634 727 645 715 645C700 645 684 629 672 629C662 629 610 663 529 663C293 663 96 494 96 240C96 90 234 -14 384 -14Z"
-            />
-          </g>
-        </g>
-      </svg>
-    </div>
-    <!-- Splash safety-net + reduced-motion handling. Extracted from
-         a previous inline <script> so the document's CSP can drop
-         `'unsafe-inline'` from `script-src` in a follow-up without
-         behaviour changes. Classic script (no defer/async) so it
-         runs synchronously while the parser is still emitting the
-         body — same timing as the previous inline block.
-         `?v=` cache-busting token — see the comment on the
-         /splash.css link above. -->
-    <script src="/splash.js?v=2"></script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
