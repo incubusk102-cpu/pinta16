@@ -194,27 +194,21 @@ database_id = "68b3022d-91ff-4847-9412-a8cce8bdd508"
 migrations_dir = "migrations"
 
 # ---------------------------------------------------------------------------
-# R2 bucket binding (optional)
+# R2 bucket binding
 #
-# When this binding is present, admin product photo uploads write to R2
-# instead of returning a base64 data URL stuffed into KV. The free tier
-# (10 GB stored, $0 egress) covers a small gallery indefinitely.
+# Admin product-photo uploads stream to R2 (`/api/uploads`) and read
+# back through the public proxy (`/api/r/*`). Migrating an existing
+# library of inline base64 images is a one-shot via Admin → Exports →
+# "Migrate inline images to R2".
 #
-# To enable in production:
-#   1. Create the bucket in the Cloudflare dashboard:
-#      Workers & Pages → R2 → Create bucket → name `canvhub-uploads`
-#   2. Bind it to the Pages project:
-#      Workers & Pages → canvhub → Settings → Functions → R2 bucket bindings
-#      Variable name: UPLOADS_BUCKET   Bucket: canvhub-uploads
-#   3. Uncomment the block below and `git push` (CI redeploys with the
-#      binding active). Until step 2 is done, the upload endpoint
-#      returns 503 and the admin upload UI falls back to the existing
-#      base64 path — so this PR is safe to merge before R2 is created.
-#
-# [[r2_buckets]]
-# binding = "UPLOADS_BUCKET"
-# bucket_name = "canvhub-uploads"
-# preview_bucket_name = "canvhub-uploads-preview"
+# Bucket was created with `canvhub-images` as the name; preview deploys
+# share the same bucket because no separate preview namespace exists.
+# If preview ever needs isolation, create `canvhub-images-preview` and
+# point `preview_bucket_name` at it.
+[[r2_buckets]]
+binding = "UPLOADS_BUCKET"
+bucket_name = "canvhub-images"
+preview_bucket_name = "canvhub-images"
 
 # ---------------------------------------------------------------------------
 # Workers AI binding (used by the Turso vector-search "More like this" rail)
