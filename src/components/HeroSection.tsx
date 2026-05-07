@@ -49,6 +49,13 @@ const HeroSection = () => {
         >
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </motion.div>
+        {/* Wordmark intentionally hidden visually per the design call to
+            drop the visible "Canvas Hub" lockup from the hero, but the
+            <h1> is preserved for screen readers, the smoke suite (which
+            asserts h1 visibility on `/`), and document-outline /
+            SEO crawlers. Same `sr-only` pattern admin's auth-gate uses
+            when the gold C mark stands in for the brand visually. */}
+        <h1 className="sr-only">Canvas Hub</h1>
         <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
         <motion.p
           initial={{ opacity: 0, y: 30 }}
