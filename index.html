@@ -55,8 +55,22 @@
 
     <!-- Splash screen styles. Loaded as an external sheet so the
          document's CSP can drop `'unsafe-inline'` from `style-src`
-         in a follow-up without behaviour changes. -->
-    <link rel="stylesheet" href="/splash.css" />
+         in a follow-up without behaviour changes.
+
+         The `?v=` query is a cache-busting token: /splash.css and
+         /splash.js are served by the service worker (sw.js) using a
+         cache-first strategy on `isAssetRequest`, which means every
+         existing device keeps returning the previously-cached file
+         indefinitely. Bumping the SW VERSION alone does not help on
+         the first reload after a deploy (the old SW is still in
+         control until the new one finishes install + activate + claim,
+         by which point the page has already painted with stale CSS).
+         A different URL forces a cache miss in the SW asset bucket
+         (cache.match() is search-aware by default), so the SW falls
+         through to the network and serves the fresh file even on the
+         very first reload. Bump this token together with the SW
+         VERSION any time /splash.css or /splash.js change. -->
+    <link rel="stylesheet" href="/splash.css?v=2" />
 
     <!-- Structured data for Google. `<script type="application/ld+json">`
          is treated as data, not script, by browsers, so it is not
@@ -168,8 +182,10 @@
          `'unsafe-inline'` from `script-src` in a follow-up without
          behaviour changes. Classic script (no defer/async) so it
          runs synchronously while the parser is still emitting the
-         body — same timing as the previous inline block. -->
-    <script src="/splash.js"></script>
+         body — same timing as the previous inline block.
+         `?v=` cache-busting token — see the comment on the
+         /splash.css link above. -->
+    <script src="/splash.js?v=2"></script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
