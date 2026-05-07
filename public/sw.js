@@ -15,11 +15,14 @@
 // dropped). Content-hashed Vite assets normally make this unnecessary,
 // but bump it whenever the SW logic itself changes or when we ship a
 // fix that users on stale chunks must pick up immediately. Last bump:
-// v8 (splash rotation: SMIL restore — non-Vite-hashed /splash.css and
-// /splash.js need to be evicted from the cache-first asset bucket so
-// existing devices pick up the SMIL rotation that fixes the C drifting
-// through the lower-right quadrant on Android Chrome / Brave).
-const VERSION = "v8";
+// v9 (splash rotation: drops the v8 caches that on existing devices
+// still hold the pre-fix /splash.css and /splash.js — the v8 bump in
+// PR #322 was insufficient on its own because the v7 SW kept serving
+// the old assets cache-first while v8 was still installing on the
+// user's first reload after deploy. PR #323 also adds a `?v=N` cache-
+// busting token to the splash references in index.html so the SW
+// asset bucket misses on the new URL even before v9 takes over).
+const VERSION = "v9";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
