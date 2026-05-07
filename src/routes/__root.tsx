@@ -4,33 +4,43 @@ import {
   createRootRoute,
   useRouterState,
 } from "@tanstack/react-router";
+import { Suspense, lazy, useEffect } from "react";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
 import { PoliciesProvider } from "@/contexts/PoliciesContext";
 import { HeroSlidesProvider } from "@/contexts/HeroSlidesContext";
-import AnnouncementBar from "@/components/AnnouncementBar";
-import ChatWidget from "@/components/ChatWidget";
-import NewUserModal from "@/components/NewUserModal";
-import OrderConfirmation from "@/components/OrderConfirmation";
-import PwaPrompts from "@/components/PwaPrompts";
-import PassportTracker from "@/components/PassportTracker";
-import WelcomeBackToast from "@/components/WelcomeBackToast";
-import WelcomeBonusCountdown from "@/components/WelcomeBonusCountdown";
-import ArtistThankYou from "@/components/ArtistThankYou";
-import SiteFooter from "@/components/SiteFooter";
-import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { UserAuthProvider } from "@/contexts/UserAuthContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
+import AnnouncementBar from "@/components/AnnouncementBar";
+import SiteFooter from "@/components/SiteFooter";
+import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
 import { useGoogleAuthHash } from "@/hooks/useGoogleAuthHash";
-import { useEffect } from "react";
 import { captureReferralFromUrl } from "@/lib/referral";
 import { Toaster } from "@/components/ui/sonner";
+
+// Conditional UI — each of these renders nothing until a trigger fires
+// (returning-visitor toast, first-visit modal, PWA install prompt,
+// passport-stamp threshold, welcome-bonus countdown, post-purchase
+// thank-you, chat widget). They were importing synchronously into the
+// entry chunk, paying for ~30–40 KB of code that 90% of visitors never
+// see on first paint. `React.lazy` shifts each into its own chunk that
+// only downloads when the component actually mounts.
+const ChatWidget = lazy(() => import("@/components/ChatWidget"));
+const NewUserModal = lazy(() => import("@/components/NewUserModal"));
+const OrderConfirmation = lazy(() => import("@/components/OrderConfirmation"));
+const PwaPrompts = lazy(() => import("@/components/PwaPrompts"));
+const PassportTracker = lazy(() => import("@/components/PassportTracker"));
+const WelcomeBackToast = lazy(() => import("@/components/WelcomeBackToast"));
+const WelcomeBonusCountdown = lazy(
+  () => import("@/components/WelcomeBonusCountdown"),
+);
+const ArtistThankYou = lazy(() => import("@/components/ArtistThankYou"));
 
 function NotFoundComponent() {
   return (
@@ -116,12 +126,12 @@ function ConditionalVisitorDelight() {
   });
   if (pathname.startsWith("/admin")) return null;
   return (
-    <>
+    <Suspense fallback={null}>
       <PassportTracker />
       <WelcomeBackToast />
       <WelcomeBonusCountdown />
       <ArtistThankYou />
-    </>
+    </Suspense>
   );
 }
 
@@ -144,10 +154,12 @@ function RootComponent() {
                           <ConditionalAnnouncementBar />
                           <Outlet />
                           <ConditionalSiteFooter />
-                          <ConditionalOrderConfirmation />
-                          <ChatWidget />
-                          <NewUserModal />
-                          <PwaPrompts />
+                          <Suspense fallback={null}>
+                            <ConditionalOrderConfirmation />
+                            <ChatWidget />
+                            <NewUserModal />
+                            <PwaPrompts />
+                          </Suspense>
                           <ConditionalVisitorDelight />
                           <Toaster richColors position="top-right" />
                         </SmoothScrollProvider>

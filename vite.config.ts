@@ -17,6 +17,17 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Vite's `__vitePreload` runtime helper is a tiny generated module
+          // (`\0vite/preload-helper.js`) that every chunk using `import()`
+          // statically imports. Without an explicit assignment Rollup can
+          // bundle it into whatever heavy chunk it lands next to, which then
+          // becomes a static dependency of the entry — dragging that chunk
+          // into `<link rel="modulepreload">` on every page load. This used
+          // to pin the 407 KB jspdf+jsbarcode `waybill` chunk into the
+          // initial paint even though the waybill PDF is only generated on
+          // a button click. Pin the helper to `vendor` so it rides along
+          // with code that's already preloaded anyway.
+          if (id.includes("preload-helper")) return "vendor";
           if (!id.includes("node_modules")) return undefined;
           // Match the package root, not arbitrary substrings — `id.includes("/react/")`
           // accidentally bucketed `@floating-ui/react-dom` into the `react` chunk,

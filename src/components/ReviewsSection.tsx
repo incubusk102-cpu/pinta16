@@ -1,20 +1,9 @@
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import SectionReveal from "@/components/motion/SectionReveal";
 import SplitText from "@/components/motion/SplitText";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
-
-interface PublishedReview {
-  orderId: string;
-  rating: number;
-  text: string;
-  images: string[];
-  submittedAt: string;
-  customerName: string;
-  customerCity?: string;
-  adminReply?: { text: string; repliedAt: string } | null;
-}
+import { usePublishedReviews } from "@/hooks/usePublishedReviews";
 
 const formatRelativeDate = (iso: string): string => {
   const d = new Date(iso);
@@ -44,28 +33,7 @@ const Stars = ({ rating }: { rating: number }) => (
 const ReviewsSection = () => {
   const { config } = useStorefrontConfig();
   const reviewsCopy = config.siteCopy.reviews;
-  const [reviews, setReviews] = useState<PublishedReview[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/orders?reviews=published");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        setReviews(Array.isArray(data.reviews) ? data.reviews : []);
-      } catch {
-        // ignore — section just won't render
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { reviews, loading } = usePublishedReviews();
 
   if (loading || reviews.length === 0) return null;
 
@@ -135,9 +103,9 @@ const ReviewsSection = () => {
             <p className="font-body text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap line-clamp-[10]">
               {r.text}
             </p>
-            {r.images.length > 0 && (
+            {(r.images?.length ?? 0) > 0 && (
               <div className="grid grid-cols-3 gap-1.5">
-                {r.images.slice(0, 3).map((src, j) => (
+                {(r.images ?? []).slice(0, 3).map((src, j) => (
                   <a
                     key={j}
                     href={src}
