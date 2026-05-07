@@ -1,6 +1,7 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { connectLambda, getStore } from "./_lib/kv-stores.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
+import { recordPiiAccess } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { logError } from "./_lib/redact.js";
 
@@ -216,6 +217,11 @@ export const handler = async (event) => {
         },
       );
       summary.totalLtv = Math.round(summary.totalLtv * 100) / 100;
+      await recordPiiAccess(event, {
+        resource: "customer",
+        action: "list",
+        detail: `Listed ${list.length} customer(s)`,
+      });
       return json(200, { customers: list, summary });
     }
 
@@ -229,6 +235,12 @@ export const handler = async (event) => {
       const customerOrders = ordersData
         .filter((o) => normalizeEmail(o?.orderInfo?.email) === email)
         .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      await recordPiiAccess(event, {
+        resource: "customer",
+        action: "view",
+        target: email,
+        detail: `Viewed customer detail (${customerOrders.length} order(s))`,
+      });
       return json(200, { orders: customerOrders });
     }
 
@@ -249,6 +261,12 @@ export const handler = async (event) => {
       const existing = await readMeta(meta);
       existing[email] = { notes, tags, updatedAt: new Date().toISOString() };
       await meta.setJSON(META_KEY, existing);
+      await recordPiiAccess(event, {
+        resource: "customer",
+        action: "update",
+        target: email,
+        detail: `Updated meta (${tags.length} tag(s), notes ${notes.length} chars)`,
+      });
       return json(200, { ok: true, meta: existing[email] });
     }
 

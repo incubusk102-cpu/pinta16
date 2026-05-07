@@ -32,7 +32,11 @@ import {
   getUserAgent,
 } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
-import { appendAuditEvent, readAuditEvents } from "./_lib/audit-log.js";
+import {
+  appendAuditEvent,
+  readAuditEvents,
+  readAuditEventsPaginated,
+} from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { verifyTurnstileToken } from "./_lib/turnstile.js";
 import {
@@ -205,6 +209,25 @@ export const handler = async (event) => {
           return json(401, { error: "Not authenticated" });
         }
         const limit = Math.max(1, Math.min(500, Number(params.limit) || 200));
+        // Optional pagination/filter knobs are used by the "PII access"
+        // panel and the per-customer access-history link. When none are
+        // supplied we fall back to the legacy unfiltered shape so the
+        // existing audit-log table keeps working unchanged.
+        const hasFilter =
+          (params.type && String(params.type).trim() !== "") ||
+          (params.subject && String(params.subject).trim() !== "") ||
+          (params.outcome && String(params.outcome).trim() !== "") ||
+          (params.before && String(params.before).trim() !== "");
+        if (hasFilter) {
+          const { events, hasMore } = await readAuditEventsPaginated(event, {
+            limit,
+            type: String(params.type || ""),
+            subject: String(params.subject || ""),
+            outcome: String(params.outcome || ""),
+            before: String(params.before || ""),
+          });
+          return json(200, { events, hasMore });
+        }
         const events = await readAuditEvents(event, { limit });
         return json(200, { events });
       }

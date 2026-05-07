@@ -36,6 +36,7 @@ import { sendEmail, loadOrderEmailConfig } from "../_lib/email.js";
 import { isAuthenticated } from "../_lib/admin-auth.js";
 import { makeStore } from "../_lib/kv-store.js";
 import { getStore } from "../_lib/kv-stores.js";
+import { recordPiiAccess } from "../_lib/audit-log.js";
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
 const MS_PER_MINUTE = 60_000;
@@ -433,7 +434,7 @@ const unsubscribePage = (message) =>
 </html>`.trim();
 
 // ── stats (admin) ───────────────────────────────────────────────────────
-const handleStats = async (store) => {
+const handleStats = async (event, store) => {
   let cursor;
   let total = 0;
   let pending = 0;
@@ -463,6 +464,12 @@ const handleStats = async (store) => {
       }
     }
   } while (cursor);
+
+  await recordPiiAccess(event, {
+    resource: "abandoned-cart",
+    action: "stats",
+    detail: `Listed ${total} cart(s) (pending=${pending}, converted=${converted})`,
+  });
 
   return json(200, {
     total,
@@ -523,7 +530,7 @@ const handle = async ({ request, env }) => {
     if (!(await isAuthenticated(event))) {
       return json(401, { error: "Not authenticated" });
     }
-    return handleStats(store);
+    return handleStats(event, store);
   }
 
   return json(404, { error: "Not found" });

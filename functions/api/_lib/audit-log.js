@@ -4,6 +4,7 @@
 
 import { makeStore } from "./kv-store.js";
 import { getCloudflareEnv } from "./context.js";
+import { captureRequestMeta } from "./request-info.js";
 
 const KEY = "events";
 const MAX_ENTRIES = 500;
@@ -65,4 +66,87 @@ export const readAuditEvents = async (event, { limit = 200 } = {}) => {
   if (!store) return [];
   const list = await safeReadEntries(store);
   return list.slice(0, Math.max(1, Math.min(MAX_ENTRIES, limit)));
+};
+
+// Read paginated audit events with optional client-side filters. Used by
+// the admin "PII access" panel and the per-customer access-history link.
+// `before` is an ISO timestamp; entries strictly older than it are returned.
+// Filters (type / subject / outcome) are matched as case-insensitive
+// substrings so callers can pass partial values (e.g. type="pii.").
+export const readAuditEventsPaginated = async (
+  event,
+  { limit = 100, before = "", type = "", subject = "", outcome = "" } = {},
+) => {
+  const store = getAuditStore();
+  if (!store) return { events: [], hasMore: false };
+  const all = await safeReadEntries(store);
+  const cap = Math.max(1, Math.min(MAX_ENTRIES, Number(limit) || 100));
+  const t = String(type || "")
+    .trim()
+    .toLowerCase();
+  const s = String(subject || "")
+    .trim()
+    .toLowerCase();
+  const o = String(outcome || "")
+    .trim()
+    .toLowerCase();
+  const beforeTs = before ? Date.parse(before) : NaN;
+  const filtered = [];
+  for (const entry of all) {
+    if (!entry || typeof entry !== "object") continue;
+    if (Number.isFinite(beforeTs)) {
+      const at = Date.parse(entry.at || "");
+      if (!Number.isFinite(at) || at >= beforeTs) continue;
+    }
+    if (
+      t &&
+      !String(entry.type || "")
+        .toLowerCase()
+        .includes(t)
+    )
+      continue;
+    if (
+      s &&
+      !String(entry.subject || "")
+        .toLowerCase()
+        .includes(s)
+    )
+      continue;
+    if (
+      o &&
+      !String(entry.outcome || "")
+        .toLowerCase()
+        .includes(o)
+    )
+      continue;
+    filtered.push(entry);
+    if (filtered.length >= cap + 1) break;
+  }
+  const hasMore = filtered.length > cap;
+  return { events: filtered.slice(0, cap), hasMore };
+};
+
+// Convenience wrapper for "an admin just accessed PII" — captures IP / UA
+// and writes a structured event. `resource` and `action` form the type
+// (e.g. resource="customer", action="view" → type="pii.customer.view").
+// `target` lands in `subject` so the per-customer access-history filter
+// can match by email or id. `detail` is a short human-readable note
+// (truncated to 400 chars by the underlying helper).
+export const recordPiiAccess = async (
+  event,
+  { resource, action, target = "", detail = "" } = {},
+) => {
+  if (!resource || !action) return;
+  const meta = captureRequestMeta(event);
+  await appendAuditEvent(event, {
+    type: `pii.${String(resource)}.${String(action)}`,
+    outcome: String(action),
+    subject: String(target || ""),
+    detail: String(detail || ""),
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+    browser: meta.browser,
+    os: meta.os,
+    device: meta.device,
+  });
 };
