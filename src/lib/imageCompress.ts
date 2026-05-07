@@ -1,9 +1,10 @@
 // Client-side image compression. Phone photos routinely come in at 5–30 MB,
 // but the storefront only renders them as <img> tags up to ~1200 px wide, and
 // the Netlify Functions request body is capped at 6 MB. We resize on a
-// canvas and re-encode as JPEG, iteratively dropping quality until the
-// resulting data URL fits under the byte budget. Returns a data URL plus the
-// approximate compressed byte count.
+// canvas and re-encode as JPEG (or WebP), iteratively dropping quality until
+// the encoded byte size fits the budget. Returns the encoded `Blob`, plus
+// a base64 data URL derived from the same blob for callers that need to
+// embed the bytes inline (admin previews, KV-stored email images, etc.).
 //
 // Used by every admin image input (product gallery, inline thumb, hero
 // slides, profile avatar, order review photos).
@@ -11,7 +12,7 @@
 export interface CompressOptions {
   /** Max long-edge in pixels. Defaults to 2000. */
   maxDim?: number;
-  /** Target max bytes for the encoded data URL payload (raw bytes, not base64-inflated). Defaults to 800 KB. */
+  /** Target max bytes for the encoded payload. Defaults to 800 KB. */
   maxBytes?: number;
   /** Initial JPEG quality (0–1). Defaults to 0.85. */
   initialQuality?: number;
@@ -22,24 +23,22 @@ export interface CompressOptions {
 }
 
 export interface CompressedImage {
-  /** Encoded data URL (already base64). */
+  /** Encoded data URL (already base64). Derived from `blob`; same bytes. */
   url: string;
-  /** Approximate raw decoded byte size (data URL length minus the prefix, then ÷ 4 × 3). */
+  /**
+   * Encoded image bytes. Use this directly when uploading (e.g. R2) — it
+   * avoids the data-URL → base64 → Blob round-trip and is not subject to
+   * any `connect-src` CSP that blocks `fetch("data:...")` (see PR #317).
+   */
+  blob: Blob;
+  /** Encoded byte size (== `blob.size`). */
   bytes: number;
-  /** Suggested file name; preserves the original stem with a .jpg extension. */
+  /** Suggested file name; preserves the original stem. */
   fileName: string;
   /** Resulting width × height in pixels. */
   width: number;
   height: number;
 }
-
-const dataUrlRawBytes = (dataUrl: string): number => {
-  const comma = dataUrl.indexOf(",");
-  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-  // Strip any '=' padding then convert to byte count.
-  const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
-  return Math.floor((b64.length * 3) / 4) - padding;
-};
 
 const loadImage = (file: File): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -62,10 +61,57 @@ const replaceExt = (name: string, ext: string): string => {
   return `${stem}.${ext}`;
 };
 
+const extForMime = (mime: string): string => {
+  if (mime === "image/webp") return "webp";
+  if (mime === "image/png") return "png";
+  if (mime === "image/avif") return "avif";
+  return "jpg";
+};
+
+// Promise wrapper around `canvas.toBlob`. Rejects if the browser hands back
+// a null blob (rare — happens on tainted canvases or out-of-memory, both
+// of which we want to surface as an error rather than silently producing
+// an empty image).
+const canvasToBlob = (
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality: number,
+): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) =>
+        b
+          ? resolve(b)
+          : reject(new Error(`canvas.toBlob returned null for ${mimeType}`)),
+      mimeType,
+      quality,
+    );
+  });
+
+// Encode a Blob as a base64 data URL using FileReader. We avoid
+// `canvas.toDataURL()` and `await fetch(dataUrl).blob()` because:
+//   1. We already have the Blob from `canvas.toBlob()` — no need to encode
+//      twice.
+//   2. The site CSP's `connect-src` does not include `data:`, so
+//      `fetch("data:...")` is blocked in production (the bug fixed by
+//      PR #317). FileReader stays inside the JS runtime and is unaffected.
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") resolve(result);
+      else reject(new Error("FileReader returned non-string result"));
+    };
+    reader.onerror = () =>
+      reject(reader.error || new Error("FileReader failed"));
+    reader.readAsDataURL(blob);
+  });
+
 /**
- * Resize + re-encode an image file so the resulting base64 data URL fits
- * inside `maxBytes`. Falls back to the original file's data URL if
- * compression is not available (e.g. canvas/toDataURL throws).
+ * Resize + re-encode an image file so the encoded payload fits inside
+ * `maxBytes`. Returns both the encoded `Blob` (for direct upload) and a
+ * base64 data URL derived from the same blob (for inline embedding).
  */
 export const compressImage = async (
   file: File,
@@ -98,8 +144,7 @@ export const compressImage = async (
   // Re-encoding loop: try the requested quality, then iteratively drop
   // quality, then iteratively drop dimensions if we're still over budget.
   let quality = initialQuality;
-  let url = "";
-  let bytes = 0;
+  let blob: Blob | null = null;
   const minDim = 320;
 
   for (let pass = 0; pass < 8; pass++) {
@@ -108,9 +153,8 @@ export const compressImage = async (
     ctx.fillStyle = "#ffffff"; // flatten any alpha against white for JPEG
     ctx.fillRect(0, 0, targetW, targetH);
     ctx.drawImage(img, 0, 0, targetW, targetH);
-    url = canvas.toDataURL(mimeType, quality);
-    bytes = dataUrlRawBytes(url);
-    if (bytes <= maxBytes) break;
+    blob = await canvasToBlob(canvas, mimeType, quality);
+    if (blob.size <= maxBytes) break;
     if (quality > minQuality + 0.05) {
       // Try a lower quality first — cheaper than another resize.
       quality = Math.max(minQuality, quality - 0.1);
@@ -139,10 +183,14 @@ export const compressImage = async (
     targetH = Math.max(1, Math.round(nextH));
   }
 
+  if (!blob) throw new Error("Canvas encoding produced no output");
+  const url = await blobToDataUrl(blob);
+
   return {
     url,
-    bytes,
-    fileName: replaceExt(file.name || "image", "jpg"),
+    blob,
+    bytes: blob.size,
+    fileName: replaceExt(file.name || "image", extForMime(mimeType)),
     width: targetW,
     height: targetH,
   };

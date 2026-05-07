@@ -25,7 +25,7 @@ import {
 } from "@/contexts/ProductContext";
 import { compressImageVariants } from "@/lib/imageCompress";
 import { hashImageDataUrl } from "@/lib/imageHash";
-import { dataUrlToBlob, uploadImageToR2 } from "@/lib/uploadImage";
+import { uploadImageToR2 } from "@/lib/uploadImage";
 import { VARIANT_WIDTHS } from "@/lib/productImage";
 
 interface ScanRow {
@@ -108,19 +108,13 @@ export const MigrateVariantsCard = () => {
       // so re-uploads dedupe in R2.
       const hash = await hashImageDataUrl(variants.lg.url);
 
-      const blobs = await Promise.all([
-        dataUrlToBlob(variants.sm.url),
-        dataUrlToBlob(variants.md.url),
-        dataUrlToBlob(variants.lg.url),
+      // Use the Blobs canvas.toBlob() emitted directly — no data-URL
+      // round-trip and no CSP `connect-src` issues with `fetch("data:...")`.
+      const outcomes = await Promise.all([
+        uploadImageToR2(variants.sm.blob),
+        uploadImageToR2(variants.md.blob),
+        uploadImageToR2(variants.lg.blob),
       ]);
-      const allBlobs: Blob[] = [];
-      for (const b of blobs) if (b) allBlobs.push(b);
-      if (allBlobs.length !== blobs.length) {
-        throw new Error("Failed to read encoded variants from canvas.");
-      }
-      const outcomes = await Promise.all(
-        allBlobs.map((b) => uploadImageToR2(b)),
-      );
       const allUploaded = outcomes.every((o) => o.kind === "uploaded");
       if (!allUploaded) {
         const errored = outcomes.find((o) => o.kind === "error");

@@ -7,7 +7,7 @@ import {
 } from "@/contexts/ProductContext";
 import { compressImageVariants } from "@/lib/imageCompress";
 import { hashImageDataUrl } from "@/lib/imageHash";
-import { dataUrlToBlob, uploadImageToR2 } from "@/lib/uploadImage";
+import { uploadImageToR2 } from "@/lib/uploadImage";
 
 // Original file size cap before compression. The Netlify Functions request
 // body is capped at 6 MB, so even though we accept up to 30 MB phone photos
@@ -66,43 +66,37 @@ export function ProductImageGallery({ images, onChange }: Props) {
 
           // Upload all three to R2 in parallel. R2 dedupes identical
           // bytes, so re-uploads of the same photo produce the same
-          // keys and don't grow the bucket.
-          const blobs = await Promise.all([
-            dataUrlToBlob(variants.sm.url),
-            dataUrlToBlob(variants.md.url),
-            dataUrlToBlob(variants.lg.url),
-          ]);
-
+          // keys and don't grow the bucket. We use the Blob that
+          // canvas.toBlob() emitted directly — no data-URL round-trip,
+          // no CSP `connect-src` issues with `fetch("data:...")`.
           let storedUrl: string = variants.lg.url; // inline-fallback
           let urls: ProductImage["urls"] | undefined;
-          const allBlobs: Blob[] = [];
-          for (const b of blobs) if (b) allBlobs.push(b);
-          if (allBlobs.length === blobs.length) {
-            const outcomes = await Promise.all(
-              allBlobs.map((b) => uploadImageToR2(b)),
-            );
-            const allUploaded = outcomes.every((o) => o.kind === "uploaded");
-            if (allUploaded) {
-              const [smOut, mdOut, lgOut] = outcomes;
-              urls = {
-                sm: smOut.kind === "uploaded" ? smOut.result.url : undefined,
-                md: mdOut.kind === "uploaded" ? mdOut.result.url : undefined,
-                lg: lgOut.kind === "uploaded" ? lgOut.result.url : undefined,
-              };
-              storedUrl = urls.lg ?? variants.lg.url;
-            } else {
-              const errored = outcomes.find((o) => o.kind === "error");
-              const fellBack = outcomes.find((o) => o.kind === "fallback");
-              if (errored && errored.kind === "error") {
-                toast.error(
-                  `Could not upload ${file.name} to R2: ${errored.message}. Saved inline instead.`,
-                );
-              } else if (fellBack && !r2FallbackToastShown) {
-                toast.message(
-                  "R2 image storage isn't configured on this deploy — saving images inline. (See docs/cloudflare-setup.md)",
-                );
-                r2FallbackToastShown = true;
-              }
+          const outcomes = await Promise.all([
+            uploadImageToR2(variants.sm.blob),
+            uploadImageToR2(variants.md.blob),
+            uploadImageToR2(variants.lg.blob),
+          ]);
+          const allUploaded = outcomes.every((o) => o.kind === "uploaded");
+          if (allUploaded) {
+            const [smOut, mdOut, lgOut] = outcomes;
+            urls = {
+              sm: smOut.kind === "uploaded" ? smOut.result.url : undefined,
+              md: mdOut.kind === "uploaded" ? mdOut.result.url : undefined,
+              lg: lgOut.kind === "uploaded" ? lgOut.result.url : undefined,
+            };
+            storedUrl = urls.lg ?? variants.lg.url;
+          } else {
+            const errored = outcomes.find((o) => o.kind === "error");
+            const fellBack = outcomes.find((o) => o.kind === "fallback");
+            if (errored && errored.kind === "error") {
+              toast.error(
+                `Could not upload ${file.name} to R2: ${errored.message}. Saved inline instead.`,
+              );
+            } else if (fellBack && !r2FallbackToastShown) {
+              toast.message(
+                "R2 image storage isn't configured on this deploy — saving images inline. (See docs/cloudflare-setup.md)",
+              );
+              r2FallbackToastShown = true;
             }
           }
 
