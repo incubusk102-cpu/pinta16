@@ -1,9 +1,8 @@
 import { motion, useScroll, useTransform } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import { useRef } from "react";
 import BrushDivider from "@/components/decor/BrushDivider";
 import MagneticButton from "@/components/MagneticButton";
-import SplitText from "@/components/motion/SplitText";
-import { GoldenCMark } from "@/components/GoldenCMark";
 
 const HeroSection = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -32,40 +31,24 @@ const HeroSection = () => {
         >
           Affordable Art, Authentic Stories
         </motion.p>
-        {/* Slow-spinning gold C above the wordmark.
-            Same source-of-truth component the admin sidebar / auth
-            gate use, opted into the spinning variant. The rotation is
-            applied to the `<svg>` root (HTML transform semantics) so
-            it pivots cleanly in place on every browser including
-            Android Chrome / Brave — no `<g>` + `transform-box: view-
-            box` interaction here, which is the bug PRs #322/#323
-            walked through for the splash mark. The fade-in matches
-            the eyebrow + wordmark choreography so the C settles in
-            at the same beat as the rest of the hero. */}
+        {/* Loader-style spinner — copied verbatim from the admin auth-
+            context's loading state at the top of `AdminPage`:
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            Same lucide glyph, same Tailwind classes, so the hero's
+            "loading C" matches admin's loading C exactly. Wrapped in
+            a motion.div so the entrance fades in alongside the
+            eyebrow + body + button choreography rather than popping
+            in instantly. */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.35 }}
-          className="mb-3 sm:mb-4"
+          className="mb-4 md:mb-6"
+          role="status"
+          aria-label="Loading"
         >
-          <GoldenCMark
-            spin
-            size={56}
-            ariaLabel="Canvas Hub"
-            className="sm:w-16 sm:h-16"
-          />
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </motion.div>
-        <SplitText
-          as="h1"
-          by="letter"
-          stagger={0.05}
-          duration={0.9}
-          yFrom={48}
-          delay={0.45}
-          className="font-logo text-5xl sm:text-5xl md:text-7xl lg:text-8xl mb-2 md:mb-3"
-        >
-          Canvas Hub
-        </SplitText>
         <BrushDivider className="mb-4 md:mb-6 text-foreground/70" delay={0.9} />
         <motion.p
           initial={{ opacity: 0, y: 30 }}
