@@ -120,11 +120,21 @@
           stroke-opacity="0.12"
         />
         <!-- Rotating italic C from EB Garamond, gold fill.
-             Rotation is a CSS animation on the outer <g class="splash-spin">
-             — CSS transforms on SVG groups are GPU-composited, which keeps
-             the spin at 60fps on mobile Chrome (SMIL animateTransform
-             stutters on Android Chrome/Brave when the main thread is busy
-             during first paint).
+             Rotation is an SVG-native <animateTransform> (SMIL) around
+             the explicit viewBox pivot (256, 256). The previous CSS
+             implementation relied on `transform-box: view-box` /
+             `transform-origin: 256px 256px`, which does not apply
+             reliably to <g> elements on shipped Android Chrome / Brave
+             builds — the rotation pivot collapsed to viewBox (0, 0)
+             and the C swung through the lower-right quadrant instead
+             of spinning in place. SMIL's `from`/`to` rotate values
+             carry their pivot in viewBox user units, with zero
+             dependency on `transform-box` / `transform-origin`, so it
+             pivots exactly where we ask on every browser.
+             Reduced-motion is handled in /splash.js by stripping the
+             <animateTransform> element when matchMedia reports
+             `(prefers-reduced-motion: reduce)` (SMIL ignores CSS
+             media queries).
              The inner <g> translate centers the path's bounding box at
              the viewBox midpoint (256, 256) so the C rotates in place
              instead of orbiting around an offset pivot. The path's bbox
@@ -132,7 +142,16 @@
              (410.36, 324.5). After scale(0.5, -0.5) the half-width / -half-
              height is (205.18, -162.25), so the centering translate is
              (256 - 205.18, 256 + 162.25) = (50.82, 418.25). -->
-        <g class="splash-spin">
+        <g>
+          <animateTransform
+            attributeName="transform"
+            attributeType="XML"
+            type="rotate"
+            from="0 256 256"
+            to="360 256 256"
+            dur="1.8s"
+            repeatCount="indefinite"
+          />
           <g
             transform="translate(50.82 418.25) scale(0.50 -0.50)"
             fill="#c4a86a"
