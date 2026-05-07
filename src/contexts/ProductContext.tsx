@@ -13,6 +13,12 @@ export interface ProductImage {
   url: string;
   fileName?: string;
   bytes?: number;
+  /**
+   * SHA-256 fingerprint of the image bytes. Set by the admin upload UI so
+   * we can refuse to add the same painting twice. Optional for back-compat
+   * with products created before the dedup check existed.
+   */
+  hash?: string;
 }
 
 export const PRODUCT_MAX_IMAGES = 5;
@@ -152,6 +158,51 @@ export const getDiscountPercent = (product: {
     );
   }
   return 0;
+};
+
+export type DuplicateReason = "image" | "title";
+
+export interface DuplicateMatch {
+  product: Product;
+  reason: DuplicateReason;
+}
+
+const normalizeTitle = (title: string): string => title.trim().toLowerCase();
+
+/**
+ * Look for an existing product that already has one of the supplied
+ * image hashes, OR shares the same case-insensitive trimmed title.
+ * Used by the admin upload form so the same painting can't be added
+ * twice. Pass `excludeId` when editing an existing product so it's
+ * not flagged as a duplicate of itself.
+ */
+export const findDuplicateProduct = (
+  candidate: { images: ProductImage[]; title: string },
+  existing: Product[],
+  excludeId?: string,
+): DuplicateMatch | null => {
+  const candidateHashes = new Set(
+    candidate.images.map((img) => img.hash).filter((h): h is string => !!h),
+  );
+  const candidateTitle = normalizeTitle(candidate.title);
+
+  for (const product of existing) {
+    if (excludeId && product.id === excludeId) continue;
+
+    if (candidateHashes.size > 0) {
+      const productImages = getProductImages(product);
+      for (const img of productImages) {
+        if (img.hash && candidateHashes.has(img.hash)) {
+          return { product, reason: "image" };
+        }
+      }
+    }
+
+    if (candidateTitle && normalizeTitle(product.title) === candidateTitle) {
+      return { product, reason: "title" };
+    }
+  }
+  return null;
 };
 
 interface ProductContextType {

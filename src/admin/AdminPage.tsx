@@ -5,6 +5,7 @@ import Turnstile, { isTurnstileEnabled } from "@/components/Turnstile";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
   useProducts,
+  findDuplicateProduct,
   getDiscountPercent,
   getProductImages,
   buildImageFields,
@@ -1343,6 +1344,20 @@ function ProductsSection() {
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
+
+    const duplicate = findDuplicateProduct(
+      { images, title: title.trim() },
+      products,
+    );
+    if (duplicate) {
+      const { product: existing, reason } = duplicate;
+      toast.error(
+        reason === "image"
+          ? `This image is already in "${existing.title}". Pick a different photo or edit the existing product.`
+          : `A product titled "${existing.title}" already exists. Pick a different name.`,
+      );
+      return;
+    }
 
     setSubmitting(true);
 

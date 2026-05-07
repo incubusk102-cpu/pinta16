@@ -21,9 +21,11 @@ import {
 import { toast } from "sonner";
 import {
   buildImageFields,
+  findDuplicateProduct,
   getProductImages,
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
+  useProducts,
   type Product,
   type ProductAvailability,
   type ProductImage,
@@ -39,6 +41,7 @@ interface Props {
 }
 
 export function EditProductDialog({ product, open, onClose, onSave }: Props) {
+  const { products } = useProducts();
   const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("");
@@ -94,6 +97,21 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
+
+    const duplicate = findDuplicateProduct(
+      { images, title: title.trim() },
+      products,
+      product.id,
+    );
+    if (duplicate) {
+      const { product: existing, reason } = duplicate;
+      toast.error(
+        reason === "image"
+          ? `This image is already in "${existing.title}". Remove it here or delete the other product first.`
+          : `Another product is titled "${existing.title}". Pick a different name.`,
+      );
+      return;
+    }
 
     setSaving(true);
     try {

@@ -6,6 +6,7 @@ import {
   type ProductImage,
 } from "@/contexts/ProductContext";
 import { compressImage } from "@/lib/imageCompress";
+import { hashImageUrl } from "@/lib/imageHash";
 import { dataUrlToBlob, uploadImageToR2 } from "@/lib/uploadImage";
 
 // Original file size cap before compression. The Netlify Functions request
@@ -59,6 +60,11 @@ export function ProductImageGallery({ images, onChange }: Props) {
         }
         try {
           const compressed = await compressImage(file);
+          // Hash the compressed bytes BEFORE we choose between R2 and the
+          // inline data-URL fallback, so the fingerprint stays stable
+          // either way and the dedup check on submit can spot a re-upload
+          // of the same painting regardless of where it ends up stored.
+          const hash = (await hashImageUrl(compressed.url)) ?? undefined;
           // Try R2 first. The endpoint returns 503 when the bucket isn't
           // bound on this deploy, so we keep the existing data-URL flow
           // as a graceful fallback — the product still saves either way.
@@ -83,6 +89,7 @@ export function ProductImageGallery({ images, onChange }: Props) {
             url: storedUrl,
             fileName: compressed.fileName,
             bytes: compressed.bytes,
+            hash,
           });
         } catch {
           toast.error(`Could not read ${file.name}`);
