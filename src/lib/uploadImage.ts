@@ -86,41 +86,9 @@ export const uploadImageToR2 = async (blob: Blob): Promise<UploadOutcome> => {
   }
 };
 
-// Convenience: turn a base64 data URL back into a Blob so we can pipe
-// the existing compressImage() output (which returns a data URL) into
-// uploadImageToR2 without re-running the canvas pipeline.
-//
-// Decodes the base64 manually rather than `fetch(dataUrl)` because the
-// site CSP's `connect-src` does not list `data:`, and Cloudflare Pages
-// enforces the header in production. `fetch("data:...")` is treated as
-// a connect and gets blocked, which previously caused
-// MigrateVariantsCard's R2 backfill to error out with "Failed to read
-// encoded variants from canvas." for every image.
-export const dataUrlToBlob = async (dataUrl: string): Promise<Blob | null> => {
-  if (!dataUrl.startsWith("data:")) return null;
-  const comma = dataUrl.indexOf(",");
-  if (comma < 0) return null;
-  const meta = dataUrl.slice(5, comma); // strip "data:"
-  const isBase64 = /;base64$/i.test(meta);
-  const mimeType = isBase64
-    ? meta.slice(0, meta.length - ";base64".length) ||
-      "application/octet-stream"
-    : meta || "application/octet-stream";
-  const payload = dataUrl.slice(comma + 1);
-  try {
-    if (isBase64) {
-      const binary = atob(payload);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return new Blob([bytes], { type: mimeType });
-    }
-    // Non-base64 data URLs (rare for our pipeline — canvas.toDataURL
-    // always emits base64 — but support them for completeness).
-    const text = decodeURIComponent(payload);
-    return new Blob([text], { type: mimeType });
-  } catch {
-    return null;
-  }
-};
+// `dataUrlToBlob` lived here previously as a helper to convert
+// `compressImage()`'s data-URL output back into a Blob for upload.
+// `compressImage()` now returns the encoded `Blob` directly (see
+// `src/lib/imageCompress.ts`), so callers should use `variant.blob`
+// instead. Removing the helper avoids a foot-gun where someone reaches
+// for `fetch(dataUrl)` again and trips the production CSP.
