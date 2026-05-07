@@ -1,13 +1,20 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { useProducts } from "@/contexts/ProductContext";
+import { useProducts, type ProductImage } from "@/contexts/ProductContext";
 import { getStorefrontArtworks } from "@/lib/artworks";
+import { imgAttrsFromProduct } from "@/lib/productImage";
 import {
   clearRecentlyViewed,
   getRecentlyViewed,
   subscribeRecentlyViewed,
 } from "@/lib/recentlyViewed";
+
+// Rail thumbnails are 180 px on desktop / 160 px on phone — pick the
+// `sm` (400 w) variant on 2x DPR, `md` (800 w) on 3x. Either is far
+// smaller than the legacy full-resolution download.
+const railAttrs = (art: { image: string; images?: ProductImage[] }) =>
+  imgAttrsFromProduct(art, "180px", "sm");
 
 interface Props {
   excludeId?: string;
@@ -73,7 +80,7 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
                 <img
-                  src={art.image}
+                  {...railAttrs(art)}
                   alt={art.title}
                   loading="lazy"
                   decoding="async"

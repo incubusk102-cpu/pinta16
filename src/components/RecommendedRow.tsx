@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { imgAttrsFromProduct } from "@/lib/productImage";
 import {
   getDiscountPercent,
   getEffectivePrice,
@@ -85,6 +86,11 @@ const RecommendedRow = () => {
       <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
         {picks.map((p) => {
           const discount = getDiscountPercent(p);
+          // Rail thumbnails are ~180 px on desktop / ~160 px on phone.
+          // Browser will pick the `sm` (400 w) variant for retina at
+          // 2x DPR; `md` (800 w) for 3x. Either is far smaller than
+          // the previous full-resolution download.
+          const attrs = imgAttrsFromProduct(p, "180px", "sm");
           return (
             <Link
               key={p.id}
@@ -94,7 +100,11 @@ const RecommendedRow = () => {
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
                 <img
-                  src={p.image}
+                  src={attrs.src}
+                  srcSet={attrs.srcSet}
+                  sizes={attrs.sizes}
+                  width={attrs.width}
+                  height={attrs.height}
                   alt={p.title}
                   loading="lazy"
                   decoding="async"

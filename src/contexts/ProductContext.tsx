@@ -19,6 +19,29 @@ export interface ProductImage {
    * title-only dedupe). See `src/lib/imageHash.ts`.
    */
   hash?: string;
+  /**
+   * Multi-size variants (WebP) emitted by the upload pipeline.
+   * `sm` ≈ 400 px wide (gallery thumbnails / cart rows),
+   * `md` ≈ 800 px wide (rails + product detail on phones),
+   * `lg` ≈ 1600 px wide (full-screen lightbox / zoom).
+   * Absent on legacy entries — render sites fall back to `url`.
+   * See `src/lib/productImage.ts`.
+   */
+  urls?: {
+    sm?: string;
+    md?: string;
+    lg?: string;
+  };
+  /**
+   * Intrinsic dimensions of the largest variant. Set on entries that
+   * went through the multi-variant upload path. Used to set
+   * `<img width height>` so the browser reserves the slot before the
+   * bytes land (Cumulative Layout Shift fix).
+   */
+  dims?: {
+    w: number;
+    h: number;
+  };
 }
 
 export const PRODUCT_MAX_IMAGES = 5;

@@ -68,6 +68,7 @@ import { NewUserModalSection } from "@/components/admin/NewUserModalSection";
 import { AppreciationSection } from "@/components/admin/AppreciationSection";
 import { SecuritySection } from "@/components/admin/SecuritySection";
 import { MigrateR2Card } from "@/components/admin/MigrateR2Card";
+import { MigrateVariantsCard } from "@/components/admin/MigrateVariantsCard";
 import ExportPanel from "@/admin/ExportPanel";
 import AdminMobileUploadFAB from "@/components/admin/AdminMobileUploadFAB";
 import {
@@ -4685,6 +4686,7 @@ function ExportsSection() {
       </div>
       <ExportPanel token={token} />
       <MigrateR2Card />
+      <MigrateVariantsCard />
     </div>
   );
 }

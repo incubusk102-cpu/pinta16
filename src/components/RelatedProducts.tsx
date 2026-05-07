@@ -7,6 +7,7 @@ import {
   useProducts,
 } from "@/contexts/ProductContext";
 import { findArtworkById } from "@/lib/artworks";
+import { imgAttrsFromProduct } from "@/lib/productImage";
 
 interface Props {
   currentId: string;
@@ -77,6 +78,13 @@ export default function RelatedProducts({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
         {related.map((p) => {
           const discount = getDiscountPercent(p);
+          // Grid is 2-up phone / 4-up desktop. Phone slots are ~50 vw,
+          // desktop ~25 vw — `md` (800 w) covers both at retina DPR.
+          const attrs = imgAttrsFromProduct(
+            p,
+            "(min-width: 768px) 25vw, 50vw",
+            "md",
+          );
           return (
             <Link
               key={p.id}
@@ -86,7 +94,11 @@ export default function RelatedProducts({
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
                 <img
-                  src={p.image}
+                  src={attrs.src}
+                  srcSet={attrs.srcSet}
+                  sizes={attrs.sizes}
+                  width={attrs.width}
+                  height={attrs.height}
                   alt={p.title}
                   loading="lazy"
                   decoding="async"

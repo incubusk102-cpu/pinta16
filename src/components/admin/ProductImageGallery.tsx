@@ -5,7 +5,7 @@ import {
   PRODUCT_MAX_IMAGES,
   type ProductImage,
 } from "@/contexts/ProductContext";
-import { compressImage } from "@/lib/imageCompress";
+import { compressImageVariants } from "@/lib/imageCompress";
 import { hashImageDataUrl } from "@/lib/imageHash";
 import { dataUrlToBlob, uploadImageToR2 } from "@/lib/uploadImage";
 
@@ -59,38 +59,60 @@ export function ProductImageGallery({ images, onChange }: Props) {
           continue;
         }
         try {
-          const compressed = await compressImage(file);
-          // Hash the compressed bytes so the upload form can dedupe
-          // before saving — same painting re-encoded to the same JPEG
-          // bytes will hash identically. Computed on the data URL
-          // because that's what we have in hand regardless of whether
-          // the image ultimately lands in R2 or as an inline data URL.
-          const hash = await hashImageDataUrl(compressed.url);
-          // Try R2 first. The endpoint returns 503 when the bucket isn't
-          // bound on this deploy, so we keep the existing data-URL flow
-          // as a graceful fallback — the product still saves either way.
-          const blob = await dataUrlToBlob(compressed.url);
-          let storedUrl = compressed.url;
-          if (blob) {
-            const outcome = await uploadImageToR2(blob);
-            if (outcome.kind === "uploaded") {
-              storedUrl = outcome.result.url;
-            } else if (outcome.kind === "error") {
-              toast.error(
-                `Could not upload ${file.name} to R2: ${outcome.message}. Saved inline instead.`,
-              );
-            } else if (outcome.kind === "fallback" && !r2FallbackToastShown) {
-              toast.message(
-                "R2 image storage isn't configured on this deploy — saving images inline. (See docs/cloudflare-setup.md)",
-              );
-              r2FallbackToastShown = true;
+          // Generate three responsive WebP variants (sm/md/lg). Hash on
+          // the largest variant — same content always hashes the same.
+          const variants = await compressImageVariants(file);
+          const hash = await hashImageDataUrl(variants.lg.url);
+
+          // Upload all three to R2 in parallel. R2 dedupes identical
+          // bytes, so re-uploads of the same photo produce the same
+          // keys and don't grow the bucket.
+          const blobs = await Promise.all([
+            dataUrlToBlob(variants.sm.url),
+            dataUrlToBlob(variants.md.url),
+            dataUrlToBlob(variants.lg.url),
+          ]);
+
+          let storedUrl: string = variants.lg.url; // inline-fallback
+          let urls: ProductImage["urls"] | undefined;
+          const allBlobs: Blob[] = [];
+          for (const b of blobs) if (b) allBlobs.push(b);
+          if (allBlobs.length === blobs.length) {
+            const outcomes = await Promise.all(
+              allBlobs.map((b) => uploadImageToR2(b)),
+            );
+            const allUploaded = outcomes.every((o) => o.kind === "uploaded");
+            if (allUploaded) {
+              const [smOut, mdOut, lgOut] = outcomes;
+              urls = {
+                sm: smOut.kind === "uploaded" ? smOut.result.url : undefined,
+                md: mdOut.kind === "uploaded" ? mdOut.result.url : undefined,
+                lg: lgOut.kind === "uploaded" ? lgOut.result.url : undefined,
+              };
+              storedUrl = urls.lg ?? variants.lg.url;
+            } else {
+              const errored = outcomes.find((o) => o.kind === "error");
+              const fellBack = outcomes.find((o) => o.kind === "fallback");
+              if (errored && errored.kind === "error") {
+                toast.error(
+                  `Could not upload ${file.name} to R2: ${errored.message}. Saved inline instead.`,
+                );
+              } else if (fellBack && !r2FallbackToastShown) {
+                toast.message(
+                  "R2 image storage isn't configured on this deploy — saving images inline. (See docs/cloudflare-setup.md)",
+                );
+                r2FallbackToastShown = true;
+              }
             }
           }
+
           next.push({
             url: storedUrl,
-            fileName: compressed.fileName,
-            bytes: compressed.bytes,
+            fileName: variants.lg.fileName,
+            bytes: variants.lg.bytes,
             hash: hash || undefined,
+            urls,
+            dims: { w: variants.dims.w, h: variants.dims.h },
           });
         } catch {
           toast.error(`Could not read ${file.name}`);
