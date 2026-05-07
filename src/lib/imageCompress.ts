@@ -156,3 +156,72 @@ export const compressAvatar = (file: File): Promise<CompressedImage> =>
     initialQuality: 0.85,
     minQuality: 0.5,
   });
+
+export interface VariantSpec {
+  /** Long-edge target in pixels. */
+  maxDim: number;
+  /** Encoded byte budget. Kept loose for variants — WebP at 0.78
+   * quality lands well under these on typical phone photos. */
+  maxBytes: number;
+}
+
+/**
+ * Sizes that match the `srcset` widths consumed by `imgAttrs` in
+ * `src/lib/productImage.ts`. Bump these together if you ever change
+ * the responsive ladder.
+ */
+export const PRODUCT_VARIANT_SPECS: Record<"sm" | "md" | "lg", VariantSpec> = {
+  sm: { maxDim: 400, maxBytes: 60 * 1024 },
+  md: { maxDim: 800, maxBytes: 200 * 1024 },
+  lg: { maxDim: 1600, maxBytes: 700 * 1024 },
+};
+
+export interface ProductImageVariants {
+  sm: CompressedImage;
+  md: CompressedImage;
+  lg: CompressedImage;
+  /** Largest-variant intrinsic dimensions; populated for explicit
+   * `<img width height>` so the browser reserves the slot before bytes
+   * land (CLS fix). */
+  dims: { w: number; h: number };
+}
+
+/**
+ * Generate three WebP variants for a single source file, sized for the
+ * `<img srcset>` ladder. Each variant is independent — same file can be
+ * uploaded to R2 three times yielding three content-addressed objects
+ * (or deduped on identical bytes).
+ *
+ * Browsers without WebP support fall back to whatever the call site
+ * stores as `image.url` (typically the `lg` variant).
+ */
+export const compressImageVariants = async (
+  file: File,
+): Promise<ProductImageVariants> => {
+  const [sm, md, lg] = await Promise.all([
+    compressImage(file, {
+      ...PRODUCT_VARIANT_SPECS.sm,
+      mimeType: "image/webp",
+      initialQuality: 0.78,
+      minQuality: 0.5,
+    }),
+    compressImage(file, {
+      ...PRODUCT_VARIANT_SPECS.md,
+      mimeType: "image/webp",
+      initialQuality: 0.82,
+      minQuality: 0.55,
+    }),
+    compressImage(file, {
+      ...PRODUCT_VARIANT_SPECS.lg,
+      mimeType: "image/webp",
+      initialQuality: 0.85,
+      minQuality: 0.6,
+    }),
+  ]);
+  return {
+    sm,
+    md,
+    lg,
+    dims: { w: lg.width, h: lg.height },
+  };
+};

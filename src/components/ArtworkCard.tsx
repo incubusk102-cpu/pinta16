@@ -14,7 +14,9 @@ import { useWishlist } from "@/contexts/WishlistContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
+  type ProductImage,
 } from "@/contexts/ProductContext";
+import { imgAttrs } from "@/lib/productImage";
 import {
   AVAILABILITY_LABEL,
   isPurchasable,
@@ -33,6 +35,14 @@ interface ArtworkCardProps {
   description: string;
   index: number;
   availability?: Availability;
+  /**
+   * Full ProductImage records for the gallery card. When present,
+   * the card renders `<img srcset>` against the multi-size variants
+   * stored in `images[*].urls`. Absent on legacy default artworks
+   * served from the static /images bundle, which fall back to the
+   * single `image` prop.
+   */
+  images?: ProductImage[];
   onClick: () => void;
 }
 
@@ -55,6 +65,7 @@ const ArtworkCard = ({
   description,
   index,
   availability = "available",
+  images,
   onClick,
 }: ArtworkCardProps) => {
   const { addToCart } = useCart();
@@ -128,7 +139,18 @@ const ArtworkCard = ({
     });
   };
 
+  // Decide which ProductImage record (if any) backs the currently
+  // displayed photo so we can emit `<img srcset>` for it. Falls back
+  // to a string-only `src` when the product predates the variants
+  // pipeline or when the source is the static /images bundle.
+  const primaryImage = images?.[0];
+  const mockupImage = images && images.length > 1 ? images[1] : undefined;
+  const activeImage = isHovered && mockupImage ? mockupImage : primaryImage;
   const displayImage = isHovered && mockup ? mockup : image;
+  const responsiveAttrs = imgAttrs(
+    activeImage && activeImage.url === displayImage ? activeImage : undefined,
+    "(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw",
+  );
   const isDimmed = availability === "sold" || availability === "draft";
 
   return (
@@ -179,8 +201,9 @@ const ArtworkCard = ({
         />
         <AnimatePresence mode="wait">
           <motion.img
-            key={displayImage}
-            src={displayImage}
+            key={responsiveAttrs.src || displayImage}
+            src={responsiveAttrs.src || displayImage}
+            srcSet={responsiveAttrs.srcSet}
             alt={title}
             initial={{ opacity: 0, scale: 1.05 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -189,10 +212,15 @@ const ArtworkCard = ({
             className={`w-full object-cover ${isDimmed ? "grayscale opacity-80" : ""}`}
             loading="lazy"
             decoding="async"
+            width={responsiveAttrs.width}
+            height={responsiveAttrs.height}
             // Help the browser pick an appropriately-sized image for
             // the card slot at each breakpoint (gallery is 1-up on
             // mobile, 2-up on `sm:`, 3-up on `lg:`).
-            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            sizes={
+              responsiveAttrs.sizes ??
+              "(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            }
           />
         </AnimatePresence>
 

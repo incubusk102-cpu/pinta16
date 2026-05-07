@@ -26,6 +26,7 @@ import MagneticButton from "@/components/MagneticButton";
 import SplitText from "@/components/motion/SplitText";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { addStamp } from "@/lib/passport";
+import { imgAttrs, variantSrc } from "@/lib/productImage";
 import {
   getDiscountPercent,
   getEffectivePrice,
@@ -377,20 +378,38 @@ function ProductPage() {
                 className="block w-full"
                 aria-label="Zoom image"
               >
-                <ImageWithFallback
-                  key={currentImage.url}
-                  src={currentImage.url}
-                  alt={`${artwork.title} – photo ${activeImage + 1}`}
-                  className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
-                  fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
-                  // This is the LCP element on the product detail page —
-                  // tell the browser to prioritize it over off-screen
-                  // gallery images and deferred chunks.
-                  loading="eager"
-                  // Cast to bypass the older React DOM types that don't
-                  // know about the modern `fetchpriority` attribute yet.
-                  {...({ fetchpriority: "high" } as Record<string, string>)}
-                />
+                {(() => {
+                  // LCP element on the product detail page. Hero slot
+                  // is roughly 60 vw on desktop / 100 vw on mobile, so
+                  // `md` (800 w) covers most phones at retina DPR and
+                  // `lg` (1600 w) handles desktop and high-DPR phones.
+                  const heroAttrs = imgAttrs(
+                    currentImage,
+                    "(min-width: 1024px) 60vw, 100vw",
+                    "lg",
+                  );
+                  return (
+                    <ImageWithFallback
+                      key={currentImage.url}
+                      src={heroAttrs.src || currentImage.url}
+                      srcSet={heroAttrs.srcSet}
+                      sizes={heroAttrs.sizes}
+                      width={heroAttrs.width}
+                      height={heroAttrs.height}
+                      alt={`${artwork.title} – photo ${activeImage + 1}`}
+                      className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
+                      fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
+                      // Tell the browser to prioritize the LCP image
+                      // over off-screen gallery images and deferred
+                      // chunks.
+                      loading="eager"
+                      // Cast to bypass the older React DOM types that
+                      // don't know about the modern `fetchpriority`
+                      // attribute yet.
+                      {...({ fetchpriority: "high" } as Record<string, string>)}
+                    />
+                  );
+                })()}
               </button>
               {showAvailabilityBadge && (
                 <span
@@ -449,12 +468,16 @@ function ProductPage() {
                     }`}
                   >
                     <ImageWithFallback
-                      src={img.url}
+                      // Thumbnails are 80×80 — `sm` (400 w) covers
+                      // 4x DPR phones with bytes to spare.
+                      src={variantSrc(img, "sm")}
                       alt={`${artwork.title} thumbnail ${idx + 1}`}
                       className="w-full h-full object-cover"
                       fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
                       loading="lazy"
                       decoding="async"
+                      width={img.dims?.w}
+                      height={img.dims?.h}
                     />
                   </button>
                 ))}
@@ -643,7 +666,9 @@ function ProductPage() {
             Close
           </button>
           <ZoomableImage
-            src={currentImage.url}
+            // Pinch-zoom needs the highest-resolution variant we have
+            // so detail stays crisp at full scale.
+            src={variantSrc(currentImage, "lg")}
             alt={artwork.title}
             className="w-full h-full"
           />
