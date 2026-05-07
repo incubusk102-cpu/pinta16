@@ -49,7 +49,7 @@ import {
   recordAuthFailure,
 } from "./_lib/security-events.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
-import { appendAuditEvent } from "./_lib/audit-log.js";
+import { appendAuditEvent, recordPiiAccess } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { loadWelcomeEmailConfig, sendWelcomeEmail } from "./_lib/email.js";
 import { verifyTurnstileToken } from "./_lib/turnstile.js";
@@ -884,6 +884,11 @@ export const handler = async (event) => {
       const list = Object.values(users)
         .map(publicUser)
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      await recordPiiAccess(event, {
+        resource: "users",
+        action: "list",
+        detail: `Listed ${list.length} user(s)`,
+      });
       return json(200, {
         users: list,
         total: list.length,
@@ -896,6 +901,11 @@ export const handler = async (event) => {
         return json(401, { error: "Admin authentication required" });
       }
       const result = await runInactiveUserCleanup(store);
+      await recordPiiAccess(event, {
+        resource: "users",
+        action: "cleanup",
+        detail: `Inactive cleanup removed ${result?.removed ?? 0} user(s)`,
+      });
       return json(200, result);
     }
 
@@ -910,6 +920,12 @@ export const handler = async (event) => {
       if (!found) return json(404, { error: "User not found" });
       delete users[found[0]];
       await writeUsers(store, users);
+      await recordPiiAccess(event, {
+        resource: "user",
+        action: "delete",
+        target: found[0],
+        detail: `Deleted user ${id}`,
+      });
       return json(200, { ok: true, deletedEmail: found[0] });
     }
 

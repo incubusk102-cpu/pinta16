@@ -21,6 +21,7 @@ import {
 } from "./_lib/email.js";
 import { renderVoucherEmail } from "../../src/emails/render.ts";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { recordPiiAccess } from "./_lib/audit-log.js";
 
 const LIST_KEY = "subscribers";
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -168,6 +169,11 @@ const handle = async ({ request, env }) => {
           : env.BREVO_API_KEY && env.BREVO_LIST_ID
             ? "brevo"
             : null;
+      await recordPiiAccess(event, {
+        resource: "newsletter",
+        action: "list",
+        detail: `Listed ${subs.length} subscriber(s)`,
+      });
       return json(200, {
         subscribers: subs,
         count: subs.length,
@@ -309,6 +315,12 @@ const handle = async ({ request, env }) => {
       const subs = await readSubscribers(store);
       const next = subs.filter((s) => s.email !== email);
       await store.setJSON(LIST_KEY, next);
+      await recordPiiAccess(event, {
+        resource: "newsletter",
+        action: "delete",
+        target: email,
+        detail: `Removed subscriber, ${next.length} remain`,
+      });
       return json(200, { ok: true, count: next.length });
     }
 

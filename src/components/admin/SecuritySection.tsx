@@ -40,6 +40,14 @@ interface AuditEvent {
   detail?: string;
 }
 
+// Backend response when ?type= / ?subject= / ?outcome= / ?before= are
+// supplied to /api/admin-auth?action=audit. Used by the "PII access"
+// panel and the per-customer access-history filter.
+interface PiiAuditResponse {
+  events: AuditEvent[];
+  hasMore: boolean;
+}
+
 interface RateLimit {
   windowMs: number;
   max: number;
@@ -139,6 +147,15 @@ export function SecuritySection() {
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [filter, setFilter] = useState<string>("");
 
+  // PII access panel state. Lives alongside the general audit log but
+  // queries the backend with type="pii." so the panel only ever sees
+  // PII-touching admin actions (customer / order / user / newsletter /
+  // abandoned-cart / export-backup reads & writes).
+  const [piiEvents, setPiiEvents] = useState<AuditEvent[] | null>(null);
+  const [piiHasMore, setPiiHasMore] = useState(false);
+  const [loadingPii, setLoadingPii] = useState(false);
+  const [piiSubject, setPiiSubject] = useState<string>("");
+
   // Live-tunable security config state. `serverConfig` is the last value the
   // backend confirmed; `draft` is the value the admin is currently editing.
   // The Save buttons are disabled when the draft equals the server value to
@@ -179,6 +196,38 @@ export function SecuritySection() {
     }
   };
 
+  // Pull the most-recent 200 PII access entries (or up to 200 entries
+  // whose subject matches the filter) from the audit log. We pass
+  // type="pii." to the paginated endpoint so it returns only the
+  // structured `pii.<resource>.<action>` rows the recordPiiAccess()
+  // helper writes — unrelated audit events stay in the panel below.
+  const refreshPiiEvents = async (subject = piiSubject) => {
+    setLoadingPii(true);
+    try {
+      const token = getAdminToken() ?? "";
+      const params = new URLSearchParams({
+        action: "audit",
+        type: "pii.",
+        limit: "200",
+      });
+      const trimmed = subject.trim();
+      if (trimmed) params.set("subject", trimmed);
+      const data = await fetchJson<PiiAuditResponse>(
+        `/api/admin-auth?${params.toString()}`,
+        { token },
+      );
+      setPiiEvents(Array.isArray(data.events) ? data.events : []);
+      setPiiHasMore(Boolean(data.hasMore));
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error ? err.message : "Could not load PII access events",
+      );
+    } finally {
+      setLoadingPii(false);
+    }
+  };
+
   const refreshConfig = async () => {
     setLoadingConfig(true);
     try {
@@ -207,6 +256,11 @@ export function SecuritySection() {
   useEffect(() => {
     void refreshAudit();
     void refreshConfig();
+    void refreshPiiEvents("");
+    // refreshPiiEvents is intentionally omitted from deps — we only
+    // want the initial load here. Subsequent refreshes happen via the
+    // refresh button and the subject filter form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredEvents = (events ?? []).filter((e) => {
@@ -406,6 +460,109 @@ export function SecuritySection() {
       <AdminPasskeysSection />
 
       <Admin2FASection />
+
+      <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
+        <div className="p-3 border-b border-border/60 bg-muted/20 flex items-center gap-2 flex-wrap">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            PII access ({piiEvents?.length ?? 0})
+            {piiHasMore && (
+              <span className="ml-1 text-amber-600">
+                (newer entries truncated)
+              </span>
+            )}
+          </span>
+          <form
+            className="flex items-center gap-2 ml-auto"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void refreshPiiEvents(piiSubject);
+            }}
+          >
+            <Input
+              placeholder="Filter by subject (email, order id…)"
+              value={piiSubject}
+              onChange={(e) => setPiiSubject(e.target.value)}
+              className="w-72"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              disabled={loadingPii}
+            >
+              {loadingPii ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+            </Button>
+            {piiSubject && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setPiiSubject("");
+                  void refreshPiiEvents("");
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </form>
+        </div>
+        {piiEvents === null ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : piiEvents.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">
+            {piiSubject
+              ? `No PII access events match "${piiSubject}".`
+              : "No PII access events recorded yet."}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/40 text-xs">
+            {piiEvents.map((e, idx) => (
+              <li key={`pii-${e.at}-${idx}`} className="p-3 space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-foreground">{e.type}</span>
+                  <span className="text-muted-foreground">{e.outcome}</span>
+                  <span className="text-muted-foreground ml-auto">
+                    {new Date(e.at).toLocaleString()}
+                  </span>
+                </div>
+                {(e.subject || e.detail) && (
+                  <p className="text-muted-foreground">
+                    {e.subject && (
+                      <button
+                        type="button"
+                        className="text-foreground/80 underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setPiiSubject(e.subject || "");
+                          void refreshPiiEvents(e.subject || "");
+                        }}
+                        title="View access history for this subject"
+                      >
+                        {e.subject}
+                      </button>
+                    )}
+                    {e.subject && e.detail && " — "}
+                    {e.detail}
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  {e.ip && <span className="font-mono">{e.ip}</span>}
+                  {e.ip && (e.browser || e.os) && " · "}
+                  {e.browser && e.os && (
+                    <span>
+                      {e.browser} on {e.os} ({e.device || "device"})
+                    </span>
+                  )}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="rounded-lg border border-border/60 bg-card overflow-hidden">
         <header className="p-3 border-b border-border/60 bg-muted/20 flex items-center gap-2">

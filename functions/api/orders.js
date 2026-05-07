@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
-import { appendAuditEvent } from "./_lib/audit-log.js";
+import { appendAuditEvent, recordPiiAccess } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { logError, logWarn } from "./_lib/redact.js";
 import {
@@ -844,6 +844,11 @@ export const handler = async (event) => {
         return json(401, { error: "Not authenticated" });
       }
       const orders = await readOrders(store);
+      await recordPiiAccess(event, {
+        resource: "orders",
+        action: "list",
+        detail: `Listed ${orders.length} order(s)`,
+      });
       return json(200, { orders });
     }
 
@@ -1402,6 +1407,12 @@ export const handler = async (event) => {
           detail: `Manual order ₱${safeOrder.total.toLocaleString()}`,
           ...meta,
         });
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "create",
+          target: safeOrder.orderInfo.email,
+          detail: `${safeOrder.id} ₱${safeOrder.total.toLocaleString()}`,
+        });
         return json(200, { order: safeOrder });
       }
 
@@ -1493,6 +1504,12 @@ export const handler = async (event) => {
         const latestNote = statusChanged
           ? notifications[notifications.length - 1]
           : null;
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "update",
+          target: recipient,
+          detail: `${orderId} status -> ${status}`,
+        });
         return json(200, { order: orders[idx], notification: latestNote });
       }
 
@@ -1542,6 +1559,12 @@ export const handler = async (event) => {
         notifications[idx] = target;
         orders[orderIdx] = { ...existing, notifications };
         await store.setJSON(ORDERS_KEY, orders);
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "resend-email",
+          target: existing.orderInfo?.email || "",
+          detail: `${orderId} resent ${target.type || "notification"}`,
+        });
         return json(200, { order: orders[orderIdx], notification: target });
       }
 
@@ -1556,6 +1579,12 @@ export const handler = async (event) => {
         if (idx === -1) return json(404, { error: "Order not found" });
         orders[idx] = { ...orders[idx], adminNote: note || "" };
         await store.setJSON(ORDERS_KEY, orders);
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "update-note",
+          target: orders[idx].orderInfo?.email || "",
+          detail: `${orderId} admin note (${String(note || "").length} chars)`,
+        });
         return json(200, { order: orders[idx] });
       }
 
@@ -1571,6 +1600,12 @@ export const handler = async (event) => {
         const idx = orders.findIndex((o) => o.id === orderId);
         if (idx === -1) return json(404, { error: "Order not found" });
         const existing = orders[idx];
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "update-shipment",
+          target: existing.orderInfo?.email || "",
+          detail: `${orderId} shipment ${shipment === null ? "cleared" : "updated"}`,
+        });
         const meta = captureRequestMeta(event);
         const activityLog = Array.isArray(existing.activityLog)
           ? [...existing.activityLog]
@@ -2327,6 +2362,12 @@ export const handler = async (event) => {
           subject: orderId,
           detail: `Refund ₱${refundRecord.amount.toLocaleString()} (${refundReason})`,
           ...refundMeta,
+        });
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "refund",
+          target: recipient,
+          detail: `${orderId} refund ₱${refundRecord.amount.toLocaleString()} (${refundReason})`,
         });
         return json(200, { order: orders[idx] });
       }

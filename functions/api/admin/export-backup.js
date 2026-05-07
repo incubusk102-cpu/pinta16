@@ -27,6 +27,19 @@
 // with `wrangler kv:bulk put` (see docs/backup-recovery.md).
 
 import { initRequestContext } from "../_lib/handler-wrapper.js";
+import { recordPiiAccess } from "../_lib/audit-log.js";
+
+// Convert a fetch-style Request's headers into the flat key/value
+// object shape that captureRequestMeta() / appendAuditEvent() expect
+// (lambda-event headers). We lower-case keys for consistency with
+// the lookup helpers in request-info.js.
+const buildLambdaHeaders = (request) => {
+  const headers = {};
+  for (const [key, value] of request.headers.entries()) {
+    headers[key.toLowerCase()] = value;
+  }
+  return headers;
+};
 
 // Namespaces that contain irreplaceable / business-critical data.
 // Order matters only for log readability; the dump is independent
@@ -115,6 +128,22 @@ export const onRequestGet = async ({ request, env }) => {
   }
 
   const startedAt = new Date().toISOString();
+  // Best-effort audit entry — the dump exposes every PII namespace, so
+  // it deserves a visible row in the admin "PII access" panel even
+  // though the caller is the GitHub Action (BACKUP_TOKEN), not a
+  // logged-in admin.
+  try {
+    await recordPiiAccess(
+      { headers: buildLambdaHeaders(request) },
+      {
+        resource: "export",
+        action: "backup",
+        detail: `Backup dump started at ${startedAt} (${BACKUP_NAMESPACES.length} namespaces)`,
+      },
+    );
+  } catch {
+    /* never block the dump on audit failures */
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
