@@ -15,8 +15,11 @@
 // dropped). Content-hashed Vite assets normally make this unnecessary,
 // but bump it whenever the SW logic itself changes or when we ship a
 // fix that users on stale chunks must pick up immediately. Last bump:
-// v7 (admin variant generation fix — see PR #318).
-const VERSION = "v7";
+// v8 (splash rotation: SMIL restore — non-Vite-hashed /splash.css and
+// /splash.js need to be evicted from the cache-first asset bucket so
+// existing devices pick up the SMIL rotation that fixes the C drifting
+// through the lower-right quadrant on Android Chrome / Brave).
+const VERSION = "v8";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
