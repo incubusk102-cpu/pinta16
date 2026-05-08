@@ -1393,6 +1393,16 @@ const sanitizeConfig = (raw) => {
               ? null
               : Math.max(0, Math.floor(Number(p.usageLimit) || 0)) || null,
           usageCount: Math.max(0, Math.floor(Number(p.usageCount) || 0)),
+          // Per-customer redemption cap. 0 (or missing) means unlimited so
+          // existing codes saved before this field round-trip unchanged.
+          // Enforced server-side by orders.js at place time, against the D1
+          // `coupon_redemptions` ledger. The KV usageCount counter tracks
+          // global uses; this caps how many times any single customer can
+          // redeem the same code.
+          maxRedemptionsPerCustomer: Math.max(
+            0,
+            Math.floor(Number(p.maxRedemptionsPerCustomer) || 0),
+          ),
           expiresAt:
             typeof p.expiresAt === "string" && p.expiresAt ? p.expiresAt : null,
           enabled: p.enabled !== false,

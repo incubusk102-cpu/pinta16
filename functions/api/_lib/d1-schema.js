@@ -101,4 +101,23 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_wishlist_items_user ON wishlist_items(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_wishlist_items_product ON wishlist_items(product_id)`,
   `CREATE INDEX IF NOT EXISTS idx_wishlist_items_added_at ON wishlist_items(added_at)`,
+
+  `CREATE TABLE IF NOT EXISTS coupon_redemptions (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    customer_id TEXT,
+    customer_email TEXT NOT NULL,
+    discount_cents INTEGER NOT NULL DEFAULT 0,
+    subtotal_cents INTEGER NOT NULL DEFAULT 0,
+    total_cents INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'PHP',
+    redeemed_at TEXT NOT NULL,
+    UNIQUE (order_id, code)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_code ON coupon_redemptions(code)`,
+  `CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_email ON coupon_redemptions(customer_email)`,
+  `CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_customer ON coupon_redemptions(customer_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_redeemed_at ON coupon_redemptions(redeemed_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_email_code ON coupon_redemptions(customer_email, code)`,
 ];

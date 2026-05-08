@@ -67,6 +67,10 @@ export interface PromoCodePublic {
   minSpend: number;
   expiresAt: string | null;
   description: string;
+  // 0 means unlimited per customer (back-compat with codes that pre-date
+  // the per-customer cap). Surfaced publicly so the cart can warn the
+  // shopper before they hit the wall at checkout.
+  maxRedemptionsPerCustomer?: number;
 }
 
 export interface ChatConfig {

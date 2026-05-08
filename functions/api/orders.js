@@ -29,7 +29,12 @@ import {
   writeUsers,
 } from "./_lib/user-auth.js";
 import { ensurePersonalReward } from "./_lib/personal-rewards.js";
-import { mirrorOrderToD1, isD1Available } from "./_lib/d1.js";
+import {
+  mirrorOrderToD1,
+  isD1Available,
+  recordCouponRedemption,
+  customerCouponRedemptionCount,
+} from "./_lib/d1.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
 
@@ -1103,8 +1108,28 @@ export const handler = async (event) => {
             // shipping). free_shipping-only codes have expected === 0 and
             // were previously dropped — they are now honored.
             if (discountMatches && (expected > 0 || grantsFreeShip)) {
-              validatedVoucherCode = clientVoucher;
-              validatedDiscount = expected;
+              // Per-customer cap: when the admin set
+              // `maxRedemptionsPerCustomer > 0`, look the buyer up in the
+              // D1 redemption ledger and refuse the discount if they're
+              // already at the cap. Null return = D1 unbound, in which
+              // case we silently fall through and rely on the global
+              // KV `usageLimit` instead so the order still places.
+              const cap = Math.max(
+                0,
+                Math.floor(Number(promo.maxRedemptionsPerCustomer) || 0),
+              );
+              let overCap = false;
+              if (cap > 0) {
+                const used = await customerCouponRedemptionCount(
+                  info.email,
+                  clientVoucher,
+                );
+                if (typeof used === "number" && used >= cap) overCap = true;
+              }
+              if (!overCap) {
+                validatedVoucherCode = clientVoucher;
+                validatedDiscount = expected;
+              }
             }
           }
         }
@@ -1248,6 +1273,22 @@ export const handler = async (event) => {
         }
         if (safeOrder.voucherCode && safeOrder.discount > 0) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
+          // Mirror this redemption into D1 so the per-customer cap query
+          // above stays accurate and the admin "top codes" report has
+          // something to aggregate. Best-effort — the KV usageCount
+          // increment above is the source of truth for the global cap.
+          try {
+            const sessionUser = await getCurrentUserFromSession(event).catch(
+              () => null,
+            );
+            await recordCouponRedemption({
+              code: safeOrder.voucherCode,
+              order: safeOrder,
+              customerId: sessionUser?.id || null,
+            });
+          } catch (err) {
+            logWarn("D1 coupon redemption mirror failed:", err);
+          }
         }
         try {
           await applyFirstOrderRewards({
