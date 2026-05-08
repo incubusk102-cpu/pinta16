@@ -54,6 +54,7 @@ import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { CustomersSection } from "@/components/admin/CustomersSection";
+import ReturnsSection from "@/components/admin/ReturnsSection";
 import { AbandonedCartSection } from "@/components/admin/AbandonedCartSection";
 import { MarketingSection } from "@/components/admin/MarketingSection";
 import { MarketingTriggersSection } from "@/components/admin/MarketingTriggersSection";
@@ -89,6 +90,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   Package,
+  PackageX,
   Palmtree,
   Pencil,
   Plus,
@@ -138,6 +140,7 @@ type AdminSection =
   | "dashboard"
   | "products"
   | "orders"
+  | "returns"
   | "messages"
   | "reviews"
   | "visitors"
@@ -163,6 +166,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   dashboard: "Dashboard",
   products: "Products",
   orders: "Orders",
+  returns: "Returns",
   messages: "Messages",
   reviews: "Reviews",
   visitors: "Visitors",
@@ -512,6 +516,11 @@ const NAV_GROUPS: {
         key: "orders",
         icon: <Package className="w-4 h-4" />,
         hint: "Track & update",
+      },
+      {
+        key: "returns",
+        icon: <PackageX className="w-4 h-4" />,
+        hint: "RMA queue",
       },
     ],
   },
@@ -1133,6 +1142,7 @@ function AdminDashboard() {
           )}
           {section === "products" && <ProductsSection />}
           {section === "orders" && <OrdersSection />}
+          {section === "returns" && <ReturnsSection />}
           {section === "messages" && <MessagesSection />}
           {section === "reviews" && <ReviewsSection />}
           {section === "visitors" && <VisitorsSection />}

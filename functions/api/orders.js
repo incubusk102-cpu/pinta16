@@ -34,6 +34,8 @@ import {
   isD1Available,
   recordCouponRedemption,
   customerCouponRedemptionCount,
+  mirrorReturnRequestToD1,
+  listReturnRequests,
 } from "./_lib/d1.js";
 
 const PAYMONGO_BASE = "https://api.paymongo.com";
@@ -472,6 +474,119 @@ export const handler = async (event) => {
             new Date(a.submittedAt).getTime(),
         );
         return json(200, { reviews });
+      }
+
+      if (params.returns === "queue") {
+        // Admin-only: hydrate the Returns admin panel. We pull rows from
+        // the D1 ledger (cheap, status-filterable, indexed on
+        // requested_at) and then re-attach the live order summary from
+        // KV so the panel can show product titles + customer name
+        // without a second round-trip. Falls back to scanning the
+        // orders blob when D1 is unbound — the customer-files-a-return
+        // path already works via KV alone, so this guarantees the
+        // admin queue is never empty just because the migration hasn't
+        // been applied yet.
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const status =
+          typeof params.status === "string" && params.status.trim()
+            ? params.status.trim()
+            : null;
+        const limit = Math.min(Math.max(Number(params.limit) || 100, 1), 500);
+
+        const rows = await listReturnRequests({ status, limit });
+        const orders = await readOrders(store);
+        const orderById = new Map(orders.map((o) => [o.id, o]));
+
+        let queue;
+        if (rows) {
+          queue = rows.map((r) => {
+            const o = orderById.get(r.orderId);
+            return {
+              ...r,
+              order: o
+                ? {
+                    id: o.id,
+                    createdAt: o.createdAt,
+                    total: o.total,
+                    status: o.status,
+                    customerName: o.orderInfo?.fullName || "",
+                    customerCity: o.orderInfo?.city || "",
+                    items: Array.isArray(o.items)
+                      ? o.items.map((it) => ({
+                          id: it.id,
+                          title: it.title,
+                          image: it.image,
+                          quantity: it.quantity,
+                          price: it.price,
+                        }))
+                      : [],
+                    refund: o.refund
+                      ? { status: o.refund.status, amount: o.refund.amount }
+                      : null,
+                  }
+                : null,
+            };
+          });
+        } else {
+          // Fallback: walk every order in KV and emit a synthetic row
+          // for any that has a returnRequest sub-document. Slower, but
+          // exactly equivalent in shape so the admin panel renders the
+          // same UI either way.
+          queue = [];
+          for (const o of orders) {
+            const rr = o.returnRequest;
+            if (!rr || typeof rr !== "object") continue;
+            if (status && rr.status !== status) continue;
+            queue.push({
+              id: rr.id || `${o.id}:return`,
+              orderId: o.id,
+              customerId: null,
+              customerEmail: (o.orderInfo?.email || "").toLowerCase(),
+              status: rr.status || "requested",
+              reason: rr.reason || "",
+              description: rr.description || "",
+              rmaNumber: rr.rmaNumber || null,
+              denialReason: rr.denialReason || "",
+              refundAmount:
+                typeof rr.refundAmount === "number" ? rr.refundAmount : null,
+              requestedAt: rr.requestedAt || o.createdAt || "",
+              decidedAt: rr.decidedAt || "",
+              receivedAt: rr.receivedAt || "",
+              completedAt: rr.completedAt || "",
+              cancelledAt: rr.cancelledAt || "",
+              order: {
+                id: o.id,
+                createdAt: o.createdAt,
+                total: o.total,
+                status: o.status,
+                customerName: o.orderInfo?.fullName || "",
+                customerCity: o.orderInfo?.city || "",
+                items: Array.isArray(o.items)
+                  ? o.items.map((it) => ({
+                      id: it.id,
+                      title: it.title,
+                      image: it.image,
+                      quantity: it.quantity,
+                      price: it.price,
+                    }))
+                  : [],
+                refund: o.refund
+                  ? { status: o.refund.status, amount: o.refund.amount }
+                  : null,
+              },
+            });
+          }
+          queue.sort(
+            (a, b) =>
+              new Date(b.requestedAt || 0).getTime() -
+              new Date(a.requestedAt || 0).getTime(),
+          );
+          queue = queue.slice(0, limit);
+        }
+
+        return json(200, { queue, source: rows ? "d1" : "kv" });
       }
 
       if (params.recent === "sold") {
@@ -2513,6 +2628,313 @@ export const handler = async (event) => {
         };
         await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: sanitize(orders[idx]) });
+      }
+
+      // ─── Returns / RMA ─────────────────────────────────────────────────
+      // Customer-initiated. Auth is the storefront user session (cookie or
+      // bearer), not the admin token. Email on the order must match the
+      // signed-in user, otherwise we 403 — this prevents a logged-in
+      // customer from filing a return on someone else's order ID.
+      if (action === "customer-return-request") {
+        const sessionUser = await getCurrentUserFromSession(event).catch(
+          () => null,
+        );
+        if (!sessionUser) {
+          return json(401, { error: "Not authenticated" });
+        }
+
+        const VALID_REASONS = new Set([
+          "damaged_in_transit",
+          "wrong_item",
+          "not_as_described",
+          "changed_mind",
+          "other",
+        ]);
+
+        const orderId =
+          typeof body.orderId === "string" ? body.orderId.trim() : "";
+        const reason = VALID_REASONS.has(body.reason) ? body.reason : "other";
+        const description =
+          typeof body.description === "string"
+            ? body.description.trim().slice(0, 2000)
+            : "";
+        const photoUrls = Array.isArray(body.photoUrls)
+          ? body.photoUrls
+              .filter((u) => typeof u === "string" && u.trim())
+              .slice(0, 8)
+              .map((u) => u.trim().slice(0, 2000))
+          : [];
+        const items = Array.isArray(body.items)
+          ? body.items
+              .map((it) => {
+                if (!it || typeof it !== "object") return null;
+                const productId =
+                  typeof it.productId === "string"
+                    ? it.productId.trim().slice(0, 200)
+                    : "";
+                const quantity = Math.max(
+                  1,
+                  Math.floor(Number(it.quantity) || 1),
+                );
+                if (!productId) return null;
+                return { productId, quantity };
+              })
+              .filter(Boolean)
+              .slice(0, 50)
+          : [];
+
+        if (!orderId) {
+          return json(400, { error: "Invalid orderId" });
+        }
+        if (!description) {
+          return json(400, {
+            error: "Please describe the issue in a few words",
+          });
+        }
+
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const orderEmail = normalizeEmail(existing.orderInfo?.email);
+        const sessionEmail = normalizeEmail(sessionUser.email);
+        if (!orderEmail || orderEmail !== sessionEmail) {
+          return json(403, { error: "This order is not on your account" });
+        }
+        if (existing.status !== "received") {
+          return json(409, {
+            error: "Returns can only be filed after the order is received",
+          });
+        }
+        if (
+          existing.returnRequest &&
+          existing.returnRequest.status !== "denied" &&
+          existing.returnRequest.status !== "cancelled"
+        ) {
+          return json(409, { error: "A return is already on file" });
+        }
+
+        const now = new Date().toISOString();
+        const returnRequest = {
+          id: `${existing.id}:return`,
+          status: "requested",
+          reason,
+          description,
+          photoUrls,
+          items,
+          requestedAt: now,
+        };
+
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        activityLog.push({
+          at: now,
+          type: "return-requested",
+          actor: "customer",
+          ...meta,
+        });
+
+        orders[idx] = {
+          ...existing,
+          returnRequest,
+          activityLog,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+
+        if (isD1Available()) {
+          void mirrorReturnRequestToD1({
+            order: orders[idx],
+            request: returnRequest,
+            customerId: sessionUser.id || null,
+          }).catch((err) => logError("mirrorReturnRequestToD1 failed:", err));
+        }
+
+        await appendAuditEvent(event, {
+          type: "order.return",
+          outcome: "requested",
+          subject: orderId,
+          detail: `Return requested (${reason})`,
+          ...meta,
+        });
+
+        return json(200, { order: orders[idx] });
+      }
+
+      if (action === "customer-return-cancel") {
+        const sessionUser = await getCurrentUserFromSession(event).catch(
+          () => null,
+        );
+        if (!sessionUser) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const orderId =
+          typeof body.orderId === "string" ? body.orderId.trim() : "";
+        if (!orderId) {
+          return json(400, { error: "Invalid orderId" });
+        }
+
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const orderEmail = normalizeEmail(existing.orderInfo?.email);
+        const sessionEmail = normalizeEmail(sessionUser.email);
+        if (!orderEmail || orderEmail !== sessionEmail) {
+          return json(403, { error: "This order is not on your account" });
+        }
+        if (
+          !existing.returnRequest ||
+          existing.returnRequest.status !== "requested"
+        ) {
+          return json(409, { error: "No pending return on this order" });
+        }
+
+        const now = new Date().toISOString();
+        const returnRequest = {
+          ...existing.returnRequest,
+          status: "cancelled",
+          cancelledAt: now,
+        };
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        activityLog.push({
+          at: now,
+          type: "return-cancelled",
+          actor: "customer",
+          ...captureRequestMeta(event),
+        });
+        orders[idx] = { ...existing, returnRequest, activityLog };
+        await store.setJSON(ORDERS_KEY, orders);
+
+        if (isD1Available()) {
+          void mirrorReturnRequestToD1({
+            order: orders[idx],
+            request: returnRequest,
+            customerId: sessionUser.id || null,
+          }).catch((err) => logError("mirrorReturnRequestToD1 failed:", err));
+        }
+
+        return json(200, { order: orders[idx] });
+      }
+
+      // Admin-only: walk a return through the rest of its lifecycle.
+      // approve / deny / mark-received / complete-return are all gated on
+      // the admin session (same gate as request-refund above).
+      if (
+        action === "approve-return" ||
+        action === "deny-return" ||
+        action === "mark-return-received" ||
+        action === "complete-return"
+      ) {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const orderId =
+          typeof body.orderId === "string" ? body.orderId.trim() : "";
+        if (!orderId) {
+          return json(400, { error: "Invalid orderId" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        if (!existing.returnRequest) {
+          return json(409, { error: "No return on this order" });
+        }
+        const cur = existing.returnRequest;
+        const now = new Date().toISOString();
+        let nextStatus = cur.status;
+        const patch = {};
+
+        if (action === "approve-return") {
+          if (cur.status !== "requested") {
+            return json(409, {
+              error: `Cannot approve a return in status "${cur.status}"`,
+            });
+          }
+          nextStatus = "approved";
+          patch.decidedAt = now;
+          if (typeof body.rmaNumber === "string" && body.rmaNumber.trim()) {
+            patch.rmaNumber = body.rmaNumber.trim().slice(0, 100);
+          }
+        } else if (action === "deny-return") {
+          if (cur.status !== "requested") {
+            return json(409, {
+              error: `Cannot deny a return in status "${cur.status}"`,
+            });
+          }
+          const denialReason =
+            typeof body.denialReason === "string"
+              ? body.denialReason.trim().slice(0, 1000)
+              : "";
+          if (!denialReason) {
+            return json(400, { error: "Please provide a denial reason" });
+          }
+          nextStatus = "denied";
+          patch.decidedAt = now;
+          patch.denialReason = denialReason;
+        } else if (action === "mark-return-received") {
+          if (cur.status !== "approved") {
+            return json(409, {
+              error: `Can only mark-received an approved return (current: "${cur.status}")`,
+            });
+          }
+          nextStatus = "received";
+          patch.receivedAt = now;
+        } else if (action === "complete-return") {
+          if (cur.status !== "approved" && cur.status !== "received") {
+            return json(409, {
+              error: `Can only complete an approved or received return (current: "${cur.status}")`,
+            });
+          }
+          nextStatus = "completed";
+          patch.completedAt = now;
+          if (!cur.receivedAt) {
+            patch.receivedAt = now;
+          }
+          if (body.refundAmount != null) {
+            const amt = Math.max(0, Math.round(Number(body.refundAmount)));
+            if (Number.isFinite(amt)) patch.refundAmount = amt;
+          }
+        }
+
+        const returnRequest = { ...cur, ...patch, status: nextStatus };
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        activityLog.push({
+          at: now,
+          type: `return-${nextStatus}`,
+          actor: "admin",
+          ...meta,
+        });
+        orders[idx] = { ...existing, returnRequest, activityLog };
+        await store.setJSON(ORDERS_KEY, orders);
+
+        if (isD1Available()) {
+          void mirrorReturnRequestToD1({
+            order: orders[idx],
+            request: returnRequest,
+            customerId: null,
+          }).catch((err) => logError("mirrorReturnRequestToD1 failed:", err));
+        }
+
+        await appendAuditEvent(event, {
+          type: "order.return",
+          outcome: nextStatus,
+          subject: orderId,
+          detail:
+            action === "deny-return"
+              ? `Return denied: ${patch.denialReason}`
+              : `Return ${nextStatus}`,
+          ...meta,
+        });
+
+        return json(200, { order: orders[idx] });
       }
 
       return json(400, { error: "Unknown action" });

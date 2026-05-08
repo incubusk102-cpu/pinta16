@@ -92,6 +92,43 @@ export interface OrderRefund {
   failureMessage?: string;
 }
 
+export type ReturnRequestStatus =
+  | "requested"
+  | "approved"
+  | "received"
+  | "completed"
+  | "denied"
+  | "cancelled";
+
+export type ReturnRequestReason =
+  | "damaged_in_transit"
+  | "wrong_item"
+  | "not_as_described"
+  | "changed_mind"
+  | "other";
+
+export interface ReturnRequestItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface ReturnRequest {
+  id: string;
+  status: ReturnRequestStatus;
+  reason: ReturnRequestReason;
+  description: string;
+  photoUrls?: string[];
+  items?: ReturnRequestItem[];
+  rmaNumber?: string;
+  denialReason?: string;
+  refundAmount?: number;
+  requestedAt: string;
+  decidedAt?: string;
+  receivedAt?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+}
+
 export interface OrderShipment {
   courier: string;
   trackingNumber: string;
@@ -162,6 +199,7 @@ export interface CompletedOrder {
   review?: OrderReview;
   reviews?: OrderReview[];
   refund?: OrderRefund;
+  returnRequest?: ReturnRequest;
   shipment?: OrderShipment;
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];
