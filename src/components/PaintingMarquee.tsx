@@ -16,8 +16,8 @@ const DURATION_S = 36;
 const MAX_TILES = 24;
 
 const tileClass =
-  "relative shrink-0 size-[72px] sm:size-[96px] md:size-[112px] " +
-  "rounded-md overflow-hidden bg-muted/30 border border-border/40 " +
+  "painting-marquee-tile relative shrink-0 size-[76px] sm:size-[104px] md:size-[124px] " +
+  "rounded-lg overflow-hidden bg-muted/30 border border-border/40 " +
   "hover:border-foreground/50 transition-colors";
 
 interface TileProps {
@@ -79,7 +79,7 @@ const PaintingMarquee = () => {
 
   return (
     <div
-      className="relative overflow-hidden border-y border-border/40 bg-background/60 py-3 sm:py-4"
+      className="painting-marquee-rail relative overflow-hidden border-y border-border/40 bg-background/60 py-3 sm:py-4"
       aria-label="Painting collection ticker"
     >
       {/* Soft fade-out gutters so thumbnails dissolve at the edges
@@ -94,7 +94,7 @@ const PaintingMarquee = () => {
         className="pointer-events-none absolute inset-y-0 right-0 w-12 sm:w-20 bg-gradient-to-l from-background to-transparent z-10"
       />
       <div
-        className="painting-marquee-track flex gap-3 sm:gap-4 w-max hover:[animation-play-state:paused] focus-within:[animation-play-state:paused]"
+        className="painting-marquee-track flex gap-3 sm:gap-4 md:gap-5 w-max hover:[animation-play-state:paused] focus-within:[animation-play-state:paused]"
         style={{
           animationDuration: `${DURATION_S}s`,
         }}

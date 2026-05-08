@@ -447,9 +447,29 @@
      class list, not here, so `:hover` cascade order stays predictable
      when the strip is offscreen). Reduced-motion users get a static
      row that stops at the natural overflow boundary. */
+  .painting-marquee-rail {
+    perspective: 1000px;
+  }
+
   .painting-marquee-track {
     animation: painting-marquee-scroll linear infinite;
     will-change: transform;
+  }
+
+  .painting-marquee-tile {
+    transform: translateZ(0);
+    transform-style: preserve-3d;
+    transition:
+      transform 0.45s var(--transition-smooth),
+      box-shadow 0.45s var(--transition-smooth),
+      border-color 0.45s var(--transition-smooth);
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .painting-marquee-tile:hover {
+      transform: translateY(-0.3rem) rotateX(7deg) translateZ(18px);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    }
   }
   @keyframes painting-marquee-scroll {
     from {
