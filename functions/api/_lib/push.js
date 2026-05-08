@@ -22,7 +22,12 @@ const normalizeEmail = (email) =>
     .toLowerCase()
     .slice(0, 200);
 
-// All 7 status kinds the email pipeline already covers. Push mirrors them.
+// All 7 status kinds the email pipeline already covers, plus a Push-only
+// `production_stage` kind for finer-grained "cut → frame → paint → varnish
+// → packed" updates while an order is in_progress. Email is not wired for
+// production_stage on purpose — five inbox pings per order would feel
+// spammy, but a single tap-through native push is exactly the right
+// surface for it.
 export const ORDER_PUSH_KINDS = [
   "confirmed",
   "in_progress",
@@ -31,6 +36,7 @@ export const ORDER_PUSH_KINDS = [
   "refund_requested",
   "refund_succeeded",
   "refund_failed",
+  "production_stage",
 ];
 
 const ORIGIN = "https://canvhub.com";
@@ -79,6 +85,11 @@ export const DEFAULT_ORDER_PUSH = {
       enabled: true,
       title: "Refund needs attention",
       body: "Your refund for order {{orderId}} could not be completed: {{failureMessage}}. We'll reach out.",
+    },
+    production_stage: {
+      enabled: true,
+      title: "Order {{orderId}} · {{stageLabel}}",
+      body: "{{stageMessage}}",
     },
   },
 };
@@ -154,6 +165,9 @@ const buildPushPayload = (kind, order, extra, cfg) => {
           : "",
     failureMessage:
       extra?.failureMessage || order?.refund?.failureMessage || "",
+    stage: extra?.stage || order?.productionStage || "",
+    stageLabel: extra?.stageLabel || "",
+    stageMessage: extra?.stageMessage || "",
   };
   const title = fillMustache(kindCfg.title, vars);
   const body = fillMustache(kindCfg.body, vars);

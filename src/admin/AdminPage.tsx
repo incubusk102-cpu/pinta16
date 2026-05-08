@@ -76,6 +76,7 @@ import {
   ArrowLeft,
   Activity,
   Bell,
+  Brush,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -122,9 +123,11 @@ import {
 } from "lucide-react";
 import {
   ORDER_STEPS,
+  PRODUCTION_STAGES,
   type CompletedOrder,
   type OrderReview,
   type OrderShipment,
+  type ProductionStage,
 } from "@/contexts/CartContext";
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 import {
@@ -2954,6 +2957,71 @@ function OrdersSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleProductionStageUpdate = async (
+    orderId: string,
+    stage: ProductionStage | null,
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "update-production-stage",
+          orderId,
+          stage,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? (updated ?? {
+                ...o,
+                productionStage: stage ?? undefined,
+              })
+            : o,
+        ),
+      );
+      const note = data.notification as
+        | {
+            push?: {
+              delivered?: boolean;
+              skipped?: boolean;
+              reason?: string;
+            };
+          }
+        | null
+        | undefined;
+      if (stage === null) {
+        toast.success("Production stage cleared");
+      } else if (note?.push?.delivered) {
+        toast.success("Stage updated · Push sent to customer");
+      } else if (note?.push?.skipped) {
+        toast.message(
+          `Stage updated · Push skipped: ${note.push.reason || "not configured"}`,
+        );
+      } else {
+        toast.success("Stage updated");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update stage",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleStatusUpdate = async (
     orderId: string,
     status: CompletedOrder["status"],
@@ -4043,6 +4111,56 @@ function OrdersSection() {
                 );
               })}
             </div>
+
+            {/* Production stage stepper — only meaningful while the
+                artist is actively working on the painting, so we hide
+                it for confirmed / shipping / received rows to keep the
+                row compact. */}
+            {order.status === "in_progress" && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <Brush className="w-3 h-3" />
+                    Production stage
+                  </div>
+                  {order.productionStage && (
+                    <button
+                      type="button"
+                      disabled={updatingId === order.id}
+                      onClick={() =>
+                        void handleProductionStageUpdate(order.id, null)
+                      }
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {PRODUCTION_STAGES.map((s) => {
+                    const isCurrent = order.productionStage === s.key;
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        disabled={updatingId === order.id}
+                        onClick={() =>
+                          void handleProductionStageUpdate(order.id, s.key)
+                        }
+                        title={s.description}
+                        className={`flex-1 py-1.5 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
+                          isCurrent
+                            ? "bg-foreground text-background"
+                            : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                        } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Refund block */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">

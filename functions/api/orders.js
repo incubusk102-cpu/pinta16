@@ -1779,6 +1779,118 @@ export const handler = async (event) => {
         return json(200, { order: orders[idx], notification: latestNote });
       }
 
+      if (action === "update-production-stage") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, stage } = body;
+        // Stage labels mirror src/contexts/CartContext.tsx PRODUCTION_STAGES.
+        // Server keeps its own copy because functions/ is plain JS and
+        // can't pull from .tsx — the two lists must stay in sync (5
+        // entries, same keys / same order).
+        const STAGE_LABELS = {
+          cut: "Canvas cut",
+          frame: "Stretcher framed",
+          paint: "Painting",
+          varnish: "Varnishing",
+          packed: "Packed",
+        };
+        const STAGE_PUSH_BODY = {
+          cut: "We've cut the canvas for your painting and started prep.",
+          frame: "Your canvas is on the frame and ready for paint.",
+          paint: "Brushes are out — your painting is being made right now.",
+          varnish: "Final varnish is on. We're letting it cure before packing.",
+          packed: "Packed and ready to ship — we'll add tracking shortly.",
+        };
+        const validStages = Object.keys(STAGE_LABELS);
+        const isClearing = stage === null || stage === "";
+        if (!orderId || (!isClearing && !validStages.includes(stage))) {
+          return json(400, { error: "Invalid orderId or stage" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        // Only meaningful while the artist is actively working on the
+        // painting. Reject quietly otherwise so admins don't accidentally
+        // brand a "received" order with a "Canvas cut" stage.
+        if (existing.status !== "in_progress") {
+          return json(400, {
+            error: "Production stage only valid for in_progress orders",
+          });
+        }
+        const previousStage = existing.productionStage || null;
+        const nextStage = isClearing ? undefined : stage;
+        if (previousStage === (nextStage || null)) {
+          return json(200, { order: existing, notification: null });
+        }
+        const meta = captureRequestMeta(event);
+        const recipient = existing.orderInfo?.email || "";
+        const notifications = Array.isArray(existing.notifications)
+          ? [...existing.notifications]
+          : [];
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        let latestNote = null;
+        if (nextStage) {
+          const note = {
+            type: "production_stage",
+            message: `${STAGE_LABELS[nextStage]} — ${STAGE_PUSH_BODY[nextStage]}`,
+            recipient,
+            sentAt: new Date().toISOString(),
+          };
+          // Push only — five inbox pings per order would feel spammy, so
+          // this kind is intentionally not wired through recordEmail.
+          await recordPush({ ...existing, productionStage: nextStage }, note, {
+            stage: nextStage,
+            stageLabel: STAGE_LABELS[nextStage],
+            stageMessage: STAGE_PUSH_BODY[nextStage],
+          });
+          notifications.push(note);
+          latestNote = note;
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: `production_stage:${nextStage}`,
+            actor: "admin",
+            ...meta,
+          });
+          await appendAuditEvent(event, {
+            type: "order.production-stage",
+            outcome: nextStage,
+            subject: orderId,
+            detail: `Production stage -> ${nextStage}`,
+            ...meta,
+          });
+        } else {
+          activityLog.push({
+            at: new Date().toISOString(),
+            type: "production_stage:cleared",
+            actor: "admin",
+            ...meta,
+          });
+          await appendAuditEvent(event, {
+            type: "order.production-stage",
+            outcome: "cleared",
+            subject: orderId,
+            detail: "Production stage cleared",
+            ...meta,
+          });
+        }
+        const next = { ...existing, notifications, activityLog };
+        if (nextStage) next.productionStage = nextStage;
+        else delete next.productionStage;
+        orders[idx] = next;
+        await store.setJSON(ORDERS_KEY, orders);
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "update-production-stage",
+          target: recipient,
+          detail: `${orderId} stage -> ${nextStage || "(cleared)"}`,
+        });
+        return json(200, { order: orders[idx], notification: latestNote });
+      }
+
       if (action === "resend-email") {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
@@ -2513,12 +2625,13 @@ export const handler = async (event) => {
         if (amountInCentavos <= 0) {
           return json(400, { error: "Invalid refund amount" });
         }
-        const { refundRecord, error: refundError } = await attemptPaymongoRefund({
-          existing,
-          amountCentavos: amountInCentavos,
-          refundReason,
-          notesPrefix: "Manual refund",
-        });
+        const { refundRecord, error: refundError } =
+          await attemptPaymongoRefund({
+            existing,
+            amountCentavos: amountInCentavos,
+            refundReason,
+            notesPrefix: "Manual refund",
+          });
         if (refundError) {
           // Map helper errors back to the same status codes the inline
           // implementation produced so existing clients stay sane.
@@ -2976,9 +3089,7 @@ export const handler = async (event) => {
             order: orders[idx],
             request: orders[idx].returnRequest,
             customerId: null,
-          }).catch((err) =>
-            logError("mirrorReturnRequestToD1 failed:", err),
-          );
+          }).catch((err) => logError("mirrorReturnRequestToD1 failed:", err));
         }
         await appendAuditEvent(event, {
           type: "order.return",
