@@ -94,7 +94,7 @@ const PaintingMarquee = () => {
         className="pointer-events-none absolute inset-y-0 right-0 w-12 sm:w-20 bg-gradient-to-l from-background to-transparent z-10"
       />
       <div
-        className="painting-marquee-track flex gap-3 sm:gap-4 md:gap-5 w-max hover:[animation-play-state:paused] focus-within:[animation-play-state:paused]"
+        className="painting-marquee-track flex gap-3 sm:gap-4 md:gap-5 w-max"
         style={{
           animationDuration: `${DURATION_S}s`,
         }}

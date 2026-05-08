@@ -443,11 +443,14 @@
 
   /* Continuously-scrolling painting strip (PaintingMarquee).
      Renders thumbnails twice in the DOM so translating by -50% loops
-     seamlessly. Pauses on hover/focus-within (set via the component's
-     class list, not here, so `:hover` cascade order stays predictable
-     when the strip is offscreen). Reduced-motion users get a static
-     row that stops at the natural overflow boundary. */
+     seamlessly. Pauses on hover/focus-within and stays clipped to the
+     rail so the wide animated track cannot create mobile page overflow.
+     Reduced-motion users get a static row that stops at the natural
+     overflow boundary. */
   .painting-marquee-rail {
+    contain: paint;
+    max-width: 100%;
+    overflow-x: clip;
     perspective: 1000px;
   }
 
@@ -456,6 +459,11 @@
     backface-visibility: hidden;
     transform: translate3d(0, 0, 0);
     will-change: transform;
+  }
+
+  .painting-marquee-track:hover,
+  .painting-marquee-track:focus-within {
+    animation-play-state: paused;
   }
 
   .painting-marquee-tile {
