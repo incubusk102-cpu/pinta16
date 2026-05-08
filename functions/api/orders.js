@@ -2906,6 +2906,90 @@ export const handler = async (event) => {
         return json(200, { order: orders[idx] });
       }
 
+      // Admin-only: amend the bookkeeping refund amount on an
+      // already-completed return. Used to fix records created when the
+      // legacy Complete-return prompt asked for centavos and the
+      // operator typed pesos by mistake (e.g. `20` for "twenty pesos"
+      // got stored as 20 centavos = ₱0.20). This does NOT push any new
+      // money — it only updates the metadata visible on the customer's
+      // order page and the admin Returns queue. Use Manual refund on
+      // the order if you also need to push the corrected amount through
+      // PayMongo.
+      if (action === "update-return-refund-amount") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const orderId =
+          typeof body.orderId === "string" ? body.orderId.trim() : "";
+        if (!orderId) {
+          return json(400, { error: "Invalid orderId" });
+        }
+        if (body.refundAmount == null) {
+          return json(400, { error: "Missing refundAmount" });
+        }
+        const amt = Math.round(Number(body.refundAmount));
+        if (!Number.isFinite(amt) || amt < 0) {
+          return json(400, { error: "Invalid refund amount" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        if (!existing.returnRequest) {
+          return json(409, { error: "No return on this order" });
+        }
+        if (existing.returnRequest.status !== "completed") {
+          return json(409, {
+            error: `Can only edit refund amount on a completed return (current: "${existing.returnRequest.status}")`,
+          });
+        }
+        const totalCentavos = Math.max(
+          0,
+          Math.round(Number(existing.total || 0) * 100),
+        );
+        if (totalCentavos > 0 && amt > totalCentavos) {
+          return json(400, {
+            error: `Refund amount cannot exceed order total (\u20b1${(totalCentavos / 100).toLocaleString()})`,
+          });
+        }
+        const now = new Date().toISOString();
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        activityLog.push({
+          at: now,
+          type: "return-refund-amount-updated",
+          actor: "admin",
+          previousRefundAmount: existing.returnRequest.refundAmount ?? null,
+          refundAmount: amt,
+          ...meta,
+        });
+        orders[idx] = {
+          ...existing,
+          returnRequest: { ...existing.returnRequest, refundAmount: amt },
+          activityLog,
+        };
+        await store.setJSON(ORDERS_KEY, orders);
+        if (isD1Available()) {
+          void mirrorReturnRequestToD1({
+            order: orders[idx],
+            request: orders[idx].returnRequest,
+            customerId: null,
+          }).catch((err) =>
+            logError("mirrorReturnRequestToD1 failed:", err),
+          );
+        }
+        await appendAuditEvent(event, {
+          type: "order.return",
+          outcome: "refund-amount-updated",
+          subject: orderId,
+          detail: `Refund amount updated to \u20b1${(amt / 100).toLocaleString()} (was \u20b1${((existing.returnRequest.refundAmount ?? 0) / 100).toLocaleString()})`,
+          ...meta,
+        });
+        return json(200, { order: orders[idx] });
+      }
+
       // Admin-only: walk a return through the rest of its lifecycle.
       // approve / deny / mark-received / complete-return are all gated on
       // the admin session (same gate as request-refund above).

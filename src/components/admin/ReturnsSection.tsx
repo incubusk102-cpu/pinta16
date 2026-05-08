@@ -5,6 +5,7 @@ import {
   PackageCheck,
   PackageOpen,
   PackageX,
+  Pencil,
   RefreshCw,
   XCircle,
 } from "lucide-react";
@@ -248,6 +249,54 @@ export function ReturnsSection() {
       toast.error(
         err instanceof Error ? err.message : "Failed to mark received",
       );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Fix the bookkeeping refund amount on a completed return without
+  // touching PayMongo. Targets legacy records where the operator typed
+  // pesos into the old centavos prompt and stored e.g. ₱0.20 instead
+  // of ₱20. The Manual refund button on the order is still the way to
+  // push the corrected amount through PayMongo if needed.
+  const handleEditRefundAmount = async (it: QueueItem) => {
+    const orderTotalPhp = Number(it.order?.total ?? 0);
+    const currentPhp =
+      it.refundAmount != null ? (it.refundAmount / 100).toFixed(2) : "";
+    const raw = window.prompt(
+      "Edit refund amount in PHP (e.g. 20 or 20.00). " +
+        "This only fixes the recorded amount on the return; it does NOT " +
+        "push any new money. Use Manual refund on the order if you also " +
+        "need to refund the corrected amount through PayMongo.",
+      currentPhp ||
+        (Number.isFinite(orderTotalPhp) && orderTotalPhp > 0
+          ? orderTotalPhp.toFixed(2)
+          : ""),
+    );
+    if (raw === null) return;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      toast.error("Enter an amount in pesos");
+      return;
+    }
+    const php = Number(trimmed);
+    if (!Number.isFinite(php) || php < 0) {
+      toast.error("Invalid amount");
+      return;
+    }
+    const refundAmount = Math.max(0, Math.round(php * 100));
+    setBusyId(it.id);
+    try {
+      await postAction("update-return-refund-amount", {
+        orderId: it.orderId,
+        refundAmount,
+      });
+      toast.success(
+        `Updated refund amount on ${it.orderId} to ${peso(refundAmount / 100)}`,
+      );
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update");
     } finally {
       setBusyId(null);
     }
@@ -526,13 +575,26 @@ export function ReturnsSection() {
                   )}
                   {it.status === "completed" && (
                     <div className="flex flex-col gap-1">
-                      <span className="inline-flex items-center text-[11px] text-emerald-600 dark:text-emerald-400">
-                        <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
-                        Refund recorded
-                        {it.refundAmount != null
-                          ? `: ${peso(it.refundAmount / 100)}`
-                          : ""}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center text-[11px] text-emerald-600 dark:text-emerald-400">
+                          <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
+                          Refund recorded
+                          {it.refundAmount != null
+                            ? `: ${peso(it.refundAmount / 100)}`
+                            : ""}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[11px]"
+                          disabled={isBusy}
+                          onClick={() => void handleEditRefundAmount(it)}
+                          title="Edit recorded refund amount (does not push money)"
+                        >
+                          <Pencil className="w-3 h-3 mr-1" />
+                          Edit amount
+                        </Button>
+                      </div>
                       {it.order?.refund && (
                         <span className="inline-flex items-center text-[11px] text-emerald-600 dark:text-emerald-400">
                           <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
