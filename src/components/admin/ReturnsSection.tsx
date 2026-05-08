@@ -130,8 +130,20 @@ const postAction = async (action: string, payload: Record<string, unknown>) => {
     headers: jsonAuthHeaders(),
     body: JSON.stringify({ action, ...payload }),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    detail?: string;
+    [key: string]: unknown;
+  };
+  if (!res.ok) {
+    // Surface `detail` (e.g. PayMongo error message on a 502 from
+    // request-refund / complete-return auto-refund) so the toast
+    // shows the actual reason instead of just "HTTP 502".
+    const message = data.detail
+      ? `${data.error || `HTTP ${res.status}`}: ${data.detail}`
+      : data.error || `HTTP ${res.status}`;
+    throw new Error(message);
+  }
   return data;
 };
 
@@ -338,12 +350,19 @@ export function ReturnsSection() {
       const result = (await postAction("complete-return", {
         orderId: it.orderId,
         ...(refundAmount != null ? { refundAmount } : {}),
-      })) as { order?: { refund?: { status?: string; amount?: number } | null; returnRequest?: { autoRefundError?: string | null } } };
+      })) as {
+        order?: {
+          refund?: { status?: string; amount?: number } | null;
+          returnRequest?: { autoRefundError?: string | null };
+        };
+      };
       const refund = result.order?.refund || null;
-      const autoRefundError = result.order?.returnRequest?.autoRefundError || null;
+      const autoRefundError =
+        result.order?.returnRequest?.autoRefundError || null;
       if (refund) {
         const amt = Number(refund.amount ?? 0);
-        const statusLabel = refund.status === "succeeded" ? "succeeded" : "initiated";
+        const statusLabel =
+          refund.status === "succeeded" ? "succeeded" : "initiated";
         toast.success(
           `Completed return for ${it.orderId} — auto-refund ${peso(amt)} ${statusLabel}`,
         );

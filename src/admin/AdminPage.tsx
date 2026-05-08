@@ -3195,9 +3195,21 @@ function OrdersSection() {
           reason: "requested_by_customer",
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        detail?: string;
+        order?: CompletedOrder;
+      };
       if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+        // The backend returns `{error, detail}` for PayMongo failures
+        // (502s) and `{error}` for everything else. Folding `detail`
+        // into the toast surfaces the actual PayMongo reason (e.g.
+        // "Insufficient balance") instead of the useless "HTTP 502"
+        // fallback.
+        const message = data.detail
+          ? `${data.error || "Refund failed"}: ${data.detail}`
+          : data.error || `HTTP ${res.status}`;
+        throw new Error(message);
       }
       const updated = data.order as CompletedOrder;
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
@@ -3222,9 +3234,16 @@ function OrdersSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "check-refund", orderId }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        detail?: string;
+        order?: CompletedOrder;
+      };
       if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+        const message = data.detail
+          ? `${data.error || "Check refund failed"}: ${data.detail}`
+          : data.error || `HTTP ${res.status}`;
+        throw new Error(message);
       }
       const updated = data.order as CompletedOrder;
       setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
