@@ -7,13 +7,13 @@ import { getStorefrontArtworks, type DisplayArtwork } from "@/lib/artworks";
 // scannable, fast enough that the strip never feels static. Mobile
 // gets a touch more pace because the viewport is narrower so the
 // duplicated half scrolls past faster relative to the user's eye.
-const DURATION_S = 36;
+const DURATION_S = 28;
 
 // Show at most this many unique thumbnails per direction. Beyond this
 // the strip stops adding visual interest and just inflates the DOM.
 // (Each thumbnail is duplicated for the seamless wrap, so the total
 // rendered tile count is 2× this.)
-const MAX_TILES = 24;
+const MAX_TILES = 18;
 
 const tileClass =
   "painting-marquee-tile relative shrink-0 size-[76px] sm:size-[104px] md:size-[124px] " +
@@ -41,7 +41,7 @@ function Tile({ art, cloned }: TileProps) {
         alt={cloned ? "" : art.title}
         loading="lazy"
         decoding="async"
-        className="w-full h-full object-cover transition-transform duration-500 hover:scale-[1.06]"
+        className="w-full h-full object-cover transition-transform duration-300 motion-safe:hover:scale-[1.05]"
       />
       {art.availability === "sold" && (
         <span
