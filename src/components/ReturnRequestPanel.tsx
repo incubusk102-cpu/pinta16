@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { jsonAuthHeaders } from "@/lib/api";
+import { useUserAuth } from "@/contexts/UserAuthContext";
 import {
   useCart,
   type CompletedOrder,
@@ -254,9 +255,23 @@ const FileReturnDialog = ({
 
 const ReturnRequestPanel = ({ order, onUpdated }: ReturnRequestPanelProps) => {
   const { applyOrderUpdate } = useCart();
+  const { token } = useUserAuth();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+
+  // Authed POSTs need either a `cv_user_session` cookie + matching
+  // `X-CSRF-Token` header (the standard cookie path) OR an
+  // `Authorization: Bearer` header. Google's redirect-flow callback used
+  // to land us on the SPA with only an in-memory token — no cookies —
+  // which silently 401'd the return request. We now also fall back to
+  // the bearer token so any in-memory-only session keeps working even
+  // before the user re-logs in to pick up the new cookies.
+  const buildAuthedJsonHeaders = (): Record<string, string> => {
+    const headers = jsonAuthHeaders();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  };
 
   const existing = order.returnRequest;
   // A "received" order with no active return — or with a previously
@@ -276,7 +291,7 @@ const ReturnRequestPanel = ({ order, onUpdated }: ReturnRequestPanelProps) => {
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: jsonAuthHeaders(),
+        headers: buildAuthedJsonHeaders(),
         body: JSON.stringify({
           action: "customer-return-request",
           orderId: order.id,
@@ -307,7 +322,7 @@ const ReturnRequestPanel = ({ order, onUpdated }: ReturnRequestPanelProps) => {
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: jsonAuthHeaders(),
+        headers: buildAuthedJsonHeaders(),
         body: JSON.stringify({
           action: "customer-return-cancel",
           orderId: order.id,

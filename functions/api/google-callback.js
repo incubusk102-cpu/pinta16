@@ -9,8 +9,12 @@ import {
   normalizeEmail,
   publicUser,
   readUsers,
+  TOKEN_TTL_SECONDS,
+  USER_SESSION_COOKIE,
   writeUsers,
 } from "./_lib/user-auth.js";
+import { CSRF_COOKIE_NAME, generateCsrfToken } from "./_lib/csrf.js";
+import { serializeCookie } from "./_lib/cookies.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
 import { appendAuditEvent } from "./_lib/audit-log.js";
@@ -42,15 +46,39 @@ const parseFormUrlEncoded = (body) => {
   return out;
 };
 
-const redirect = (location) => ({
+const redirect = (location, cookies) => ({
   statusCode: 302,
   headers: {
     Location: location,
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
   },
+  ...(Array.isArray(cookies) && cookies.length > 0 ? { cookies } : {}),
   body: "",
 });
+
+// Match the Set-Cookie pair issued by /api/users?action=login (and its
+// signup / google-login siblings) so a Google-redirect sign-in lands on
+// the SPA already cookie-authenticated. Without this, the in-memory
+// `#auth=…` token works on the first page but every subsequent
+// state-changing API call (e.g. customer-return-request) reads no
+// `cv_user_session` cookie and 401s.
+const buildSessionCookies = (token, csrfToken) => [
+  serializeCookie(USER_SESSION_COOKIE, token, {
+    maxAgeSeconds: TOKEN_TTL_SECONDS,
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+  serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
+    maxAgeSeconds: TOKEN_TTL_SECONDS,
+    httpOnly: false,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  }),
+];
 
 const errorRedirect = (event, message) => {
   const origin = resolveOrigin(event);
@@ -201,10 +229,17 @@ export const handler = async (event) => {
       "base64url",
     );
     const origin = resolveOrigin(event);
+    const csrfToken = generateCsrfToken();
     // Land on the homepage. The root-level GoogleAuthHashBridge reads
     // `#auth=` and finalizes the session in place — no need to bounce
-    // through /login just to parse the fragment.
-    return redirect(`${origin}/#auth=${encoded}`);
+    // through /login just to parse the fragment. We also attach the
+    // session + CSRF cookies so subsequent cookie-authed API calls
+    // (returns, profile updates, etc.) and page reloads find a real
+    // session, not just the in-memory React state.
+    return redirect(
+      `${origin}/#auth=${encoded}`,
+      buildSessionCookies(token, csrfToken),
+    );
   } catch (error) {
     logError("google-callback handler error:", error);
     return errorRedirect(event, "Internal error");
