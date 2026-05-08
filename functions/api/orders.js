@@ -79,6 +79,103 @@ const getPaymongoSecret = () => {
   return key;
 };
 
+// Try to push a refund through PayMongo for `existing` (an order) and
+// return either {refundRecord, error: null} on success, or
+// {refundRecord: null, error: "<reason>"} on any failure (no payment
+// intent, PayMongo down, last payment not in `paid`, …). Used by both
+// `request-refund` (where the caller turns the error into a 4xx/5xx)
+// and `complete-return` (where the caller records the error on the
+// returnRequest so the admin can fall back to Manual refund). Amount
+// is in centavos; the returned record stores `amount` in PHP for
+// parity with `recordEmail` / `recordPush` payloads.
+const attemptPaymongoRefund = async ({
+  existing,
+  amountCentavos,
+  refundReason,
+  notesPrefix,
+}) => {
+  if (!existing.paymentIntentId) {
+    return {
+      refundRecord: null,
+      error:
+        "This order has no PayMongo paymentIntentId; cannot refund automatically",
+    };
+  }
+  const secretKey = getPaymongoSecret();
+  if (!secretKey) {
+    return { refundRecord: null, error: "Payment not configured" };
+  }
+  const amount = Math.max(0, Math.round(Number(amountCentavos) || 0));
+  if (amount <= 0) {
+    return { refundRecord: null, error: "Invalid refund amount" };
+  }
+  let intent;
+  try {
+    intent = await payMongoRequest(
+      `/v1/payment_intents/${existing.paymentIntentId}`,
+      secretKey,
+      null,
+      "GET",
+    );
+  } catch (e) {
+    return {
+      refundRecord: null,
+      error: `Could not load payment from PayMongo: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+  const payments = intent?.data?.attributes?.payments;
+  if (!Array.isArray(payments) || payments.length === 0) {
+    return {
+      refundRecord: null,
+      error: "No completed payment to refund on this intent",
+    };
+  }
+  const lastPayment = payments[payments.length - 1];
+  const paymentId = lastPayment?.id;
+  const paymentStatus = lastPayment?.attributes?.status;
+  if (!paymentId || paymentStatus !== "paid") {
+    return {
+      refundRecord: null,
+      error: `Payment is not refundable (status: ${paymentStatus || "unknown"})`,
+    };
+  }
+  let refund;
+  try {
+    refund = await payMongoRequest("/v1/refunds", secretKey, {
+      data: {
+        attributes: {
+          amount,
+          payment_id: paymentId,
+          reason: refundReason,
+          currency: "PHP",
+          notes: `${notesPrefix || "Refund"} for order ${existing.id}`,
+        },
+      },
+    });
+  } catch (e) {
+    return {
+      refundRecord: null,
+      error: `Refund creation failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+  const refundData = refund?.data;
+  const refundAttrs = refundData?.attributes || {};
+  const nowIso = new Date().toISOString();
+  const refundRecord = {
+    id: refundData?.id || "",
+    paymentId,
+    amount: amount / 100,
+    status: refundAttrs.status || "pending",
+    reason: refundReason,
+    requestedAt: nowIso,
+    completedAt:
+      refundAttrs.status === "succeeded" || refundAttrs.status === "failed"
+        ? nowIso
+        : undefined,
+  };
+  return { refundRecord, error: null };
+};
+
 const STORE_NAME = "orders";
 const ORDERS_KEY = "all-orders";
 const CONFIG_STORE_NAME = "storefront-config";
@@ -503,8 +600,17 @@ export const handler = async (event) => {
         if (rows) {
           queue = rows.map((r) => {
             const o = orderById.get(r.orderId);
+            // `autoRefundError` only lives in KV (the D1 mirror was
+            // designed before hybrid auto-refund), so always read it
+            // off the live order's returnRequest. Null when absent.
+            const autoRefundError =
+              typeof o?.returnRequest?.autoRefundError === "string" &&
+              o.returnRequest.autoRefundError
+                ? o.returnRequest.autoRefundError
+                : null;
             return {
               ...r,
+              autoRefundError,
               order: o
                 ? {
                     id: o.id,
@@ -551,6 +657,10 @@ export const handler = async (event) => {
               denialReason: rr.denialReason || "",
               refundAmount:
                 typeof rr.refundAmount === "number" ? rr.refundAmount : null,
+              autoRefundError:
+                typeof rr.autoRefundError === "string" && rr.autoRefundError
+                  ? rr.autoRefundError
+                  : null,
               requestedAt: rr.requestedAt || o.createdAt || "",
               decidedAt: rr.decidedAt || "",
               receivedAt: rr.receivedAt || "",
@@ -2379,82 +2489,58 @@ export const handler = async (event) => {
         if (existing.refund && existing.refund.status !== "failed") {
           return json(409, { error: "Refund already in progress" });
         }
-        if (!existing.paymentIntentId) {
-          return json(400, {
-            error:
-              "This order has no PayMongo paymentIntentId; cannot refund automatically",
-          });
+        // Default to the full order total so the existing "Manual refund"
+        // button keeps refunding the whole order. Admin can pass an
+        // explicit `amount` (in centavos) to issue a partial refund — used
+        // by the Returns panel after a partial-quantity return.
+        const totalCentavos = Math.max(
+          0,
+          Math.round(Number(existing.total || 0) * 100),
+        );
+        let amountInCentavos = totalCentavos;
+        if (body.amount != null) {
+          const parsed = Math.round(Number(body.amount));
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            return json(400, { error: "Invalid refund amount" });
+          }
+          if (parsed > totalCentavos) {
+            return json(400, {
+              error: `Refund amount cannot exceed order total (\u20b1${(totalCentavos / 100).toLocaleString()})`,
+            });
+          }
+          amountInCentavos = parsed;
         }
-        const secretKey = getPaymongoSecret();
-        if (!secretKey) {
-          return json(500, { error: "Payment not configured" });
-        }
-        let intent;
-        try {
-          intent = await payMongoRequest(
-            `/v1/payment_intents/${existing.paymentIntentId}`,
-            secretKey,
-            null,
-            "GET",
-          );
-        } catch (e) {
-          return json(502, {
-            error: "Could not load payment from PayMongo",
-            detail: e instanceof Error ? e.message : String(e),
-          });
-        }
-        const payments = intent?.data?.attributes?.payments;
-        if (!Array.isArray(payments) || payments.length === 0) {
-          return json(400, {
-            error: "No completed payment to refund on this intent",
-          });
-        }
-        const lastPayment = payments[payments.length - 1];
-        const paymentId = lastPayment?.id;
-        const paymentStatus = lastPayment?.attributes?.status;
-        if (!paymentId || paymentStatus !== "paid") {
-          return json(400, {
-            error: `Payment is not refundable (status: ${paymentStatus || "unknown"})`,
-          });
-        }
-        const amountInCentavos = Math.round(Number(existing.total || 0) * 100);
         if (amountInCentavos <= 0) {
           return json(400, { error: "Invalid refund amount" });
         }
-        let refund;
-        try {
-          refund = await payMongoRequest("/v1/refunds", secretKey, {
-            data: {
-              attributes: {
-                amount: amountInCentavos,
-                payment_id: paymentId,
-                reason: refundReason,
-                currency: "PHP",
-                notes: `Manual refund for order ${existing.id}`,
-              },
-            },
-          });
-        } catch (e) {
-          return json(502, {
-            error: "Refund creation failed",
-            detail: e instanceof Error ? e.message : String(e),
-          });
+        const { refundRecord, error: refundError } = await attemptPaymongoRefund({
+          existing,
+          amountCentavos: amountInCentavos,
+          refundReason,
+          notesPrefix: "Manual refund",
+        });
+        if (refundError) {
+          // Map helper errors back to the same status codes the inline
+          // implementation produced so existing clients stay sane.
+          if (refundError === "Payment not configured") {
+            return json(500, { error: refundError });
+          }
+          if (refundError.startsWith("Could not load payment from PayMongo")) {
+            return json(502, {
+              error: "Could not load payment from PayMongo",
+              detail: refundError.slice(
+                "Could not load payment from PayMongo: ".length,
+              ),
+            });
+          }
+          if (refundError.startsWith("Refund creation failed")) {
+            return json(502, {
+              error: "Refund creation failed",
+              detail: refundError.slice("Refund creation failed: ".length),
+            });
+          }
+          return json(400, { error: refundError });
         }
-        const refundData = refund?.data;
-        const refundAttrs = refundData?.attributes || {};
-        const refundRecord = {
-          id: refundData?.id || "",
-          paymentId,
-          amount: Number(existing.total) || 0,
-          status: refundAttrs.status || "pending",
-          reason: refundReason,
-          requestedAt: new Date().toISOString(),
-          completedAt:
-            refundAttrs.status === "succeeded" ||
-            refundAttrs.status === "failed"
-              ? new Date().toISOString()
-              : undefined,
-        };
         const recipient = existing.orderInfo?.email || "";
         const notifications = Array.isArray(existing.notifications)
           ? [...existing.notifications]
@@ -2848,6 +2934,16 @@ export const handler = async (event) => {
         const now = new Date().toISOString();
         let nextStatus = cur.status;
         const patch = {};
+        // Hybrid refund state for `complete-return`. `autoRefundRecord`
+        // is set only when the PayMongo refund call succeeded inline; the
+        // outer save logic folds it into `orders[idx].refund` and fires
+        // the same email/push notifications as the standalone
+        // `request-refund` action. When the auto-refund can't run (no
+        // paymentIntent, COD, PayMongo error, …) we still finish the
+        // return and surface the reason on `returnRequest.autoRefundError`
+        // so the admin Returns panel can prompt the operator to use the
+        // Manual refund button on the order instead.
+        let autoRefundRecord = null;
 
         if (action === "approve-return") {
           if (cur.status !== "requested") {
@@ -2899,6 +2995,37 @@ export const handler = async (event) => {
             const amt = Math.max(0, Math.round(Number(body.refundAmount)));
             if (Number.isFinite(amt)) patch.refundAmount = amt;
           }
+          // Always reset autoRefundError so a successful retry doesn't
+          // leave a stale "use Manual refund" hint on the queue row.
+          patch.autoRefundError = null;
+          const refundAlreadyInFlight =
+            existing.refund && existing.refund.status !== "failed";
+          if (
+            typeof patch.refundAmount === "number" &&
+            patch.refundAmount > 0 &&
+            !refundAlreadyInFlight
+          ) {
+            const totalCentavos = Math.max(
+              0,
+              Math.round(Number(existing.total || 0) * 100),
+            );
+            if (totalCentavos > 0 && patch.refundAmount > totalCentavos) {
+              patch.autoRefundError = `Refund amount (\u20b1${(patch.refundAmount / 100).toLocaleString()}) cannot exceed order total (\u20b1${(totalCentavos / 100).toLocaleString()})`;
+            } else {
+              const { refundRecord, error: refundError } =
+                await attemptPaymongoRefund({
+                  existing,
+                  amountCentavos: patch.refundAmount,
+                  refundReason: "requested_by_customer",
+                  notesPrefix: "Return refund",
+                });
+              if (refundRecord) {
+                autoRefundRecord = refundRecord;
+              } else {
+                patch.autoRefundError = refundError || "Auto-refund failed";
+              }
+            }
+          }
         }
 
         const returnRequest = { ...cur, ...patch, status: nextStatus };
@@ -2912,7 +3039,72 @@ export const handler = async (event) => {
           actor: "admin",
           ...meta,
         });
-        orders[idx] = { ...existing, returnRequest, activityLog };
+
+        // Fold the auto-refund result into the saved order so the
+        // customer's order page and the admin Orders panel both see the
+        // refund record without the operator having to also click
+        // Manual refund. Notifications mirror the standalone
+        // `request-refund` action.
+        let nextNotifications = existing.notifications;
+        if (autoRefundRecord) {
+          activityLog.push({
+            at: now,
+            type: "refund-requested",
+            actor: "admin",
+            ...meta,
+          });
+          const recipient = existing.orderInfo?.email || "";
+          const accNotifications = Array.isArray(existing.notifications)
+            ? [...existing.notifications]
+            : [];
+          const refundRequestedNote = {
+            type: "refund_requested",
+            message: `Your refund of \u20b1${autoRefundRecord.amount.toLocaleString()} has been initiated and is being processed via QR Ph back to your wallet.`,
+            recipient,
+            sentAt: now,
+          };
+          await recordEmail(
+            { ...existing, refund: autoRefundRecord },
+            refundRequestedNote,
+            { refundAmount: autoRefundRecord.amount },
+          );
+          await recordPush(
+            { ...existing, refund: autoRefundRecord },
+            refundRequestedNote,
+            { refundAmount: autoRefundRecord.amount },
+          );
+          accNotifications.push(refundRequestedNote);
+          if (autoRefundRecord.status === "succeeded") {
+            const refundDoneNote = {
+              type: "refund_succeeded",
+              message: `Your refund of \u20b1${autoRefundRecord.amount.toLocaleString()} has been completed.`,
+              recipient,
+              sentAt: now,
+            };
+            await recordEmail(
+              { ...existing, refund: autoRefundRecord },
+              refundDoneNote,
+              { refundAmount: autoRefundRecord.amount },
+            );
+            await recordPush(
+              { ...existing, refund: autoRefundRecord },
+              refundDoneNote,
+              { refundAmount: autoRefundRecord.amount },
+            );
+            accNotifications.push(refundDoneNote);
+          }
+          nextNotifications = accNotifications;
+        }
+
+        orders[idx] = {
+          ...existing,
+          returnRequest,
+          activityLog,
+          ...(autoRefundRecord ? { refund: autoRefundRecord } : {}),
+          ...(nextNotifications !== existing.notifications
+            ? { notifications: nextNotifications }
+            : {}),
+        };
         await store.setJSON(ORDERS_KEY, orders);
 
         if (isD1Available()) {
@@ -2933,6 +3125,21 @@ export const handler = async (event) => {
               : `Return ${nextStatus}`,
           ...meta,
         });
+        if (autoRefundRecord) {
+          await appendAuditEvent(event, {
+            type: "order.refund",
+            outcome: autoRefundRecord.status,
+            subject: orderId,
+            detail: `Auto-refund \u20b1${autoRefundRecord.amount.toLocaleString()} on return-completed`,
+            ...meta,
+          });
+          await recordPiiAccess(event, {
+            resource: "order",
+            action: "refund",
+            target: existing.orderInfo?.email || "",
+            detail: `${orderId} auto-refund \u20b1${autoRefundRecord.amount.toLocaleString()} on return-completed`,
+          });
+        }
 
         return json(200, { order: orders[idx] });
       }
