@@ -72,12 +72,27 @@ const TONE_CLASS: Record<
   error: "bg-destructive/10 border-destructive/30 text-destructive",
 };
 
+const formatPhp = (php: number) =>
+  php.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 const ReturnStatusCard = ({
   request,
+  orderRefundAmount,
   onCancel,
   cancelling,
 }: {
   request: ReturnRequest;
+  /**
+   * The actual amount (in PHP) recorded on the order's PayMongo refund,
+   * if one exists. Preferred over `request.refundAmount` (centavos
+   * bookkeeping) because it's the real money moved through PayMongo —
+   * the bookkeeping field is mostly historical and was for a long time
+   * incorrectly populated in centavos by an operator-confusing prompt.
+   */
+  orderRefundAmount: number | null;
   onCancel: () => void;
   cancelling: boolean;
 }) => {
@@ -85,6 +100,16 @@ const ReturnStatusCard = ({
     title: request.status,
     tone: "muted" as const,
   };
+  // Prefer the real PayMongo refund amount over the legacy centavos
+  // bookkeeping. Always render with 2 decimals so ₱0.20 doesn't get
+  // rendered as "₱0.2" — that mis-read as "centavos" was the original
+  // bug report.
+  const refundDisplay: string | null =
+    orderRefundAmount != null && Number.isFinite(orderRefundAmount)
+      ? formatPhp(orderRefundAmount)
+      : request.refundAmount != null
+        ? formatPhp(request.refundAmount / 100)
+        : null;
   return (
     <div className={`p-4 border rounded-sm space-y-2 ${TONE_CLASS[copy.tone]}`}>
       <div className="flex items-center gap-2">
@@ -126,9 +151,9 @@ const ReturnStatusCard = ({
           Reason for denial: {request.denialReason}
         </p>
       )}
-      {request.status === "completed" && request.refundAmount != null && (
+      {request.status === "completed" && refundDisplay != null && (
         <p className="text-[11px] opacity-80">
-          Refunded: ₱{(request.refundAmount / 100).toLocaleString()}
+          Refunded: ₱{refundDisplay}
         </p>
       )}
       <p className="text-[11px] opacity-70">
@@ -356,6 +381,11 @@ const ReturnRequestPanel = ({ order, onUpdated }: ReturnRequestPanelProps) => {
       {hasActiveRequest && existing && (
         <ReturnStatusCard
           request={existing}
+          orderRefundAmount={
+            order.refund && Number.isFinite(order.refund.amount)
+              ? order.refund.amount
+              : null
+          }
           onCancel={() => void handleCancel()}
           cancelling={cancelling}
         />
