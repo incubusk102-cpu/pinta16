@@ -153,11 +153,17 @@ const postAction = async (action: string, payload: Record<string, unknown>) => {
 // action is a one-to-one mapping onto an existing single-row endpoint,
 // so the backend stays unchanged — we just iterate from the client and
 // summarize the per-row outcome in a single toast.
-type BulkAction = "approve" | "mark-received" | "complete" | "deny";
+type BulkAction =
+  | "approve"
+  | "mark-received"
+  | "receive-and-refund"
+  | "complete"
+  | "deny";
 
 const BULK_ACTION_LABEL: Record<BulkAction, string> = {
   approve: "Approve",
   "mark-received": "Mark received",
+  "receive-and-refund": "Receive + refund",
   complete: "Complete (auto-refund full)",
   deny: "Deny",
 };
@@ -165,6 +171,10 @@ const BULK_ACTION_LABEL: Record<BulkAction, string> = {
 const BULK_ALLOWED_FROM: Record<BulkAction, ReturnStatus[]> = {
   approve: ["requested"],
   "mark-received": ["approved"],
+  // One-click flow: skips the intermediate "received" status entirely
+  // and runs the same hybrid PayMongo refund attempt complete-return
+  // does, defaulting the amount to the full order total.
+  "receive-and-refund": ["approved"],
   complete: ["approved", "received"],
   deny: ["requested"],
 };
@@ -305,6 +315,20 @@ export function ReturnsSection() {
           });
         } else if (action === "mark-received") {
           await postAction("mark-return-received", { orderId: it.orderId });
+        } else if (action === "receive-and-refund") {
+          // Backend defaults refundAmount to the full order total when
+          // omitted. Skip rows missing a usable total — same guard as the
+          // single-row handler.
+          const totalPhp = Number(it.order?.total ?? 0);
+          if (!Number.isFinite(totalPhp) || totalPhp <= 0) {
+            skipped += 1;
+            continue;
+          }
+          await postAction("mark-return-received", {
+            orderId: it.orderId,
+            autoComplete: true,
+            refundAmount: Math.max(0, Math.round(totalPhp * 100)),
+          });
         } else if (action === "complete") {
           // Default to the order total so the common case ("refund the
           // whole thing") is fully unattended. Skip rows that don't have
@@ -347,6 +371,24 @@ export function ReturnsSection() {
 
   const handleBulkApprove = () => void runBulk("approve");
   const handleBulkMarkReceived = () => void runBulk("mark-received");
+  const handleBulkReceiveAndRefund = () => {
+    const refundCount = [...selectedIds].filter((id) => {
+      const it = items.find((x) => x.id === id);
+      return (
+        it &&
+        BULK_ALLOWED_FROM["receive-and-refund"].includes(it.status) &&
+        Number(it.order?.total ?? 0) > 0
+      );
+    }).length;
+    if (
+      !window.confirm(
+        `Receive + refund ${refundCount} return(s)? Each one will be marked completed and (if paid via PayMongo) auto-refund the full order total. Other selected rows will be skipped.`,
+      )
+    ) {
+      return;
+    }
+    void runBulk("receive-and-refund");
+  };
   const handleBulkComplete = () => {
     const orderTotalCount = [...selectedIds].filter((id) => {
       const it = items.find((x) => x.id === id);
@@ -434,6 +476,58 @@ export function ReturnsSection() {
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to mark received",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Single-row "Receive + refund": mark received and immediately
+  // complete + auto-refund the full order total in one round-trip.
+  // Surfaces the same auto-refund-error hint the Complete button
+  // already does.
+  const handleReceiveAndRefund = async (it: QueueItem) => {
+    const orderTotalPhp = Number(it.order?.total ?? 0);
+    if (!Number.isFinite(orderTotalPhp) || orderTotalPhp <= 0) {
+      toast.error("Order has no usable total — use Complete return instead");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Mark received + auto-refund ${peso(orderTotalPhp)} to the customer? If the order was paid via PayMongo this fires the refund immediately.`,
+      )
+    ) {
+      return;
+    }
+    const refundAmount = Math.max(0, Math.round(orderTotalPhp * 100));
+    setBusyId(it.id);
+    try {
+      const result = await postAction("mark-return-received", {
+        orderId: it.orderId,
+        autoComplete: true,
+        refundAmount,
+      });
+      const order = (result.order ?? {}) as {
+        returnRequest?: { autoRefundError?: string };
+        refund?: { amount?: number; status?: string };
+      };
+      const autoRefundError = order.returnRequest?.autoRefundError;
+      if (autoRefundError && !order.refund) {
+        toast.warning(
+          `Marked received & completed, but auto-refund didn't run: ${autoRefundError}. Use Manual refund on the order to push the money back.`,
+          { duration: 8000 },
+        );
+      } else if (order.refund) {
+        toast.success(
+          `Received + refund ${order.refund.status ?? "queued"}: ${peso(order.refund.amount ?? refundAmount / 100)}`,
+        );
+      } else {
+        toast.success(`Marked received & completed: ${it.orderId}`);
+      }
+      await load();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to receive + refund",
       );
     } finally {
       setBusyId(null);
@@ -690,6 +784,16 @@ export function ReturnsSection() {
                 size="sm"
                 variant="outline"
                 disabled={bulkRunning}
+                onClick={handleBulkReceiveAndRefund}
+                title="One-click: mark every selected approved return received + completed + auto-refund the full order total"
+              >
+                <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
+                Receive + refund
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={bulkRunning}
                 onClick={handleBulkComplete}
                 title="Complete every selected approved/received return; auto-refund full order total"
               >
@@ -852,6 +956,16 @@ export function ReturnsSection() {
                       >
                         <PackageOpen className="w-3.5 h-3.5 mr-1.5" />
                         Mark received
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isBusy}
+                        onClick={() => void handleReceiveAndRefund(it)}
+                        title="One-click: mark received, complete, and auto-refund full order total"
+                      >
+                        <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
+                        Receive + refund
                       </Button>
                       <Button
                         size="sm"
