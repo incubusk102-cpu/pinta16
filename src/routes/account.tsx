@@ -30,6 +30,7 @@ import { useWishlist } from "@/contexts/WishlistContext";
 import { buildTrackingUrl } from "@/lib/shipment";
 import OrderReviewForm from "@/components/OrderReviewForm";
 import RefundBanner from "@/components/RefundBanner";
+import ReturnRequestPanel from "@/components/ReturnRequestPanel";
 import ProfileEditor from "@/components/account/ProfileEditor";
 import AddressBook from "@/components/account/AddressBook";
 import MyOrders from "@/components/account/MyOrders";
@@ -268,6 +269,13 @@ function OrderTracker() {
               onRefreshed={(updated) => setOrder(updated)}
             />
           )}
+
+          {/* Returns / RMA — file a return on a received order, or show
+              the status of an in-flight return request. */}
+          <ReturnRequestPanel
+            order={order}
+            onUpdated={(updated) => setOrder(updated)}
+          />
 
           {/* Review form / submitted reviews */}
           {(() => {
