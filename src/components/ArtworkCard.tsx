@@ -2,7 +2,9 @@ import { useRef, useState } from "react";
 import {
   motion,
   AnimatePresence,
+  useMotionTemplate,
   useMotionValue,
+  useReducedMotion,
   useSpring,
   useTransform,
 } from "framer-motion";
@@ -75,25 +77,24 @@ const ArtworkCard = ({
   const wishlist = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
-  // Mouse-tracked 3D tilt: pointer x/y get mapped onto a small rotation
-  // around the X/Y axes, springed for a smooth follow. Disabled on touch
-  // / reduced-motion via the CSS media query on `motion-safe:` below.
+  const reduceMotion = useReducedMotion();
   const tiltX = useMotionValue(0);
   const tiltY = useMotionValue(0);
-  const springConfig = { stiffness: 220, damping: 22, mass: 0.4 };
+  const springConfig = { stiffness: 320, damping: 30, mass: 0.28 };
   const rotateX = useSpring(
-    useTransform(tiltY, [-0.5, 0.5], [8, -8]),
+    useTransform(tiltY, [-0.5, 0.5], [6, -6]),
     springConfig,
   );
   const rotateY = useSpring(
-    useTransform(tiltX, [-0.5, 0.5], [-8, 8]),
+    useTransform(tiltX, [-0.5, 0.5], [-6, 6]),
     springConfig,
   );
   const glareX = useTransform(tiltX, [-0.5, 0.5], ["0%", "100%"]);
   const glareY = useTransform(tiltY, [-0.5, 0.5], ["0%", "100%"]);
+  const glareBackground = useMotionTemplate`radial-gradient(320px circle at ${glareX} ${glareY}, rgba(255,255,255,0.16), transparent 62%)`;
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "mouse") return;
+    if (reduceMotion || e.pointerType !== "mouse") return;
     const rect = cardRef.current?.getBoundingClientRect();
     if (!rect) return;
     tiltX.set((e.clientX - rect.left) / rect.width - 0.5);
@@ -156,18 +157,12 @@ const ArtworkCard = ({
   return (
     <motion.div
       ref={cardRef}
-      initial={{ opacity: 0, y: 56 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 36 }}
+      whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
-      // Apple-style choreographed reveal: small horizontal sweep
-      // (column-based stagger so a row appears left-to-right) plus an
-      // out-expo curve for the smooth "lifts and settles" feel. The
-      // modulo keeps the longest delay capped at 0.16 s so a card
-      // 50 down the masonry doesn't sit invisible queueing five
-      // seconds of stagger.
       transition={{
-        duration: 0.85,
-        delay: (index % 3) * 0.08,
+        duration: 0.5,
+        delay: (index % 4) * 0.035,
         ease: [0.16, 1, 0.3, 1],
       }}
       className="break-inside-avoid group cursor-pointer [perspective:1200px]"
@@ -177,7 +172,7 @@ const ArtworkCard = ({
         setIsHovered(false);
         resetTilt();
       }}
-      onPointerMove={handlePointerMove}
+      onPointerMove={reduceMotion ? undefined : handlePointerMove}
     >
       <motion.div
         style={{
@@ -185,19 +180,18 @@ const ArtworkCard = ({
           rotateY,
           transformStyle: "preserve-3d",
         }}
-        whileHover={{ y: -4 }}
-        transition={{ y: { type: "spring", stiffness: 220, damping: 22 } }}
-        className="relative overflow-hidden gallery-frame hover-lift-shadow will-change-transform motion-reduce:!transform-none"
+        whileHover={reduceMotion ? undefined : { y: -6, z: 18 }}
+        transition={{
+          y: { type: "spring", stiffness: 360, damping: 30 },
+          z: { type: "spring", stiffness: 360, damping: 30 },
+        }}
+        className="relative overflow-hidden gallery-frame hover-lift-shadow motion-safe:group-hover:will-change-transform motion-reduce:!transform-none"
       >
         {/* Painterly glare overlay following pointer */}
         <motion.div
           aria-hidden
-          style={{
-            background: `radial-gradient(380px circle at var(--gx) var(--gy), rgba(255,255,255,0.18), transparent 60%)`,
-            ["--gx" as string]: glareX,
-            ["--gy" as string]: glareY,
-          }}
-          className="pointer-events-none absolute inset-0 z-[4] mix-blend-overlay opacity-0 group-hover:opacity-100 transition-opacity duration-500 motion-reduce:hidden"
+          style={{ background: glareBackground }}
+          className="pointer-events-none absolute inset-0 z-[4] mix-blend-overlay opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:hidden"
         />
         <AnimatePresence mode="wait">
           <motion.img
@@ -205,10 +199,10 @@ const ArtworkCard = ({
             src={responsiveAttrs.src || displayImage}
             srcSet={responsiveAttrs.srcSet}
             alt={title}
-            initial={{ opacity: 0, scale: 1.05 }}
+            initial={reduceMotion ? false : { opacity: 0, scale: 1.025 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.4 }}
+            exit={reduceMotion ? undefined : { opacity: 0, scale: 0.985 }}
+            transition={{ duration: 0.24 }}
             className={`w-full object-cover ${isDimmed ? "grayscale opacity-80" : ""}`}
             loading="lazy"
             decoding="async"
@@ -280,12 +274,12 @@ const ArtworkCard = ({
             so the title + price strip below is readable over the image;
             hover-only on md+ so desktop visitors see the bare painting
             until they engage. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300" />
         {/* Metadata + add-to-cart strip. On <md it stays anchored at the
             bottom so touch users can see the title, price, and tap the
             cart button; on md+ it slides up on hover for a cleaner
             gallery aesthetic. */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-500">
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-300">
           <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60 mb-1">
             {medium} · {year}
           </p>

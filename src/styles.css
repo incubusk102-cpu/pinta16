@@ -252,10 +252,10 @@
      transform (e.g. framer-motion 3D-tilt cards). Keeping `transform` out
      of this class avoids fighting the inline transform set by motion. */
   .hover-lift-shadow {
-    transition: box-shadow 0.6s var(--transition-smooth);
+    transition: box-shadow 0.38s var(--transition-smooth);
   }
   .hover-lift-shadow:hover {
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
   }
 
   /* Slow drifting gradient on the hero wordmark for a subtle premium feel.
@@ -453,30 +453,34 @@
 
   .painting-marquee-track {
     animation: painting-marquee-scroll linear infinite;
+    backface-visibility: hidden;
+    transform: translate3d(0, 0, 0);
     will-change: transform;
   }
 
   .painting-marquee-tile {
-    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: paint;
+    transform: translate3d(0, 0, 0);
     transform-style: preserve-3d;
     transition:
-      transform 0.45s var(--transition-smooth),
-      box-shadow 0.45s var(--transition-smooth),
-      border-color 0.45s var(--transition-smooth);
+      transform 0.28s var(--transition-smooth),
+      box-shadow 0.28s var(--transition-smooth),
+      border-color 0.28s var(--transition-smooth);
   }
 
   @media (hover: hover) and (prefers-reduced-motion: no-preference) {
     .painting-marquee-tile:hover {
-      transform: translateY(-0.3rem) rotateX(7deg) translateZ(18px);
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+      transform: translate3d(0, -0.25rem, 18px) rotateX(6deg);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
     }
   }
   @keyframes painting-marquee-scroll {
     from {
-      transform: translateX(0);
+      transform: translate3d(0, 0, 0);
     }
     to {
-      transform: translateX(-50%);
+      transform: translate3d(-50%, 0, 0);
     }
   }
   @media (prefers-reduced-motion: reduce) {
