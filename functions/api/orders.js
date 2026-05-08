@@ -3173,8 +3173,60 @@ export const handler = async (event) => {
               error: `Can only mark-received an approved return (current: "${cur.status}")`,
             });
           }
-          nextStatus = "received";
-          patch.receivedAt = now;
+          // Hybrid one-click "received + refund" flow. When admin opts in
+          // (autoComplete=true), we skip the intermediate "received"
+          // status entirely: stamp receivedAt + completedAt in the same
+          // tick and run the same PayMongo auto-refund attempt
+          // complete-return uses below. Refund amount defaults to the
+          // full order total (centavos) since the alternative — silently
+          // not refunding — defeats the purpose of the one-click flow.
+          if (body.autoComplete === true) {
+            nextStatus = "completed";
+            patch.receivedAt = now;
+            patch.completedAt = now;
+            const fullTotalCentavos = Math.max(
+              0,
+              Math.round(Number(existing.total || 0) * 100),
+            );
+            const requestedAmt =
+              body.refundAmount != null
+                ? Math.max(0, Math.round(Number(body.refundAmount)))
+                : fullTotalCentavos;
+            if (Number.isFinite(requestedAmt) && requestedAmt > 0) {
+              patch.refundAmount = requestedAmt;
+            }
+            patch.autoRefundError = null;
+            const refundAlreadyInFlight =
+              existing.refund && existing.refund.status !== "failed";
+            if (
+              typeof patch.refundAmount === "number" &&
+              patch.refundAmount > 0 &&
+              !refundAlreadyInFlight
+            ) {
+              if (
+                fullTotalCentavos > 0 &&
+                patch.refundAmount > fullTotalCentavos
+              ) {
+                patch.autoRefundError = `Refund amount (\u20b1${(patch.refundAmount / 100).toLocaleString()}) cannot exceed order total (\u20b1${(fullTotalCentavos / 100).toLocaleString()})`;
+              } else {
+                const { refundRecord, error: refundError } =
+                  await attemptPaymongoRefund({
+                    existing,
+                    amountCentavos: patch.refundAmount,
+                    refundReason: "requested_by_customer",
+                    notesPrefix: "Return refund",
+                  });
+                if (refundRecord) {
+                  autoRefundRecord = refundRecord;
+                } else {
+                  patch.autoRefundError = refundError || "Auto-refund failed";
+                }
+              }
+            }
+          } else {
+            nextStatus = "received";
+            patch.receivedAt = now;
+          }
         } else if (action === "complete-return") {
           if (cur.status !== "approved" && cur.status !== "received") {
             return json(409, {
