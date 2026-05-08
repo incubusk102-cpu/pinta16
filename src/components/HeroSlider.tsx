@@ -56,7 +56,7 @@ const isExternalHref = (href: string) => /^(https?:|mailto:|tel:)/i.test(href);
 
 const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const cls =
-    "inline-flex items-center font-body text-[11px] sm:text-xs tracking-[0.25em] sm:tracking-[0.3em] uppercase px-7 sm:px-10 py-3 sm:py-4 bg-foreground text-background hover:bg-foreground/90 transition-colors duration-300 rounded-none";
+    "inline-flex max-w-full items-center justify-center font-body text-[11px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase px-5 sm:px-10 py-3 sm:py-4 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 rounded-none shadow-lg shadow-background/25";
   const external = isExternalHref(href);
   const target = external ? "_blank" : undefined;
   const rel = external ? "noreferrer" : undefined;
@@ -75,15 +75,15 @@ const CtaLink = ({ label, href }: { label: string; href: string }) => {
 
 const SlideContent = ({ slide, active }: SlideContentProps) => (
   <div
-    className={`absolute inset-0 z-10 flex flex-col justify-center px-5 sm:px-6 md:px-12 ${ALIGN_CLASSES[slide.align]}`}
+    className={`absolute inset-0 z-10 flex flex-col justify-center px-5 pb-32 sm:px-6 md:px-12 md:pb-0 ${ALIGN_CLASSES[slide.align]}`}
   >
-    <div className="max-w-3xl flex flex-col gap-4 sm:gap-5">
+    <div className="max-w-2xl md:max-w-3xl flex flex-col gap-3 sm:gap-5">
       {slide.eyebrow && (
         <motion.p
           initial={{ opacity: 0, y: 18 }}
           animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           transition={{ duration: 0.7, delay: 0.15 }}
-          className="font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-muted-foreground/90"
+          className="font-body text-[10px] sm:text-xs tracking-[0.25em] sm:tracking-[0.4em] uppercase text-foreground/75 md:text-muted-foreground/90 drop-shadow-sm"
         >
           {slide.eyebrow}
         </motion.p>
@@ -93,7 +93,7 @@ const SlideContent = ({ slide, active }: SlideContentProps) => (
           initial={{ opacity: 0, y: 28 }}
           animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 28 }}
           transition={{ duration: 0.9, delay: 0.25 }}
-          className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-foreground leading-[1.05]"
+          className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-foreground leading-[1.05] drop-shadow-md"
         >
           {slide.headline}
         </motion.h2>
@@ -103,7 +103,7 @@ const SlideContent = ({ slide, active }: SlideContentProps) => (
           initial={{ opacity: 0, y: 22 }}
           animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 22 }}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="font-body text-sm md:text-base text-muted-foreground max-w-xl leading-relaxed"
+          className="font-body text-sm md:text-base text-foreground/85 md:text-muted-foreground max-w-xl leading-relaxed drop-shadow-sm"
         >
           {slide.subtext}
         </motion.p>
@@ -237,7 +237,7 @@ const HeroSlider = () => {
       onBlur={() => setPaused(false)}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className="relative h-screen overflow-hidden bg-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="relative h-svh md:h-screen overflow-hidden bg-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <AnimatePresence initial={false} custom={direction} mode="sync">
         <motion.div
@@ -277,7 +277,7 @@ const HeroSlider = () => {
             />
           )}
           {/* readability overlay — gradient bottom-up */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/85 via-background/45 to-background/15" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/60 to-background/20 md:from-background/85 md:via-background/45 md:to-background/15" />
           <motion.div
             className="absolute inset-0"
             style={reduced ? undefined : { y: overlayY }}
@@ -299,7 +299,7 @@ const HeroSlider = () => {
             type="button"
             onClick={prev}
             aria-label="Previous slide"
-            className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 rounded-full bg-background/40 hover:bg-background/70 backdrop-blur text-foreground transition-all"
+            className="absolute left-5 bottom-20 md:left-6 md:bottom-auto md:top-1/2 z-20 p-2 sm:p-2.5 rounded-full bg-background/70 hover:bg-background/80 backdrop-blur text-foreground transition-all translate-y-0 md:-translate-y-1/2"
           >
             <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
@@ -307,7 +307,7 @@ const HeroSlider = () => {
             type="button"
             onClick={next}
             aria-label="Next slide"
-            className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 rounded-full bg-background/40 hover:bg-background/70 backdrop-blur text-foreground transition-all"
+            className="absolute right-5 bottom-20 md:right-6 md:bottom-auto md:top-1/2 z-20 p-2 sm:p-2.5 rounded-full bg-background/70 hover:bg-background/80 backdrop-blur text-foreground transition-all translate-y-0 md:-translate-y-1/2"
           >
             <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
