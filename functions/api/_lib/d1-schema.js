@@ -86,4 +86,19 @@ export const D1_SCHEMA_STATEMENTS = [
     updated_at TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`,
+
+  `CREATE TABLE IF NOT EXISTS wishlist_items (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    product_title TEXT,
+    product_image TEXT,
+    product_price INTEGER,
+    added_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (user_id, product_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_wishlist_items_user ON wishlist_items(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_wishlist_items_product ON wishlist_items(product_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_wishlist_items_added_at ON wishlist_items(added_at)`,
 ];
