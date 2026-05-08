@@ -54,6 +54,13 @@ interface QueueItem {
   rmaNumber: string | null;
   denialReason: string;
   refundAmount: number | null;
+  /**
+   * Reason the hybrid auto-refund couldn't run when this return was
+   * completed (no PayMongo paymentIntent, COD order, PayMongo error,
+   * etc). When non-null, the operator should use Manual refund on the
+   * order instead.
+   */
+  autoRefundError: string | null;
   requestedAt: string;
   decidedAt: string;
   receivedAt: string;
@@ -247,26 +254,58 @@ export function ReturnsSection() {
   };
 
   const handleComplete = async (it: QueueItem) => {
+    // Pesos UX. Old prompt asked for centavos which kept tripping
+    // operators up (typing `20` for "twenty pesos" recorded ₱0.20).
+    // Default to the order total so the common case is one Enter.
+    // We still send centavos to the API to match the storage shape.
+    const orderTotalPhp = Number(it.order?.total ?? 0);
+    const defaultPhp =
+      it.refundAmount != null
+        ? (it.refundAmount / 100).toFixed(2)
+        : Number.isFinite(orderTotalPhp) && orderTotalPhp > 0
+          ? orderTotalPhp.toFixed(2)
+          : "";
     const raw = window.prompt(
-      "Refund amount in PHP centavos (leave blank to skip recording an amount):",
-      it.refundAmount != null ? String(it.refundAmount) : "",
+      "Refund amount in PHP (e.g. 20 or 20.00). " +
+        "If the order was paid via PayMongo we'll auto-refund this amount; " +
+        "otherwise the return is just recorded and you can use Manual refund " +
+        "on the order to push the money back manually.\n\n" +
+        "Leave blank to skip recording an amount.",
+      defaultPhp,
     );
     if (raw === null) return;
     const trimmed = raw.trim();
-    const refundAmount = trimmed
-      ? Math.max(0, Math.round(Number(trimmed)))
-      : null;
-    if (trimmed && !Number.isFinite(refundAmount as number)) {
-      toast.error("Invalid amount");
-      return;
+    let refundAmount: number | null = null;
+    if (trimmed) {
+      const php = Number(trimmed);
+      if (!Number.isFinite(php) || php < 0) {
+        toast.error("Invalid amount");
+        return;
+      }
+      refundAmount = Math.max(0, Math.round(php * 100));
     }
     setBusyId(it.id);
     try {
-      await postAction("complete-return", {
+      const result = (await postAction("complete-return", {
         orderId: it.orderId,
         ...(refundAmount != null ? { refundAmount } : {}),
-      });
-      toast.success(`Completed return for ${it.orderId}`);
+      })) as { order?: { refund?: { status?: string; amount?: number } | null; returnRequest?: { autoRefundError?: string | null } } };
+      const refund = result.order?.refund || null;
+      const autoRefundError = result.order?.returnRequest?.autoRefundError || null;
+      if (refund) {
+        const amt = Number(refund.amount ?? 0);
+        const statusLabel = refund.status === "succeeded" ? "succeeded" : "initiated";
+        toast.success(
+          `Completed return for ${it.orderId} — auto-refund ${peso(amt)} ${statusLabel}`,
+        );
+      } else if (autoRefundError) {
+        toast.warning(
+          `Completed return for ${it.orderId}. Auto-refund couldn't run (${autoRefundError}). Use Manual refund on the order to push the money back.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.success(`Completed return for ${it.orderId}`);
+      }
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to complete");
@@ -486,13 +525,36 @@ export function ReturnsSection() {
                     </Button>
                   )}
                   {it.status === "completed" && (
-                    <span className="inline-flex items-center text-[11px] text-emerald-600 dark:text-emerald-400">
-                      <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
-                      Refund recorded
-                      {it.refundAmount != null
-                        ? `: ${peso(it.refundAmount / 100)}`
-                        : ""}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center text-[11px] text-emerald-600 dark:text-emerald-400">
+                        <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
+                        Refund recorded
+                        {it.refundAmount != null
+                          ? `: ${peso(it.refundAmount / 100)}`
+                          : ""}
+                      </span>
+                      {it.order?.refund && (
+                        <span className="inline-flex items-center text-[11px] text-emerald-600 dark:text-emerald-400">
+                          <PackageCheck className="w-3.5 h-3.5 mr-1.5" />
+                          Auto-refund {it.order.refund.status}
+                          {Number.isFinite(it.order.refund.amount)
+                            ? `: ${peso(it.order.refund.amount)}`
+                            : ""}
+                        </span>
+                      )}
+                      {it.autoRefundError && !it.order?.refund && (
+                        <span className="inline-flex items-start text-[11px] text-amber-600 dark:text-amber-400">
+                          <XCircle className="w-3.5 h-3.5 mr-1.5 shrink-0 mt-0.5" />
+                          <span>
+                            Auto-refund didn't run: {it.autoRefundError}.{" "}
+                            <span className="font-medium">
+                              Use Manual refund on the order to push the money
+                              back.
+                            </span>
+                          </span>
+                        </span>
+                      )}
+                    </div>
                   )}
                   {it.status === "cancelled" && (
                     <span className="inline-flex items-center text-[11px] text-muted-foreground">

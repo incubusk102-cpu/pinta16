@@ -122,6 +122,14 @@ export interface ReturnRequest {
   rmaNumber?: string;
   denialReason?: string;
   refundAmount?: number;
+  /**
+   * Reason the hybrid auto-refund couldn't run when the admin clicked
+   * Complete return (e.g. order has no PayMongo paymentIntent, refund
+   * amount > order total, PayMongo rejected the refund). Surfaced on
+   * the admin Returns queue so the operator can fall back to the
+   * Manual refund flow on the order. Cleared on a successful retry.
+   */
+  autoRefundError?: string | null;
   requestedAt: string;
   decidedAt?: string;
   receivedAt?: string;
