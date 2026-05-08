@@ -50,6 +50,10 @@ interface AdminPromo {
   minSpend: number;
   usageLimit: number | null;
   usageCount: number;
+  // Per-customer redemption cap. 0 (or missing) means unlimited and is
+  // back-compat with codes saved before this field existed. Enforced by
+  // the place-order handler against the D1 redemption ledger.
+  maxRedemptionsPerCustomer: number;
   expiresAt: string | null;
   enabled: boolean;
   description: string;
@@ -720,6 +724,11 @@ export function StorefrontSection() {
   const isDirty = useMemo(() => {
     if (loading) return false;
     try {
+      // baselineCfg is a stable useRef snapshot of the last persisted server
+      // state; reading .current here is the entire point of the comparison
+      // and is gated on `cfg`/`loading` deps, so the memo recomputes when
+      // either side changes.
+      // eslint-disable-next-line react-hooks/refs
       return JSON.stringify(cfg) !== JSON.stringify(baselineCfg.current);
     } catch {
       return false;
@@ -752,6 +761,7 @@ export function StorefrontSection() {
   const [promoFreeShipping, setPromoFreeShipping] = useState(false);
   const [promoMinSpend, setPromoMinSpend] = useState("");
   const [promoUsageLimit, setPromoUsageLimit] = useState("");
+  const [promoMaxPerCustomer, setPromoMaxPerCustomer] = useState("");
   const [promoExpiresAt, setPromoExpiresAt] = useState("");
   const [promoDescription, setPromoDescription] = useState("");
 
@@ -994,6 +1004,10 @@ export function StorefrontSection() {
             promoType === "free_shipping" ? true : promoFreeShipping,
           minSpend: Number(promoMinSpend) || 0,
           usageLimit: promoUsageLimit ? Number(promoUsageLimit) : null,
+          maxRedemptionsPerCustomer: Math.max(
+            0,
+            Math.floor(Number(promoMaxPerCustomer) || 0),
+          ),
           expiresAt: promoExpiresAt
             ? new Date(promoExpiresAt).toISOString()
             : null,
@@ -1007,6 +1021,7 @@ export function StorefrontSection() {
       setPromoFreeShipping(false);
       setPromoMinSpend("");
       setPromoUsageLimit("");
+      setPromoMaxPerCustomer("");
       setPromoExpiresAt("");
       setPromoDescription("");
     } catch (e) {
@@ -2021,6 +2036,26 @@ export function StorefrontSection() {
             />
           </div>
           <div>
+            <Label htmlFor="promo-per-customer">
+              Max uses per customer{" "}
+              <span className="text-muted-foreground font-normal">
+                (0 = unlimited)
+              </span>
+            </Label>
+            <Input
+              id="promo-per-customer"
+              type="number"
+              min={0}
+              value={promoMaxPerCustomer}
+              onChange={(e) => setPromoMaxPerCustomer(e.target.value)}
+              placeholder="1"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Enforced against the D1 redemption ledger at checkout. Requires
+              the D1 binding + 0003_coupons migration to apply.
+            </p>
+          </div>
+          <div>
             <Label htmlFor="promo-expires">
               Expires{" "}
               <span className="text-muted-foreground font-normal">
@@ -2089,7 +2124,11 @@ export function StorefrontSection() {
         ) : (
           <ul className="space-y-2">
             {cfg.promoCodes.map((p) => {
+              // Read-once expiry check. Refactoring into useMemo just to
+              // satisfy react-hooks/purity would add memo churn with no
+              // behavioural benefit.
               const expired =
+                // eslint-disable-next-line react-hooks/purity
                 p.expiresAt && new Date(p.expiresAt).getTime() < Date.now();
               const used =
                 p.usageLimit !== null && p.usageCount >= p.usageLimit;
@@ -2114,6 +2153,11 @@ export function StorefrontSection() {
                       {p.minSpend > 0 && (
                         <span className="text-[10px] text-muted-foreground">
                           min ₱{p.minSpend.toLocaleString()}
+                        </span>
+                      )}
+                      {(p.maxRedemptionsPerCustomer ?? 0) > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-muted rounded">
+                          {p.maxRedemptionsPerCustomer}× per customer
                         </span>
                       )}
                       {!p.enabled && (
@@ -2347,7 +2391,11 @@ function AnnouncementPreview({ cfg }: { cfg: AdminConfig }) {
       .filter((p) => p.enabled)
       .filter((p) => p.usageLimit === null || p.usageCount < p.usageLimit)
       .filter(
-        (p) => !p.expiresAt || new Date(p.expiresAt).getTime() >= Date.now(),
+        (p) =>
+          !p.expiresAt ||
+          // Read-once expiry check inside the announcement-bar preview path.
+          // eslint-disable-next-line react-hooks/purity
+          new Date(p.expiresAt).getTime() >= Date.now(),
       )
       .forEach((p) => {
         const line = formatPromoLine(tpl, p);
