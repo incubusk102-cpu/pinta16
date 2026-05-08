@@ -9,6 +9,7 @@ import { useUserAuth } from "@/contexts/UserAuthContext";
 import {
   useCart,
   ORDER_STEPS,
+  PRODUCTION_STAGES,
   type CompletedOrder,
 } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,67 @@ const formatDate = (iso?: string) => {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
 };
+
+// Sub-stage stepper rendered inline under the "Painting in progress" step
+// in the customer-facing journey map. Walks the artist's physical-studio
+// milestones (cut → frame → paint → varnish → packed) and highlights
+// whichever one the artist last marked.
+function ProductionStageInline({
+  stage,
+}: {
+  stage?: CompletedOrder["productionStage"];
+}) {
+  const currentIdx = stage
+    ? PRODUCTION_STAGES.findIndex((s) => s.key === stage)
+    : -1;
+  return (
+    <ol
+      className="mt-2 space-y-1.5"
+      aria-label="Production stage"
+      data-testid="production-stage-inline"
+    >
+      {PRODUCTION_STAGES.map((s, idx) => {
+        const done = idx <= currentIdx;
+        const active = idx === currentIdx;
+        return (
+          <li
+            key={s.key}
+            className="flex items-center gap-2"
+            aria-current={active ? "step" : undefined}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                done ? "bg-foreground" : "bg-border"
+              }`}
+              aria-hidden="true"
+            />
+            <span
+              className={`text-[11px] ${
+                active
+                  ? "text-foreground font-medium"
+                  : done
+                    ? "text-foreground/80"
+                    : "text-muted-foreground"
+              }`}
+            >
+              {s.label}
+              {active && (
+                <span className="ml-1.5 font-body text-[9px] tracking-[0.2em] uppercase text-foreground/60">
+                  Now
+                </span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+      {currentIdx === -1 && (
+        <li className="text-[10px] text-muted-foreground italic pl-3.5">
+          The artist hasn't marked a stage yet.
+        </li>
+      )}
+    </ol>
+  );
+}
 
 function OrderTracker() {
   const [orderId, setOrderId] = useState("");
@@ -169,6 +231,8 @@ function OrderTracker() {
             {ORDER_STEPS.map((step, idx) => {
               const done = idx <= currentStepIdx;
               const active = idx === currentStepIdx;
+              const showStages =
+                step.key === "in_progress" && order.status === "in_progress";
               return (
                 <div key={step.key} className="flex gap-3">
                   <div className="flex flex-col items-center">
@@ -181,11 +245,11 @@ function OrderTracker() {
                     />
                     {idx < ORDER_STEPS.length - 1 && (
                       <div
-                        className={`w-0.5 h-6 ${done ? "bg-foreground" : "bg-border"}`}
+                        className={`w-0.5 ${showStages ? "h-32" : "h-6"} ${done ? "bg-foreground" : "bg-border"}`}
                       />
                     )}
                   </div>
-                  <div className="-mt-0.5 pb-3">
+                  <div className="-mt-0.5 pb-3 w-full">
                     <p
                       className={`text-xs font-medium ${done ? "text-foreground" : "text-muted-foreground"}`}
                     >
@@ -194,6 +258,9 @@ function OrderTracker() {
                     <p className="text-[10px] text-muted-foreground">
                       {step.description}
                     </p>
+                    {showStages && (
+                      <ProductionStageInline stage={order.productionStage} />
+                    )}
                   </div>
                 </div>
               );

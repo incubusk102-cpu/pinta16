@@ -69,7 +69,8 @@ export interface OrderNotification {
     | "out_for_delivery"
     | "refund_requested"
     | "refund_succeeded"
-    | "refund_failed";
+    | "refund_failed"
+    | "production_stage";
   message: string;
   recipient: string;
   sentAt: string;
@@ -212,6 +213,14 @@ export interface CompletedOrder {
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];
   /**
+   * Sub-stage shown while `status === "in_progress"`. The artist (admin)
+   * advances the order through cut → frame → paint → varnish → packed
+   * so the customer can see exactly where their painting is in the
+   * studio, instead of just a generic "in progress" badge for days at a
+   * stretch. Undefined means the artist hasn't picked a stage yet.
+   */
+  productionStage?: ProductionStage;
+  /**
    * Local sync state. `false` means the SPA tried to POST this order to
    * `/api/orders` but the request never confirmed (network blip, edge
    * challenge, body-size rejection, anything). `true` means the server
@@ -269,6 +278,54 @@ export const ORDER_STEPS: {
     key: "received",
     label: "Order Received",
     description: "Delivered successfully",
+  },
+];
+
+/**
+ * Sub-stages the artist marks while an order is in_progress. These are
+ * deliberately physical-studio milestones, not generic "started / mid /
+ * finishing" buckets, so the customer's progress timeline reads like a
+ * mini behind-the-scenes tour. Order matters — the order tracker walks
+ * this array left-to-right.
+ */
+export type ProductionStage = "cut" | "frame" | "paint" | "varnish" | "packed";
+
+export const PRODUCTION_STAGES: {
+  key: ProductionStage;
+  label: string;
+  description: string;
+  // Short customer-facing line piped into the push notification body.
+  pushBody: string;
+}[] = [
+  {
+    key: "cut",
+    label: "Canvas cut",
+    description: "Raw canvas trimmed and prepped for stretching",
+    pushBody: "We've cut the canvas for your painting and started prep.",
+  },
+  {
+    key: "frame",
+    label: "Stretcher framed",
+    description: "Canvas stretched onto the wooden frame",
+    pushBody: "Your canvas is on the frame and ready for paint.",
+  },
+  {
+    key: "paint",
+    label: "Painting",
+    description: "Artist is laying down the painting",
+    pushBody: "Brushes are out — your painting is being made right now.",
+  },
+  {
+    key: "varnish",
+    label: "Varnishing",
+    description: "Final varnish layer being applied and cured",
+    pushBody: "Final varnish is on. We're letting it cure before packing.",
+  },
+  {
+    key: "packed",
+    label: "Packed",
+    description: "Painting is wrapped and waiting for the courier",
+    pushBody: "Packed and ready to ship — we'll add tracking shortly.",
   },
 ];
 
