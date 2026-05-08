@@ -163,6 +163,29 @@ preview_id = "67c757b425ee427b9c9bba0a16519ff7"
 # preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
 
 # ---------------------------------------------------------------------------
+# WISHLISTS (optional)
+#
+# Server-side mirror of the per-user wishlist that today lives in
+# localStorage only (see `src/contexts/WishlistContext.tsx`). When the
+# binding is configured, signed-in visitors get cross-device wishlist
+# sync via /api/wishlist; when it isn't, every endpoint returns 503 and
+# the SPA falls back to localStorage exactly as before.
+#
+# Stored under per-user keys: `user/<userId>` → { items: WishlistItem[] }.
+#
+# To enable in production:
+#   1. Create the namespace in the Cloudflare dashboard:
+#      Workers & Pages → KV → Create namespace → name `canvhub-wishlists`.
+#      Then create a second namespace for preview (e.g. `canvhub-wishlists-preview`).
+#   2. Paste the production + preview IDs below and uncomment the block.
+#   3. `git push` (CI redeploys with the binding active).
+#
+# [[kv_namespaces]]
+# binding = "WISHLISTS"
+# id = "REPLACE_WITH_PRODUCTION_NAMESPACE_ID"
+# preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
+
+# ---------------------------------------------------------------------------
 # D1 database binding (hybrid KV+SQL architecture)
 #
 # D1 is a managed SQLite database that runs on the same Cloudflare edge as
