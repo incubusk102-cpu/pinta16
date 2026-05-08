@@ -102,9 +102,11 @@ import {
   Eye,
   EyeOff,
   Image as ImageIcon,
+  ImagePlus,
   Images,
   Star,
   Trash2,
+  X,
   TrendingUp,
   Truck,
   Type,
@@ -139,6 +141,8 @@ import {
 } from "@/lib/shipment";
 import { linkifyMessage } from "@/lib/chat-format";
 import { GoldenCMark } from "@/components/GoldenCMark";
+import { compressImage } from "@/lib/imageCompress";
+import { uploadImageToR2 } from "@/lib/uploadImage";
 type AdminSection =
   | "dashboard"
   | "products"
@@ -3022,6 +3026,128 @@ function OrdersSection() {
     }
   };
 
+  // Behind-the-scenes photo upload. The flow is two hops on purpose:
+  //   1. POST the compressed bytes to /api/uploads, which writes them to
+  //      R2 at a content-addressable key and returns `/api/r/<path>`.
+  //   2. POST that path + stage to /api/orders `add-production-photo`,
+  //      which appends it to the order's productionPhotos array, logs an
+  //      activity event, and fires the push notification.
+  // Doing this in one round-trip would mean reading the bytes twice on
+  // the worker (once to hash for R2, once to attach to the order) and
+  // would tangle the upload size budget with the order JSON budget.
+  const handleUploadProductionPhoto = async (
+    orderId: string,
+    stage: ProductionStage,
+    file: File,
+  ) => {
+    setUpdatingId(orderId);
+    try {
+      // 1.6 MB encoded budget at 1600 px long-edge. Bigger than the email
+      // header banner (1.2 MB) because progress photos are the hero of
+      // the customer's notification — a softer JPEG looks worse here
+      // than it does in a transactional email footer.
+      const compressed = await compressImage(file, {
+        maxDim: 1600,
+        maxBytes: 1600 * 1024,
+        initialQuality: 0.85,
+      });
+      const upload = await uploadImageToR2(compressed.blob);
+      if (upload.kind !== "uploaded") {
+        const reason =
+          upload.kind === "fallback"
+            ? "R2 storage is not configured on this deploy."
+            : upload.message;
+        throw new Error(reason);
+      }
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "add-production-photo",
+          orderId,
+          stage,
+          url: upload.result.url,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
+      if (updated) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      }
+      const note = data.notification as
+        | {
+            push?: {
+              delivered?: boolean;
+              skipped?: boolean;
+              reason?: string;
+            };
+          }
+        | null
+        | undefined;
+      if (note?.push?.delivered) {
+        toast.success("Photo uploaded · Push sent to customer");
+      } else if (note?.push?.skipped) {
+        toast.message(
+          `Photo uploaded · Push skipped: ${note.push.reason || "not configured"}`,
+        );
+      } else {
+        toast.success("Photo uploaded");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not upload photo",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleRemoveProductionPhoto = async (
+    orderId: string,
+    photoId: string,
+  ) => {
+    // No setUpdatingId here — removal is fast (no upload) and we don't
+    // want to grey out the stage selector while a delete confirmation
+    // round-trips. The button itself goes through optimistic state.
+    try {
+      const token = getAdminToken();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "remove-production-photo",
+          orderId,
+          photoId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const updated = data.order as CompletedOrder | undefined;
+      if (updated) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      }
+      toast.success("Photo removed");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not remove photo",
+      );
+    }
+  };
+
   const handleStatusUpdate = async (
     orderId: string,
     status: CompletedOrder["status"],
@@ -4156,6 +4282,101 @@ function OrdersSection() {
                       >
                         {s.label}
                       </button>
+                    );
+                  })}
+                </div>
+                {/* Behind-the-scenes photo strip per stage. Shows
+                    existing photos (with hover-to-remove), plus an
+                    upload button that's only enabled when a stage is
+                    actually selected — uploading without a stage tag
+                    would leave the photo orphaned in the customer UI. */}
+                <div className="space-y-1.5 pt-1">
+                  {PRODUCTION_STAGES.map((s) => {
+                    const photos = (order.productionPhotos || []).filter(
+                      (p) => p.stage === s.key,
+                    );
+                    const canUpload =
+                      order.productionStage === s.key &&
+                      updatingId !== order.id;
+                    if (photos.length === 0 && order.productionStage !== s.key)
+                      return null;
+                    return (
+                      <div
+                        key={s.key}
+                        className="flex items-start gap-2 text-[10px]"
+                      >
+                        <span className="w-14 shrink-0 pt-1 uppercase tracking-wider text-muted-foreground">
+                          {s.label}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                          {photos.map((p) => (
+                            <div
+                              key={p.id}
+                              className="relative group w-12 h-12 rounded-sm overflow-hidden border border-border/40 bg-muted/40"
+                            >
+                              <a
+                                href={p.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block w-full h-full"
+                                title={`Uploaded ${formatDate(p.uploadedAt)}`}
+                              >
+                                <img
+                                  src={p.url}
+                                  alt={`${s.label} photo`}
+                                  loading="lazy"
+                                  className="w-full h-full object-cover"
+                                />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleRemoveProductionPhoto(
+                                    order.id,
+                                    p.id,
+                                  )
+                                }
+                                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-background/90 text-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center"
+                                aria-label={`Remove ${s.label} photo`}
+                                title="Remove photo"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          ))}
+                          <label
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm border border-dashed text-[10px] uppercase tracking-wider transition-colors ${
+                              canUpload
+                                ? "border-border text-muted-foreground hover:bg-muted/40 cursor-pointer"
+                                : "border-border/50 text-muted-foreground/50 cursor-not-allowed"
+                            }`}
+                            title={
+                              canUpload
+                                ? "Upload a behind-the-scenes photo"
+                                : "Mark this stage as current to upload"
+                            }
+                          >
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              disabled={!canUpload}
+                              onChange={(e) => {
+                                const file = e.currentTarget.files?.[0];
+                                e.currentTarget.value = "";
+                                if (!file) return;
+                                void handleUploadProductionPhoto(
+                                  order.id,
+                                  s.key,
+                                  file,
+                                );
+                              }}
+                            />
+                            <ImagePlus className="w-3 h-3" />
+                            {photos.length === 0 ? "Add photo" : "Add"}
+                          </label>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

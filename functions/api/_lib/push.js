@@ -22,12 +22,19 @@ const normalizeEmail = (email) =>
     .toLowerCase()
     .slice(0, 200);
 
-// All 7 status kinds the email pipeline already covers, plus a Push-only
-// `production_stage` kind for finer-grained "cut → frame → paint → varnish
-// → packed" updates while an order is in_progress. Email is not wired for
-// production_stage on purpose — five inbox pings per order would feel
-// spammy, but a single tap-through native push is exactly the right
-// surface for it.
+// All 7 status kinds the email pipeline already covers, plus two Push-only
+// kinds for the in-progress sub-states:
+//
+//   - `production_stage` for the cut → frame → paint → varnish → packed
+//     transitions themselves.
+//   - `production_photo` for when the artist uploads a behind-the-scenes
+//     photo at the current stage. This is the bigger UX win — a tiny
+//     thumbnail in the customer's notification tray ("Your canvas is
+//     being painted!") is much more reassuring than a text-only update.
+//
+// Email is not wired for either of these on purpose — adding 5–10 extra
+// emails per order would feel spammy. A single tap-through native push
+// is the right surface for both.
 export const ORDER_PUSH_KINDS = [
   "confirmed",
   "in_progress",
@@ -37,6 +44,7 @@ export const ORDER_PUSH_KINDS = [
   "refund_succeeded",
   "refund_failed",
   "production_stage",
+  "production_photo",
 ];
 
 const ORIGIN = "https://canvhub.com";
@@ -90,6 +98,11 @@ export const DEFAULT_ORDER_PUSH = {
       enabled: true,
       title: "Order {{orderId}} · {{stageLabel}}",
       body: "{{stageMessage}}",
+    },
+    production_photo: {
+      enabled: true,
+      title: "New photo · {{stageLabel}}",
+      body: "The artist just shared a progress shot of order {{orderId}}. Tap to peek.",
     },
   },
 };
@@ -171,11 +184,23 @@ const buildPushPayload = (kind, order, extra, cfg) => {
   };
   const title = fillMustache(kindCfg.title, vars);
   const body = fillMustache(kindCfg.body, vars);
+  // For `production_photo`, lift the actual photo URL into the payload
+  // image field so the OS shows it as a thumbnail in the notification
+  // tray. We only honour absolute URLs (or our own /api/r/... paths
+  // resolved against ORIGIN) — never raw user input — to avoid stuffing
+  // arbitrary data into the OS-level notification surface.
+  let image;
+  if (kind === "production_photo" && typeof extra?.photoUrl === "string") {
+    const raw = extra.photoUrl.trim();
+    if (raw.startsWith("/api/r/")) image = `${ORIGIN}${raw}`;
+    else if (raw.startsWith("https://")) image = raw;
+  }
   return {
     title: title.slice(0, 80),
     body: body.slice(0, 240),
     icon: `${ORIGIN}/icon-192.png`,
     badge: `${ORIGIN}/icon-192.png`,
+    ...(image ? { image } : {}),
     tag: order?.id ? `order-${order.id}-${kind}` : `order-${kind}`,
     url: order?.id
       ? `/account?orderId=${encodeURIComponent(order.id)}`

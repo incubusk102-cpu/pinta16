@@ -1891,6 +1891,177 @@ export const handler = async (event) => {
         return json(200, { order: orders[idx], notification: latestNote });
       }
 
+      if (action === "add-production-photo") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, stage, url } = body;
+        // Stage list mirrors src/contexts/CartContext.tsx PRODUCTION_STAGES
+        // and the STAGE_LABELS in update-production-stage above. Three
+        // copies feels redundant but each lives in a different runtime
+        // (admin TSX, server JS, server JS) and they must stay in sync.
+        const STAGE_LABELS = {
+          cut: "Canvas cut",
+          frame: "Stretcher framed",
+          paint: "Painting",
+          varnish: "Varnishing",
+          packed: "Packed",
+        };
+        const validStages = Object.keys(STAGE_LABELS);
+        // The photo URL must come from /api/uploads (R2-backed) so the
+        // bytes are content-addressable and admin-authenticated. Any
+        // other origin is rejected to stop a logged-in admin from
+        // pasting an arbitrary off-site URL into the customer's order
+        // page (cookie-bearing referrer leak / hotlinking risk).
+        if (
+          !orderId ||
+          !validStages.includes(stage) ||
+          typeof url !== "string" ||
+          !/^\/api\/r\/[\w./-]{1,200}$/.test(url)
+        ) {
+          return json(400, { error: "Invalid orderId, stage, or url" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        if (existing.status !== "in_progress") {
+          return json(400, {
+            error: "Production photos only valid for in_progress orders",
+          });
+        }
+        const photos = Array.isArray(existing.productionPhotos)
+          ? [...existing.productionPhotos]
+          : [];
+        // Hard cap mirrors MAX_PRODUCTION_PHOTOS in CartContext.tsx (30).
+        // Server is the source of truth so this also defends against a
+        // tampered admin client.
+        if (photos.length >= 30) {
+          return json(400, {
+            error: "Photo limit reached (30) — remove an older one first",
+          });
+        }
+        const photo = {
+          id: crypto.randomUUID(),
+          stage,
+          url,
+          uploadedAt: new Date().toISOString(),
+        };
+        // Newest-first so the customer sees the latest behind-the-scenes
+        // shot at the top of each stage strip.
+        photos.unshift(photo);
+        const meta = captureRequestMeta(event);
+        const recipient = existing.orderInfo?.email || "";
+        const notifications = Array.isArray(existing.notifications)
+          ? [...existing.notifications]
+          : [];
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        const note = {
+          type: "production_photo",
+          message: `New ${STAGE_LABELS[stage]} photo shared`,
+          recipient,
+          sentAt: new Date().toISOString(),
+        };
+        // Push only — same rationale as production_stage. Adding emails
+        // here would mean five-plus extra inbox pings per order.
+        await recordPush({ ...existing, productionPhotos: photos }, note, {
+          stage,
+          stageLabel: STAGE_LABELS[stage],
+          photoUrl: url,
+        });
+        notifications.push(note);
+        activityLog.push({
+          at: new Date().toISOString(),
+          type: `production_photo:${stage}`,
+          actor: "admin",
+          ...meta,
+        });
+        await appendAuditEvent(event, {
+          type: "order.production-photo",
+          outcome: "added",
+          subject: orderId,
+          detail: `Production photo added at stage ${stage}`,
+          ...meta,
+        });
+        const next = {
+          ...existing,
+          notifications,
+          activityLog,
+          productionPhotos: photos,
+        };
+        orders[idx] = next;
+        await store.setJSON(ORDERS_KEY, orders);
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "add-production-photo",
+          target: recipient,
+          detail: `${orderId} +photo @ ${stage}`,
+        });
+        return json(200, {
+          order: orders[idx],
+          notification: note,
+          photo,
+        });
+      }
+
+      if (action === "remove-production-photo") {
+        if (!(await isAuthenticated(event))) {
+          return json(401, { error: "Not authenticated" });
+        }
+        const { orderId, photoId } = body;
+        if (!orderId || !photoId || typeof photoId !== "string") {
+          return json(400, { error: "Invalid orderId or photoId" });
+        }
+        const orders = await readOrders(store);
+        const idx = orders.findIndex((o) => o.id === orderId);
+        if (idx === -1) return json(404, { error: "Order not found" });
+        const existing = orders[idx];
+        const photos = Array.isArray(existing.productionPhotos)
+          ? existing.productionPhotos
+          : [];
+        const target = photos.find((p) => p && p.id === photoId);
+        if (!target) {
+          return json(404, { error: "Photo not found" });
+        }
+        const remaining = photos.filter((p) => p && p.id !== photoId);
+        const meta = captureRequestMeta(event);
+        const activityLog = Array.isArray(existing.activityLog)
+          ? [...existing.activityLog]
+          : [];
+        activityLog.push({
+          at: new Date().toISOString(),
+          type: `production_photo:removed`,
+          actor: "admin",
+          ...meta,
+        });
+        await appendAuditEvent(event, {
+          type: "order.production-photo",
+          outcome: "removed",
+          subject: orderId,
+          detail: `Production photo removed (stage ${target.stage})`,
+          ...meta,
+        });
+        const next = { ...existing, activityLog, productionPhotos: remaining };
+        // Zero photos? Drop the field entirely so legacy orders read as
+        // "no photos yet" instead of "[]" (cosmetic, but keeps the KV
+        // payload tidy).
+        if (remaining.length === 0) delete next.productionPhotos;
+        orders[idx] = next;
+        await store.setJSON(ORDERS_KEY, orders);
+        // R2 object itself stays — uploads are content-addressed and may
+        // be referenced by other orders. A separate sweeper job can GC
+        // unreferenced objects.
+        await recordPiiAccess(event, {
+          resource: "order",
+          action: "remove-production-photo",
+          target: existing.orderInfo?.email || "",
+          detail: `${orderId} -photo ${photoId}`,
+        });
+        return json(200, { order: orders[idx], notification: null });
+      }
+
       if (action === "resend-email") {
         if (!(await isAuthenticated(event))) {
           return json(401, { error: "Not authenticated" });
