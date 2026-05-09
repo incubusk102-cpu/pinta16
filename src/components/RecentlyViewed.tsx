@@ -1,6 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { X } from "lucide-react";
+import SectionReveal from "@/components/motion/SectionReveal";
+import SplitText from "@/components/motion/SplitText";
 import { useProducts, type ProductImage } from "@/contexts/ProductContext";
 import { getStorefrontArtworks } from "@/lib/artworks";
 import { imgAttrsFromProduct } from "@/lib/productImage";
@@ -47,21 +50,60 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
   if (visible.length === 0) return null;
 
   return (
-    <section className="mt-16 border-t border-border/40 pt-10">
-      <div className="flex items-baseline justify-between mb-6">
-        <h2 className="font-display text-2xl text-foreground">
-          Recently viewed
-        </h2>
+    <SectionReveal
+      as="section"
+      from="bottom"
+      distance={48}
+      duration={0.85}
+      staggerChildren={0.08}
+      className="mt-16 border-t border-border/40 pt-10"
+    >
+      <motion.div
+        variants={{
+          hidden: { opacity: 0, y: 18 },
+          visible: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+          },
+        }}
+        className="flex items-baseline justify-between gap-4 mb-6"
+      >
+        <div className="min-w-0">
+          <p className="font-body text-[10px] sm:text-xs tracking-[0.4em] uppercase text-muted-foreground mb-1.5">
+            Saved by you
+          </p>
+          <SplitText
+            as="h2"
+            by="word"
+            stagger={0.06}
+            duration={0.8}
+            yFrom={22}
+            className="font-display text-2xl sm:text-3xl text-foreground leading-tight"
+          >
+            Recently viewed
+          </SplitText>
+        </div>
         <button
           type="button"
           onClick={clearRecentlyViewed}
-          className="text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          className="shrink-0 font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors"
         >
           <X className="w-3 h-3" />
           Clear
         </button>
-      </div>
-      <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+      </motion.div>
+      <motion.div
+        variants={{
+          hidden: { opacity: 0, y: 24 },
+          visible: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
+          },
+        }}
+        className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory"
+      >
         {visible.map((art) => {
           const effective =
             typeof art.salePrice === "number" && art.salePrice < art.price
@@ -78,14 +120,17 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
               params={{ id: art.id }}
               className="group flex-none w-[160px] md:w-[180px] snap-start"
             >
-              <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
+              <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm shadow-[0_2px_18px_rgba(0,0,0,0.08)] transition-shadow duration-500 group-hover:shadow-[0_18px_44px_rgba(0,0,0,0.28)]">
                 <img
                   {...railAttrs(art)}
                   alt={art.title}
                   loading="lazy"
                   decoding="async"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.09] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                 />
+                {/* Hover gradient sweep — matches RecommendedRow + the
+                    main ArtworkCard so all rails read as one family. */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 {discount > 0 && art.availability === "available" && (
                   <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
                     {discount}% OFF
@@ -112,7 +157,7 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
             </Link>
           );
         })}
-      </div>
-    </section>
+      </motion.div>
+    </SectionReveal>
   );
 }

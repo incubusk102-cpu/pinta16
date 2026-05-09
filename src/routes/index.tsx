@@ -1,11 +1,12 @@
 import { lazy, Suspense } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import HeroSlider from "@/components/HeroSlider";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import VisitorTicker from "@/components/VisitorTicker";
 import PaintingMarquee from "@/components/PaintingMarquee";
 import DailyFeature from "@/components/DailyFeature";
+import CinematicCollectionCTA from "@/components/CinematicCollectionCTA";
 import Ornament from "@/components/decor/Ornament";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -73,37 +74,13 @@ function HeroOrFallback() {
   return <HeroSlider />;
 }
 
-// Replaces the dense 2-column GallerySection grid that used to sit
-// inline on the homepage. Single editorial-feel card that points
-// curious shoppers to /collection where the full filterable grid
-// now lives. Kept terse on purpose — the homepage is meant to feel
-// curated, not catalogue-heavy.
-function CollectionCTA() {
-  return (
-    <section
-      id="gallery"
-      className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-12 sm:py-16 text-center"
-      aria-label="Browse the collection"
-    >
-      <p className="font-body text-[10px] sm:text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
-        The collection
-      </p>
-      <h2 className="font-display text-2xl sm:text-3xl md:text-4xl text-foreground mb-4 leading-tight">
-        Every painting, in one place
-      </h2>
-      <p className="font-body text-sm text-muted-foreground mb-8 max-w-xl mx-auto leading-relaxed">
-        Browse the full catalogue — search by mood, filter by category or price,
-        and find the piece that fits your wall.
-      </p>
-      <Link
-        to="/collection"
-        className="inline-flex items-center justify-center px-8 py-4 bg-foreground text-background font-body text-xs tracking-[0.25em] uppercase hover:bg-foreground/90 transition-colors rounded-sm"
-      >
-        Browse the collection
-      </Link>
-    </section>
-  );
-}
+// The previous text-only "Browse the collection" card has been
+// replaced by `CinematicCollectionCTA` — a full-bleed scene with a
+// parallax artwork collage, scroll-reveal headline, and film-grain
+// overlay — so the gap between the dynamic carousels and the
+// editorial block reads as a deliberate intermission instead of a
+// plain CTA panel. The new component preserves the `id="gallery"`
+// anchor so legacy `/#gallery` deep links still scroll correctly.
 
 function Index() {
   const { user } = useUserAuth();
@@ -125,7 +102,7 @@ function Index() {
       <PaintingMarquee />
       <VisitorTicker />
       <DailyFeature />
-      <CollectionCTA />
+      <CinematicCollectionCTA />
       <Suspense fallback={null}>
         <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
           <RecommendedRow />

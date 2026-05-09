@@ -6,6 +6,7 @@ import {
 } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import FilmGrain from "@/components/FilmGrain";
 import {
   type HeroSlide,
   type HeroTransition,
@@ -149,6 +150,13 @@ const HeroSlider = () => {
   });
   const imageY = useTransform(scrollYProgress, [0, 1], ["0%", "20%"]);
   const overlayY = useTransform(scrollYProgress, [0, 1], [0, -60]);
+  // Cinematic exit: as the user scrolls past the hero the whole
+  // scene scales down a hair and dims, so the next section reveals
+  // itself like a curtain pull rather than just appearing under an
+  // unchanged hero. Range stays subtle so it never reads as glitchy
+  // when scrolling backwards.
+  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 0.97]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.7, 1], [1, 1, 0.7]);
 
   const count = slides.length;
 
@@ -248,53 +256,76 @@ const HeroSlider = () => {
       onTouchEnd={onTouchEnd}
       className="relative h-svh md:h-screen overflow-hidden bg-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      <AnimatePresence initial={false} custom={direction} mode="sync">
-        <motion.div
-          key={slide.id}
-          custom={direction}
-          variants={variants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={{ duration: reduced ? 0.1 : 0.9, ease: "easeOut" }}
-          className="absolute inset-0"
-          aria-hidden={false}
-          aria-roledescription="slide"
-          aria-label={`Slide ${safeIndex + 1} of ${count}`}
-        >
-          {slide.image && (
-            <motion.img
-              src={slide.image}
-              alt={slide.headline || slide.eyebrow || `Slide ${safeIndex + 1}`}
-              className="absolute inset-0 w-full h-full object-cover"
-              initial={showKenBurns ? { scale: 1.05 } : false}
-              animate={showKenBurns ? { scale: 1.18 } : { scale: 1 }}
-              transition={{
-                duration: showKenBurns ? settings.intervalMs / 1000 + 1 : 0,
-                ease: "linear",
-              }}
-              style={reduced ? undefined : { y: imageY }}
-              draggable={false}
-              // The first slide is the LCP element on the homepage; load
-              // it eagerly with high fetch priority. Subsequent slides
-              // load lazily so the initial paint stays fast.
-              loading={safeIndex === 0 ? "eager" : "lazy"}
-              decoding="async"
-              {...(safeIndex === 0
-                ? ({ fetchpriority: "high" } as Record<string, string>)
-                : {})}
-            />
-          )}
-          {/* readability overlay — gradient bottom-up */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/60 to-background/20 md:from-background/85 md:via-background/45 md:to-background/15" />
+      <motion.div
+        // Wraps the slide stack so the cinematic exit (scale + opacity
+        // on scroll) applies once to the whole hero rather than to
+        // each AnimatePresence child individually.
+        className="absolute inset-0"
+        style={
+          reduced
+            ? undefined
+            : {
+                scale: heroScale,
+                opacity: heroOpacity,
+                transformOrigin: "center top",
+              }
+        }
+      >
+        <AnimatePresence initial={false} custom={direction} mode="sync">
           <motion.div
+            key={slide.id}
+            custom={direction}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: reduced ? 0.1 : 0.9, ease: "easeOut" }}
             className="absolute inset-0"
-            style={reduced ? undefined : { y: overlayY }}
+            aria-hidden={false}
+            aria-roledescription="slide"
+            aria-label={`Slide ${safeIndex + 1} of ${count}`}
           >
-            <SlideContent slide={slide} active />
+            {slide.image && (
+              <motion.img
+                src={slide.image}
+                alt={
+                  slide.headline || slide.eyebrow || `Slide ${safeIndex + 1}`
+                }
+                className="absolute inset-0 w-full h-full object-cover"
+                initial={showKenBurns ? { scale: 1.05 } : false}
+                animate={showKenBurns ? { scale: 1.18 } : { scale: 1 }}
+                transition={{
+                  duration: showKenBurns ? settings.intervalMs / 1000 + 1 : 0,
+                  ease: "linear",
+                }}
+                style={reduced ? undefined : { y: imageY }}
+                draggable={false}
+                // The first slide is the LCP element on the homepage; load
+                // it eagerly with high fetch priority. Subsequent slides
+                // load lazily so the initial paint stays fast.
+                loading={safeIndex === 0 ? "eager" : "lazy"}
+                decoding="async"
+                {...(safeIndex === 0
+                  ? ({ fetchpriority: "high" } as Record<string, string>)
+                  : {})}
+              />
+            )}
+            {/* readability overlay — gradient bottom-up */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/60 to-background/20 md:from-background/85 md:via-background/45 md:to-background/15" />
+            {/* Cinematic film-grain overlay. Sits below the slide copy
+              (z-index < 10) so headline + CTA stay crisp; sits above
+              the readability gradient so the texture reads on the
+              dark wash. */}
+            <FilmGrain opacity={0.06} />
+            <motion.div
+              className="absolute inset-0"
+              style={reduced ? undefined : { y: overlayY }}
+            >
+              <SlideContent slide={slide} active />
+            </motion.div>
           </motion.div>
-        </motion.div>
-      </AnimatePresence>
+        </AnimatePresence>
+      </motion.div>
 
       {/* aria-live announcement of current slide for screen readers */}
       <div className="sr-only" aria-live="polite">
