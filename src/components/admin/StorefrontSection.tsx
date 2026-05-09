@@ -10,6 +10,7 @@ import {
   Loader2,
   PackageOpen,
   Palmtree,
+  Clapperboard,
 } from "lucide-react";
 import {
   COURIERS,
@@ -140,6 +141,16 @@ interface AdminConfig {
     message: string;
     pauseCheckout: boolean;
   };
+  landingVideo: {
+    enabled: boolean;
+    videoUrl: string;
+    posterUrl: string;
+    eyebrow: string;
+    headline: string;
+    description: string;
+    ctaLabel: string;
+    ctaHref: string;
+  };
 }
 
 const DEFAULTS: AdminConfig = {
@@ -183,6 +194,17 @@ const DEFAULTS: AdminConfig = {
     returnDate: "",
     message: "",
     pauseCheckout: true,
+  },
+  landingVideo: {
+    enabled: false,
+    videoUrl: "",
+    posterUrl: "",
+    eyebrow: "Behind the brush",
+    headline: "Watch the studio in motion.",
+    description:
+      "A short montage of every painting coming to life \u2014 from blank canvas to the wall it was made for.",
+    ctaLabel: "Browse the collection",
+    ctaHref: "/collection",
   },
 };
 
@@ -744,6 +766,7 @@ export function StorefrontSection() {
     | "chat"
     | "vacation"
     | "lalamove-fare"
+    | "landing-video"
   >(null);
 
   // Free-shipping rule preview — admin-only state used to show what
@@ -813,6 +836,13 @@ export function StorefrontSection() {
               ? data.config.vacationMode
               : {}),
           },
+          landingVideo: {
+            ...DEFAULTS.landingVideo,
+            ...(data.config.landingVideo &&
+            typeof data.config.landingVideo === "object"
+              ? data.config.landingVideo
+              : {}),
+          },
         };
         setCfg(next);
         baselineCfg.current = next;
@@ -879,6 +909,25 @@ export function StorefrontSection() {
         cfg.vacationMode.enabled
           ? "Shop paused — buyers will see the vacation banner"
           : "Vacation mode off — shop is open",
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveLandingVideo = async () => {
+    setSaving("landing-video");
+    try {
+      await post({
+        action: "update-landing-video",
+        landingVideo: cfg.landingVideo,
+      });
+      toast.success(
+        cfg.landingVideo.videoUrl
+          ? "Studio reel saved — visitors will see it on the homepage"
+          : "Studio reel cleared — the homepage section is hidden",
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
@@ -1302,6 +1351,206 @@ export function StorefrontSection() {
                 </>
               ) : (
                 "Save vacation settings"
+              )}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Studio reel — optional cinematic video section that lives
+          between DailyFeature and the Cinematic Collection scene on
+          the homepage. Section renders to nothing on the storefront
+          while videoUrl is empty, so this is safe to leave blank
+          until the admin uploads a montage. */}
+      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Clapperboard className="w-4 h-4 text-primary" />
+          <h2 className="font-display text-lg">Studio reel (homepage)</h2>
+          {cfg.landingVideo.videoUrl && (
+            <span className="ml-2 inline-flex items-center px-2 py-0.5 bg-primary text-primary-foreground text-[10px] font-body tracking-[0.2em] uppercase rounded-sm">
+              Live
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Optional autoplay-muted video reel that sits between the daily feature
+          and the cinematic "Browse the collection" scene on the homepage. Leave
+          the video URL blank to hide the section completely. Looping, muted,
+          and lazy-loaded so mobile visitors who never scroll this far never pay
+          the bandwidth cost.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="lv-video-url">Video URL (mp4 / webm)</Label>
+            <Input
+              id="lv-video-url"
+              type="url"
+              inputMode="url"
+              placeholder="https://your-cdn.com/studio-reel.mp4"
+              value={cfg.landingVideo.videoUrl}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  landingVideo: {
+                    ...c.landingVideo,
+                    videoUrl: e.target.value,
+                  },
+                }))
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Paste a public URL to a short, silent montage. mp4 (H.264) is the
+              safest pick — it plays on every modern browser. Aim for under
+              8&nbsp;MB so mobile visitors don't bail. Section is hidden when
+              this is empty.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="lv-poster-url">
+              Poster image URL{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="lv-poster-url"
+              type="url"
+              inputMode="url"
+              placeholder="https://your-cdn.com/studio-reel-poster.jpg"
+              value={cfg.landingVideo.posterUrl}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  landingVideo: {
+                    ...c.landingVideo,
+                    posterUrl: e.target.value,
+                  },
+                }))
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Shown while the video downloads, and used as the still fallback
+              for visitors on prefers-reduced-motion. A frame from the reel
+              works perfectly.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="lv-eyebrow">Eyebrow</Label>
+              <Input
+                id="lv-eyebrow"
+                maxLength={80}
+                placeholder={DEFAULTS.landingVideo.eyebrow}
+                value={cfg.landingVideo.eyebrow}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    landingVideo: {
+                      ...c.landingVideo,
+                      eyebrow: e.target.value.slice(0, 80),
+                    },
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="lv-cta-label">CTA label</Label>
+              <Input
+                id="lv-cta-label"
+                maxLength={40}
+                placeholder={DEFAULTS.landingVideo.ctaLabel}
+                value={cfg.landingVideo.ctaLabel}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    landingVideo: {
+                      ...c.landingVideo,
+                      ctaLabel: e.target.value.slice(0, 40),
+                    },
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="lv-headline">Headline</Label>
+            <Input
+              id="lv-headline"
+              maxLength={120}
+              placeholder={DEFAULTS.landingVideo.headline}
+              value={cfg.landingVideo.headline}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  landingVideo: {
+                    ...c.landingVideo,
+                    headline: e.target.value.slice(0, 120),
+                  },
+                }))
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="lv-description">
+              Description{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id="lv-description"
+              maxLength={280}
+              rows={3}
+              placeholder={DEFAULTS.landingVideo.description}
+              value={cfg.landingVideo.description}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  landingVideo: {
+                    ...c.landingVideo,
+                    description: e.target.value.slice(0, 280),
+                  },
+                }))
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {cfg.landingVideo.description.length}/280 characters.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="lv-cta-href">CTA destination</Label>
+            <Input
+              id="lv-cta-href"
+              type="text"
+              placeholder={DEFAULTS.landingVideo.ctaHref}
+              value={cfg.landingVideo.ctaHref}
+              onChange={(e) =>
+                setCfg((c) => ({
+                  ...c,
+                  landingVideo: {
+                    ...c.landingVideo,
+                    ctaHref: e.target.value.slice(0, 500),
+                  },
+                }))
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Storefront path (e.g. <code>/collection</code>) or a full https://
+              URL. Anything else is rejected on save.
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => void handleSaveLandingVideo()}
+              disabled={saving === "landing-video"}
+            >
+              {saving === "landing-video" ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save studio reel"
               )}
             </Button>
           </div>

@@ -214,6 +214,35 @@ export const DEFAULT_VACATION_MODE: VacationModeConfig = {
   message: "",
 };
 
+// Optional cinematic landing-page video. Rendered as a full-bleed
+// "montage" section between the daily-feature carousel and the
+// collection scene on the homepage. When `videoUrl` is empty (or
+// `enabled` is false) the section renders nothing — the homepage
+// degrades gracefully so this can ship before the admin uploads a
+// final asset.
+export interface LandingVideoConfig {
+  enabled: boolean;
+  videoUrl: string;
+  posterUrl: string;
+  eyebrow: string;
+  headline: string;
+  description: string;
+  ctaLabel: string;
+  ctaHref: string;
+}
+
+export const DEFAULT_LANDING_VIDEO: LandingVideoConfig = {
+  enabled: false,
+  videoUrl: "",
+  posterUrl: "",
+  eyebrow: "Behind the brush",
+  headline: "Watch the studio in motion.",
+  description:
+    "A short montage of every painting coming to life — from blank canvas to the wall it was made for.",
+  ctaLabel: "Browse the collection",
+  ctaHref: "/collection",
+};
+
 export interface StorefrontConfig {
   announcement: AnnouncementConfig;
   freeShipping: FreeShippingConfig;
@@ -227,6 +256,7 @@ export interface StorefrontConfig {
   dailyFeatureToday: DailyFeatureToday | null;
   thankYou: ThankYouConfig;
   vacationMode: VacationModeConfig;
+  landingVideo: LandingVideoConfig;
 }
 
 const DEFAULT_CONFIG: StorefrontConfig = {
@@ -271,6 +301,7 @@ const DEFAULT_CONFIG: StorefrontConfig = {
   dailyFeatureToday: null,
   thankYou: DEFAULT_THANK_YOU,
   vacationMode: DEFAULT_VACATION_MODE,
+  landingVideo: DEFAULT_LANDING_VIDEO,
 };
 
 const mergeDailyFeature = (raw: unknown): DailyFeatureConfig => {
@@ -313,6 +344,42 @@ const mergeVacationMode = (raw: unknown): VacationModeConfig => {
     returnDate,
     message:
       typeof data.message === "string" ? data.message.trim().slice(0, 280) : "",
+  };
+};
+
+// Only allow http(s) URLs (or empty) so admin pastes can't slip a
+// `javascript:` / `data:` URI through into a video element.
+const sanitizeMediaUrl = (raw: unknown, max = 2000): string => {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (!/^https?:\/\//i.test(trimmed)) return "";
+  return trimmed.slice(0, max);
+};
+
+const mergeLandingVideo = (raw: unknown): LandingVideoConfig => {
+  const data = (
+    raw && typeof raw === "object" ? raw : {}
+  ) as Partial<LandingVideoConfig>;
+  const trimmedString = (value: unknown, fallback: string, max: number) => {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    return trimmed.slice(0, max);
+  };
+  return {
+    enabled: data.enabled === true,
+    videoUrl: sanitizeMediaUrl(data.videoUrl),
+    posterUrl: sanitizeMediaUrl(data.posterUrl),
+    eyebrow: trimmedString(data.eyebrow, DEFAULT_LANDING_VIDEO.eyebrow, 80),
+    headline: trimmedString(data.headline, DEFAULT_LANDING_VIDEO.headline, 120),
+    description: trimmedString(
+      data.description,
+      DEFAULT_LANDING_VIDEO.description,
+      280,
+    ),
+    ctaLabel: trimmedString(data.ctaLabel, DEFAULT_LANDING_VIDEO.ctaLabel, 40),
+    ctaHref: trimmedString(data.ctaHref, DEFAULT_LANDING_VIDEO.ctaHref, 500),
   };
 };
 
@@ -510,6 +577,7 @@ export const StorefrontConfigProvider = ({
           ),
           thankYou: mergeThankYou(data.config.thankYou),
           vacationMode: mergeVacationMode(data.config.vacationMode),
+          landingVideo: mergeLandingVideo(data.config.landingVideo),
         });
       }
     } catch {
