@@ -40,6 +40,9 @@ import AppreciationSection from "@/components/account/AppreciationSection";
 const OrderPushOptInPrompt = lazy(
   () => import("@/components/OrderPushOptInPrompt"),
 );
+const OrderPushTopicPrefs = lazy(
+  () => import("@/components/OrderPushTopicPrefs"),
+);
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
@@ -619,14 +622,20 @@ function AccountPage() {
             wire the subscription on the spot without re-asking for
             anything. forceShow=true so the card is always visible from
             here even if the customer dismissed the order-confirmation
-            variant. */}
-        <div id="account-notifications" className="scroll-mt-28">
+            variant. The topic-prefs panel underneath only renders once
+            the device is actually subscribed (it polls the SW state
+            itself), so guests / unsubscribed shoppers see the opt-in
+            card and nothing else; once they enable, the toggles fade in. */}
+        <div id="account-notifications" className="scroll-mt-28 space-y-4">
           <Suspense>
             <OrderPushOptInPrompt
               email={user.email}
               variant="inline"
               forceShow
             />
+          </Suspense>
+          <Suspense>
+            <OrderPushTopicPrefs email={user.email} />
           </Suspense>
         </div>
 
