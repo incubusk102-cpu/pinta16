@@ -9,6 +9,7 @@ import {
 import FilmGrain from "@/components/FilmGrain";
 import SplitText from "@/components/motion/SplitText";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import { isExternalHref, safeHref } from "@/lib/safeUrl";
 
 // Cinematic full-bleed video reel section. Sits between DailyFeature
 // and CinematicCollectionCTA so the homepage gets a "moving image"
@@ -34,8 +35,6 @@ import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 // to a plain anchor with rel="noopener" so the SPA router doesn't
 // try to handle them.
 
-const isExternalHref = (href: string): boolean => /^https?:\/\//i.test(href);
-
 interface CtaButtonProps {
   href: string;
   children: React.ReactNode;
@@ -44,11 +43,16 @@ interface CtaButtonProps {
 const CtaButton = ({ href, children }: CtaButtonProps) => {
   const className =
     "inline-flex items-center justify-center px-8 sm:px-10 py-4 bg-foreground text-background font-body text-xs tracking-[0.3em] uppercase hover:bg-foreground/90 transition-colors rounded-none shadow-lg shadow-background/30";
-  if (!href) return null;
-  if (isExternalHref(href)) {
+  // The landing-video sanitiser in `storefront-config.js` already filters
+  // dangerous schemes server-side, but we re-validate via the shared
+  // `safeHref` helper so a stale cached payload can't smuggle a
+  // `javascript:` link into the foreground CTA button.
+  const safe = safeHref(href);
+  if (!safe) return null;
+  if (isExternalHref(safe)) {
     return (
       <a
-        href={href}
+        href={safe}
         target="_blank"
         rel="noopener noreferrer"
         className={className}
@@ -58,7 +62,7 @@ const CtaButton = ({ href, children }: CtaButtonProps) => {
     );
   }
   return (
-    <Link to={href} className={className}>
+    <Link to={safe} className={className}>
       {children}
     </Link>
   );

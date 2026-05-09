@@ -7,6 +7,7 @@ import {
   usePolicies,
 } from "@/contexts/PoliciesContext";
 import { useLocale } from "@/contexts/LocaleContext";
+import { safeHref } from "@/lib/safeUrl";
 
 export const Route = createFileRoute("/policy/$slug")({
   component: PolicyPage,
@@ -23,12 +24,7 @@ const isPolicySlug = (s: string): s is PolicySlug =>
 // `[click me](javascript:alert(1))` would otherwise fire on click; React
 // itself will warn but not block, so we filter explicitly. Anything that
 // fails this check renders as a non-link span.
-const SAFE_LINK_RE = /^(https?:|mailto:|tel:|\/[^/]|\/$|#)/i;
-const sanitizeHref = (href: string): string | null => {
-  const trimmed = href.trim();
-  if (!trimmed) return null;
-  return SAFE_LINK_RE.test(trimmed) ? trimmed : null;
-};
+const sanitizeHref = (href: string): string | null => safeHref(href);
 
 const renderInline = (text: string) => {
   const parts: (string | { type: "link"; href: string; label: string })[] = [];
@@ -229,6 +225,12 @@ const renderMarkdown = (md: string) => {
 
 // BreadcrumbList JSON-LD helper. Embedded as a `<script type="application/ld+json">`
 // data block, which is not subject to CSP `script-src` enforcement.
+//
+// We escape `<` to `\u003c` so that an admin policy title containing a
+// literal `</script>` cannot break out of the surrounding script tag and
+// execute arbitrary JS — JSON.stringify alone leaves `<` untouched, so the
+// raw bytes `</script>` would otherwise terminate the data block. The same
+// guard is used for the product-page JSON-LD in `product.$id.tsx`.
 const breadcrumbJsonLd = (slug: PolicySlug, title: string) =>
   JSON.stringify({
     "@context": "https://schema.org",
@@ -247,7 +249,7 @@ const breadcrumbJsonLd = (slug: PolicySlug, title: string) =>
         item: `https://canvhub.com/policy/${slug}`,
       },
     ],
-  });
+  }).replace(/</g, "\\u003c");
 
 function PolicyPage() {
   const { slug } = Route.useParams();

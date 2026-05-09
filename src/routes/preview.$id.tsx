@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Image as ImageIcon } from "lucide-react";
 import GalleryNav from "@/components/GalleryNav";
+import { safeHref } from "@/lib/safeUrl";
 
 export const Route = createFileRoute("/preview/$id")({
   component: PreviewPage,
@@ -75,12 +76,16 @@ function PreviewPage() {
   const ctaLabel = data?.ctaLabel?.trim() || "Browse the collection";
   // Email CTA may be absolute (https://canvhub.com/) — treat any same-origin
   // URL as an internal route so the SPA router handles it without a reload.
+  // The shared `safeHref` helper rejects `javascript:` / `data:` /
+  // schemeless `//evil.com` so a stale welcome-email payload can't smuggle
+  // a dangerous protocol into the external CTA branch below.
+  const safeCta = safeHref(data?.ctaUrl ?? "");
   const ctaIsInternal =
-    !data?.ctaUrl ||
-    /^https?:\/\/(?:www\.)?canvhub\.com(?:\/|$)/i.test(data.ctaUrl) ||
-    /^\/[^/]/.test(data.ctaUrl) ||
-    data.ctaUrl === "/";
-  const ctaHref = ctaIsInternal ? "/" : data!.ctaUrl;
+    !safeCta ||
+    /^https?:\/\/(?:www\.)?canvhub\.com(?:\/|$)/i.test(safeCta) ||
+    /^\/[^/]/.test(safeCta) ||
+    safeCta === "/";
+  const ctaHref = ctaIsInternal ? "/" : safeCta;
 
   return (
     <div className="min-h-screen bg-background">

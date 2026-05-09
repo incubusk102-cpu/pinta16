@@ -89,6 +89,25 @@ const DEFAULT_CHAT_FAQS = [
   },
 ];
 
+// Allow-list filter for the announcement bar's link field. Mirrors the
+// hero-slides sanitizer in `hero-slides.js` so the public site can never
+// render an `<a href="javascript:...">` even if an admin paste smuggles
+// one in. Empty / disallowed input collapses to an empty string, which the
+// SPA's AnnouncementBar treats as "no link" (renders the message as text
+// only).
+const sanitizeAnnouncementLink = (raw) => {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, 500);
+  if (!trimmed) return "";
+  if (trimmed.startsWith("//")) return "";
+  if (trimmed.startsWith("/") || trimmed.startsWith("#")) return trimmed;
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
+  return "";
+};
+
 const slugifyFaqId = (value) => {
   const slug = String(value || "")
     .toLowerCase()
@@ -1313,7 +1332,7 @@ const sanitizeConfig = (raw) => {
     announcement: {
       enabled: Boolean(announcement.enabled),
       message: String(announcement.message ?? "").slice(0, 240),
-      link: String(announcement.link ?? "").slice(0, 500),
+      link: sanitizeAnnouncementLink(announcement.link),
       backgroundColor: String(
         announcement.backgroundColor ??
           DEFAULT_CONFIG.announcement.backgroundColor,

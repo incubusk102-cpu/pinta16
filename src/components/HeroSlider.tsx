@@ -12,6 +12,7 @@ import {
   type HeroTransition,
   useHeroSlides,
 } from "@/contexts/HeroSlidesContext";
+import { isExternalHref, safeHref } from "@/lib/safeUrl";
 
 const SWIPE_PX = 50;
 
@@ -53,8 +54,6 @@ const ALIGN_CLASSES: Record<HeroSlide["align"], string> = {
   right: "items-end text-right",
 };
 
-const isExternalHref = (href: string) => /^(https?:|mailto:|tel:)/i.test(href);
-
 // Until May 2026 the homepage rendered a `#gallery` anchor on top of the
 // dense 2-column grid. PR #349 moved that grid to /collection. The server
 // rewrites legacy `#gallery` / `/#gallery` to `/collection` on read, but
@@ -67,15 +66,21 @@ const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const cls =
     "inline-flex max-w-full items-center justify-center font-body text-[11px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase px-5 sm:px-10 py-3 sm:py-4 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 rounded-none shadow-lg shadow-background/25";
   const migrated = migrateLegacyHref(href);
-  const external = isExternalHref(migrated);
-  const target = external ? "_blank" : undefined;
-  const rel = external ? "noreferrer" : undefined;
   // Defence in depth: the server already blocks protocol-relative URLs
-  // ("//evil.com"), but the client also rejects them in case stored data
-  // predates that fix. Tanstack typed Link is overkill for hero CTAs.
-  const isSafeInternal = migrated.startsWith("/") && !migrated.startsWith("//");
-  const finalHref =
-    isSafeInternal || external ? migrated : `#${migrated.replace(/^#/, "")}`;
+  // ("//evil.com") and dangerous schemes (`javascript:`, `data:`), but the
+  // client also re-validates via the shared `safeHref` helper in case a
+  // stale cached payload predates that fix.
+  const finalHref = safeHref(migrated);
+  if (!finalHref) {
+    return (
+      <span className={cls} aria-disabled="true">
+        {label}
+      </span>
+    );
+  }
+  const external = isExternalHref(finalHref);
+  const target = external ? "_blank" : undefined;
+  const rel = external ? "noopener noreferrer" : undefined;
   return (
     <a href={finalHref} target={target} rel={rel} className={cls}>
       {label}

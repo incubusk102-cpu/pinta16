@@ -2,13 +2,13 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=(), fullscreen=(self), usb=(), bluetooth=(), serial=(), hid=()
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=(), fullscreen=(self), usb=(), bluetooth=(), serial=(), hid=(), accelerometer=(), gyroscope=(), magnetometer=(), xr-spatial-tracking=(), sync-xhr=(), document-domain=(), midi=(), screen-wake-lock=()
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-site
   X-Robots-Tag: index, follow
   X-Permitted-Cross-Domain-Policies: none
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://api.paymongo.com https://oauth2.googleapis.com https://accounts.google.com https://challenges.cloudflare.com https://cloudflareinsights.com https://api.maptiler.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src https://accounts.google.com https://content.google.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; media-src 'self' https: blob:; manifest-src 'self'; connect-src 'self' https://api.paymongo.com https://oauth2.googleapis.com https://accounts.google.com https://challenges.cloudflare.com https://cloudflareinsights.com https://api.maptiler.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; worker-src 'self' blob:; child-src 'self' blob:; frame-src https://accounts.google.com https://content.google.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
 
 # CSP rationale (kept on the global `/*` rule above so it applies to every
 # SPA route — `/`, `/product/<id>`, `/admin`, etc. The previous `/*.html`
@@ -33,6 +33,20 @@
 # `worker-src 'self' blob:` is required by maplibre-gl, which spawns
 # its tile-decoder worker from a blob URL. Without this directive the
 # hybrid address picker (PR #163) silently fails to render the map.
+# `child-src 'self' blob:` is the legacy fallback for browsers that
+# haven't kept up with the modern `worker-src` directive — same allow
+# list, ensures no regression in older Safari / WebKit views.
+#
+# `media-src 'self' https: blob:` mirrors `img-src`: studio reels and
+# product videos are uploaded to R2 / served from canvhub-controlled
+# HTTPS hosts, and the QR-Ph save flow constructs a `blob:` URL for the
+# downloaded PNG. Without this directive `<video>` and `<audio>` would
+# fall through to `default-src 'self'`, blocking cross-origin media.
+#
+# `manifest-src 'self'` is the explicit allow-list for the PWA manifest
+# (`/manifest.webmanifest` if/when it ships). Already covered by
+# `default-src 'self'`, but stated explicitly so a future loosening of
+# `default-src` can't accidentally allow third-party manifests.
 #
 # Allowlists:
 #   script-src   accounts.google.com, apis.google.com, www.gstatic.com  Google Sign-In (GIS)
