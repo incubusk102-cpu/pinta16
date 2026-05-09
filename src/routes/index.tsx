@@ -7,6 +7,7 @@ import VisitorTicker from "@/components/VisitorTicker";
 import PaintingMarquee from "@/components/PaintingMarquee";
 import DailyFeature from "@/components/DailyFeature";
 import CinematicCollectionCTA from "@/components/CinematicCollectionCTA";
+import HomepageVideoMontage from "@/components/HomepageVideoMontage";
 import Ornament from "@/components/decor/Ornament";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -102,6 +103,11 @@ function Index() {
       <PaintingMarquee />
       <VisitorTicker />
       <DailyFeature />
+      {/* Optional studio reel — renders only when admin has set a
+          videoUrl in /admin → Storefront → Studio reel; otherwise the
+          page collapses straight from DailyFeature into the
+          collection scene. */}
+      <HomepageVideoMontage />
       <CinematicCollectionCTA />
       <Suspense fallback={null}>
         <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">

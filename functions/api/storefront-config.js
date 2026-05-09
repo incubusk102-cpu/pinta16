@@ -1050,6 +1050,10 @@ const DEFAULT_CONFIG = {
   newUserModal: DEFAULT_NEW_USER_MODAL,
   abandonedCart: DEFAULT_ABANDONED_CART,
   marketingTriggers: DEFAULT_MARKETING_TRIGGERS,
+  // landingVideo gets its DEFAULT pulled in via sanitizeConfig() so we
+  // don't double-define it here — sanitizeLandingVideo runs against
+  // whatever's stored in KV (or {} on first read) and falls back to the
+  // shape declared in DEFAULT_LANDING_VIDEO above.
 };
 
 const DEFAULT_DAILY_FEATURE = {
@@ -1103,6 +1107,69 @@ const DEFAULT_VACATION_MODE = {
   returnDate: "",
   message: "",
   pauseCheckout: true,
+};
+
+// Optional cinematic landing-page video. Lives alongside the
+// homepage scene config (daily feature, thank-you) but is rendered
+// inline in the storefront, not as a modal. Falls back to nothing
+// when `videoUrl` is empty so this is safe to ship empty.
+const DEFAULT_LANDING_VIDEO = {
+  enabled: false,
+  videoUrl: "",
+  posterUrl: "",
+  eyebrow: "Behind the brush",
+  headline: "Watch the studio in motion.",
+  description:
+    "A short montage of every painting coming to life \u2014 from blank canvas to the wall it was made for.",
+  ctaLabel: "Browse the collection",
+  ctaHref: "/collection",
+};
+
+const sanitizeLandingVideoUrl = (raw, max = 2000) => {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  // Reject `javascript:` / `data:` URIs and anything that isn't an
+  // absolute http(s) URL. The video element loads cross-origin from
+  // wherever the asset is hosted (R2, Cloudinary, Mux, …) so a
+  // relative path wouldn't resolve usefully here either.
+  if (!/^https?:\/\//i.test(trimmed)) return "";
+  return trimmed.slice(0, max);
+};
+
+const sanitizeLandingVideo = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const trimmedString = (value, fallback, max) => {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    return trimmed.slice(0, max);
+  };
+  // ctaHref: allow http(s) absolute or storefront-relative paths
+  // (e.g. "/collection"). Reject anything else so a paste can't smuggle
+  // a `javascript:` link into the foreground CTA button.
+  const sanitizeCtaHref = (value) => {
+    if (typeof value !== "string") return DEFAULT_LANDING_VIDEO.ctaHref;
+    const trimmed = value.trim();
+    if (!trimmed) return DEFAULT_LANDING_VIDEO.ctaHref;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed.slice(0, 500);
+    if (trimmed.startsWith("/")) return trimmed.slice(0, 500);
+    return DEFAULT_LANDING_VIDEO.ctaHref;
+  };
+  return {
+    enabled: data.enabled === true,
+    videoUrl: sanitizeLandingVideoUrl(data.videoUrl),
+    posterUrl: sanitizeLandingVideoUrl(data.posterUrl),
+    eyebrow: trimmedString(data.eyebrow, DEFAULT_LANDING_VIDEO.eyebrow, 80),
+    headline: trimmedString(data.headline, DEFAULT_LANDING_VIDEO.headline, 120),
+    description: trimmedString(
+      data.description,
+      DEFAULT_LANDING_VIDEO.description,
+      280,
+    ),
+    ctaLabel: trimmedString(data.ctaLabel, DEFAULT_LANDING_VIDEO.ctaLabel, 40),
+    ctaHref: sanitizeCtaHref(data.ctaHref),
+  };
 };
 
 const sanitizeVacationMode = (raw) => {
@@ -1422,6 +1489,7 @@ const sanitizeConfig = (raw) => {
     dailyFeature: sanitizeDailyFeature(data.dailyFeature),
     thankYou: sanitizeThankYou(data.thankYou),
     vacationMode: sanitizeVacationMode(data.vacationMode),
+    landingVideo: sanitizeLandingVideo(data.landingVideo),
     // Persisted internal map of one-time migrations applied to this
     // config — not exposed publicly. Keys here mark a migration as done
     // so we don't re-run it on every read.
@@ -1569,6 +1637,19 @@ const publicView = (config) => {
       returnDate: config.vacationMode.returnDate,
       message: config.vacationMode.message,
     },
+    // Public read of the homepage cinematic montage section. The full
+    // shape is already safe to ship publicly (no secrets), so we mirror
+    // it 1:1.
+    landingVideo: {
+      enabled: config.landingVideo.enabled,
+      videoUrl: config.landingVideo.videoUrl,
+      posterUrl: config.landingVideo.posterUrl,
+      eyebrow: config.landingVideo.eyebrow,
+      headline: config.landingVideo.headline,
+      description: config.landingVideo.description,
+      ctaLabel: config.landingVideo.ctaLabel,
+      ctaHref: config.landingVideo.ctaHref,
+    },
   };
 };
 
@@ -1668,6 +1749,18 @@ const handle = async ({ request, env }) => {
         const next = sanitizeConfig({
           ...existing,
           thankYou: { ...existing.thankYou, ...body.thankYou },
+        });
+        await store.setJSON(CONFIG_KEY, next);
+        return json(200, { config: next });
+      }
+
+      if (action === "update-landing-video") {
+        const next = sanitizeConfig({
+          ...existing,
+          landingVideo: {
+            ...(existing.landingVideo || DEFAULT_LANDING_VIDEO),
+            ...(body.landingVideo || {}),
+          },
         });
         await store.setJSON(CONFIG_KEY, next);
         return json(200, { config: next });
