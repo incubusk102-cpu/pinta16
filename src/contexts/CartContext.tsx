@@ -70,7 +70,8 @@ export interface OrderNotification {
     | "refund_requested"
     | "refund_succeeded"
     | "refund_failed"
-    | "production_stage";
+    | "production_stage"
+    | "production_photo";
   message: string;
   recipient: string;
   sentAt: string;
@@ -221,6 +222,13 @@ export interface CompletedOrder {
    */
   productionStage?: ProductionStage;
   /**
+   * Behind-the-scenes progress photos uploaded by the artist, tagged
+   * with the stage they were taken at. Newest first. Each entry stores
+   * a stable `/api/r/<key>` URL pointing at the R2 object served by
+   * functions/api/r/[[path]].js (uploaded via /api/uploads).
+   */
+  productionPhotos?: ProductionPhoto[];
+  /**
    * Local sync state. `false` means the SPA tried to POST this order to
    * `/api/orders` but the request never confirmed (network blip, edge
    * challenge, body-size rejection, anything). `true` means the server
@@ -328,6 +336,29 @@ export const PRODUCTION_STAGES: {
     pushBody: "Packed and ready to ship — we'll add tracking shortly.",
   },
 ];
+
+/**
+ * A single behind-the-scenes photo uploaded by the artist while the
+ * order is in_progress. The photo is tagged with the stage it belongs
+ * to so the customer's tracker can group thumbnails under the right
+ * milestone (e.g. three "paint" photos all sit under "Painting").
+ */
+export interface ProductionPhoto {
+  /** Stable id (UUID) — used as the React key + the remove handle. */
+  id: string;
+  /** Which stage the artist took the photo at. */
+  stage: ProductionStage;
+  /** `/api/r/products/<aa>/<sha256>.<ext>` — served by the R2 proxy. */
+  url: string;
+  /** ISO 8601 timestamp captured server-side at upload time. */
+  uploadedAt: string;
+}
+
+// Hard cap on photos per order. The customer-facing tracker fans them
+// out as thumbnails, and most orders only need a handful per stage; an
+// arbitrarily long gallery would just bloat the KV order JSON and the
+// customer-facing render. Admins can prune older shots if they hit this.
+export const MAX_PRODUCTION_PHOTOS = 30;
 
 interface VoucherState {
   code: string;

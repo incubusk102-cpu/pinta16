@@ -11,6 +11,7 @@ import {
   ORDER_STEPS,
   PRODUCTION_STAGES,
   type CompletedOrder,
+  type ProductionPhoto,
 } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,16 +60,30 @@ const formatDate = (iso?: string) => {
 
 // Sub-stage stepper rendered inline under the "Painting in progress" step
 // in the customer-facing journey map. Walks the artist's physical-studio
-// milestones (cut → frame → paint → varnish → packed) and highlights
-// whichever one the artist last marked.
+// milestones (cut → frame → paint → varnish → packed), highlights
+// whichever one the artist last marked, and fans out any progress
+// photos the artist has uploaded for that stage as a small thumbnail
+// strip below the label.
 function ProductionStageInline({
   stage,
+  photos,
 }: {
   stage?: CompletedOrder["productionStage"];
+  photos?: ProductionPhoto[];
 }) {
   const currentIdx = stage
     ? PRODUCTION_STAGES.findIndex((s) => s.key === stage)
     : -1;
+  // Photos are stored newest-first server-side; group by stage so we
+  // can fan them out under the right milestone without preserving the
+  // global order. An empty/undefined `photos` is the common case.
+  const photosByStage = (photos || []).reduce<
+    Record<string, ProductionPhoto[]>
+  >((acc, p) => {
+    if (!acc[p.stage]) acc[p.stage] = [];
+    acc[p.stage].push(p);
+    return acc;
+  }, {});
   return (
     <ol
       className="mt-2 space-y-1.5"
@@ -78,34 +93,61 @@ function ProductionStageInline({
       {PRODUCTION_STAGES.map((s, idx) => {
         const done = idx <= currentIdx;
         const active = idx === currentIdx;
+        const stagePhotos = photosByStage[s.key] || [];
         return (
           <li
             key={s.key}
-            className="flex items-center gap-2"
+            className="space-y-1"
             aria-current={active ? "step" : undefined}
           >
-            <span
-              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                done ? "bg-foreground" : "bg-border"
-              }`}
-              aria-hidden="true"
-            />
-            <span
-              className={`text-[11px] ${
-                active
-                  ? "text-foreground font-medium"
-                  : done
-                    ? "text-foreground/80"
-                    : "text-muted-foreground"
-              }`}
-            >
-              {s.label}
-              {active && (
-                <span className="ml-1.5 font-body text-[9px] tracking-[0.2em] uppercase text-foreground/60">
-                  Now
-                </span>
-              )}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  done ? "bg-foreground" : "bg-border"
+                }`}
+                aria-hidden="true"
+              />
+              <span
+                className={`text-[11px] ${
+                  active
+                    ? "text-foreground font-medium"
+                    : done
+                      ? "text-foreground/80"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {s.label}
+                {active && (
+                  <span className="ml-1.5 font-body text-[9px] tracking-[0.2em] uppercase text-foreground/60">
+                    Now
+                  </span>
+                )}
+              </span>
+            </div>
+            {stagePhotos.length > 0 && (
+              <div
+                className="flex flex-wrap gap-1.5 pl-3.5"
+                data-testid="production-stage-photos"
+              >
+                {stagePhotos.map((p) => (
+                  <a
+                    key={p.id}
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-12 h-12 rounded-sm overflow-hidden border border-border/40 bg-muted/40 hover:opacity-90 transition-opacity"
+                    title={`Uploaded ${formatDate(p.uploadedAt)}`}
+                  >
+                    <img
+                      src={p.url}
+                      alt={`${s.label} progress photo`}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
           </li>
         );
       })}
@@ -259,7 +301,10 @@ function OrderTracker() {
                       {step.description}
                     </p>
                     {showStages && (
-                      <ProductionStageInline stage={order.productionStage} />
+                      <ProductionStageInline
+                        stage={order.productionStage}
+                        photos={order.productionPhotos}
+                      />
                     )}
                   </div>
                 </div>
