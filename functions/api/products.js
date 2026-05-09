@@ -41,6 +41,41 @@ const parseBody = (body) => {
   }
 };
 
+// Accept https:// URLs and the in-app proxy path /api/r/...
+// Reject javascript:, data:, vbscript:, and any other scheme.
+const isSafeMediaUrl = (value) => {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("/api/r/") || trimmed.startsWith("/")) return true;
+  if (/^https:\/\//i.test(trimmed)) return true;
+  return false;
+};
+
+const sanitizeVideo = (raw) => {
+  if (!raw || typeof raw !== "object") return undefined;
+  const url = typeof raw.url === "string" ? raw.url.trim() : "";
+  if (!isSafeMediaUrl(url)) return undefined;
+  const cleaned = { url };
+  if (typeof raw.posterUrl === "string" && isSafeMediaUrl(raw.posterUrl)) {
+    cleaned.posterUrl = raw.posterUrl.trim();
+  }
+  if (typeof raw.fileName === "string" && raw.fileName.trim()) {
+    cleaned.fileName = raw.fileName.trim().slice(0, 200);
+  }
+  if (
+    typeof raw.bytes === "number" &&
+    Number.isFinite(raw.bytes) &&
+    raw.bytes >= 0
+  ) {
+    cleaned.bytes = Math.floor(raw.bytes);
+  }
+  if (typeof raw.mimeType === "string" && raw.mimeType.trim()) {
+    cleaned.mimeType = raw.mimeType.trim().slice(0, 100);
+  }
+  return cleaned;
+};
+
 const handle = async ({ request, env }) => {
   const blocked = await initRequestContext({ request, env });
   if (blocked) return blocked;
@@ -64,6 +99,12 @@ const handle = async ({ request, env }) => {
       const product = parseBody(event.body);
       if (!product?.id || !product?.image || !product?.title) {
         return json(400, { error: "Invalid product payload" });
+      }
+      const sanitizedVideo = sanitizeVideo(product.video);
+      if (sanitizedVideo) {
+        product.video = sanitizedVideo;
+      } else {
+        delete product.video;
       }
       const existing = await readProducts(store);
       const next = sortProducts([

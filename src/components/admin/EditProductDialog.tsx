@@ -28,8 +28,10 @@ import {
   type Product,
   type ProductAvailability,
   type ProductImage,
+  type ProductVideo,
 } from "@/contexts/ProductContext";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
+import { ProductVideoUpload } from "@/components/admin/ProductVideoUpload";
 import {
   AVAILABILITY_OPTIONS,
   defaultArtworks,
@@ -59,6 +61,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
   const [availability, setAvailability] =
     useState<ProductAvailability>("available");
   const [embargoUntil, setEmbargoUntil] = useState("");
+  const [video, setVideo] = useState<ProductVideo | undefined>(undefined);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -91,6 +94,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         ? product.embargoUntil.replace(/(:\d{2})?\.\d+Z?$/, "").slice(0, 16)
         : "",
     );
+    setVideo(product.video);
   }, [product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -153,6 +157,11 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
         dimensions: dimensions.trim() || undefined,
         availability,
         embargoUntil: embargoIso,
+        // `undefined` means "leave the video field as-is on the existing
+        // product"; we deliberately strip a video that was cleared in
+        // the UI by writing `undefined` only when there's no `url` AND
+        // no `posterUrl` left.
+        video: video?.url ? video : undefined,
       });
       toast.success("Product updated");
       onClose();
@@ -366,6 +375,20 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
               maxLength={500}
               rows={4}
             />
+          </div>
+
+          <div>
+            <Label className="mb-2 block">
+              Studio video{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <ProductVideoUpload value={video} onChange={setVideo} />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Adds a "play" tile to the photo gallery on this product's page.
+              Visitors click it to watch the video inline.
+            </p>
           </div>
 
           <DialogFooter>

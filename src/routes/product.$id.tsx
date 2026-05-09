@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Star,
   Share2,
+  Play,
   ZoomIn,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -322,14 +323,29 @@ function ProductPage() {
   const effectivePrice = getEffectivePrice(artwork);
   const galleryImages =
     artwork.images.length > 0 ? artwork.images : [{ url: artwork.image }];
-  const currentImage = galleryImages[activeImage] ?? galleryImages[0];
+  // Optional studio video shows up as a leading "play" tile in the
+  // thumbnail strip and switches the hero slot from `<img>` to
+  // `<video controls>` when selected. We resolve the artwork-level
+  // video off the underlying Product (defaults from `lib/artworks` may
+  // not carry it) so default artworks don't try to render undefined.
+  const productVideo =
+    products.find((p) => p.id === artwork.id)?.video ?? undefined;
+  const hasVideo = Boolean(productVideo?.url);
+  // The "play" tile reserves index 0 when a video is present, so the
+  // image at thumbnail index `i` lives at `images[i - 1]` in that case.
+  const isVideoActive = hasVideo && activeImage === 0;
+  const imageOffset = hasVideo ? 1 : 0;
+  const totalGalleryItems = galleryImages.length + imageOffset;
+  const currentImage = isVideoActive
+    ? galleryImages[0]
+    : (galleryImages[activeImage - imageOffset] ?? galleryImages[0]);
   const showAvailabilityBadge = artwork.availability !== "available";
 
   const handlePrev = () => {
-    setActiveImage((i) => (i > 0 ? i - 1 : galleryImages.length - 1));
+    setActiveImage((i) => (i > 0 ? i - 1 : totalGalleryItems - 1));
   };
   const handleNext = () => {
-    setActiveImage((i) => (i < galleryImages.length - 1 ? i + 1 : 0));
+    setActiveImage((i) => (i < totalGalleryItems - 1 ? i + 1 : 0));
   };
 
   const handleAdd = () => {
@@ -369,45 +385,71 @@ function ProductPage() {
         >
           <section className="space-y-4">
             <div className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame">
-              <button
-                type="button"
-                onClick={() => setZoomed(true)}
-                className="block w-full"
-                aria-label="Zoom image"
-              >
-                {(() => {
-                  // LCP element on the product detail page. Hero slot
-                  // is roughly 60 vw on desktop / 100 vw on mobile, so
-                  // `md` (800 w) covers most phones at retina DPR and
-                  // `lg` (1600 w) handles desktop and high-DPR phones.
-                  const heroAttrs = imgAttrs(
-                    currentImage,
-                    "(min-width: 1024px) 60vw, 100vw",
-                    "lg",
-                  );
-                  return (
-                    <ImageWithFallback
-                      key={currentImage.url}
-                      src={heroAttrs.src || currentImage.url}
-                      srcSet={heroAttrs.srcSet}
-                      sizes={heroAttrs.sizes}
-                      width={heroAttrs.width}
-                      height={heroAttrs.height}
-                      alt={`${artwork.title} – photo ${activeImage + 1}`}
-                      className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
-                      fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
-                      // Tell the browser to prioritize the LCP image
-                      // over off-screen gallery images and deferred
-                      // chunks.
-                      loading="eager"
-                      // Cast to bypass the older React DOM types that
-                      // don't know about the modern `fetchpriority`
-                      // attribute yet.
-                      {...({ fetchpriority: "high" } as Record<string, string>)}
-                    />
-                  );
-                })()}
-              </button>
+              {isVideoActive && productVideo ? (
+                <div className="w-full bg-black flex items-center justify-center">
+                  <video
+                    key={productVideo.url}
+                    src={productVideo.url}
+                    poster={productVideo.posterUrl || currentImage.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-auto max-h-[70vh]"
+                    aria-label={`${artwork.title} — studio video`}
+                  >
+                    {productVideo.mimeType ? (
+                      <source
+                        src={productVideo.url}
+                        type={productVideo.mimeType}
+                      />
+                    ) : null}
+                  </video>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setZoomed(true)}
+                  className="block w-full"
+                  aria-label="Zoom image"
+                >
+                  {(() => {
+                    // LCP element on the product detail page. Hero slot
+                    // is roughly 60 vw on desktop / 100 vw on mobile, so
+                    // `md` (800 w) covers most phones at retina DPR and
+                    // `lg` (1600 w) handles desktop and high-DPR phones.
+                    const heroAttrs = imgAttrs(
+                      currentImage,
+                      "(min-width: 1024px) 60vw, 100vw",
+                      "lg",
+                    );
+                    return (
+                      <ImageWithFallback
+                        key={currentImage.url}
+                        src={heroAttrs.src || currentImage.url}
+                        srcSet={heroAttrs.srcSet}
+                        sizes={heroAttrs.sizes}
+                        width={heroAttrs.width}
+                        height={heroAttrs.height}
+                        alt={`${artwork.title} – photo ${activeImage + 1}`}
+                        className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
+                        fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
+                        // Tell the browser to prioritize the LCP image
+                        // over off-screen gallery images and deferred
+                        // chunks.
+                        loading="eager"
+                        // Cast to bypass the older React DOM types that
+                        // don't know about the modern `fetchpriority`
+                        // attribute yet.
+                        {...({ fetchpriority: "high" } as Record<
+                          string,
+                          string
+                        >)}
+                      />
+                    );
+                  })()}
+                </button>
+              )}
               {showAvailabilityBadge && (
                 <span
                   className={`absolute top-4 left-4 px-3 py-1 font-body text-[10px] tracking-[0.3em] uppercase rounded-sm ${availabilityBadgeClass[artwork.availability]}`}
@@ -420,15 +462,17 @@ function ProductPage() {
                   {discount}% OFF
                 </span>
               )}
-              <button
-                type="button"
-                onClick={() => setZoomed(true)}
-                aria-label="Zoom image"
-                className="absolute bottom-4 right-4 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
-              >
-                <ZoomIn className="w-4 h-4 text-foreground" />
-              </button>
-              {galleryImages.length > 1 && (
+              {!isVideoActive && (
+                <button
+                  type="button"
+                  onClick={() => setZoomed(true)}
+                  aria-label="Zoom image"
+                  className="absolute bottom-4 right-4 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
+                >
+                  <ZoomIn className="w-4 h-4 text-foreground" />
+                </button>
+              )}
+              {totalGalleryItems > 1 && (
                 <>
                   <button
                     type="button"
@@ -449,35 +493,75 @@ function ProductPage() {
                 </>
               )}
             </div>
-            {galleryImages.length > 1 && (
+            {totalGalleryItems > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {galleryImages.map((img, idx) => (
+                {hasVideo && productVideo ? (
                   <button
-                    key={`${img.url}-${idx}`}
+                    key="__video-tile"
                     type="button"
-                    onClick={() => setActiveImage(idx)}
-                    aria-label={`Show photo ${idx + 1}`}
-                    aria-current={idx === activeImage}
-                    className={`flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all ${
-                      idx === activeImage
+                    onClick={() => setActiveImage(0)}
+                    aria-label="Play studio video"
+                    aria-current={isVideoActive}
+                    className={`relative flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all bg-black ${
+                      isVideoActive
                         ? "border-foreground"
-                        : "border-transparent opacity-70 hover:opacity-100"
+                        : "border-transparent opacity-80 hover:opacity-100"
                     }`}
                   >
-                    <ImageWithFallback
-                      // Thumbnails are 80×80 — `sm` (400 w) covers
-                      // 4x DPR phones with bytes to spare.
-                      src={variantSrc(img, "sm")}
-                      alt={`${artwork.title} thumbnail ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                      fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
-                      loading="lazy"
-                      decoding="async"
-                      width={img.dims?.w}
-                      height={img.dims?.h}
-                    />
+                    {productVideo.posterUrl ? (
+                      <ImageWithFallback
+                        src={productVideo.posterUrl}
+                        alt={`${artwork.title} — studio video poster`}
+                        className="w-full h-full object-cover"
+                        fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <ImageWithFallback
+                        src={variantSrc(galleryImages[0], "sm")}
+                        alt={`${artwork.title} — studio video poster`}
+                        className="w-full h-full object-cover opacity-60"
+                        fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <Play className="w-6 h-6 text-white drop-shadow" />
+                    </span>
                   </button>
-                ))}
+                ) : null}
+                {galleryImages.map((img, idx) => {
+                  const tileIdx = idx + imageOffset;
+                  return (
+                    <button
+                      key={`${img.url}-${idx}`}
+                      type="button"
+                      onClick={() => setActiveImage(tileIdx)}
+                      aria-label={`Show photo ${idx + 1}`}
+                      aria-current={tileIdx === activeImage}
+                      className={`flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all ${
+                        tileIdx === activeImage
+                          ? "border-foreground"
+                          : "border-transparent opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      <ImageWithFallback
+                        // Thumbnails are 80×80 — `sm` (400 w) covers
+                        // 4x DPR phones with bytes to spare.
+                        src={variantSrc(img, "sm")}
+                        alt={`${artwork.title} thumbnail ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                        fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
+                        loading="lazy"
+                        decoding="async"
+                        width={img.dims?.w}
+                        height={img.dims?.h}
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </section>
