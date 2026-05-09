@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, CheckCircle, QrCode, RefreshCw } from "lucide-react";
+import {
+  X,
+  Loader2,
+  CheckCircle,
+  QrCode,
+  RefreshCw,
+  Download,
+  ChevronDown,
+} from "lucide-react";
 import { checkPaymentStatus as checkPaymentStatusFn } from "@/utils/payment.functions";
 
 interface PaymentModalProps {
@@ -150,6 +158,52 @@ const PaymentModal = ({
     }
   }, [status, onSuccess]);
 
+  // Save the QR PNG to the customer's device so they can import it
+  // straight from their gallery in GCash / Maya. We fetch as a blob
+  // first (rather than a plain anchor download) because PayMongo's CDN
+  // serves the QR image with a content-disposition that pops it inline
+  // in a new tab on mobile browsers — that defeats the "save to
+  // gallery → import" flow customers are about to do. If the fetch is
+  // blocked by CORS for some reason, we fall back to opening the URL
+  // in a new tab, which still lets a customer long-press to save.
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const handleDownload = useCallback(async () => {
+    if (!qrCodeUrl || downloading) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      const response = await fetch(qrCodeUrl, { mode: "cors" });
+      if (!response.ok) {
+        throw new Error(`status ${response.status}`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `canvhub-qrph-${paymentIntentId || "payment"}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.warn("QR download via fetch failed, opening in new tab:", error);
+      setDownloadError(
+        "Couldn't auto-save. Long-press the QR image and tap Save instead.",
+      );
+      window.open(qrCodeUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloading(false);
+    }
+  }, [qrCodeUrl, paymentIntentId, downloading]);
+
+  // The import-from-gallery guide is collapsed by default so the QR
+  // and amount stay the visual focus for the majority of customers
+  // who will scan with a second device. Customers paying from the
+  // same phone tap the toggle and get step-by-step instructions for
+  // each wallet.
+  const [guideOpen, setGuideOpen] = useState(false);
+
   return (
     <AnimatePresence>
       <motion.div
@@ -207,7 +261,8 @@ const PaymentModal = ({
                   Pay with QR Ph
                 </h3>
                 <p className="font-body text-xs text-muted-foreground">
-                  Scan with GCash, Maya, or any QR Ph-enabled app
+                  Scan with another device, or save the QR and import it from
+                  your GCash / Maya app on this phone.
                 </p>
               </div>
 
@@ -220,6 +275,85 @@ const PaymentModal = ({
                 </p>
               </div>
 
+              {/* Import-from-gallery guide. Collapsed by default; the
+                  customer paying from the same phone they're checking
+                  out on opens it for step-by-step instructions on
+                  loading the saved QR image inside their wallet. */}
+              <div className="mb-5 text-left border border-border/30 rounded-sm overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setGuideOpen((open) => !open)}
+                  aria-expanded={guideOpen}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-muted/20 hover:bg-muted/40 transition-colors"
+                >
+                  <span className="font-body text-xs uppercase tracking-[0.18em] text-foreground">
+                    How to import the QR in GCash / Maya
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-foreground/70 transition-transform ${
+                      guideOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                <AnimatePresence initial={false}>
+                  {guideOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4 font-body text-[11px] leading-relaxed text-muted-foreground">
+                        <div>
+                          <p className="font-semibold text-foreground tracking-[0.18em] uppercase text-[10px] mb-2">
+                            GCash
+                          </p>
+                          <ol className="space-y-1.5 list-decimal list-inside">
+                            <li>Tap Save QR below.</li>
+                            <li>
+                              Open GCash and tap{" "}
+                              <span className="text-foreground">Pay QR</span>.
+                            </li>
+                            <li>
+                              Tap the{" "}
+                              <span className="text-foreground">
+                                upload / gallery icon
+                              </span>{" "}
+                              and pick the saved image.
+                            </li>
+                            <li>Confirm the amount and tap Pay.</li>
+                          </ol>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground tracking-[0.18em] uppercase text-[10px] mb-2">
+                            Maya
+                          </p>
+                          <ol className="space-y-1.5 list-decimal list-inside">
+                            <li>Tap Save QR below.</li>
+                            <li>
+                              Open Maya and tap{" "}
+                              <span className="text-foreground">
+                                Scan to Pay
+                              </span>
+                              .
+                            </li>
+                            <li>
+                              Tap the{" "}
+                              <span className="text-foreground">
+                                gallery icon
+                              </span>{" "}
+                              and pick the saved image.
+                            </li>
+                            <li>Confirm the amount and tap Pay.</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {qrCodeUrl ? (
                 <div className="mb-6">
                   <img
@@ -228,10 +362,30 @@ const PaymentModal = ({
                     className="mx-auto w-full max-w-xs rounded-sm border border-border/20 bg-white p-3"
                     loading="lazy"
                     decoding="async"
+                    crossOrigin="anonymous"
                   />
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    disabled={downloading}
+                    className="mt-3 inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-foreground/20 text-foreground font-body text-[11px] tracking-[0.2em] uppercase hover:bg-accent disabled:opacity-50 transition-all rounded-sm"
+                  >
+                    {downloading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    {downloading ? "Saving..." : "Save QR"}
+                  </button>
+                  {downloadError && (
+                    <p className="font-body text-[10px] text-destructive mt-2">
+                      {downloadError}
+                    </p>
+                  )}
                   <p className="font-body text-[10px] text-muted-foreground mt-3">
-                    Scan this QR code using GCash, Maya, or any QR Ph-enabled
-                    app. We'll detect your payment automatically.
+                    Scan this QR with another device, or tap Save QR and import
+                    it from your gallery in GCash or Maya. We'll detect your
+                    payment automatically.
                   </p>
                 </div>
               ) : (
