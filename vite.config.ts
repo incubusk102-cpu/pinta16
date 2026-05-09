@@ -53,7 +53,7 @@ export default defineConfig({
           // entry vendor chunk and the 3D dependency leaks into the
           // initial paint of every page.
           if (
-            /[\\/]node_modules[\\/](three|@react-three[\\/](fiber|drei|xr|test|cannon|csg))[\\/]/.test(
+            /[\\/]node_modules[\\/](three|@react-three[\\/](fiber|drei|xr|test|cannon|csg|postprocessing)|postprocessing)[\\/]/.test(
               id,
             )
           ) {

@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import HeroSlider from "@/components/HeroSlider";
+import HomeHero from "@/components/HomeHero";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import VisitorTicker from "@/components/VisitorTicker";
 import PaintingMarquee from "@/components/PaintingMarquee";
@@ -60,17 +61,20 @@ export const Route = createFileRoute("/")({
 
 function HeroOrFallback() {
   const { slides, loading } = useHeroSlides();
-  // The static hero (eyebrow + brush divider + body + "View Collection"
-  // button) was removed per the May 7 design call. When admin has no
-  // slides configured (or is still loading), the homepage now drops
-  // straight into the marquee + gallery and we keep only an `sr-only`
-  // <h1> so the smoke suite (`tests/e2e/smoke.spec.ts` asserts
+  // When admin has uploaded hero slides via /admin → Hero slider,
+  // those take precedence (the operator's promotional copy / CTAs
+  // matter more than ambient brand atmosphere). Otherwise the
+  // homepage drops into the cinematic 3D hero — a floating framed
+  // painting with bloom on desktop, a static fallback on mobile.
+  // We keep an `sr-only` <h1> path while data is loading so the
+  // smoke suite (`tests/e2e/smoke.spec.ts` asserts
   // `page.locator("h1").first()` visible on `/`), document outline,
-  // and SEO crawlers all still find a heading. Once admin uploads
-  // slides via /admin → Hero slider, those render in place of the
-  // sr-only h1.
-  if (loading || slides.length === 0) {
+  // and SEO crawlers still find a heading on the very first frame.
+  if (loading) {
     return <h1 className="sr-only">Canvas Hub</h1>;
+  }
+  if (slides.length === 0) {
+    return <HomeHero />;
   }
   return <HeroSlider />;
 }
