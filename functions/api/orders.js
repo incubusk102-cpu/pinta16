@@ -2240,8 +2240,15 @@ export const handler = async (event) => {
           existing.shipment.trackingNumber !== safeShipment.trackingNumber ||
           existing.shipment.courier !== safeShipment.courier;
         if (isNew) {
+          // Setting / changing the AWB is the customer-facing "your order
+          // shipped" moment, so fire the proper out_for_delivery kind on
+          // both channels. The kind name has to match an entry in
+          // ORDER_EMAIL_KINDS / ORDER_PUSH_KINDS or the email pipeline
+          // silently falls back to the "confirmed" template (legacy bug
+          // pre-Phase 4) and the push pipeline drops the message with
+          // reason="unknown kind".
           const note = {
-            type: "shipped",
+            type: "out_for_delivery",
             message: `Your order has shipped via ${courier} (tracking ${trackingNumber}).`,
             recipient: existing.orderInfo?.email || "",
             sentAt: new Date().toISOString(),
@@ -2253,16 +2260,12 @@ export const handler = async (event) => {
             trackingNumber: safeShipment.trackingNumber,
           };
           await recordEmail(
-            { ...existing, shipment: safeShipment },
+            { ...existing, status: "out_for_delivery", shipment: safeShipment },
             note,
             shipExtra,
           );
-          // Note.type is "shipped" (legacy), which is not in ORDER_PUSH_KINDS,
-          // so recordPush will skip with reason="unknown kind". The actual
-          // user-facing push for shipping fires via the matching
-          // "out_for_delivery" status update.
           await recordPush(
-            { ...existing, shipment: safeShipment },
+            { ...existing, status: "out_for_delivery", shipment: safeShipment },
             note,
             shipExtra,
           );
