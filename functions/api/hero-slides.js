@@ -50,12 +50,26 @@ const trimText = (v, max) =>
     .trim()
     .slice(0, max);
 
+// Until May 2026 the homepage rendered a `#gallery` anchor on top of the
+// dense 2-column grid. PR #349 lifted that grid out to /collection and the
+// homepage now anchors `#gallery` to a small CTA card. Old hero slides
+// saved with `ctaHref: "#gallery"` (or "/#gallery") would still scroll
+// to that tiny card instead of taking the customer to the actual browse
+// experience. Rewriting on every read + write is a no-op once everyone
+// has saved at least once, and it keeps the admin editor in sync (the
+// dropdown's "Use template" detection compares ctaHref strings).
+const migrateLegacyHref = (v) => {
+  if (v === "#gallery" || v === "/#gallery") return "/collection";
+  return v;
+};
+
 const sanitizeHref = (raw) => {
   const v = trimText(raw, MAX_HREF);
   if (!v) return "";
   if (v.startsWith("//")) return "";
-  if (v.startsWith("/") || v.startsWith("#")) return v;
-  if (/^(https?:|mailto:|tel:)/i.test(v)) return v;
+  const migrated = migrateLegacyHref(v);
+  if (migrated.startsWith("/") || migrated.startsWith("#")) return migrated;
+  if (/^(https?:|mailto:|tel:)/i.test(migrated)) return migrated;
   return "";
 };
 

@@ -54,18 +54,27 @@ const ALIGN_CLASSES: Record<HeroSlide["align"], string> = {
 
 const isExternalHref = (href: string) => /^(https?:|mailto:|tel:)/i.test(href);
 
+// Until May 2026 the homepage rendered a `#gallery` anchor on top of the
+// dense 2-column grid. PR #349 moved that grid to /collection. The server
+// rewrites legacy `#gallery` / `/#gallery` to `/collection` on read, but
+// keep the same fixup here as defence in depth in case a stale slide ships
+// from a cached payload before it round-trips through the API again.
+const migrateLegacyHref = (href: string): string =>
+  href === "#gallery" || href === "/#gallery" ? "/collection" : href;
+
 const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const cls =
     "inline-flex max-w-full items-center justify-center font-body text-[11px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase px-5 sm:px-10 py-3 sm:py-4 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 rounded-none shadow-lg shadow-background/25";
-  const external = isExternalHref(href);
+  const migrated = migrateLegacyHref(href);
+  const external = isExternalHref(migrated);
   const target = external ? "_blank" : undefined;
   const rel = external ? "noreferrer" : undefined;
   // Defence in depth: the server already blocks protocol-relative URLs
   // ("//evil.com"), but the client also rejects them in case stored data
   // predates that fix. Tanstack typed Link is overkill for hero CTAs.
-  const isSafeInternal = href.startsWith("/") && !href.startsWith("//");
+  const isSafeInternal = migrated.startsWith("/") && !migrated.startsWith("//");
   const finalHref =
-    isSafeInternal || external ? href : `#${href.replace(/^#/, "")}`;
+    isSafeInternal || external ? migrated : `#${migrated.replace(/^#/, "")}`;
   return (
     <a href={finalHref} target={target} rel={rel} className={cls}>
       {label}

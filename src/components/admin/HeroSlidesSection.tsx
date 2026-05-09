@@ -584,7 +584,7 @@ export function HeroSlidesSection() {
                       onChange={(e) =>
                         updateSlide(slide.id, { ctaHref: e.target.value })
                       }
-                      placeholder="#gallery or /policy/shipping"
+                      placeholder="/collection or /policy/shipping"
                     />
                   </div>
                 </div>
