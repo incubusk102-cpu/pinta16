@@ -134,6 +134,17 @@ function Index() {
         <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
           <Ornament label="The studio" />
         </div>
+        {/* Sentinel watched by MobileBackToCollection — when this scrolls
+            above the viewport the floating "View Collection" pill is
+            revealed. Sits just before the editorial block (About /
+            ThankYou / Reviews / Contact) so the pill shows up only when
+            the customer has drifted away from the dynamic shopping
+            carousels into the studio story. Zero visual footprint. */}
+        <div
+          id="back-to-collection-sentinel"
+          aria-hidden="true"
+          className="h-px"
+        />
         <AboutSection />
         <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
           <Ornament label="Voices" />

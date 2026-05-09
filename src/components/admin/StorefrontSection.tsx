@@ -1369,7 +1369,7 @@ export function StorefrontSection() {
                   announcement: { ...c.announcement, link: e.target.value },
                 }))
               }
-              placeholder="https://example.com or /#gallery"
+              placeholder="https://example.com or /collection"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
