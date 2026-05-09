@@ -92,6 +92,9 @@ const en = {
   "footer.lastUpdated": "Last updated {date}",
   "footer.weAccept": "We accept",
   "footer.tagline": "Hand-crafted in the Philippines.",
+  "footer.help": "Help",
+  "footer.trackOrder": "Track an order",
+  "footer.contactSupport": "Contact support",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -167,6 +170,9 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "footer.lastUpdated": "Huling na-update {date}",
   "footer.weAccept": "Tinatanggap namin",
   "footer.tagline": "Gawang-kamay sa Pilipinas.",
+  "footer.help": "Tulong",
+  "footer.trackOrder": "I-track ang order",
+  "footer.contactSupport": "Makipag-ugnayan sa support",
 };
 
 export const dictionaries: Record<Locale, Record<TranslationKey, string>> = {

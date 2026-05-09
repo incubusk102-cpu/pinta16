@@ -203,15 +203,17 @@ const OrderConfirmation = () => {
                     <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                   </button>
                   <Link
-                    to="/account"
-                    search={{ track: lastOrder.id }}
-                    hash="account-tracker"
+                    to="/track"
+                    search={{ id: lastOrder.id }}
                     onClick={closeConfirmation}
                     className="flex items-center justify-center gap-1.5 font-body text-xs text-foreground hover:underline"
                   >
                     <Search className="w-3.5 h-3.5" />
                     Track this order
                   </Link>
+                  <p className="font-body text-[10px] text-muted-foreground/80 text-center">
+                    Bookmark the link — works without signing in.
+                  </p>
                 </div>
               </div>
 

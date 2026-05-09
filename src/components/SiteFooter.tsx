@@ -1,5 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Facebook, Instagram, Mail, MapPin, Phone } from "lucide-react";
+import {
+  Facebook,
+  Instagram,
+  Mail,
+  MapPin,
+  Package,
+  Phone,
+} from "lucide-react";
 import { useLocale } from "@/contexts/LocaleContext";
 import {
   POLICY_SLUGS,
@@ -52,13 +59,13 @@ const SiteFooter = () => {
 
   return (
     <footer className="border-t border-border/30 mt-16 sm:mt-24 px-4 sm:px-6 md:px-12 py-10 sm:py-14 bg-card/30">
-      <div className="max-w-6xl mx-auto grid gap-10 sm:gap-12 sm:grid-cols-2 text-sm">
+      <div className="max-w-6xl mx-auto grid gap-10 sm:gap-12 sm:grid-cols-3 text-sm">
         {/* Socials — only render when a real profile URL is configured.
               Brand wordmark moved out: 'Canvas Hub' now lives only on the
               homepage hero (and meta tab titles), not in the footer of
               every page. */}
         {(FACEBOOK_URL || INSTAGRAM_URL) && (
-          <div className="sm:col-span-2 flex items-center gap-3">
+          <div className="sm:col-span-3 flex items-center gap-3">
             {FACEBOOK_URL && (
               <a
                 href={FACEBOOK_URL}
@@ -101,6 +108,37 @@ const SiteFooter = () => {
                 </Link>
               </li>
             ))}
+          </ul>
+        </nav>
+
+        {/* Help — discoverable entry point for guests who checked out
+              without an account and need to look up their order again
+              later. The /track page accepts an ORD-XXXX number and
+              hits the same public lookup endpoint as the signed-in
+              tracker. */}
+        <nav aria-label={t("footer.help")}>
+          <p className="font-body text-xs tracking-[0.3em] uppercase text-muted-foreground mb-3">
+            {t("footer.help")}
+          </p>
+          <ul className="space-y-2">
+            <li>
+              <Link
+                to="/track"
+                className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
+              >
+                <Package className="w-3.5 h-3.5 text-muted-foreground" />
+                {t("footer.trackOrder")}
+              </Link>
+            </li>
+            <li>
+              <a
+                href="mailto:support@canvhub.com"
+                className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
+              >
+                <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                {t("footer.contactSupport")}
+              </a>
+            </li>
           </ul>
         </nav>
 

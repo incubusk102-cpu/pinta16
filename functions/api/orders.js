@@ -744,6 +744,17 @@ export const handler = async (event) => {
       }
 
       if (params.id) {
+        // Public guest lookup — no sign-in required so a customer who
+        // checked out without an account can still pull their order
+        // status from the confirmation email link or the /track page.
+        // Rate-limited per IP to keep the 8-char ORD-XXXXXXXX space
+        // (~32 bits of entropy) from being enumerable in bulk.
+        const limit = await consumeRateLimit(event, {
+          bucket: "orders-public-lookup",
+          windowMs: 60_000,
+          max: 30,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
         const orders = await readOrders(store);
         const order = orders.find((o) => o.id === params.id);
         if (!order) return json(404, { error: "Order not found" });
