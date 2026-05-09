@@ -197,6 +197,16 @@ const GalleryNav = () => {
     icon: React.ComponentType<{ className?: string }>;
   }[] = [{ id: "reviews", label: t("nav.reviews"), icon: Star }];
 
+  // The full filterable gallery now lives at /collection (it was lifted
+  // off the homepage so the landing experience reads like an editorial
+  // site rather than a catalogue dump). Surface a dedicated drawer row
+  // so customers can always reach it in one tap, regardless of the
+  // page they're currently on.
+  const handleCollection = useCallback(() => {
+    closeMenu();
+    void navigate({ to: "/collection" });
+  }, [closeMenu, navigate]);
+
   return (
     <motion.nav
       className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,backdrop-filter,border-color,box-shadow] duration-500 ease-out ${
@@ -368,10 +378,18 @@ const GalleryNav = () => {
                 )}
               </div>
 
-              {/* Primary nav — Reviews, My orders (signed-in), and Cart.
-                    Row-style (icon · label · chevron) to match the
-                    Policies section below, instead of boxed tiles. */}
+              {/* Primary nav — Collection, Reviews, My orders (signed-in),
+                    and Cart. Row-style (icon · label · chevron) to match
+                    the Policies section below, instead of boxed tiles. */}
               <div className="border-b border-border/30">
+                <button
+                  onClick={handleCollection}
+                  className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
+                >
+                  <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                  <span className="flex-1 text-left">The collection</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </button>
                 {browseItems.map((item) => {
                   const Icon = item.icon;
                   return (

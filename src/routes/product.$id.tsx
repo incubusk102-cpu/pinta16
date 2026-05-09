@@ -280,8 +280,7 @@ function ProductPage() {
               The painting you're looking for is no longer in our collection.
             </p>
             <Link
-              to="/"
-              hash="gallery"
+              to="/collection"
               className="inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all rounded-sm"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -306,8 +305,7 @@ function ProductPage() {
               It's still being prepared. Please check back soon.
             </p>
             <Link
-              to="/"
-              hash="gallery"
+              to="/collection"
               className="inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all rounded-sm"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -356,8 +354,7 @@ function ProductPage() {
       <main className="flex-1 pt-24 md:pt-32 pb-20 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full">
         <div className="mb-6">
           <Link
-            to="/"
-            hash="gallery"
+            to="/collection"
             className="inline-flex items-center gap-2 font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -612,8 +609,7 @@ function ProductPage() {
                 <NotifyMeButton productId={artwork.id} />
               )}
               <Link
-                to="/"
-                hash="gallery"
+                to="/collection"
                 className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
               >
                 Continue browsing
