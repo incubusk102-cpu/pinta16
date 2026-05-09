@@ -1,8 +1,17 @@
 # Canvas Hub — security contact (RFC 9116).
 # Full policy: https://github.com/incubusk102-cpu/pinta16/blob/main/SECURITY.md
+#
+# This file follows RFC 9116 (https://www.rfc-editor.org/rfc/rfc9116)
+# so security researchers can reach us with vulnerability reports.
+# Cloudflare's Security Center auto-detects this file at the standard
+# /.well-known/security.txt path. NOTE: if Security Center still flags
+# canvhub.com as "Not Secured" after this file deploys, the cause is
+# Cloudflare's WAF / Bot Fight Mode challenging unauthenticated GETs
+# to /.well-known/* — fix it in the Cloudflare dashboard with a
+# Configuration Rule that skips bot challenges for `/.well-known/*`.
 
-Contact: mailto:chaomen1998@gmail.com
-Expires: 2027-04-30T00:00:00.000Z
-Preferred-Languages: en
+Contact: mailto:support@canvhub.com
+Expires: 2027-05-09T00:00:00.000Z
+Preferred-Languages: en, fil
 Canonical: https://canvhub.com/.well-known/security.txt
 Policy: https://github.com/incubusk102-cpu/pinta16/blob/main/SECURITY.md

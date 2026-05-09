@@ -11,7 +11,7 @@ If you believe you've discovered a security issue in Canvas Hub
 (`canvhub.com`, `*.pinta16.pages.dev`, or any of the Cloudflare Pages
 Functions under `/api/*`), please **do not file a public GitHub issue**.
 
-Email **`chaomen1998@gmail.com`** with:
+Email **`support@canvhub.com`** with:
 
 - A clear description of the issue and its impact.
 - The minimal steps required to reproduce it (URL, request body, account
