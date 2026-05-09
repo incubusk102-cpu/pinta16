@@ -328,8 +328,23 @@ function ProductPage() {
   // `<video controls>` when selected. We resolve the artwork-level
   // video off the underlying Product (defaults from `lib/artworks` may
   // not carry it) so default artworks don't try to render undefined.
-  const productVideo =
-    products.find((p) => p.id === artwork.id)?.video ?? undefined;
+  //
+  // `artwork.id` is the merged display id (`product-<uuid>` for pure
+  // uploads, `default-<slug>` for stock pieces). `p.id` is always the
+  // bare uuid, and overrides of stock pieces carry the matching
+  // `default-<slug>` on `p.replacesDefaultId` — neither matches a
+  // direct `p.id === artwork.id` comparison, so map both shapes back
+  // to the underlying product before reading the video field.
+  const productVideo = (() => {
+    if (artwork.id.startsWith("default-")) {
+      return products.find((p) => p.replacesDefaultId === artwork.id)?.video;
+    }
+    if (artwork.id.startsWith("product-")) {
+      const rawId = artwork.id.slice("product-".length);
+      return products.find((p) => p.id === rawId)?.video;
+    }
+    return undefined;
+  })();
   const hasVideo = Boolean(productVideo?.url);
   // The "play" tile reserves index 0 when a video is present, so the
   // image at thumbnail index `i` lives at `images[i - 1]` in that case.
