@@ -13,6 +13,7 @@ import {
   type Product,
   type ProductAvailability,
   type ProductImage,
+  type ProductVideo,
 } from "@/contexts/ProductContext";
 import {
   AVAILABILITY_LABEL,
@@ -49,6 +50,7 @@ import { AdminCreateOrderDialog } from "@/components/admin/AdminCreateOrderDialo
 import { D1AnalyticsPanel } from "@/components/admin/D1AnalyticsPanel";
 import { TursoVectorPanel } from "@/components/admin/TursoVectorPanel";
 import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
+import { ProductVideoUpload } from "@/components/admin/ProductVideoUpload";
 import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
@@ -1275,6 +1277,7 @@ function ProductsSection() {
   const [description, setDescription] = useState("");
   const [availability, setAvailability] =
     useState<ProductAvailability>("available");
+  const [video, setVideo] = useState<ProductVideo | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -1295,6 +1298,7 @@ function ProductsSection() {
     setDiscountPercent("");
     setDescription("");
     setAvailability("available");
+    setVideo(undefined);
   };
 
   const handlePriceChange = (value: string) => {
@@ -1379,6 +1383,7 @@ function ProductsSection() {
         category: category.trim() || undefined,
         dimensions: dimensions.trim() || undefined,
         availability,
+        video: video?.url ? video : undefined,
       });
       toast.success(`"${trimmedTitle}" added to the collection`);
       reset();
@@ -1684,6 +1689,20 @@ function ProductsSection() {
                 rows={4}
                 placeholder="A short story about the piece..."
               />
+            </div>
+
+            <div>
+              <Label className="mb-2 block">
+                Studio video{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <ProductVideoUpload value={video} onChange={setVideo} />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Adds a "play" tile to the photo gallery on this product&rsquo;s
+                page. Visitors click it to watch the video inline.
+              </p>
             </div>
 
             <div className="flex gap-3 pt-2">

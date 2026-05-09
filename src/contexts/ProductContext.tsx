@@ -46,6 +46,31 @@ export interface ProductImage {
 
 export const PRODUCT_MAX_IMAGES = 5;
 
+/**
+ * Optional process / studio video attached to a product. One per
+ * product. The storefront viewer renders a "play" tile in the gallery
+ * thumbnail strip when this is set; clicking it switches the hero slot
+ * to a `<video controls>` player. `posterUrl` is shown on the tile and
+ * as the video's `poster` attribute while it loads.
+ *
+ * Either uploaded directly to R2 via `/api/video-uploads` (in which
+ * case `url` is `/api/r/products/videos/...`) or pasted as a public
+ * https:// URL pointing at any external host (Mux, Cloudinary, etc.).
+ */
+export interface ProductVideo {
+  url: string;
+  posterUrl?: string;
+  fileName?: string;
+  bytes?: number;
+  /**
+   * Reported by the upload pipeline (e.g. "video/mp4"). Used to set the
+   * `<source type>` so the browser doesn't have to sniff the bytes.
+   * Absent on entries pasted as plain URLs — the browser still plays
+   * those, it just has to detect the type itself.
+   */
+  mimeType?: string;
+}
+
 export type ProductAvailability = "available" | "reserved" | "sold" | "draft";
 
 export interface Product {
@@ -87,6 +112,12 @@ export interface Product {
    * is visible to everyone like a normal listing.
    */
   embargoUntil?: string;
+  /**
+   * Optional studio / process video shown alongside the product photos
+   * in the storefront viewer. See `ProductVideo`. Hidden by the viewer
+   * when absent or when `url` is empty.
+   */
+  video?: ProductVideo;
 }
 
 export const PRODUCT_CATEGORIES = [
