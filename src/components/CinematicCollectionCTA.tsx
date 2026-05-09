@@ -8,7 +8,7 @@ import {
 } from "framer-motion";
 import FilmGrain from "@/components/FilmGrain";
 import SplitText from "@/components/motion/SplitText";
-import { useProducts } from "@/contexts/ProductContext";
+import { type Product, useProducts } from "@/contexts/ProductContext";
 import { type DisplayArtwork, getStorefrontArtworks } from "@/lib/artworks";
 
 // Cinematic full-bleed "intermission" between the dynamic shopping
@@ -24,27 +24,58 @@ import { type DisplayArtwork, getStorefrontArtworks } from "@/lib/artworks";
 // `/collection` migration) still scroll to a sensible place.
 const TILE_COUNT = 4;
 
-// Spread the collage picks across the catalogue so we get a varied
-// snapshot rather than four similar pieces from the same recent
-// upload batch. The indices are clamped against `all.length` at
-// runtime so a tiny catalogue still renders.
-const COLLAGE_SPREAD = [0, 3, 7, 11];
+// Walk the catalogue with the newest customer-posted artworks at the
+// front. ProductContext already sorts `products` createdAt-desc, so a
+// freshly posted painting bubbles to index 0 here — which the collage
+// anchors on so the background visibly refreshes whenever a new
+// product is published.
+const orderForCollage = (
+  products: Product[],
+  all: DisplayArtwork[],
+): { ordered: DisplayArtwork[]; freshCount: number } => {
+  const byId = new Map(all.map((a) => [a.id, a] as const));
+  const fresh: DisplayArtwork[] = [];
+  for (const p of products) {
+    // An override surfaces under its `default-<slug>` id (see
+    // getAllArtworks); pure uploads surface as `product-<uuid>`.
+    const id = p.replacesDefaultId ?? `product-${p.id}`;
+    const art = byId.get(id);
+    if (art) {
+      fresh.push(art);
+      byId.delete(id);
+    }
+  }
+  return {
+    ordered: [...fresh, ...byId.values()],
+    freshCount: fresh.length,
+  };
+};
 
-const pickTiles = (all: DisplayArtwork[]): DisplayArtwork[] => {
+const pickTiles = (
+  products: Product[],
+  all: DisplayArtwork[],
+): DisplayArtwork[] => {
   if (all.length === 0) return [];
+  const { ordered, freshCount } = orderForCollage(products, all);
+  // When the operator has posted at least four products, keep the
+  // collage entirely on those — that way every new upload swaps a
+  // tile and the scene stays tied to live inventory. With fewer
+  // customer-posted pieces, spread across the merged catalogue so
+  // the four tiles still feel varied.
+  const span = freshCount >= TILE_COUNT ? freshCount : ordered.length;
   const seen = new Set<string>();
   const picks: DisplayArtwork[] = [];
-  for (const i of COLLAGE_SPREAD) {
-    const art = all[i % all.length];
+  for (let k = 0; k < TILE_COUNT; k++) {
+    const idx = Math.floor((k * span) / TILE_COUNT);
+    const art = ordered[idx % ordered.length];
     if (art && !seen.has(art.id)) {
       seen.add(art.id);
       picks.push(art);
     }
   }
-  // Fill up if the spread collided (small catalogue, duplicate
-  // picks). Walk linearly so the collage stays full even at
-  // catalogue size 4.
-  for (const art of all) {
+  // Fill any gaps (collisions on a tiny catalogue, duplicate picks)
+  // so the grid is always TILE_COUNT wide.
+  for (const art of ordered) {
     if (picks.length >= TILE_COUNT) break;
     if (!seen.has(art.id)) {
       seen.add(art.id);
@@ -60,7 +91,7 @@ const CinematicCollectionCTA = () => {
   const containerRef = useRef<HTMLElement>(null);
 
   const tiles = useMemo(
-    () => pickTiles(getStorefrontArtworks(products)),
+    () => pickTiles(products, getStorefrontArtworks(products)),
     [products],
   );
 
