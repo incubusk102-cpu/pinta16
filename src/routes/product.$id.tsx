@@ -346,14 +346,21 @@ function ProductPage() {
     return undefined;
   })();
   const hasVideo = Boolean(productVideo?.url);
-  // The "play" tile reserves index 0 when a video is present, so the
-  // image at thumbnail index `i` lives at `images[i - 1]` in that case.
-  const isVideoActive = hasVideo && activeImage === 0;
-  const imageOffset = hasVideo ? 1 : 0;
-  const totalGalleryItems = galleryImages.length + imageOffset;
+  // The "play" tile sits at the 3rd thumbnail slot (index 2) when
+  // there are at least two images, otherwise it tags onto the end of
+  // the strip. Image tiles before that slot keep their natural index;
+  // image tiles after it shift right by one.
+  const VIDEO_TILE_POSITION = 2;
+  const videoTileIndex = hasVideo
+    ? Math.min(VIDEO_TILE_POSITION, galleryImages.length)
+    : -1;
+  const isVideoActive = hasVideo && activeImage === videoTileIndex;
+  const totalGalleryItems = galleryImages.length + (hasVideo ? 1 : 0);
+  const imageIndexForTile = (tileIdx: number): number =>
+    hasVideo && tileIdx > videoTileIndex ? tileIdx - 1 : tileIdx;
   const currentImage = isVideoActive
     ? galleryImages[0]
-    : (galleryImages[activeImage - imageOffset] ?? galleryImages[0]);
+    : (galleryImages[imageIndexForTile(activeImage)] ?? galleryImages[0]);
   const showAvailabilityBadge = artwork.availability !== "available";
 
   const handlePrev = () => {
@@ -510,51 +517,55 @@ function ProductPage() {
             </div>
             {totalGalleryItems > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {hasVideo && productVideo ? (
-                  <button
-                    key="__video-tile"
-                    type="button"
-                    onClick={() => setActiveImage(0)}
-                    aria-label="Play studio video"
-                    aria-current={isVideoActive}
-                    className={`relative flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all bg-black ${
-                      isVideoActive
-                        ? "border-foreground"
-                        : "border-transparent opacity-80 hover:opacity-100"
-                    }`}
-                  >
-                    {productVideo.posterUrl ? (
-                      <ImageWithFallback
-                        src={productVideo.posterUrl}
-                        alt={`${artwork.title} — studio video poster`}
-                        className="w-full h-full object-cover"
-                        fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <ImageWithFallback
-                        src={variantSrc(galleryImages[0], "sm")}
-                        alt={`${artwork.title} — studio video poster`}
-                        className="w-full h-full object-cover opacity-60"
-                        fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    )}
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-                      <Play className="w-6 h-6 text-white drop-shadow" />
-                    </span>
-                  </button>
-                ) : null}
-                {galleryImages.map((img, idx) => {
-                  const tileIdx = idx + imageOffset;
+                {Array.from({ length: totalGalleryItems }, (_, tileIdx) => {
+                  if (hasVideo && productVideo && tileIdx === videoTileIndex) {
+                    return (
+                      <button
+                        key="__video-tile"
+                        type="button"
+                        onClick={() => setActiveImage(videoTileIndex)}
+                        aria-label="Play studio video"
+                        aria-current={isVideoActive}
+                        className={`relative flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all bg-black ${
+                          isVideoActive
+                            ? "border-foreground"
+                            : "border-transparent opacity-80 hover:opacity-100"
+                        }`}
+                      >
+                        {productVideo.posterUrl ? (
+                          <ImageWithFallback
+                            src={productVideo.posterUrl}
+                            alt={`${artwork.title} — studio video poster`}
+                            className="w-full h-full object-cover"
+                            fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <ImageWithFallback
+                            src={variantSrc(galleryImages[0], "sm")}
+                            alt={`${artwork.title} — studio video poster`}
+                            className="w-full h-full object-cover opacity-60"
+                            fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        )}
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Play className="w-6 h-6 text-white drop-shadow" />
+                        </span>
+                      </button>
+                    );
+                  }
+                  const imgIdx = imageIndexForTile(tileIdx);
+                  const img = galleryImages[imgIdx];
+                  if (!img) return null;
                   return (
                     <button
-                      key={`${img.url}-${idx}`}
+                      key={`${img.url}-${imgIdx}`}
                       type="button"
                       onClick={() => setActiveImage(tileIdx)}
-                      aria-label={`Show photo ${idx + 1}`}
+                      aria-label={`Show photo ${imgIdx + 1}`}
                       aria-current={tileIdx === activeImage}
                       className={`flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all ${
                         tileIdx === activeImage
@@ -566,7 +577,7 @@ function ProductPage() {
                         // Thumbnails are 80×80 — `sm` (400 w) covers
                         // 4x DPR phones with bytes to spare.
                         src={variantSrc(img, "sm")}
-                        alt={`${artwork.title} thumbnail ${idx + 1}`}
+                        alt={`${artwork.title} thumbnail ${imgIdx + 1}`}
                         className="w-full h-full object-cover"
                         fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
                         loading="lazy"
