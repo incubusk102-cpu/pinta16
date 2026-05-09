@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
+  Box,
   ChevronLeft,
   ChevronRight,
   Heart,
@@ -42,6 +43,12 @@ import {
   type Availability,
 } from "@/lib/artworks";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
+
+// 3D viewer ships ~120 KB gz of three.js + r3f + drei runtime, so
+// load it on-demand only when a customer taps "View in 3D". The
+// button itself stays in the initial product-page bundle (it's just
+// an icon + label).
+const PaintingViewer3D = lazy(() => import("@/components/PaintingViewer3D"));
 
 interface ProductReview {
   orderId: string;
@@ -90,6 +97,7 @@ function ProductPage() {
 
   const [activeImage, setActiveImage] = useState(0);
   const [zoomed, setZoomed] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const addToCartButtonRef = useRef<HTMLButtonElement>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -100,6 +108,7 @@ function ProductPage() {
   useEffect(() => {
     setActiveImage(0);
     setZoomed(false);
+    setView3d(false);
   }, [id]);
 
   // Track view in localStorage so the "recently viewed" strip can show this
@@ -485,14 +494,26 @@ function ProductPage() {
                 </span>
               )}
               {!isVideoActive && (
-                <button
-                  type="button"
-                  onClick={() => setZoomed(true)}
-                  aria-label="Zoom image"
-                  className="absolute bottom-4 right-4 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
-                >
-                  <ZoomIn className="w-4 h-4 text-foreground" />
-                </button>
+                <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setView3d(true)}
+                    aria-label="View painting in 3D"
+                    title="View in 3D"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+                  >
+                    <Box className="w-4 h-4" />
+                    <span className="hidden sm:inline">View in 3D</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZoomed(true)}
+                    aria-label="Zoom image"
+                    className="p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
+                  >
+                    <ZoomIn className="w-4 h-4 text-foreground" />
+                  </button>
+                </div>
               )}
               {totalGalleryItems > 1 && (
                 <>
@@ -776,6 +797,26 @@ function ProductPage() {
             Pinch · scroll · double-tap to zoom · drag to pan
           </p>
         </div>
+      )}
+
+      {view3d && (
+        <Suspense
+          fallback={
+            <div
+              className="fixed inset-0 z-[1100] bg-background/95 backdrop-blur-xl flex items-center justify-center"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          }
+        >
+          <PaintingViewer3D
+            imageUrl={variantSrc(currentImage, "lg")}
+            title={artwork.title}
+            onClose={() => setView3d(false)}
+          />
+        </Suspense>
       )}
 
       <StickyMobileBuyBar
