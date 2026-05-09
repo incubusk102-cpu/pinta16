@@ -729,12 +729,6 @@ function ProductPage() {
             <div className="border-t border-border/40 pt-6 space-y-2 font-body text-xs text-muted-foreground tracking-[0.05em]">
               <p>
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  Authentic
-                </span>
-                Hand-crafted original. Each painting ships with a certificate.
-              </p>
-              <p>
-                <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
                   Shipping
                 </span>
                 Lalamove courier within Luzon — live tracking, fare paid to the
