@@ -107,3 +107,11 @@
 /.well-known/security.txt
   Cache-Control: public, max-age=86400
   Content-Type: text/plain; charset=utf-8
+
+# RFC 8461 — MTA-STS policy. Fetched by sending MTAs (Gmail, Outlook,
+# etc.) over HTTPS to learn that mail to *@canvhub.com MUST go through
+# mx1/mx2.privateemail.com over TLS. Cacheable for the policy `max_age`,
+# but receivers respect their own TTL semantics.
+/.well-known/mta-sts.txt
+  Cache-Control: public, max-age=86400
+  Content-Type: text/plain; charset=utf-8
