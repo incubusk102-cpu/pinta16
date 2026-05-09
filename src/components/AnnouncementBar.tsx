@@ -11,6 +11,7 @@ import {
   type AnnouncementConfig,
   type PromoCodePublic,
 } from "@/contexts/StorefrontConfigContext";
+import { isExternalHref, safeHref } from "@/lib/safeUrl";
 
 const DISMISS_KEY_PREFIX = "canvhub_announcement_dismissed_";
 
@@ -269,10 +270,16 @@ const AnnouncementBar = () => {
   // the centered text layout.
   const isMarquee = announcement.animation === "marquee";
 
-  const inner = announcement.link ? (
+  // Defence in depth — the server-side sanitiser in storefront-config.js
+  // already rejects `javascript:` / `data:` / schemeless `//evil` URLs, but
+  // we re-validate on the client so a stale cached payload (or a rogue
+  // shape produced before that sanitiser shipped) cannot smuggle a
+  // dangerous protocol into the bar's anchor.
+  const safeLink = safeHref(announcement.link);
+  const inner = safeLink ? (
     <a
-      href={announcement.link}
-      target={announcement.link.startsWith("http") ? "_blank" : undefined}
+      href={safeLink}
+      target={isExternalHref(safeLink) ? "_blank" : undefined}
       rel="noopener noreferrer"
       className="hover:underline"
     >
