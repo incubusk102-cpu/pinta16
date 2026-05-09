@@ -46,6 +46,19 @@ export default defineConfig({
           if (id.includes("/embla-carousel")) return "embla";
           if (id.includes("/framer-motion/")) return "motion";
           if (id.includes("/sonner/")) return "sonner";
+          // three.js + r3f + drei stay in their own chunk so the
+          // ~120 KB gzipped 3D runtime only loads when a customer
+          // opens the lazy-loaded "View in 3D" viewer on the product
+          // page. Without this, Rollup tucks bits of three into the
+          // entry vendor chunk and the 3D dependency leaks into the
+          // initial paint of every page.
+          if (
+            /[\\/]node_modules[\\/](three|@react-three[\\/](fiber|drei|xr|test|cannon|csg))[\\/]/.test(
+              id,
+            )
+          ) {
+            return "three";
+          }
           // Heavy WebGL map renderer + react-map-gl wrapper. Putting
           // these in their own chunk means they only ride along with
           // the lazy AddressMapPicker chunk that imports them, instead
