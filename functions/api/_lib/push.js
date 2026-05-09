@@ -15,6 +15,17 @@ import { getStore } from "./kv-stores.js";
 import { getVapidEnv, isWebPushConfigured, sendPush } from "./web-push.js";
 
 const SUBS_KEY = (email) => `push:sub:${email}`;
+// Per-customer topic preferences. Stored alongside SUBS_KEY in the same
+// USERS KV namespace so the deploy needs no new bindings. Value shape:
+//
+//   { kinds: { confirmed: boolean, in_progress: boolean, ... },
+//     updatedAt: ISO8601 string }
+//
+// A missing entry implicitly means "all topics on" — newly subscribed
+// shoppers shouldn't lose updates just because they haven't visited the
+// preferences screen. The customer can mute individual kinds from
+// /account#account-notifications without unsubscribing the device.
+const PREFS_KEY = (email) => `push:prefs:${email}`;
 
 const normalizeEmail = (email) =>
   String(email || "")
@@ -276,6 +287,82 @@ export const removePushSubscription = async (email, endpoint) => {
   };
 };
 
+// Default per-customer prefs: every topic enabled. Used both as the
+// initial value when nothing is stored and as the union we merge a
+// stored partial against, so a freshly added kind ships as on-by-default.
+export const defaultPushPrefs = () => {
+  const kinds = {};
+  for (const k of ORDER_PUSH_KINDS) kinds[k] = true;
+  return { kinds };
+};
+
+// Merge a stored prefs blob (which may be partial / from an older version
+// of the kind list) onto the defaults. Anything we don't recognize is
+// dropped so the response never leaks unrelated keys back to the client.
+const mergePushPrefs = (stored) => {
+  const out = defaultPushPrefs();
+  if (!stored || typeof stored !== "object") return out;
+  if (stored.kinds && typeof stored.kinds === "object") {
+    for (const k of ORDER_PUSH_KINDS) {
+      if (typeof stored.kinds[k] === "boolean") out.kinds[k] = stored.kinds[k];
+    }
+  }
+  return out;
+};
+
+export const getOrderPushPrefs = async (email) => {
+  const norm = normalizeEmail(email);
+  if (!norm) return defaultPushPrefs();
+  try {
+    const store = getStore("users");
+    const raw = await store.get(PREFS_KEY(norm), { type: "json" });
+    return mergePushPrefs(raw);
+  } catch {
+    return defaultPushPrefs();
+  }
+};
+
+// Persist a partial update to a customer's prefs. `kinds` is a record of
+// `{ kindName: boolean }` — only the keys present are touched, so the
+// caller can flip a single toggle without re-sending the whole set.
+// Returns the merged-on-defaults result so the client can mirror it
+// without re-fetching.
+export const setOrderPushPrefs = async (email, kinds) => {
+  const norm = normalizeEmail(email);
+  if (!norm) return { ok: false, reason: "no email" };
+  if (!kinds || typeof kinds !== "object") {
+    return { ok: false, reason: "invalid kinds" };
+  }
+  const store = getStore("users");
+  let current;
+  try {
+    current = await store.get(PREFS_KEY(norm), { type: "json" });
+  } catch {
+    current = null;
+  }
+  const merged = mergePushPrefs(current);
+  let touched = false;
+  for (const k of ORDER_PUSH_KINDS) {
+    if (typeof kinds[k] === "boolean") {
+      merged.kinds[k] = kinds[k];
+      touched = true;
+    }
+  }
+  if (!touched) {
+    return { ok: true, prefs: merged, written: false };
+  }
+  const value = {
+    kinds: merged.kinds,
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    await store.setJSON(PREFS_KEY(norm), value);
+  } catch {
+    return { ok: false, reason: "kv write failed" };
+  }
+  return { ok: true, prefs: merged, written: true };
+};
+
 const pruneExpired = async (store, email, expiredEndpoints) => {
   if (!expiredEndpoints.length) return;
   const norm = normalizeEmail(email);
@@ -311,6 +398,13 @@ export const sendOrderPush = async ({ kind, order, extra }) => {
   const kindCfg = cfg.kinds?.[kind] || DEFAULT_ORDER_PUSH.kinds[kind];
   if (kindCfg.enabled === false) {
     return { delivered: false, skipped: true, reason: "kind disabled" };
+  }
+  // Customer-side opt-out. The admin has already approved the kind
+  // globally; the shopper gets a second veto from /account so they can
+  // mute e.g. production_photo without unsubscribing the device.
+  const prefs = await getOrderPushPrefs(recipient);
+  if (prefs.kinds[kind] === false) {
+    return { delivered: false, skipped: true, reason: "muted by recipient" };
   }
   const store = getStore("users");
   const subs = await readSubs(store, recipient);

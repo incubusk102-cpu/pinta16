@@ -28,6 +28,8 @@ import {
   removePushSubscription,
   getVapidPublicKey,
   sendOrderTestPush,
+  getOrderPushPrefs,
+  setOrderPushPrefs,
   ORDER_PUSH_KINDS,
 } from "../_lib/push.js";
 import { isWebPushConfigured } from "../_lib/web-push.js";
@@ -133,6 +135,63 @@ const handler = async (event) => {
     if (!email) return json(400, { error: "Missing email" });
     const result = await sendOrderTestPush({ email, kind, name });
     return json(200, { ok: !!result.delivered, result });
+  }
+
+  // Per-customer topic preferences. Email-keyed (same trust model as
+  // /subscribe and /unsubscribe — anyone with the address can flip the
+  // toggles, the worst they can do to a stranger is suppress notifications
+  // the legitimate owner can re-enable from the same screen) and rate
+  // limited to deter mass churn.
+  if (method === "GET" && leaf === "prefs") {
+    const limit = await consumeRateLimit(event, {
+      bucket: "push-prefs-read",
+      windowMs: 60_000,
+      max: 60,
+    });
+    if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+    const url = new URL(event.path || "/", "https://canvhub.local");
+    const queryEmail =
+      (event.queryStringParameters && event.queryStringParameters.email) ||
+      url.searchParams.get("email") ||
+      "";
+    const email = String(queryEmail || "").trim();
+    if (!email || !email.includes("@")) {
+      return json(400, { error: "Missing or invalid email" });
+    }
+    const prefs = await getOrderPushPrefs(email);
+    return json(200, { kinds: prefs.kinds, all: ORDER_PUSH_KINDS });
+  }
+
+  if (method === "POST" && leaf === "prefs") {
+    const limit = await consumeRateLimit(event, {
+      bucket: "push-prefs-write",
+      windowMs: 60_000,
+      max: 30,
+    });
+    if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+    const body = parseBody(event.body);
+    const email = String(body.email || "").trim();
+    if (!email || !email.includes("@")) {
+      return json(400, { error: "Missing or invalid email" });
+    }
+    if (!body.kinds || typeof body.kinds !== "object") {
+      return json(400, { error: "Missing kinds map" });
+    }
+    // Cap the size of the kinds map to whatever we currently support so a
+    // malicious client can't fan-out KV writes by sending a giant blob.
+    const filteredKinds = {};
+    for (const k of ORDER_PUSH_KINDS) {
+      if (typeof body.kinds[k] === "boolean") filteredKinds[k] = body.kinds[k];
+    }
+    const result = await setOrderPushPrefs(email, filteredKinds);
+    if (!result.ok) {
+      return json(400, { error: result.reason || "rejected" });
+    }
+    return json(200, {
+      ok: true,
+      kinds: result.prefs.kinds,
+      all: ORDER_PUSH_KINDS,
+    });
   }
 
   return json(404, { error: "Not found" });

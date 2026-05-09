@@ -290,6 +290,105 @@ export const unsubscribeFromOrderPush = async (
   return { ok: true };
 };
 
+// All push kinds the server understands, mirrored from
+// functions/api/_lib/push.js > ORDER_PUSH_KINDS. Kept in sync by hand
+// (the kind list is small and rarely churns); the GET /prefs response
+// also returns `all` so the UI can verify it knows about every kind.
+export const ORDER_PUSH_KINDS = [
+  "confirmed",
+  "in_progress",
+  "out_for_delivery",
+  "received",
+  "refund_requested",
+  "refund_succeeded",
+  "refund_failed",
+  "production_stage",
+  "production_photo",
+] as const;
+
+export type OrderPushKind = (typeof ORDER_PUSH_KINDS)[number];
+
+export type OrderPushKindPrefs = Record<OrderPushKind, boolean>;
+
+const defaultKindPrefs = (): OrderPushKindPrefs => {
+  const out = {} as OrderPushKindPrefs;
+  for (const k of ORDER_PUSH_KINDS) out[k] = true;
+  return out;
+};
+
+// Read prefs JSON returned by /api/push/prefs into a strict
+// `Record<OrderPushKind, boolean>`. Anything missing defaults to true so
+// a brand-new shopper sees every topic on, matching the server-side
+// default.
+const parsePrefsResponse = (raw: unknown): OrderPushKindPrefs => {
+  const out = defaultKindPrefs();
+  if (!raw || typeof raw !== "object") return out;
+  const obj = raw as { kinds?: Record<string, unknown> };
+  if (!obj.kinds || typeof obj.kinds !== "object") return out;
+  for (const k of ORDER_PUSH_KINDS) {
+    if (typeof obj.kinds[k] === "boolean") out[k] = obj.kinds[k] as boolean;
+  }
+  return out;
+};
+
+export const fetchOrderPushPrefs = async (
+  email: string,
+): Promise<OrderPushKindPrefs> => {
+  const trimmed = (email || "").trim();
+  if (!trimmed) return defaultKindPrefs();
+  try {
+    const res = await fetch(
+      `/api/push/prefs?email=${encodeURIComponent(trimmed)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return defaultKindPrefs();
+    const data = (await res.json()) as unknown;
+    return parsePrefsResponse(data);
+  } catch {
+    return defaultKindPrefs();
+  }
+};
+
+export const updateOrderPushPrefs = async (
+  email: string,
+  patch: Partial<OrderPushKindPrefs>,
+): Promise<{ ok: boolean; prefs: OrderPushKindPrefs; reason?: string }> => {
+  const trimmed = (email || "").trim();
+  if (!trimmed) {
+    return { ok: false, prefs: defaultKindPrefs(), reason: "no email" };
+  }
+  // Server accepts a partial map; only send the keys the caller is
+  // actually flipping so a flapping toggle doesn't accidentally re-confirm
+  // unrelated muted kinds.
+  const kinds: Record<string, boolean> = {};
+  for (const k of ORDER_PUSH_KINDS) {
+    if (typeof patch[k] === "boolean") kinds[k] = patch[k] as boolean;
+  }
+  try {
+    const res = await fetch("/api/push/prefs", {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      credentials: "same-origin",
+      body: JSON.stringify({ email: trimmed, kinds }),
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        prefs: defaultKindPrefs(),
+        reason: await readServerErrorReason(res),
+      };
+    }
+    const data = (await res.json()) as unknown;
+    return { ok: true, prefs: parsePrefsResponse(data) };
+  } catch (err) {
+    return {
+      ok: false,
+      prefs: defaultKindPrefs(),
+      reason: err instanceof Error ? err.message : "network",
+    };
+  }
+};
+
 // React listener for "pushsubscriptionchange" events the SW forwards back
 // to the page. Re-registers the rotated subscription under the same email.
 export const handlePushSubscriptionChangeMessages = () => {
