@@ -14,6 +14,7 @@ import { Route as AdminRouteImport } from "./routes/admin";
 import { Route as CollectionRouteImport } from "./routes/collection";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as SignupRouteImport } from "./routes/signup";
+import { Route as TrackRouteImport } from "./routes/track";
 import { Route as ProductIdRouteImport } from "./routes/product.$id";
 import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
 import { Route as PreviewIdRouteImport } from "./routes/preview.$id";
@@ -43,6 +44,11 @@ const SignupRoute = SignupRouteImport.update({
   path: "/signup",
   getParentRoute: () => rootRouteImport,
 } as any);
+const TrackRoute = TrackRouteImport.update({
+  id: "/track",
+  path: "/track",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ProductIdRoute = ProductIdRouteImport.update({
   id: "/product/$id",
   path: "/product/$id",
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   "/admin": typeof AdminRoute;
   "/collection": typeof CollectionRoute;
   "/signup": typeof SignupRoute;
+  "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   "/admin": typeof AdminRoute;
   "/collection": typeof CollectionRoute;
   "/signup": typeof SignupRoute;
+  "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   "/admin": typeof AdminRoute;
   "/collection": typeof CollectionRoute;
   "/signup": typeof SignupRoute;
+  "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | "/admin"
     | "/collection"
     | "/signup"
+    | "/track"
     | "/policy/$slug"
     | "/preview/$id"
     | "/product/$id";
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | "/admin"
     | "/collection"
     | "/signup"
+    | "/track"
     | "/policy/$slug"
     | "/preview/$id"
     | "/product/$id";
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | "/admin"
     | "/collection"
     | "/signup"
+    | "/track"
     | "/policy/$slug"
     | "/preview/$id"
     | "/product/$id";
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute;
   CollectionRoute: typeof CollectionRoute;
   SignupRoute: typeof SignupRoute;
+  TrackRoute: typeof TrackRoute;
   PolicySlugRoute: typeof PolicySlugRoute;
   PreviewIdRoute: typeof PreviewIdRoute;
   ProductIdRoute: typeof ProductIdRoute;
@@ -171,6 +184,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SignupRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/track": {
+      id: "/track";
+      path: "/track";
+      fullPath: "/track";
+      preLoaderRoute: typeof TrackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/product/$id": {
       id: "/product/$id";
       path: "/product/$id";
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   CollectionRoute: CollectionRoute,
   SignupRoute: SignupRoute,
+  TrackRoute: TrackRoute,
   PolicySlugRoute: PolicySlugRoute,
   PreviewIdRoute: PreviewIdRoute,
   ProductIdRoute: ProductIdRoute,

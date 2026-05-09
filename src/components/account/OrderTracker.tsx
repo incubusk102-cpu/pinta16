@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   Check,
@@ -50,8 +50,19 @@ const formatShippedAt = (iso?: string): string | null => {
 // behaviour as before: accepts an Order ID, looks up via /api/orders
 // with a localStorage fallback, renders step-by-step status, shipment
 // tracking, notifications log, refund banner, and review form.
-export default function OrderTracker() {
-  const [orderId, setOrderId] = useState("");
+//
+// `initialOrderId` is used by the public /track route so that a
+// deep-linked URL like `/track?id=ORD-ABC123` populates the input and
+// fires the lookup automatically — no sign-in required, useful for
+// guest checkouts who don't have an account.
+interface OrderTrackerProps {
+  initialOrderId?: string;
+}
+
+export default function OrderTracker({
+  initialOrderId,
+}: OrderTrackerProps = {}) {
+  const [orderId, setOrderId] = useState(initialOrderId?.trim() ?? "");
   const [order, setOrder] = useState<CompletedOrder | null>(null);
   const [searching, setSearching] = useState(false);
   const [copiedAwb, setCopiedAwb] = useState(false);
@@ -72,8 +83,8 @@ export default function OrderTracker() {
       .catch(() => toast.error("Couldn't copy tracking number"));
   };
 
-  const lookup = async () => {
-    const id = orderId.trim().toUpperCase();
+  const lookup = async (rawId?: string) => {
+    const id = (rawId ?? orderId).trim().toUpperCase();
     if (!id) return;
     setSearching(true);
 
@@ -98,6 +109,21 @@ export default function OrderTracker() {
     }
     setSearching(false);
   };
+
+  // When a deep-linked initialOrderId is supplied (typically by the
+  // public /track route reading the `?id=` query param), kick off the
+  // first lookup once on mount. We don't re-fire if the prop changes
+  // mid-session — that would clobber a manual search the user just
+  // ran.
+  const autoLookupRef = useRef(false);
+  useEffect(() => {
+    if (autoLookupRef.current) return;
+    const seed = initialOrderId?.trim();
+    if (!seed) return;
+    autoLookupRef.current = true;
+    void lookup(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOrderId]);
 
   const currentStepIdx = order
     ? ORDER_STEPS.findIndex((s) => s.key === order.status)
