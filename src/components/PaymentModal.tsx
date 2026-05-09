@@ -159,43 +159,74 @@ const PaymentModal = ({
   }, [status, onSuccess]);
 
   // Save the QR PNG to the customer's device so they can import it
-  // straight from their gallery in GCash / Maya. We fetch as a blob
-  // first (rather than a plain anchor download) because PayMongo's CDN
-  // serves the QR image with a content-disposition that pops it inline
-  // in a new tab on mobile browsers — that defeats the "save to
-  // gallery → import" flow customers are about to do. If the fetch is
-  // blocked by CORS for some reason, we fall back to opening the URL
-  // in a new tab, which still lets a customer long-press to save.
+  // from their gallery in GCash / Maya. PayMongo returns the QR Ph
+  // image as a base64 `data:image/png;base64,...` URL on the
+  // payment-intent attach response, so we decode it directly into a
+  // Blob and trigger a same-origin `<a download>` click. Going through
+  // `fetch()` round-trips a data URL through the network stack and
+  // can fail inside in-app browsers (Facebook / Messenger / IG
+  // webviews), and a `window.open(dataURL)` fallback navigates the
+  // current tab to the raw data URL on those same browsers — which
+  // tears down the React modal and abandons the live payment intent.
+  // We never call window.open here for that reason; the worst-case
+  // path just shows a hint to long-press the QR instead.
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const dataUrlToBlob = useCallback((dataUrl: string): Blob => {
+    const commaIndex = dataUrl.indexOf(",");
+    if (!dataUrl.startsWith("data:") || commaIndex < 0) {
+      throw new Error("Not a data URL");
+    }
+    const meta = dataUrl.slice(5, commaIndex);
+    const isBase64 = /;base64$/i.test(meta);
+    const mime = meta.replace(/;base64$/i, "") || "image/png";
+    const payload = dataUrl.slice(commaIndex + 1);
+    const decoded = isBase64 ? atob(payload) : decodeURIComponent(payload);
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i++) {
+      bytes[i] = decoded.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+  }, []);
+
   const handleDownload = useCallback(async () => {
     if (!qrCodeUrl || downloading) return;
     setDownloading(true);
     setDownloadError(null);
     try {
-      const response = await fetch(qrCodeUrl, { mode: "cors" });
-      if (!response.ok) {
-        throw new Error(`status ${response.status}`);
-      }
-      const blob = await response.blob();
+      const blob = qrCodeUrl.startsWith("data:")
+        ? dataUrlToBlob(qrCodeUrl)
+        : await fetch(qrCodeUrl).then((r) => {
+            if (!r.ok) throw new Error(`status ${r.status}`);
+            return r.blob();
+          });
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = `canvhub-qrph-${paymentIntentId || "payment"}.png`;
+      // target=_blank protects in-app webviews that treat anchor
+      // clicks as navigations rather than downloads — the modal stays
+      // mounted in the original tab even if the browser opens the
+      // download in a new one.
+      link.target = "_blank";
+      link.rel = "noopener";
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
+      // Hold the object URL long enough for the OS download manager to
+      // hand the blob off; revoking immediately can cancel the save on
+      // some Android webviews.
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (error) {
-      console.warn("QR download via fetch failed, opening in new tab:", error);
+      console.warn("QR download failed:", error);
       setDownloadError(
-        "Couldn't auto-save. Long-press the QR image and tap Save instead.",
+        "Couldn't auto-save. Long-press the QR image and tap Save image instead — the QR and payment session are still active.",
       );
-      window.open(qrCodeUrl, "_blank", "noopener,noreferrer");
     } finally {
       setDownloading(false);
     }
-  }, [qrCodeUrl, paymentIntentId, downloading]);
+  }, [qrCodeUrl, paymentIntentId, downloading, dataUrlToBlob]);
 
   // The import-from-gallery guide is collapsed by default so the QR
   // and amount stay the visual focus for the majority of customers
@@ -362,7 +393,6 @@ const PaymentModal = ({
                     className="mx-auto w-full max-w-xs rounded-sm border border-border/20 bg-white p-3"
                     loading="lazy"
                     decoding="async"
-                    crossOrigin="anonymous"
                   />
                   <button
                     type="button"
