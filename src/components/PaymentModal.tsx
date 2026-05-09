@@ -205,12 +205,13 @@ const PaymentModal = ({
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = `canvhub-qrph-${paymentIntentId || "payment"}.png`;
-      // target=_blank protects in-app webviews that treat anchor
-      // clicks as navigations rather than downloads — the modal stays
-      // mounted in the original tab even if the browser opens the
-      // download in a new one.
-      link.target = "_blank";
-      link.rel = "noopener";
+      // Deliberately no target attribute. On Android Chrome,
+      // `<a target="_blank" download>` for a blob: URL opens a
+      // transient tab that auto-closes after the download starts,
+      // which on a single-tab Chrome session looks identical to "the
+      // site closed." Plain anchor clicks with just `download` fire
+      // the OS download manager from the current tab and leave the
+      // payment modal mounted.
       document.body.appendChild(link);
       link.click();
       link.remove();
