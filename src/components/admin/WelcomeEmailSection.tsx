@@ -971,6 +971,27 @@ const renderPreviewHtml = (
 </body></html>`;
 };
 
+// Sync the custom-items array length with the configured count so admins
+// see the right number of empty slots when they change "How many to show"
+// or first switch to the custom mode. Module-level to keep the component
+// pure during render (no Math.random() in the render path).
+const ensureCustomItems = (
+  count: number,
+  items: WelcomeCustomItem[],
+): WelcomeCustomItem[] => {
+  const next = items.slice(0, count);
+  while (next.length < count) {
+    next.push({
+      id: `item-${Math.random().toString(36).slice(2, 10)}`,
+      imageUrl: "",
+      title: "",
+      price: 0,
+      description: "",
+    });
+  }
+  return next;
+};
+
 export const WelcomeEmailSection = () => {
   const { token } = useAdminAuth();
   const [config, setConfig] = useState<WelcomeEmailConfig>(DEFAULTS);
@@ -1144,23 +1165,6 @@ export const WelcomeEmailSection = () => {
         : [...c.products.manualIds, id].slice(0, 8);
       return { ...c, products: { ...c.products, manualIds: next } };
     });
-  };
-
-  // Sync the custom-items array length with the configured count so admins
-  // see the right number of empty slots when they change "How many to show"
-  // or first switch to the custom mode.
-  const ensureCustomItems = (count: number, items: WelcomeCustomItem[]) => {
-    const next = items.slice(0, count);
-    while (next.length < count) {
-      next.push({
-        id: `item-${Math.random().toString(36).slice(2, 10)}`,
-        imageUrl: "",
-        title: "",
-        price: 0,
-        description: "",
-      });
-    }
-    return next;
   };
 
   const updateCustomItem = (

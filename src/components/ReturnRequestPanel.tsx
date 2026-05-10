@@ -152,9 +152,7 @@ const ReturnStatusCard = ({
         </p>
       )}
       {request.status === "completed" && refundDisplay != null && (
-        <p className="text-[11px] opacity-80">
-          Refunded: ₱{refundDisplay}
-        </p>
+        <p className="text-[11px] opacity-80">Refunded: ₱{refundDisplay}</p>
       )}
       <p className="text-[11px] opacity-70">
         Requested {new Date(request.requestedAt).toLocaleString()}

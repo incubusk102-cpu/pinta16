@@ -195,7 +195,9 @@ export function ThreatDashboard() {
   // latest `refresh` callback without resetting the interval on every
   // render.
   const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
   useEffect(() => {
     if (!autoRefresh) return;
     const id = window.setInterval(() => {
