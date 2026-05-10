@@ -21,6 +21,7 @@ import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
 import { useGoogleAuthHash } from "@/hooks/useGoogleAuthHash";
+import { usePageEventBeacon } from "@/hooks/usePageEventBeacon";
 import { captureReferralFromUrl } from "@/lib/referral";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -74,6 +75,7 @@ export const Route = createRootRoute({
 function HeartbeatBridge() {
   useVisitorHeartbeat();
   useUserHeartbeat();
+  usePageEventBeacon();
   return null;
 }
 
