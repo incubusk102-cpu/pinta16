@@ -112,8 +112,41 @@ const flattenSubscriber = (s: Record<string, unknown>) => ({
 
 const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
+type BusyKey = `${Dataset}:${Format}` | null;
+
+const ExportButton = ({
+  dataset,
+  format,
+  label,
+  icon,
+  busy,
+  run,
+}: {
+  dataset: Dataset;
+  format: Format;
+  label: string;
+  icon: React.ReactNode;
+  busy: BusyKey;
+  run: (dataset: Dataset, format: Format) => Promise<void>;
+}) => {
+  const key = `${dataset}:${format}` as const;
+  const isBusy = busy === key;
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => void run(dataset, format)}
+      disabled={busy != null}
+      className="justify-start"
+    >
+      {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : icon}
+      {label}
+    </Button>
+  );
+};
+
 export default function ExportPanel({ token }: Props) {
-  const [busy, setBusy] = useState<`${Dataset}:${Format}` | null>(null);
+  const [busy, setBusy] = useState<BusyKey>(null);
 
   const run = async (dataset: Dataset, format: Format) => {
     setBusy(`${dataset}:${format}`);
@@ -175,33 +208,6 @@ export default function ExportPanel({ token }: Props) {
     }
   };
 
-  const ExportButton = ({
-    dataset,
-    format,
-    label,
-    icon,
-  }: {
-    dataset: Dataset;
-    format: Format;
-    label: string;
-    icon: React.ReactNode;
-  }) => {
-    const key = `${dataset}:${format}` as const;
-    const isBusy = busy === key;
-    return (
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => void run(dataset, format)}
-        disabled={busy != null}
-        className="justify-start"
-      >
-        {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : icon}
-        {label}
-      </Button>
-    );
-  };
-
   return (
     <section className="border border-border/40 rounded-xl p-5 space-y-4">
       <div className="flex items-center gap-2">
@@ -223,36 +229,48 @@ export default function ExportPanel({ token }: Props) {
           format="csv"
           label="Orders · CSV"
           icon={<FileSpreadsheet className="w-3.5 h-3.5 mr-2" />}
+          busy={busy}
+          run={run}
         />
         <ExportButton
           dataset="orders"
           format="json"
           label="Orders · JSON"
           icon={<FileJson className="w-3.5 h-3.5 mr-2" />}
+          busy={busy}
+          run={run}
         />
         <ExportButton
           dataset="customers"
           format="csv"
           label="Customers · CSV"
           icon={<FileSpreadsheet className="w-3.5 h-3.5 mr-2" />}
+          busy={busy}
+          run={run}
         />
         <ExportButton
           dataset="customers"
           format="json"
           label="Customers · JSON"
           icon={<FileJson className="w-3.5 h-3.5 mr-2" />}
+          busy={busy}
+          run={run}
         />
         <ExportButton
           dataset="newsletter"
           format="csv"
           label="Newsletter · CSV"
           icon={<FileSpreadsheet className="w-3.5 h-3.5 mr-2" />}
+          busy={busy}
+          run={run}
         />
         <ExportButton
           dataset="newsletter"
           format="json"
           label="Newsletter · JSON"
           icon={<FileJson className="w-3.5 h-3.5 mr-2" />}
+          busy={busy}
+          run={run}
         />
       </div>
     </section>

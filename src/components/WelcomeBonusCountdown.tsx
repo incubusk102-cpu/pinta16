@@ -30,7 +30,7 @@ const WelcomeBonusCountdown = () => {
   const [bonus, setBonus] = useState<WelcomeBonusState | null>(() =>
     getWelcomeBonus(),
   );
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {

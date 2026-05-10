@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCcw, Save, Type } from "lucide-react";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { Button } from "@/components/ui/button";
@@ -24,17 +24,19 @@ export const SiteCopySection = () => {
   const { token } = useAdminAuth();
   const { config, refresh } = useStorefrontConfig();
   const [copy, setCopy] = useState<SiteCopy>(cloneDefaults);
-  const baselineCopy = useRef<SiteCopy>(cloneDefaults());
+  const [baselineJson, setBaselineJson] = useState<string>(() =>
+    JSON.stringify(cloneDefaults()),
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const isDirty = useMemo(() => {
     if (loading) return false;
     try {
-      return JSON.stringify(copy) !== JSON.stringify(baselineCopy.current);
+      return JSON.stringify(copy) !== baselineJson;
     } catch {
       return false;
     }
-  }, [copy, loading]);
+  }, [copy, loading, baselineJson]);
   useUnsavedChangesGuard(isDirty);
 
   // Pull the current saved values from the admin endpoint so blanks vs
@@ -79,7 +81,7 @@ export const SiteCopySection = () => {
             },
           };
           setCopy(next);
-          baselineCopy.current = next;
+          setBaselineJson(JSON.stringify(next));
         }
       } catch (e) {
         if (!cancelled)
@@ -113,7 +115,7 @@ export const SiteCopySection = () => {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       toast.success("Site copy saved");
-      baselineCopy.current = copy;
+      setBaselineJson(JSON.stringify(copy));
       void refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");

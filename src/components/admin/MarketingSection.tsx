@@ -67,6 +67,7 @@ export function MarketingSection() {
   const [promos, setPromos] = useState<PromoStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [now] = useState(() => Date.now());
 
   const load = async (showSpinner = true) => {
     if (showSpinner) setRefreshing(true);
@@ -186,7 +187,7 @@ export function MarketingSection() {
               {promos.map((p) => {
                 const cap = p.usageLimit;
                 const expired =
-                  p.expiresAt && new Date(p.expiresAt).getTime() < Date.now();
+                  p.expiresAt && new Date(p.expiresAt).getTime() < now;
                 return (
                   <tr key={p.code} className="border-t border-border/40">
                     <td className="px-4 py-3">
