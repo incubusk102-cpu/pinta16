@@ -126,10 +126,6 @@ KV namespace bindings, the `nodejs_compat` flag, and the
 live in the Cloudflare Pages dashboard under
 _Settings → Build & deployments_.
 
-The Workers project named `pinta16` in the Cloudflare dashboard is
-**not used** for production — Pages is the canonical surface. Its
-build CI may be red on PRs; that's expected.
-
 ### Required environment variables (Cloudflare Pages → Settings → Environment variables)
 
 | Variable                 | Used by                                | Notes                                 |
