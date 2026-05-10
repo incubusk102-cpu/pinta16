@@ -53,6 +53,7 @@ import { ProductImageGallery } from "@/components/admin/ProductImageGallery";
 import { ProductVideoUpload } from "@/components/admin/ProductVideoUpload";
 import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
+import { FunnelInsightsSection } from "@/components/admin/FunnelInsightsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { CustomersSection } from "@/components/admin/CustomersSection";
@@ -153,6 +154,7 @@ type AdminSection =
   | "messages"
   | "reviews"
   | "visitors"
+  | "funnel"
   | "users"
   | "customers"
   | "marketing"
@@ -179,6 +181,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   messages: "Messages",
   reviews: "Reviews",
   visitors: "Visitors",
+  funnel: "Funnel & traffic",
   users: "Users",
   customers: "Customers",
   marketing: "Marketing",
@@ -546,6 +549,11 @@ const NAV_GROUPS: {
         key: "visitors",
         icon: <Activity className="w-4 h-4" />,
         hint: "Live + 24h",
+      },
+      {
+        key: "funnel",
+        icon: <TrendingUp className="w-4 h-4" />,
+        hint: "Conversion funnel & top pages",
       },
       { key: "users", icon: <Users className="w-4 h-4" /> },
       {
@@ -1155,6 +1163,7 @@ function AdminDashboard() {
           {section === "messages" && <MessagesSection />}
           {section === "reviews" && <ReviewsSection />}
           {section === "visitors" && <VisitorsSection />}
+          {section === "funnel" && <FunnelInsightsSection />}
           {section === "users" && <UsersSection />}
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}

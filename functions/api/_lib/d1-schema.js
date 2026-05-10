@@ -147,4 +147,20 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_return_requests_status ON return_requests(status)`,
   `CREATE INDEX IF NOT EXISTS idx_return_requests_requested_at ON return_requests(requested_at)`,
   `CREATE INDEX IF NOT EXISTS idx_return_requests_status_requested_at ON return_requests(status, requested_at)`,
+
+  `CREATE TABLE IF NOT EXISTS page_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    path_kind TEXT NOT NULL,
+    referrer_host TEXT,
+    country TEXT,
+    device TEXT,
+    ts TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_page_events_ts ON page_events(ts)`,
+  `CREATE INDEX IF NOT EXISTS idx_page_events_path_kind ON page_events(path_kind)`,
+  `CREATE INDEX IF NOT EXISTS idx_page_events_path ON page_events(path)`,
+  `CREATE INDEX IF NOT EXISTS idx_page_events_session ON page_events(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_page_events_session_kind ON page_events(session_id, path_kind)`,
 ];
