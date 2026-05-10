@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import SplitText from "@/components/motion/SplitText";
 import { Link } from "@tanstack/react-router";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/artworks";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import { jsonAuthHeaders } from "@/lib/api";
 
 type SortOption =
   | "featured"
@@ -176,6 +177,53 @@ const GallerySection = () => {
         return copy;
     }
   }, [filteredArtworks, sortBy, isLoggedIn]);
+
+  // Debounced search-event beacon. The gallery filters in-memory so there's
+  // no server hit per keystroke; instead we beacon once per stable query
+  // (≥ 2 chars, 1.5 s of no typing) so the admin can see what shoppers
+  // search for vs. what they buy. See `functions/api/search-events.js` for
+  // the persistence side. Beacon failures are silently swallowed — the
+  // public search must keep working even if D1 isn't configured.
+  const lastBeaconedQueryRef = useRef<string>("");
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return;
+    if (trimmed.toLowerCase() === lastBeaconedQueryRef.current) return;
+
+    const handle = window.setTimeout(() => {
+      const payload = {
+        id:
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `se_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        query: trimmed,
+        resultsCount: sortedArtworks.length,
+        filterCategory: filterCategory === "all" ? null : filterCategory,
+        filterAvailability:
+          filterAvailability === "all" ? null : filterAvailability,
+        filterPrice: filterPrice === "all" ? null : filterPrice,
+      };
+      lastBeaconedQueryRef.current = trimmed.toLowerCase();
+      void fetch("/api/search-events", {
+        method: "POST",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {
+        // Beacon is best-effort — don't surface failures to the shopper.
+      });
+    }, 1500);
+
+    return () => window.clearTimeout(handle);
+  }, [
+    query,
+    isLoggedIn,
+    sortedArtworks.length,
+    filterCategory,
+    filterAvailability,
+    filterPrice,
+  ]);
 
   const hasFilters =
     query.trim().length > 0 ||
