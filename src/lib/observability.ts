@@ -28,6 +28,12 @@
 //     Optional. Defaults to 0.1 (10% of transactions sampled). Set to "0" to
 //     disable tracing entirely while keeping error capture.
 //
+//   VITE_SENTRY_RELEASE
+//     Optional. Release identifier (typically the deploy commit SHA) used
+//     to group events in Sentry and match them to uploaded source maps.
+//     Set automatically by the GitHub Actions deploy workflow; leave
+//     unset in local builds.
+//
 // CSP: see public/_headers — `static.cloudflareinsights.com` is allow-listed
 // in script-src and `cloudflareinsights.com` + `*.ingest.sentry.io` in
 // connect-src so the beacon/SDK can talk to their endpoints.
@@ -47,6 +53,9 @@ const SENTRY_TRACES_SAMPLE_RATE = (() => {
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.1;
 })();
+const SENTRY_RELEASE = import.meta.env.VITE_SENTRY_RELEASE as
+  | string
+  | undefined;
 
 let sentryReady: Promise<typeof import("@sentry/react") | null> | null = null;
 
@@ -59,6 +68,7 @@ const loadSentry = async (): Promise<typeof import("@sentry/react") | null> => {
         mod.init({
           dsn: SENTRY_DSN,
           environment: SENTRY_ENV,
+          release: SENTRY_RELEASE,
           // Lazy: don't ship browser tracing or replay unless it actually
           // helps. Browser tracing adds ~30 KB; we keep it on but at a low
           // sample rate. Replay is opt-in via integrations[] and stays off
