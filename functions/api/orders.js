@@ -375,6 +375,35 @@ const json = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
+// Customer-picked painting size carried on each cart line. Clamped
+// to plausible canvas dimensions (0–500 cm per side) so a malformed
+// or hostile payload can never blow up downstream consumers (email
+// renderer, admin dashboard, JSON-LD).
+const sanitizeSizeCm = (raw) => {
+  if (!raw || typeof raw !== "object") return undefined;
+  const w = Number(raw.widthCm);
+  const h = Number(raw.heightCm);
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return undefined;
+  if (w <= 0 || h <= 0 || w > 500 || h > 500) return undefined;
+  return {
+    widthCm: Math.round(w * 10) / 10,
+    heightCm: Math.round(h * 10) / 10,
+  };
+};
+
+const sanitizeOrderItem = (item) => {
+  const out = {
+    id: String(item.id || "").slice(0, 100),
+    title: String(item.title || "").slice(0, 300),
+    price: Number(item.price) || 0,
+    quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+    image: typeof item.image === "string" ? item.image.slice(0, 2000) : "",
+  };
+  const sizeCm = sanitizeSizeCm(item.sizeCm);
+  if (sizeCm) out.sizeCm = sizeCm;
+  return out;
+};
+
 const maskEmail = (email) => {
   const s = String(email || "");
   const at = s.indexOf("@");
@@ -1154,14 +1183,7 @@ export const handler = async (event) => {
         if (orders.some((o) => o.id === orderId)) {
           return json(409, { error: "Order already saved" });
         }
-        const safeItems = order.items.slice(0, 50).map((item) => ({
-          id: String(item.id || "").slice(0, 100),
-          title: String(item.title || "").slice(0, 300),
-          price: Number(item.price) || 0,
-          quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
-          image:
-            typeof item.image === "string" ? item.image.slice(0, 2000) : "",
-        }));
+        const safeItems = order.items.slice(0, 50).map(sanitizeOrderItem);
         const meta = captureRequestMeta(event);
         const safeOrder = {
           id: orderId,
@@ -1312,14 +1334,7 @@ export const handler = async (event) => {
         if (orders.some((o) => o.id === orderId)) {
           return json(409, { error: "Order already exists" });
         }
-        const safeItems = order.items.slice(0, 50).map((item) => ({
-          id: String(item.id || "").slice(0, 100),
-          title: String(item.title || "").slice(0, 300),
-          price: Number(item.price) || 0,
-          quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
-          image:
-            typeof item.image === "string" ? item.image.slice(0, 2000) : "",
-        }));
+        const safeItems = order.items.slice(0, 50).map(sanitizeOrderItem);
         // Server-side promo validation: only honor a voucher if it's still
         // eligible AND the client-supplied discount matches what the code
         // would actually grant. Otherwise drop the code so a malicious client
@@ -1601,14 +1616,7 @@ export const handler = async (event) => {
         if (orders.some((o) => o.id === orderId)) {
           return json(409, { error: "Order already exists" });
         }
-        const safeItems = order.items.slice(0, 50).map((item) => ({
-          id: String(item.id || "").slice(0, 100),
-          title: String(item.title || "").slice(0, 300),
-          price: Number(item.price) || 0,
-          quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
-          image:
-            typeof item.image === "string" ? item.image.slice(0, 2000) : "",
-        }));
+        const safeItems = order.items.slice(0, 50).map(sanitizeOrderItem);
         const meta = captureRequestMeta(event);
         const status = [
           "confirmed",

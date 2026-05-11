@@ -10,10 +10,11 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { useCart } from "@/contexts/CartContext";
+import { useCart, cartLineKey } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { LALAMOVE_PAID_TO_RIDER } from "@/lib/shipment";
+import { formatSize } from "@/lib/painting-sizes";
 
 const CartDrawer = () => {
   const {
@@ -168,13 +169,26 @@ const CartDrawer = () => {
                         <p className="font-body text-[10px] text-muted-foreground">
                           {item.medium}
                         </p>
+                        {item.sizeCm ? (
+                          <p className="font-body text-[10px] text-muted-foreground mt-0.5">
+                            <span className="uppercase tracking-[0.2em] opacity-70">
+                              Size
+                            </span>{" "}
+                            <span className="text-foreground">
+                              {formatSize(item.sizeCm)}
+                            </span>
+                          </p>
+                        ) : null}
                         <p className="font-body text-sm text-foreground mt-1">
                           ₱{(item.price * item.quantity).toLocaleString()}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <button
                             onClick={() =>
-                              updateQuantity(item.id, item.quantity - 1)
+                              updateQuantity(
+                                cartLineKey(item),
+                                item.quantity - 1,
+                              )
                             }
                             className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-accent rounded-sm transition-colors"
                             aria-label={`Decrease quantity of ${item.title}`}
@@ -189,7 +203,10 @@ const CartDrawer = () => {
                           </span>
                           <button
                             onClick={() =>
-                              updateQuantity(item.id, item.quantity + 1)
+                              updateQuantity(
+                                cartLineKey(item),
+                                item.quantity + 1,
+                              )
                             }
                             className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-accent rounded-sm transition-colors"
                             aria-label={`Increase quantity of ${item.title}`}
@@ -197,7 +214,7 @@ const CartDrawer = () => {
                             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                           <button
-                            onClick={() => removeFromCart(item.id)}
+                            onClick={() => removeFromCart(cartLineKey(item))}
                             className="min-w-[36px] min-h-[36px] ml-auto flex items-center justify-center hover:bg-destructive/10 rounded-sm transition-colors"
                             aria-label={`Remove ${item.title} from cart`}
                           >
