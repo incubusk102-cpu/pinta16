@@ -24,6 +24,26 @@ name: Deploy to Cloudflare Pages
 #       (or use an Internal Integration token). When unset, the build
 #       still succeeds — `@sentry/vite-plugin` becomes a no-op and source
 #       maps are not emitted. See docs/observability-setup.md.
+#
+# Optional GitHub repo secrets (inlined into the SPA bundle at build time):
+#   - VITE_SENTRY_DSN
+#       Public Sentry DSN. Vite inlines this into the bundle so the
+#       browser SDK can send events. Set this here — NOT in the
+#       Cloudflare Pages env vars — because the build runs inside this
+#       workflow, not inside the Pages git integration, so Pages env
+#       vars never reach `npm run build`. When unset, `Sentry.init` is
+#       skipped entirely (lazy import in `src/lib/observability.ts`
+#       bails when the DSN is empty).
+#   - VITE_CF_ANALYTICS_TOKEN
+#       Cloudflare Web Analytics site token. Same reasoning as the
+#       Sentry DSN — it has to be available at build time, not just
+#       at runtime, because Vite inlines it. When unset, the beacon
+#       script is never injected.
+#   - VITE_SENTRY_ENVIRONMENT
+#       Optional environment label. Defaults to the Vite build mode
+#       (`production`). Set to differentiate e.g. preview deploys.
+#   - VITE_SENTRY_TRACES_SAMPLE_RATE
+#       Optional. Float between 0 and 1. Defaults to 0.1.
 
 on:
   push:
@@ -69,10 +89,18 @@ jobs:
           # the secret is missing, both behaviors silently no-op.
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_RELEASE: ${{ github.sha }}
-          # Inlined into the SPA bundle so `Sentry.init({ release })` can
-          # tag events with the commit SHA. Public — DSNs and release IDs
-          # are designed to be visible in the bundle.
+          # Inlined into the SPA bundle so `Sentry.init({ dsn, release })`
+          # can actually send events tagged with the commit SHA. All four
+          # values are public — DSNs and release IDs are designed to be
+          # visible in the bundle. When VITE_SENTRY_DSN is empty the SDK
+          # never initializes (lazy import bails).
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: ${{ secrets.VITE_SENTRY_ENVIRONMENT }}
+          VITE_SENTRY_TRACES_SAMPLE_RATE: ${{ secrets.VITE_SENTRY_TRACES_SAMPLE_RATE }}
           VITE_SENTRY_RELEASE: ${{ github.sha }}
+          # Cloudflare Web Analytics token — also inlined at build time,
+          # so it must live here rather than in Pages env vars.
+          VITE_CF_ANALYTICS_TOKEN: ${{ secrets.VITE_CF_ANALYTICS_TOKEN }}
         run: npm run build
 
       - name: Deploy to Cloudflare Pages
