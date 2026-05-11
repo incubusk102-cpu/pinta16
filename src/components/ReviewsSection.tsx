@@ -1,9 +1,11 @@
-import { motion } from "framer-motion";
-import { Star } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Star, X } from "lucide-react";
 import SectionReveal from "@/components/motion/SectionReveal";
 import SplitText from "@/components/motion/SplitText";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { usePublishedReviews } from "@/hooks/usePublishedReviews";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 const formatRelativeDate = (iso: string): string => {
   const d = new Date(iso);
@@ -34,6 +36,49 @@ const ReviewsSection = () => {
   const { config } = useStorefrontConfig();
   const reviewsCopy = config.siteCopy.reviews;
   const { reviews, loading } = usePublishedReviews();
+
+  // Lightbox state. Holds the gallery (review photos for one review)
+  // and the currently-shown index within it. Null = closed.
+  const [photoView, setPhotoView] = useState<{
+    images: string[];
+    index: number;
+  } | null>(null);
+  const closeViewer = useCallback(() => setPhotoView(null), []);
+  const showPrev = useCallback(
+    () =>
+      setPhotoView((p) =>
+        p
+          ? {
+              ...p,
+              index: p.index === 0 ? p.images.length - 1 : p.index - 1,
+            }
+          : p,
+      ),
+    [],
+  );
+  const showNext = useCallback(
+    () =>
+      setPhotoView((p) =>
+        p
+          ? {
+              ...p,
+              index: p.index === p.images.length - 1 ? 0 : p.index + 1,
+            }
+          : p,
+      ),
+    [],
+  );
+  useBodyScrollLock(photoView !== null);
+  useEffect(() => {
+    if (!photoView) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeViewer();
+      else if (e.key === "ArrowLeft") showPrev();
+      else if (e.key === "ArrowRight") showNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [photoView, closeViewer, showPrev, showNext]);
 
   if (loading || reviews.length === 0) return null;
 
@@ -105,23 +150,28 @@ const ReviewsSection = () => {
             </p>
             {(r.images?.length ?? 0) > 0 && (
               <div className="grid grid-cols-3 gap-1.5">
-                {(r.images ?? []).slice(0, 3).map((src, j) => (
-                  <a
-                    key={j}
-                    href={src}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <img
-                      src={src}
-                      alt={`Review photo ${j + 1}`}
-                      className="aspect-square w-full object-cover rounded-md border border-border/40"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
-                ))}
+                {(r.images ?? []).slice(0, 3).map((src, j) => {
+                  const reviewImages = (r.images ?? []).slice(0, 3);
+                  return (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() =>
+                        setPhotoView({ images: reviewImages, index: j })
+                      }
+                      aria-label={`Open review photo ${j + 1}`}
+                      className="block aspect-square w-full overflow-hidden rounded-md border border-border/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <img
+                        src={src}
+                        alt={`Review photo ${j + 1}`}
+                        className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
@@ -141,6 +191,77 @@ const ReviewsSection = () => {
           </motion.article>
         ))}
       </div>
+
+      <AnimatePresence>
+        {photoView && (
+          <motion.div
+            key="review-photo-viewer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Review photo viewer"
+            onClick={closeViewer}
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeViewer();
+              }}
+              aria-label="Close photo viewer"
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {photoView.images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    showPrev();
+                  }}
+                  aria-label="Previous photo"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    showNext();
+                  }}
+                  aria-label="Next photo"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+                <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] tracking-[0.3em] uppercase text-white/80">
+                  {photoView.index + 1} / {photoView.images.length}
+                </p>
+              </>
+            )}
+
+            <motion.img
+              key={photoView.images[photoView.index]}
+              src={photoView.images[photoView.index]}
+              alt={`Review photo ${photoView.index + 1}`}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[90vh] max-w-[92vw] object-contain rounded-md shadow-2xl"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </SectionReveal>
   );
 };
