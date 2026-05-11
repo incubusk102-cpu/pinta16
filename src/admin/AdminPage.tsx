@@ -55,6 +55,7 @@ import { StockListingsSection } from "@/components/admin/StockListingsSection";
 import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { SearchInsightsSection } from "@/components/admin/SearchInsightsSection";
 import { FunnelInsightsSection } from "@/components/admin/FunnelInsightsSection";
+import { NotificationLogSection } from "@/components/admin/NotificationLogSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { CustomersSection } from "@/components/admin/CustomersSection";
@@ -157,6 +158,7 @@ type AdminSection =
   | "visitors"
   | "searchInsights"
   | "funnel"
+  | "notificationLog"
   | "users"
   | "customers"
   | "marketing"
@@ -185,6 +187,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   visitors: "Visitors",
   searchInsights: "Search insights",
   funnel: "Funnel & traffic",
+  notificationLog: "Notification log",
   users: "Users",
   customers: "Customers",
   marketing: "Marketing",
@@ -562,6 +565,11 @@ const NAV_GROUPS: {
         key: "funnel",
         icon: <TrendingUp className="w-4 h-4" />,
         hint: "Conversion funnel & top pages",
+      },
+      {
+        key: "notificationLog",
+        icon: <Bell className="w-4 h-4" />,
+        hint: "Email & push delivery log",
       },
       { key: "users", icon: <Users className="w-4 h-4" /> },
       {
@@ -1173,6 +1181,7 @@ function AdminDashboard() {
           {section === "visitors" && <VisitorsSection />}
           {section === "searchInsights" && <SearchInsightsSection />}
           {section === "funnel" && <FunnelInsightsSection />}
+          {section === "notificationLog" && <NotificationLogSection />}
           {section === "users" && <UsersSection />}
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}
