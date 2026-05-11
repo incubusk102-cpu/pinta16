@@ -90,6 +90,29 @@
   X-Permitted-Cross-Domain-Policies: none
   X-Robots-Tag: noindex, nofollow
 
+# Private SPA routes — these pages exist for authenticated humans, not
+# for search engines. The `useSEO` hook (src/hooks/useSEO.ts) writes a
+# `<meta name="robots" content="noindex, nofollow">` once the SPA
+# mounts; the headers below give Googlebot and other crawlers the
+# same signal at the HTTP layer so an empty client render of /admin
+# isn't accidentally indexed.
+/admin
+  X-Robots-Tag: noindex, nofollow
+/admin/*
+  X-Robots-Tag: noindex, nofollow
+/account
+  X-Robots-Tag: noindex, nofollow
+/account/*
+  X-Robots-Tag: noindex, nofollow
+/track
+  X-Robots-Tag: noindex, nofollow
+/track/*
+  X-Robots-Tag: noindex, nofollow
+/preview/*
+  X-Robots-Tag: noindex, nofollow
+/signup
+  X-Robots-Tag: noindex, nofollow
+
 # Service worker should be revalidated on every load and scoped to the
 # whole origin so navigation requests can be intercepted.
 /sw.js

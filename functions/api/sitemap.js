@@ -15,10 +15,25 @@ const xmlEscape = (s = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 
+// Public, index-worthy routes that aren't backed by KV. Private pages
+// (/admin, /account, /track, /preview/*, /signup) are intentionally
+// omitted — they're served with `X-Robots-Tag: noindex, nofollow` via
+// public/_headers and shouldn't appear in the sitemap either. The
+// previous build also emitted `/account` with a low priority, which
+// caused Search Console to flag a "Submitted URL blocked by robots"
+// warning once the noindex header landed.
 const STATIC_PATHS = [
   { path: "/", priority: "1.0", changefreq: "daily" },
-  { path: "/account", priority: "0.4", changefreq: "weekly" },
+  { path: "/collection", priority: "0.9", changefreq: "daily" },
 ];
+
+// Policy slugs are stable (terms / refund / shipping / privacy) and
+// match `src/contexts/PoliciesContext.tsx`'s `POLICY_SLUGS`. We
+// hard-code them here rather than importing from src/ because the
+// Pages Function bundle runs on Cloudflare Workers and pulls its own
+// closed set of files; adding a new policy slug requires a one-line
+// edit in both places.
+const POLICY_SLUGS = ["terms", "refund", "shipping", "privacy"];
 
 export const onRequestGet = async ({ request, env }) => {
   setCloudflareContext(env);
@@ -57,6 +72,15 @@ export const onRequestGet = async ({ request, env }) => {
     lines.push(`    <lastmod>${now}</lastmod>`);
     lines.push(`    <changefreq>${route.changefreq}</changefreq>`);
     lines.push(`    <priority>${route.priority}</priority>`);
+    lines.push("  </url>");
+  }
+
+  for (const slug of POLICY_SLUGS) {
+    lines.push("  <url>");
+    lines.push(`    <loc>${xmlEscape(`${origin}/policy/${slug}`)}</loc>`);
+    lines.push(`    <lastmod>${now}</lastmod>`);
+    lines.push("    <changefreq>monthly</changefreq>");
+    lines.push("    <priority>0.3</priority>");
     lines.push("  </url>");
   }
 

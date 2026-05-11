@@ -8,6 +8,7 @@ import {
 } from "@/contexts/PoliciesContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { safeHref } from "@/lib/safeUrl";
+import { useSEO } from "@/hooks/useSEO";
 
 export const Route = createFileRoute("/policy/$slug")({
   component: PolicyPage,
@@ -251,10 +252,52 @@ const breadcrumbJsonLd = (slug: PolicySlug, title: string) =>
     ],
   }).replace(/</g, "\\u003c");
 
+// Stable per-slug copy for `<title>` and `<meta name="description">`.
+// The full policy body is markdown stored in KV; admins can edit the
+// rendered title at runtime, but crawlers and social previewers need
+// deterministic head metadata even before /api/policies has resolved.
+const POLICY_SEO: Record<
+  PolicySlug,
+  { displayTitle: string; description: string }
+> = {
+  terms: {
+    displayTitle: "Terms & Conditions",
+    description:
+      "Canvas Hub terms & conditions — your rights and ours when buying original paintings from our Filipino gallery.",
+  },
+  refund: {
+    displayTitle: "Refund & Return Policy",
+    description:
+      "Canvas Hub refund & return policy — how to request a return, refund timelines, and made-to-order rules.",
+  },
+  shipping: {
+    displayTitle: "Shipping Policy",
+    description:
+      "Canvas Hub shipping policy — delivery timelines, fees, and tracking for original paintings shipped from the Philippines.",
+  },
+  privacy: {
+    displayTitle: "Privacy Policy",
+    description:
+      "Canvas Hub privacy policy — how we handle your personal information and order data.",
+  },
+};
+
 function PolicyPage() {
   const { slug } = Route.useParams();
   const { policies, loading } = usePolicies();
   const { t } = useLocale();
+  const policySlug = isPolicySlug(slug) ? slug : null;
+  const seoTitle = policySlug
+    ? `${policies[policySlug]?.title || POLICY_SEO[policySlug].displayTitle} — Canvas Hub`
+    : "Policy not found — Canvas Hub";
+  useSEO({
+    title: seoTitle,
+    description: policySlug
+      ? POLICY_SEO[policySlug].description
+      : "The page you're looking for doesn't exist.",
+    canonicalPath: policySlug ? `/policy/${policySlug}` : `/policy/${slug}`,
+    noindex: !policySlug,
+  });
 
   if (!isPolicySlug(slug)) {
     return (

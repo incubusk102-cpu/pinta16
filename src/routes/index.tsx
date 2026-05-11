@@ -4,6 +4,7 @@ import GalleryNav from "@/components/GalleryNav";
 import HeroSlider from "@/components/HeroSlider";
 import HomeHero from "@/components/HomeHero";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
+import { useSEO } from "@/hooks/useSEO";
 import VisitorTicker from "@/components/VisitorTicker";
 import PaintingMarquee from "@/components/PaintingMarquee";
 import DailyFeature from "@/components/DailyFeature";
@@ -88,6 +89,12 @@ function HeroOrFallback() {
 // anchor so legacy `/#gallery` deep links still scroll correctly.
 
 function Index() {
+  useSEO({
+    title: "Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order",
+    description:
+      "Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide.",
+    canonicalPath: "/",
+  });
   const { user } = useUserAuth();
   // Hero shows only to signed-out visitors so first-time visitors get the
   // Canvas Hub welcome and a reason to register. Once a customer is signed

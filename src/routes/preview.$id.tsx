@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Image as ImageIcon } from "lucide-react";
 import GalleryNav from "@/components/GalleryNav";
 import { safeHref } from "@/lib/safeUrl";
+import { useSEO } from "@/hooks/useSEO";
 
 export const Route = createFileRoute("/preview/$id")({
   component: PreviewPage,
@@ -46,6 +47,13 @@ const formatPHP = (n: number): string =>
 
 function PreviewPage() {
   const { id } = Route.useParams();
+  useSEO({
+    title: "Painting preview — Canvas Hub",
+    description:
+      "Preview a painting featured in your Canvas Hub welcome email.",
+    canonicalPath: `/preview/${id}`,
+    noindex: true,
+  });
   const [data, setData] = useState<WelcomePreviewPayload | null>(null);
   const [loading, setLoading] = useState(true);
 
