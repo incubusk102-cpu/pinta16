@@ -198,4 +198,21 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_notification_log_kind ON notification_log(kind)`,
   `CREATE INDEX IF NOT EXISTS idx_notification_log_order ON notification_log(order_id)`,
   `CREATE INDEX IF NOT EXISTS idx_notification_log_recipient ON notification_log(recipient)`,
+
+  `CREATE TABLE IF NOT EXISTS stock_events (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    product_title TEXT,
+    category TEXT,
+    from_state TEXT,
+    to_state TEXT NOT NULL,
+    source TEXT NOT NULL,
+    actor TEXT,
+    ts TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_stock_events_ts ON stock_events(ts)`,
+  `CREATE INDEX IF NOT EXISTS idx_stock_events_product ON stock_events(product_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_stock_events_to_state ON stock_events(to_state)`,
+  `CREATE INDEX IF NOT EXISTS idx_stock_events_category ON stock_events(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_stock_events_source ON stock_events(source)`,
 ];

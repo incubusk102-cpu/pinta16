@@ -9,6 +9,40 @@ import { logError } from "./_lib/redact.js";
 import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
+import { recordStockEvent, STOCK_STATES } from "./_lib/d1.js";
+
+const normaliseAvailability = (value) => {
+  if (typeof value !== "string") return "available";
+  const v = value.trim().toLowerCase();
+  return STOCK_STATES.has(v) ? v : "available";
+};
+
+// Fire-and-forget D1 logging for product availability transitions.
+// Wrapped in a guard so a D1 hiccup can never break the KV write or
+// the user response. KV is the source of truth; this is the queryable
+// mirror.
+const logStockTransition = async ({
+  productId,
+  productTitle,
+  category,
+  fromState,
+  toState,
+  source,
+}) => {
+  try {
+    await recordStockEvent({
+      productId,
+      productTitle,
+      category,
+      fromState,
+      toState,
+      source,
+      actor: "admin",
+    });
+  } catch (err) {
+    logError("stock-event log failed:", err);
+  }
+};
 
 const PRODUCTS_KEY = "all-products";
 
@@ -107,11 +141,29 @@ const handle = async ({ request, env }) => {
         delete product.video;
       }
       const existing = await readProducts(store);
+      const prior = existing.find((item) => item.id === product.id);
       const next = sortProducts([
         product,
         ...existing.filter((item) => item.id !== product.id),
       ]);
       await store.setJSON(PRODUCTS_KEY, next);
+      // Record the availability transition — only when it actually
+      // changes (or when the product is brand new) so the admin's
+      // event timeline isn't drowned in no-op edits.
+      const fromState = prior
+        ? normaliseAvailability(prior.availability)
+        : null;
+      const toState = normaliseAvailability(product.availability);
+      if (!prior || fromState !== toState) {
+        await logStockTransition({
+          productId: product.id,
+          productTitle: product.title,
+          category: product.category,
+          fromState,
+          toState,
+          source: prior ? "admin-edit" : "admin-create",
+        });
+      }
       return json(200, { product });
     }
 
@@ -122,8 +174,19 @@ const handle = async ({ request, env }) => {
       const { id } = parseBody(event.body);
       if (!id) return json(400, { error: "Product id is required" });
       const existing = await readProducts(store);
+      const prior = existing.find((p) => p.id === id);
       const next = existing.filter((p) => p.id !== id);
       await store.setJSON(PRODUCTS_KEY, next);
+      if (prior) {
+        await logStockTransition({
+          productId: prior.id,
+          productTitle: prior.title,
+          category: prior.category,
+          fromState: normaliseAvailability(prior.availability),
+          toState: "deleted",
+          source: "admin-delete",
+        });
+      }
       return json(200, { id });
     }
 
@@ -155,6 +218,7 @@ const handle = async ({ request, env }) => {
       }
       const existing = await readProducts(store);
       const idSet = new Set(ids.map(String));
+      const transitions = [];
       let changed = 0;
       const next = existing.map((p) => {
         if (!idSet.has(p.id)) return p;
@@ -183,10 +247,26 @@ const handle = async ({ request, env }) => {
         if (typeof updates.medium === "string") {
           merged.medium = updates.medium.slice(0, 60);
         }
+        if (
+          typeof updates.availability === "string" &&
+          merged.availability !== p.availability
+        ) {
+          transitions.push({
+            productId: p.id,
+            productTitle: p.title,
+            category: merged.category || p.category,
+            fromState: normaliseAvailability(p.availability),
+            toState: normaliseAvailability(merged.availability),
+            source: "admin-bulk",
+          });
+        }
         return merged;
       });
       if (changed > 0) {
         await store.setJSON(PRODUCTS_KEY, next);
+      }
+      for (const t of transitions) {
+        await logStockTransition(t);
       }
       return json(200, { changed });
     }
