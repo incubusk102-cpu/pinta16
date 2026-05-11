@@ -7,17 +7,17 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // WallPreview3D — "View on your wall".
 //
-// Canvhub uploads two photos per painting: the artwork itself and a
-// mockup with the painting in its real frame. This modal hangs that
-// second photo on a virtual wall at roughly life-size, with a 1.7m
-// human silhouette next to it for sense of scale. The frame and any
-// matting are part of the uploaded mockup, so the scene deliberately
-// renders the photo as a flat plane — no synthesised wooden border
-// on top — to avoid duplicating the frame the customer already sees.
+// Hangs the bare artwork (1st uploaded photo) on a virtual wall inside
+// the same beveled wooden frame used by PaintingViewer3D ("View in 3D"),
+// with a 1.7m human silhouette next to it for sense of scale. Sharing
+// the frame style keeps the two previews visually consistent: when a
+// customer flips between "View in 3D" and "On your wall" the painting
+// itself looks the same, only the surroundings change.
 //
 // World units are metres so the silhouette and painting share an
-// honest coordinate system. The wall is 4m wide × 3m tall — wide
-// enough to comfortably frame a sizeable mockup without clipping.
+// honest coordinate system. The wall is 6m wide × 3m tall — wide
+// enough to comfortably frame a sizeable canvas without clipping the
+// edges.
 //
 // The ~120 KB gz three.js + r3f + drei runtime is shared with the
 // existing PaintingViewer3D, so a customer who's already opened the
@@ -29,9 +29,10 @@ interface WallPreview3DProps {
   onClose: () => void;
 }
 
-// Width of the painting on the wall, in metres. Tuned so a 4:3
-// landscape mockup reads as a comfortably hangable piece next to the
-// 1.7m human silhouette without looking either dinky or oversized.
+// Comfortable real-world wall-plane size for the painting, in metres.
+// Tuned so a 4:3 landscape canvas reads as a comfortably hangable
+// piece next to the 1.7m human silhouette without looking either
+// dinky or oversized.
 const DEFAULT_WIDTH_M = 0.9;
 const MIN_WIDTH_M = 0.4;
 const MAX_WIDTH_M = 1.6;
@@ -44,6 +45,17 @@ const MAX_HEIGHT_M = 1.8;
 // share visual space.
 const PAINTING_CENTRE_Y_M = 1.5;
 
+// Frame and canvas tuning, mirroring PaintingViewer3D. Proportional
+// to the painting's longest edge so a small canvas gets a slim frame
+// and a wall-sized canvas gets a substantial one (~5cm on a 1m
+// painting; ~10cm on a 2m painting).
+const CANVAS_DEPTH_M = 0.05;
+const FRAME_THICKNESS_RATIO = 0.18 / 4; // 0.045
+const FRAME_DEPTH_RATIO = 0.22 / 4; // 0.055
+const FRAME_WOOD_COLOR = "#3a2618";
+const CANVAS_BACK_COLOR = "#f5f3ee";
+const FRAME_BACK_COLOR = "#1c1c1c";
+
 interface PaintingOnWallProps {
   imageUrl: string;
   widthM: number;
@@ -53,14 +65,92 @@ interface PaintingOnWallProps {
 function PaintingOnWall({ imageUrl, widthM, heightM }: PaintingOnWallProps) {
   const texture = useLoader(TextureLoader, imageUrl);
 
+  // Frame proportions scale with the longest edge so a 30 cm sketch
+  // and a 160 cm statement piece both wear honest frames.
+  const longSide = Math.max(widthM, heightM);
+  const frameThickness = longSide * FRAME_THICKNESS_RATIO;
+  const frameDepth = longSide * FRAME_DEPTH_RATIO;
+
   return (
     <group position={[0, PAINTING_CENTRE_Y_M, 0]}>
-      {/* The uploaded mockup is rendered as a single flat plane on
-          the wall. The frame in the photo IS the frame on the wall —
-          we deliberately do not draw a wooden border around it. */}
-      <mesh position={[0, 0, 0.005]} castShadow receiveShadow>
-        <planeGeometry args={[widthM, heightM]} />
-        <meshStandardMaterial map={texture} roughness={0.7} metalness={0} />
+      {/* Painting (front-facing canvas). The texture sits on a thin
+          box so the side edges are visible from raking angles —
+          identical six-material layout to PaintingViewer3D. */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[widthM, heightM, CANVAS_DEPTH_M]} />
+        <meshStandardMaterial attach="material-0" color={CANVAS_BACK_COLOR} />
+        <meshStandardMaterial attach="material-1" color={CANVAS_BACK_COLOR} />
+        <meshStandardMaterial attach="material-2" color={CANVAS_BACK_COLOR} />
+        <meshStandardMaterial attach="material-3" color={CANVAS_BACK_COLOR} />
+        <meshStandardMaterial
+          attach="material-4"
+          map={texture}
+          roughness={0.65}
+          metalness={0}
+        />
+        <meshStandardMaterial attach="material-5" color={FRAME_BACK_COLOR} />
+      </mesh>
+
+      {/* Same four-rail wooden frame used by PaintingViewer3D. */}
+      <Frame
+        width={widthM}
+        height={heightM}
+        thickness={frameThickness}
+        depth={frameDepth}
+      />
+    </group>
+  );
+}
+
+interface FrameProps {
+  width: number;
+  height: number;
+  thickness: number;
+  depth: number;
+}
+
+function Frame({ width, height, thickness, depth }: FrameProps) {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const railLength = (longest: number) => longest + thickness * 2;
+
+  return (
+    <group>
+      {/* Top rail */}
+      <mesh position={[0, halfH + thickness / 2, 0]} castShadow>
+        <boxGeometry args={[railLength(width), thickness, depth]} />
+        <meshStandardMaterial
+          color={FRAME_WOOD_COLOR}
+          roughness={0.55}
+          metalness={0.1}
+        />
+      </mesh>
+      {/* Bottom rail */}
+      <mesh position={[0, -halfH - thickness / 2, 0]} castShadow>
+        <boxGeometry args={[railLength(width), thickness, depth]} />
+        <meshStandardMaterial
+          color={FRAME_WOOD_COLOR}
+          roughness={0.55}
+          metalness={0.1}
+        />
+      </mesh>
+      {/* Left rail */}
+      <mesh position={[-halfW - thickness / 2, 0, 0]} castShadow>
+        <boxGeometry args={[thickness, height, depth]} />
+        <meshStandardMaterial
+          color={FRAME_WOOD_COLOR}
+          roughness={0.55}
+          metalness={0.1}
+        />
+      </mesh>
+      {/* Right rail */}
+      <mesh position={[halfW + thickness / 2, 0, 0]} castShadow>
+        <boxGeometry args={[thickness, height, depth]} />
+        <meshStandardMaterial
+          color={FRAME_WOOD_COLOR}
+          roughness={0.55}
+          metalness={0.1}
+        />
       </mesh>
     </group>
   );
@@ -124,11 +214,11 @@ function HumanScale({ show, paintingWidthM }: HumanScaleProps) {
   );
 }
 
-// Probe the natural aspect ratio of the mockup image before mounting
-// the three.js scene so we can size the wall plane to match the
-// uploaded photo exactly. Falls back to 4:3 (landscape) for the brief
-// window between mount and decode, which is the most common mockup
-// shape and reads naturally for both portrait and landscape art.
+// Probe the natural aspect ratio of the artwork before mounting the
+// three.js scene so we can size the wall plane to match the uploaded
+// photo. Falls back to 4:3 (landscape) for the brief window between
+// mount and decode, which is the most common shape and reads
+// naturally for both portrait and landscape art.
 function useImageAspect(imageUrl: string): number {
   const [aspect, setAspect] = useState<number>(4 / 3);
 
