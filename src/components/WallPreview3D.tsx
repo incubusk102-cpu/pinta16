@@ -1,77 +1,42 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { TextureLoader } from "three";
-import {
-  X,
-  Loader2,
-  RotateCcw,
-  Copy,
-  Check,
-  Ruler,
-  Users,
-  UserMinus,
-  ShoppingBag,
-} from "lucide-react";
+import { X, Loader2, RotateCcw, Users, UserMinus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
-import {
-  SIZE_PRESETS,
-  type SizePreset,
-  type PaintingSizeCm,
-  formatSize,
-  formatSizeInches,
-  defaultPresetFor,
-} from "@/lib/painting-sizes";
 
-// WallPreview3D — "View on your wall" for made-to-order paintings.
+// WallPreview3D — "View on your wall".
 //
-// Canvhub paints to order, so the size IS part of the order. This
-// modal lets the customer pick a size from a small preset palette
-// (S/M/L/XL/XXL) and see the painting hanging on a virtual wall at
-// real-world scale, with a 1.7m human silhouette next to it for
-// "is that the right size for my hallway?" comparison.
+// Canvhub uploads two photos per painting: the artwork itself and a
+// mockup with the painting in its real frame. This modal hangs that
+// second photo on a virtual wall at roughly life-size, with a 1.7m
+// human silhouette next to it for sense of scale. The frame and any
+// matting are part of the uploaded mockup, so the scene deliberately
+// renders the photo as a flat plane — no synthesised wooden border
+// on top — to avoid duplicating the frame the customer already sees.
 //
 // World units are metres so the silhouette and painting share an
 // honest coordinate system. The wall is 4m wide × 3m tall — wide
-// enough to comfortably frame the largest XXL canvas (1.2m × 1.6m)
-// without clipping the edges.
+// enough to comfortably frame a sizeable mockup without clipping.
 //
 // The ~120 KB gz three.js + r3f + drei runtime is shared with the
 // existing PaintingViewer3D, so a customer who's already opened the
 // 3D viewer pays no additional bundle cost when opening this one.
-//
-// Native AR (model-viewer + .glb / .usdz Quick Look) is intentionally
-// deferred to a follow-up — generating per-product GLB dynamically
-// in Cloudflare Workers needs its own pipeline and that's a larger
-// architectural decision than this preview-only PR is scoped for.
 
 interface WallPreview3DProps {
   imageUrl: string;
   title: string;
-  dimensions?: string;
   onClose: () => void;
-  /**
-   * Pre-select a size in the preset palette — used when the modal is
-   * re-opened from the product page to edit a size already on a cart
-   * line. When omitted the modal falls through to `defaultPresetFor`
-   * with the product's free-form dimensions hint.
-   */
-  initialSizeCm?: PaintingSizeCm;
-  /**
-   * Optional confirm-and-add-to-cart callback. When provided, the
-   * panel renders a primary "Add to cart at this size" button next to
-   * the existing "Copy for checkout notes" affordance and invokes
-   * this with the picked size. The modal closes on confirm so the
-   * cart drawer can take over.
-   */
-  onConfirmSize?: (size: PaintingSizeCm) => void;
-  /** Label override for the confirm button (e.g. "Update size"). */
-  confirmLabel?: string;
 }
 
-const CM_PER_M = 100;
-const HUMAN_HEIGHT_M = 1.7;
+// Width of the painting on the wall, in metres. Tuned so a 4:3
+// landscape mockup reads as a comfortably hangable piece next to the
+// 1.7m human silhouette without looking either dinky or oversized.
+const DEFAULT_WIDTH_M = 0.9;
+const MIN_WIDTH_M = 0.4;
+const MAX_WIDTH_M = 1.6;
+const MIN_HEIGHT_M = 0.3;
+const MAX_HEIGHT_M = 1.8;
 
 // Y-position of the painting's centre, measured from the floor. A
 // real gallery hangs the centre at roughly eye-level (~1.5m); we use
@@ -87,106 +52,15 @@ interface PaintingOnWallProps {
 
 function PaintingOnWall({ imageUrl, widthM, heightM }: PaintingOnWallProps) {
   const texture = useLoader(TextureLoader, imageUrl);
-  const aspect = useMemo(() => {
-    const w = texture.image?.naturalWidth || texture.image?.width || 4;
-    const h = texture.image?.naturalHeight || texture.image?.height || 3;
-    return w / h;
-  }, [texture]);
-
-  // The customer picked a *canvas* size (e.g. 60×90 cm), but the
-  // painting's natural aspect ratio may not match that frame. Letterbox
-  // the painted region inside the canvas so the artwork is never
-  // squished, and the surrounding canvas shows the unpainted neutral
-  // off-white you'd see on the side of a real stretched canvas.
-  const frameAspect = widthM / heightM;
-  let paintedW = widthM;
-  let paintedH = heightM;
-  if (aspect > frameAspect) {
-    paintedH = widthM / aspect;
-  } else {
-    paintedW = heightM * aspect;
-  }
-
-  const canvasDepth = 0.04;
-  const frameThicknessM = 0.04;
-  const frameDepthM = 0.05;
 
   return (
     <group position={[0, PAINTING_CENTRE_Y_M, 0]}>
-      {/* Stretched canvas backing — neutral off-white, slightly
-          thicker than the painted layer so the side of the canvas
-          shows when the customer rotates the view. */}
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[widthM, heightM, canvasDepth]} />
-        <meshStandardMaterial color="#f5f3ee" roughness={0.85} />
-      </mesh>
-
-      {/* Painted region — sits a hair proud of the canvas so there's
-          no z-fight, and inherits the painting's natural aspect. */}
-      <mesh position={[0, 0, canvasDepth / 2 + 0.001]}>
-        <planeGeometry args={[paintedW, paintedH]} />
+      {/* The uploaded mockup is rendered as a single flat plane on
+          the wall. The frame in the photo IS the frame on the wall —
+          we deliberately do not draw a wooden border around it. */}
+      <mesh position={[0, 0, 0.005]} castShadow receiveShadow>
+        <planeGeometry args={[widthM, heightM]} />
         <meshStandardMaterial map={texture} roughness={0.7} metalness={0} />
-      </mesh>
-
-      {/* Slim dark frame, kept understated so the customer's eye
-          stays on the painting. Four box rails, same trick as
-          PaintingViewer3D's frame. */}
-      <Frame
-        width={widthM}
-        height={heightM}
-        thickness={frameThicknessM}
-        depth={frameDepthM}
-      />
-    </group>
-  );
-}
-
-interface FrameProps {
-  width: number;
-  height: number;
-  thickness: number;
-  depth: number;
-}
-
-function Frame({ width, height, thickness, depth }: FrameProps) {
-  const halfW = width / 2;
-  const halfH = height / 2;
-  const railLength = (longest: number) => longest + thickness * 2;
-  const woodColor = "#2a1d12";
-
-  return (
-    <group position={[0, 0, depth / 2]}>
-      <mesh position={[0, halfH + thickness / 2, 0]} castShadow>
-        <boxGeometry args={[railLength(width), thickness, depth]} />
-        <meshStandardMaterial
-          color={woodColor}
-          roughness={0.55}
-          metalness={0.05}
-        />
-      </mesh>
-      <mesh position={[0, -halfH - thickness / 2, 0]} castShadow>
-        <boxGeometry args={[railLength(width), thickness, depth]} />
-        <meshStandardMaterial
-          color={woodColor}
-          roughness={0.55}
-          metalness={0.05}
-        />
-      </mesh>
-      <mesh position={[-halfW - thickness / 2, 0, 0]} castShadow>
-        <boxGeometry args={[thickness, height, depth]} />
-        <meshStandardMaterial
-          color={woodColor}
-          roughness={0.55}
-          metalness={0.05}
-        />
-      </mesh>
-      <mesh position={[halfW + thickness / 2, 0, 0]} castShadow>
-        <boxGeometry args={[thickness, height, depth]} />
-        <meshStandardMaterial
-          color={woodColor}
-          roughness={0.55}
-          metalness={0.05}
-        />
       </mesh>
     </group>
   );
@@ -250,14 +124,37 @@ function HumanScale({ show, paintingWidthM }: HumanScaleProps) {
   );
 }
 
+// Probe the natural aspect ratio of the mockup image before mounting
+// the three.js scene so we can size the wall plane to match the
+// uploaded photo exactly. Falls back to 4:3 (landscape) for the brief
+// window between mount and decode, which is the most common mockup
+// shape and reads naturally for both portrait and landscape art.
+function useImageAspect(imageUrl: string): number {
+  const [aspect, setAspect] = useState<number>(4 / 3);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !imageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (w > 0 && h > 0) setAspect(w / h);
+    };
+    img.src = imageUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
+
+  return aspect;
+}
+
 export default function WallPreview3D({
   imageUrl,
   title,
-  dimensions,
   onClose,
-  initialSizeCm,
-  onConfirmSize,
-  confirmLabel,
 }: WallPreview3DProps) {
   // Honour `prefers-reduced-motion`: opt-outs get a fully manual
   // camera, no auto-rotation. Read once via useState's initializer
@@ -268,21 +165,26 @@ export default function WallPreview3D({
   });
   const [resetKey, setResetKey] = useState(0);
   const [showHuman, setShowHuman] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [selected, setSelected] = useState<SizePreset>(() => {
-    if (initialSizeCm) {
-      const matching = SIZE_PRESETS.find(
-        (p) =>
-          p.widthCm === initialSizeCm.widthCm &&
-          p.heightCm === initialSizeCm.heightCm,
-      );
-      if (matching) return matching;
-    }
-    return defaultPresetFor(dimensions);
-  });
+  const aspect = useImageAspect(imageUrl);
 
-  const widthM = selected.widthCm / CM_PER_M;
-  const heightM = selected.heightCm / CM_PER_M;
+  // Pick a comfortable wall-plane size from the image's own aspect
+  // ratio. Landscape mockups widen up to MAX_WIDTH_M and clamp height;
+  // portrait mockups clamp height first and let width fall out of it.
+  const { widthM, heightM } = useMemo(() => {
+    let w = DEFAULT_WIDTH_M;
+    let h = DEFAULT_WIDTH_M / aspect;
+    if (h > MAX_HEIGHT_M) {
+      h = MAX_HEIGHT_M;
+      w = h * aspect;
+    }
+    if (w > MAX_WIDTH_M) {
+      w = MAX_WIDTH_M;
+      h = w / aspect;
+    }
+    if (w < MIN_WIDTH_M) w = MIN_WIDTH_M;
+    if (h < MIN_HEIGHT_M) h = MIN_HEIGHT_M;
+    return { widthM: w, heightM: h };
+  }, [aspect]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -292,27 +194,9 @@ export default function WallPreview3D({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const copySize = useCallback(() => {
-    const text = `Size: ${formatSize(selected)} (${formatSizeInches(selected)})`;
-    if (typeof navigator === "undefined" || !navigator.clipboard) {
-      toast.error("Clipboard not available — please type the size manually.");
-      return;
-    }
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setCopied(true);
-        toast.success("Size copied — paste it into your checkout notes.");
-        window.setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => {
-        toast.error("Couldn't copy — please type the size manually.");
-      });
-  }, [selected]);
-
   // Frame the painting tightly: camera distance scales with the
-  // painting's longest edge so XXL doesn't clip and S isn't lost
-  // in the middle of a vast wall.
+  // painting's longest edge so larger pieces don't clip and smaller
+  // ones aren't lost in the middle of a vast wall.
   const cameraZ = Math.max(2.8, Math.max(widthM, heightM) * 2 + 1.4);
   const humanCaption = showHuman
     ? "Person shown is 1.7 m (5′7″) tall"
@@ -335,7 +219,7 @@ export default function WallPreview3D({
               {title}
             </p>
             <p className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground mt-0.5">
-              View on your wall · made to order
+              View on your wall
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -429,80 +313,6 @@ export default function WallPreview3D({
           <p className="absolute bottom-4 left-1/2 -translate-x-1/2 font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground pointer-events-none select-none px-3 text-center max-w-[90%]">
             {humanCaption}
           </p>
-        </div>
-
-        <div className="border-t border-border/30 p-4 sm:p-5 bg-background/80 backdrop-blur-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <Ruler className="w-3.5 h-3.5 text-muted-foreground" />
-            <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
-              Pick your size — painted to order
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {SIZE_PRESETS.map((preset) => {
-              const isActive =
-                preset.widthCm === selected.widthCm &&
-                preset.heightCm === selected.heightCm;
-              return (
-                <button
-                  key={preset.label}
-                  type="button"
-                  onClick={() => setSelected(preset)}
-                  aria-pressed={isActive}
-                  className={
-                    "flex flex-col items-center justify-center px-4 py-2.5 rounded-sm border transition-colors min-w-[80px] " +
-                    (isActive
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-background/60 text-foreground border-border/60 hover:bg-accent/30")
-                  }
-                >
-                  <span className="font-display text-sm leading-none">
-                    {preset.label}
-                  </span>
-                  <span className="font-body text-[10px] tracking-wider mt-1 opacity-80">
-                    {preset.caption}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p className="font-body text-xs sm:text-sm text-muted-foreground">
-              Selected:{" "}
-              <span className="text-foreground">{formatSize(selected)}</span>{" "}
-              <span className="opacity-60">({formatSizeInches(selected)})</span>
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2 self-start sm:self-auto">
-              {onConfirmSize ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onConfirmSize({
-                      widthCm: selected.widthCm,
-                      heightCm: selected.heightCm,
-                    });
-                    onClose();
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-sm bg-foreground text-background hover:bg-foreground/90 font-body text-[10px] tracking-[0.25em] uppercase"
-                >
-                  <ShoppingBag className="w-3.5 h-3.5" aria-hidden="true" />
-                  {confirmLabel ?? "Add to cart at this size"}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={copySize}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-sm border border-border/60 hover:bg-accent/30 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
-              >
-                {copied ? (
-                  <Check className="w-3.5 h-3.5" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
-                {copied ? "Copied" : "Copy for checkout notes"}
-              </button>
-            </div>
-          </div>
         </div>
       </motion.div>
     </AnimatePresence>
