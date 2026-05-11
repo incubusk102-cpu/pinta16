@@ -56,6 +56,7 @@ import { VisitorsSection } from "@/components/admin/VisitorsSection";
 import { SearchInsightsSection } from "@/components/admin/SearchInsightsSection";
 import { FunnelInsightsSection } from "@/components/admin/FunnelInsightsSection";
 import { NotificationLogSection } from "@/components/admin/NotificationLogSection";
+import { StockEventsSection } from "@/components/admin/StockEventsSection";
 import { ReviewsSection } from "@/components/admin/ReviewsSection";
 import { UsersSection } from "@/components/admin/UsersSection";
 import { CustomersSection } from "@/components/admin/CustomersSection";
@@ -81,6 +82,7 @@ import {
   ArrowLeft,
   Activity,
   Bell,
+  Boxes,
   Brush,
   CheckCircle2,
   ChevronLeft,
@@ -159,6 +161,7 @@ type AdminSection =
   | "searchInsights"
   | "funnel"
   | "notificationLog"
+  | "stockEvents"
   | "users"
   | "customers"
   | "marketing"
@@ -188,6 +191,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   searchInsights: "Search insights",
   funnel: "Funnel & traffic",
   notificationLog: "Notification log",
+  stockEvents: "Stock events",
   users: "Users",
   customers: "Customers",
   marketing: "Marketing",
@@ -530,6 +534,11 @@ const NAV_GROUPS: {
         hint: "Revenue & metrics",
       },
       { key: "products", icon: <Upload className="w-4 h-4" /> },
+      {
+        key: "stockEvents",
+        icon: <Boxes className="w-4 h-4" />,
+        hint: "Inventory & low-stock alerts",
+      },
       {
         key: "orders",
         icon: <Package className="w-4 h-4" />,
@@ -1182,6 +1191,7 @@ function AdminDashboard() {
           {section === "searchInsights" && <SearchInsightsSection />}
           {section === "funnel" && <FunnelInsightsSection />}
           {section === "notificationLog" && <NotificationLogSection />}
+          {section === "stockEvents" && <StockEventsSection />}
           {section === "users" && <UsersSection />}
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}
