@@ -340,12 +340,11 @@ function ProductPage() {
   const effectivePrice = getEffectivePrice(artwork);
   const galleryImages =
     artwork.images.length > 0 ? artwork.images : [{ url: artwork.image }];
-  // "View on your wall" should render the uploaded mockup photo
-  // (typically the 2nd upload — the painting hung on a wall in its
-  // real frame) rather than the bare artwork shot. Falls back to the
-  // 1st image when the artist only uploaded one photo.
-  const wallImage =
-    galleryImages.length >= 2 ? galleryImages[1] : galleryImages[0];
+  // "View on your wall" renders the bare artwork (1st uploaded photo)
+  // inside the same wooden frame used by PaintingViewer3D. The button
+  // only surfaces while the 1st photo is the active gallery tile, so
+  // this directly matches what the customer is looking at.
+  const wallImage = galleryImages[0];
   // Optional studio video shows up as a leading "play" tile in the
   // thumbnail strip and switches the hero slot from `<img>` to
   // `<video controls>` when selected. We resolve the artwork-level
@@ -509,12 +508,12 @@ function ProductPage() {
               )}
               {!isVideoActive && (
                 <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                  {/* "On your wall" hangs the 2nd uploaded photo (the
-                      framed mockup) on the virtual wall, so it's only
-                      meaningful while that photo is the active gallery
-                      tile. Hide it on the bare artwork shot (1st photo)
-                      and on any additional uploads. */}
-                  {imageIndexForTile(activeImage) === 1 && (
+                  {/* "On your wall" hangs the bare artwork (1st photo)
+                      inside a virtual frame on a virtual wall, so it's
+                      only meaningful while the 1st photo is active.
+                      Hide it on any additional uploads (mockups, detail
+                      shots) and on the studio-video tile. */}
+                  {imageIndexForTile(activeImage) === 0 && (
                     <button
                       type="button"
                       onClick={() => setViewOnWall(true)}
