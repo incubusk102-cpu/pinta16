@@ -2553,8 +2553,9 @@ export function StorefrontSection() {
               live product catalogue. If the model can't answer
               confidently, or the customer asks for a human, the thread
               shows up here with a "needs you" badge instead. Requires a
-              free GROQ_API_KEY in the Cloudflare Pages env vars (see
-              README "Configuring environment variables"). */}
+              free GROQ_TOKEN (or GROQ_API_KEY) in the Cloudflare Pages
+              env vars (see README "Configuring environment
+              variables"). */}
           <div className="rounded-md bg-background/40 border border-border/40 p-3 space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -2567,7 +2568,8 @@ export function StorefrontSection() {
                 <p className="text-xs text-muted-foreground">
                   Free Groq Llama 3.3 70B answers customer chat messages using
                   your FAQs + product catalogue. Needs{" "}
-                  <code className="text-[11px]">GROQ_API_KEY</code> in Pages
+                  <code className="text-[11px]">GROQ_TOKEN</code> (or{" "}
+                  <code className="text-[11px]">GROQ_API_KEY</code>) in Pages
                   env.
                 </p>
               </div>

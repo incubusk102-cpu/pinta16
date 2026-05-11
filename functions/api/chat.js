@@ -16,7 +16,8 @@
 // token. Audit log gets `chat.message` events.
 //
 // AI auto-reply (optional): when `chat.ai.enabled` is true in
-// storefront-config and `GROQ_API_KEY` is set in the Pages env, customer
+// storefront-config and `GROQ_TOKEN` (or `GROQ_API_KEY`) is set in the
+// Pages env, customer
 // messages that don't match an admin recently-active thread will trigger
 // a Groq-backed reply, appended as `from: "ai"`. The path is best-effort
 // — any failure or timeout silently degrades to "no auto-reply" and the

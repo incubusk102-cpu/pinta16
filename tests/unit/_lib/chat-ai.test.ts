@@ -264,6 +264,64 @@ describe("generateAutoReply", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("accepts GROQ_TOKEN as a fallback for GROQ_API_KEY", async () => {
+    // canvhub's Cloudflare Pages env uses `GROQ_TOKEN`, not
+    // `GROQ_API_KEY`. The helper should accept either name and send the
+    // value through unchanged as the bearer token.
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          choices: [
+            { message: { content: "Sure, all paintings are originals." } },
+          ],
+        };
+      },
+    });
+    const thread = baseThread([
+      { from: "customer", body: "are these paintings originals?" },
+    ]);
+    const out = await generateAutoReply({
+      env: { GROQ_TOKEN: "token-from-pages" },
+      thread,
+      customerMessage: "are these paintings originals?",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    expect(out.kind).toBe("reply");
+    expect(out.source).toBe("groq");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(
+      (init as { headers: Record<string, string> }).headers.Authorization,
+    ).toBe("Bearer token-from-pages");
+  });
+
+  it("prefers GROQ_API_KEY over GROQ_TOKEN when both are present", async () => {
+    // If an admin sets both for any reason, the explicit API_KEY name
+    // wins — mirrors how Groq's own SDK documents the variable.
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      async json() {
+        return { choices: [{ message: { content: "Hi there!" } }] };
+      },
+    });
+    const thread = baseThread([{ from: "customer", body: "hi" }]);
+    await generateAutoReply({
+      env: { GROQ_API_KEY: "primary-key", GROQ_TOKEN: "fallback-key" },
+      thread,
+      customerMessage: "random non-faq question",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(
+      (init as { headers: Record<string, string> }).headers.Authorization,
+    ).toBe("Bearer primary-key");
+  });
+
   it("calls Groq and returns the model reply when no FAQ matches", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
