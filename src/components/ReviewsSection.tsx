@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Star, X } from "lucide-react";
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { Star } from "lucide-react";
 import SectionReveal from "@/components/motion/SectionReveal";
 import SplitText from "@/components/motion/SplitText";
+import ReviewPhotoLightbox, {
+  type ReviewPhotoView,
+} from "@/components/ReviewPhotoLightbox";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { usePublishedReviews } from "@/hooks/usePublishedReviews";
-import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 const formatRelativeDate = (iso: string): string => {
   const d = new Date(iso);
@@ -38,47 +40,10 @@ const ReviewsSection = () => {
   const { reviews, loading } = usePublishedReviews();
 
   // Lightbox state. Holds the gallery (review photos for one review)
-  // and the currently-shown index within it. Null = closed.
-  const [photoView, setPhotoView] = useState<{
-    images: string[];
-    index: number;
-  } | null>(null);
-  const closeViewer = useCallback(() => setPhotoView(null), []);
-  const showPrev = useCallback(
-    () =>
-      setPhotoView((p) =>
-        p
-          ? {
-              ...p,
-              index: p.index === 0 ? p.images.length - 1 : p.index - 1,
-            }
-          : p,
-      ),
-    [],
-  );
-  const showNext = useCallback(
-    () =>
-      setPhotoView((p) =>
-        p
-          ? {
-              ...p,
-              index: p.index === p.images.length - 1 ? 0 : p.index + 1,
-            }
-          : p,
-      ),
-    [],
-  );
-  useBodyScrollLock(photoView !== null);
-  useEffect(() => {
-    if (!photoView) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeViewer();
-      else if (e.key === "ArrowLeft") showPrev();
-      else if (e.key === "ArrowRight") showNext();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [photoView, closeViewer, showPrev, showNext]);
+  // and the currently-shown index within it. Null = closed. The
+  // viewer itself lives in <ReviewPhotoLightbox /> so the same
+  // GPU-safe rendering is used on the product page too.
+  const [photoView, setPhotoView] = useState<ReviewPhotoView | null>(null);
 
   if (loading || reviews.length === 0) return null;
 
@@ -192,82 +157,7 @@ const ReviewsSection = () => {
         ))}
       </div>
 
-      <AnimatePresence>
-        {photoView && (
-          <motion.div
-            key="review-photo-viewer"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            // Solid background, no backdrop-filter. backdrop-blur on a
-            // fullscreen overlay over a large image is GPU-heavy enough
-            // to crash mobile Chrome on lower-spec devices, so we stay
-            // cheap and opaque here.
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/95"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Review photo viewer"
-            onClick={closeViewer}
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeViewer();
-              }}
-              aria-label="Close photo viewer"
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {photoView.images.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    showPrev();
-                  }}
-                  aria-label="Previous photo"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    showNext();
-                  }}
-                  aria-label="Next photo"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-                <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] tracking-[0.3em] uppercase text-white/80">
-                  {photoView.index + 1} / {photoView.images.length}
-                </p>
-              </>
-            )}
-
-            {/* Plain <img>, not motion.img. The framer-motion scaling
-                animation on a 2000×2000 decoded photo can blow past the
-                GPU memory budget on phones and crash the tab. The
-                overlay's own fade is enough motion. */}
-            <img
-              key={photoView.images[photoView.index]}
-              src={photoView.images[photoView.index]}
-              alt={`Review photo ${photoView.index + 1}`}
-              onClick={(e) => e.stopPropagation()}
-              draggable={false}
-              decoding="async"
-              className="max-h-[90vh] max-w-[92vw] object-contain rounded-md shadow-2xl select-none"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </SectionReveal>
   );
 };
