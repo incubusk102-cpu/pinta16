@@ -509,16 +509,23 @@ function ProductPage() {
               )}
               {!isVideoActive && (
                 <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewOnWall(true)}
-                    aria-label="View painting on your wall"
-                    title="View on your wall"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
-                  >
-                    <Frame className="w-4 h-4" />
-                    <span className="hidden sm:inline">On your wall</span>
-                  </button>
+                  {/* "On your wall" hangs the 2nd uploaded photo (the
+                      framed mockup) on the virtual wall, so it's only
+                      meaningful while that photo is the active gallery
+                      tile. Hide it on the bare artwork shot (1st photo)
+                      and on any additional uploads. */}
+                  {imageIndexForTile(activeImage) === 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setViewOnWall(true)}
+                      aria-label="View painting on your wall"
+                      title="View on your wall"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+                    >
+                      <Frame className="w-4 h-4" />
+                      <span className="hidden sm:inline">On your wall</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setView3d(true)}
