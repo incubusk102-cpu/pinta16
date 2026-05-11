@@ -13,6 +13,18 @@
 
 import { getStore } from "./kv-stores.js";
 import { getVapidEnv, isWebPushConfigured, sendPush } from "./web-push.js";
+import { recordNotification } from "./d1.js";
+
+// Fire-and-forget D1 logger. Never throws, never blocks the push send.
+// Mirror of the helper in `email.js` — see the comment there for the
+// design rationale.
+const logNotification = (channel, kind, recipient, orderId, result) => {
+  try {
+    void recordNotification({ channel, kind, recipient, orderId, result });
+  } catch {
+    /* swallow — logging must never break the send path */
+  }
+};
 
 const SUBS_KEY = (email) => `push:sub:${email}`;
 // Per-customer topic preferences. Stored alongside SUBS_KEY in the same
@@ -376,76 +388,96 @@ const pruneExpired = async (store, email, expiredEndpoints) => {
 // Send an order-status push to all subscriptions registered against the
 // order's customer email. Returns a summary; never throws — so callers can
 // safely fire-and-forget alongside email.
-export const sendOrderPush = async ({ kind, order, extra }) => {
-  if (!ORDER_PUSH_KINDS.includes(kind)) {
-    return { delivered: false, skipped: true, reason: "unknown kind" };
-  }
+export const sendOrderPush = async ({ kind, order, extra, _test = false }) => {
+  // Compute the result in a nested helper so every early-return path
+  // flows through a single logNotification call at the bottom. The
+  // `kind` argument may be a non-allowed string when the caller is a
+  // refactor probe; we still log it because the operator wants to see
+  // the typo in the panel.
   const recipient = normalizeEmail(order?.orderInfo?.email);
-  if (!recipient) {
-    return { delivered: false, skipped: true, reason: "no recipient" };
-  }
-  if (!isWebPushConfigured()) {
+  const compute = async () => {
+    if (!ORDER_PUSH_KINDS.includes(kind)) {
+      return { delivered: false, skipped: true, reason: "unknown kind" };
+    }
+    if (!recipient) {
+      return { delivered: false, skipped: true, reason: "no recipient" };
+    }
+    if (!isWebPushConfigured()) {
+      return {
+        delivered: false,
+        skipped: true,
+        reason: "vapid not configured",
+      };
+    }
+    const cfg = (await loadOrderPushConfig()) || DEFAULT_ORDER_PUSH;
+    if (cfg.enabled === false) {
+      return { delivered: false, skipped: true, reason: "disabled" };
+    }
+    const kindCfg = cfg.kinds?.[kind] || DEFAULT_ORDER_PUSH.kinds[kind];
+    if (kindCfg.enabled === false) {
+      return { delivered: false, skipped: true, reason: "kind disabled" };
+    }
+    // Customer-side opt-out. The admin has already approved the kind
+    // globally; the shopper gets a second veto from /account so they can
+    // mute e.g. production_photo without unsubscribing the device.
+    const prefs = await getOrderPushPrefs(recipient);
+    if (prefs.kinds[kind] === false) {
+      return { delivered: false, skipped: true, reason: "muted by recipient" };
+    }
+    const store = getStore("users");
+    const subs = await readSubs(store, recipient);
+    if (subs.length === 0) {
+      return {
+        delivered: false,
+        skipped: true,
+        reason: "no subscriptions",
+        provider: "webpush",
+      };
+    }
+    const vapid = getVapidEnv();
+    const payload = JSON.stringify(buildPushPayload(kind, order, extra, cfg));
+    const expired = [];
+    let okCount = 0;
+    for (const sub of subs) {
+      const res = await sendPush(sub, payload, vapid, { ttl: 86400 });
+      if (res.ok) okCount += 1;
+      else if (res.expired) expired.push(sub.endpoint);
+    }
+    if (expired.length) {
+      pruneExpired(store, recipient, expired).catch(() => {
+        /* swallow — we'll re-prune on next send */
+      });
+    }
+    if (okCount === 0) {
+      return {
+        delivered: false,
+        provider: "webpush",
+        reason: "all targets failed or expired",
+        attempted: subs.length,
+        expired: expired.length,
+      };
+    }
     return {
-      delivered: false,
-      skipped: true,
-      reason: "vapid not configured",
-    };
-  }
-  const cfg = (await loadOrderPushConfig()) || DEFAULT_ORDER_PUSH;
-  if (cfg.enabled === false) {
-    return { delivered: false, skipped: true, reason: "disabled" };
-  }
-  const kindCfg = cfg.kinds?.[kind] || DEFAULT_ORDER_PUSH.kinds[kind];
-  if (kindCfg.enabled === false) {
-    return { delivered: false, skipped: true, reason: "kind disabled" };
-  }
-  // Customer-side opt-out. The admin has already approved the kind
-  // globally; the shopper gets a second veto from /account so they can
-  // mute e.g. production_photo without unsubscribing the device.
-  const prefs = await getOrderPushPrefs(recipient);
-  if (prefs.kinds[kind] === false) {
-    return { delivered: false, skipped: true, reason: "muted by recipient" };
-  }
-  const store = getStore("users");
-  const subs = await readSubs(store, recipient);
-  if (subs.length === 0) {
-    return {
-      delivered: false,
-      skipped: true,
-      reason: "no subscriptions",
+      delivered: true,
       provider: "webpush",
-    };
-  }
-  const vapid = getVapidEnv();
-  const payload = JSON.stringify(buildPushPayload(kind, order, extra, cfg));
-  const expired = [];
-  let okCount = 0;
-  for (const sub of subs) {
-    const res = await sendPush(sub, payload, vapid, { ttl: 86400 });
-    if (res.ok) okCount += 1;
-    else if (res.expired) expired.push(sub.endpoint);
-  }
-  if (expired.length) {
-    pruneExpired(store, recipient, expired).catch(() => {
-      /* swallow — we'll re-prune on next send */
-    });
-  }
-  if (okCount === 0) {
-    return {
-      delivered: false,
-      provider: "webpush",
-      reason: "all targets failed or expired",
       attempted: subs.length,
+      successful: okCount,
       expired: expired.length,
     };
-  }
-  return {
-    delivered: true,
-    provider: "webpush",
-    attempted: subs.length,
-    successful: okCount,
-    expired: expired.length,
   };
+  const result = await compute();
+  // Skip the D1 log for operator preview sends (`sendOrderTestPush`) —
+  // those are previews to one's own inbox, not real customer traffic.
+  if (!_test) {
+    logNotification(
+      "push",
+      `order.${kind}`,
+      recipient || null,
+      order?.id || null,
+      result,
+    );
+  }
+  return result;
 };
 
 // Force-send a push to a single email so admins / opt-in flows can verify
@@ -464,7 +496,12 @@ export const sendOrderTestPush = async ({ email, kind, name }) => {
     shipment: { courier: "LBC", trackingNumber: "TEST-TRK-001" },
     refund: { amount: 1234, failureMessage: "" },
   };
-  return await sendOrderPush({ kind: safeKind, order: fakeOrder, extra: {} });
+  return await sendOrderPush({
+    kind: safeKind,
+    order: fakeOrder,
+    extra: {},
+    _test: true,
+  });
 };
 
 // Public-facing handle so the frontend can grab the VAPID public key without

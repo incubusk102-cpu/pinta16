@@ -178,4 +178,24 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_page_events_path ON page_events(path)`,
   `CREATE INDEX IF NOT EXISTS idx_page_events_session ON page_events(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_page_events_session_kind ON page_events(session_id, path_kind)`,
+
+  `CREATE TABLE IF NOT EXISTS notification_log (
+    id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    recipient TEXT,
+    order_id TEXT,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    skipped INTEGER NOT NULL DEFAULT 0,
+    provider TEXT,
+    reason TEXT,
+    attempted INTEGER,
+    successful INTEGER,
+    ts TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_notification_log_ts ON notification_log(ts)`,
+  `CREATE INDEX IF NOT EXISTS idx_notification_log_channel_kind ON notification_log(channel, kind)`,
+  `CREATE INDEX IF NOT EXISTS idx_notification_log_kind ON notification_log(kind)`,
+  `CREATE INDEX IF NOT EXISTS idx_notification_log_order ON notification_log(order_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_notification_log_recipient ON notification_log(recipient)`,
 ];

@@ -30,6 +30,7 @@
 
 import { getCloudflareEnv } from "./context.js";
 import { getStore } from "./kv-stores.js";
+import { recordNotification } from "./d1.js";
 import {
   DEFAULT_BRAND_LOGO_DATA_URI,
   FOOTER_ICON_DATA_URIS,
@@ -43,6 +44,18 @@ import {
 } from "../../../src/emails/render.ts";
 
 const envOf = (name) => getCloudflareEnv()[name] || "";
+
+// Fire-and-forget D1 logger. Never throws, never blocks the actual send.
+// The send wrappers below call this after the provider returns so the
+// admin Notification log panel has a single queryable view of every
+// outgoing message attempt across email + push.
+const logNotification = (channel, kind, recipient, orderId, result) => {
+  try {
+    void recordNotification({ channel, kind, recipient, orderId, result });
+  } catch {
+    /* swallow — logging must never break the send path */
+  }
+};
 
 // Match every <img …> tag whose src is a base64 data: URI for a
 // supported bitmap MIME. Captures: full src attribute (group 1),
@@ -689,7 +702,7 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
           },
         ]
       : undefined;
-  return await sendEmail({
+  const result = await sendEmail({
     to: recipient,
     subject: built.subject,
     html: built.html,
@@ -698,6 +711,8 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
     from: configFrom || undefined,
     attachments,
   });
+  logNotification("email", `order.${kind}`, recipient, order?.id, result);
+  return result;
 };
 
 /**
@@ -822,7 +837,7 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
       : cfgEmail
     : "";
 
-  return await sendEmail({
+  const result = await sendEmail({
     to: recipient,
     subject: built.subject,
     html: built.html,
@@ -830,6 +845,8 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
     purpose: "order",
     from: configFrom || undefined,
   });
+  logNotification("email", "admin.new-order", recipient, order?.id, result);
+  return result;
 };
 
 const renderTemplateString = (template, vars) =>
@@ -1683,10 +1700,12 @@ export const sendWelcomeEmail = async ({ welcome, user, override }) => {
   if (override?.subjectPrefix) {
     built.subject = `${override.subjectPrefix}${built.subject}`;
   }
-  return await sendEmail({
+  const result = await sendEmail({
     to: recipient,
     subject: built.subject,
     html: built.html,
     text: built.text,
   });
+  logNotification("email", "welcome", recipient, null, result);
+  return result;
 };
