@@ -22,6 +22,9 @@ import CheckoutForm from "@/components/CheckoutForm";
 import RelatedProducts from "@/components/RelatedProducts";
 import SimilarPaintingsRail from "@/components/SimilarPaintingsRail";
 import RecentlyViewed from "@/components/RecentlyViewed";
+import ReviewPhotoLightbox, {
+  type ReviewPhotoView,
+} from "@/components/ReviewPhotoLightbox";
 import ZoomableImage from "@/components/ZoomableImage";
 import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
@@ -932,6 +935,14 @@ function ProductReviews({
   loading: boolean;
   reviews: ProductReview[];
 }) {
+  // Lightbox state. Review photos are stored as base64 data URIs
+  // (~600 KB each). The previous implementation opened them as
+  // `<a href={dataUri} target="_blank">`, which on mobile Chrome
+  // OOMs the renderer process and looks to the customer like the
+  // browser tab just closed. Rendering the photo inside an in-page
+  // <ReviewPhotoLightbox /> avoids that — same GPU-safe pattern
+  // already used by the home-page reviews carousel.
+  const [photoView, setPhotoView] = useState<ReviewPhotoView | null>(null);
   if (loading) {
     return (
       <section className="mt-16 border-t border-border/40 pt-10">
@@ -1012,22 +1023,28 @@ function ProductReviews({
             </p>
             {r.images.length > 0 && (
               <div className="grid grid-cols-3 gap-2">
-                {r.images.slice(0, 3).map((src, j) => (
-                  <a
-                    key={j}
-                    href={src}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      src={src}
-                      alt={`Review photo ${j + 1}`}
-                      className="aspect-square w-full object-cover rounded-md border border-border/40"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
-                ))}
+                {r.images.slice(0, 3).map((src, j) => {
+                  const reviewImages = r.images.slice(0, 3);
+                  return (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() =>
+                        setPhotoView({ images: reviewImages, index: j })
+                      }
+                      aria-label={`Open review photo ${j + 1}`}
+                      className="block aspect-square w-full overflow-hidden rounded-md border border-border/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <img
+                        src={src}
+                        alt={`Review photo ${j + 1}`}
+                        className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-auto">
@@ -1037,6 +1054,7 @@ function ProductReviews({
           </article>
         ))}
       </div>
+      <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </section>
   );
 }
