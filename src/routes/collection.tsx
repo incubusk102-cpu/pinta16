@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import GallerySection from "@/components/GallerySection";
+import { useSEO } from "@/hooks/useSEO";
 
 // /collection is the dedicated browse page. The homepage was trimmed to
 // hero + dynamic carousels (marquee, daily feature, recommended,
@@ -40,6 +41,12 @@ export const Route = createFileRoute("/collection")({
 });
 
 function CollectionPage() {
+  useSEO({
+    title: "The Collection — Canvas Hub",
+    description:
+      "Every Canvas Hub painting in one place. Filter by category, price, and availability — each piece hand-crafted to order by Filipino artists.",
+    canonicalPath: "/collection",
+  });
   return (
     <div className="min-h-screen bg-background">
       <GalleryNav />

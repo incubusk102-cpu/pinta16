@@ -1,10 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import { useSEO } from "@/hooks/useSEO";
 
 const AdminPage = lazy(() => import("@/admin/AdminPage"));
 
 function AdminPageWithSuspense() {
+  useSEO({
+    title: "Admin — Canvas Hub",
+    description: "Upload and manage paintings in your gallery.",
+    canonicalPath: "/admin",
+    noindex: true,
+  });
   return (
     <Suspense
       fallback={

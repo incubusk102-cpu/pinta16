@@ -60,14 +60,23 @@ test.beforeEach(async ({ context }) => {
 });
 
 test.describe("public smoke", () => {
-  test("home page renders the hero heading", async ({ page }) => {
+  test("home page renders the hero heading and useSEO updates the document head", async ({
+    page,
+  }) => {
     const errors = collectConsoleErrors(page);
     await page.goto("/");
     // The route's head() metadata isn't applied client-side in SPA
-    // mode (TanStack Router only runs head() under Start/SSR), so
-    // we assert against in-page content rather than document.title.
+    // mode (TanStack Router only runs head() under Start/SSR). The
+    // `useSEO` hook in src/hooks/useSEO.ts mutates the document head
+    // on mount — assert it has set the homepage title (which is
+    // distinct from the static `index.html` fallback) and added a
+    // canonical link tag.
     const heading = page.locator("h1").first();
     await expect(heading).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveTitle(/Canvas Hub/, { timeout: 15_000 });
+    await expect(page).toHaveTitle(/Filipino/, { timeout: 15_000 });
+    const canonical = page.locator('link[rel="canonical"]').first();
+    await expect(canonical).toHaveAttribute("href", /canvhub\.com\/$/);
     expect(errors).toEqual([]);
   });
 

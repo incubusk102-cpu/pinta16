@@ -28,6 +28,13 @@
     />
     <meta name="twitter:image" content="https://canvhub.com/icon-512.png" />
 
+    <!-- Default canonical for the homepage. Per-route canonicals are
+         emitted by the `useSEO` hook in src/hooks/useSEO.ts and replace
+         this href as soon as the SPA mounts; the static href below is
+         what non-JS crawlers (e.g. social-link unfurlers) see when
+         fetching the bare HTML document. -->
+    <link rel="canonical" href="https://canvhub.com/" />
+
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#1c1c1c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

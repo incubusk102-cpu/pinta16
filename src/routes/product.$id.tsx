@@ -44,6 +44,7 @@ import {
   type Availability,
 } from "@/lib/artworks";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
+import { useSEO } from "@/hooks/useSEO";
 
 // 3D viewer ships ~120 KB gz of three.js + r3f + drei runtime, so
 // load it on-demand only when a customer taps "View in 3D". The
@@ -171,46 +172,22 @@ function ProductPage() {
     return { count: reviews.length, average: sum / reviews.length };
   }, [reviews]);
 
-  // Update document head dynamically with rich product metadata for sharing.
-  useEffect(() => {
-    if (!artwork || typeof document === "undefined") return;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/product/${artwork.id}`;
-    const desc =
-      artwork.description ||
-      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`;
-    const imageUrl = artwork.image.startsWith("http")
-      ? artwork.image
-      : `${origin}${artwork.image}`;
-
-    document.title = `${artwork.title} — Canvas Hub`;
-
-    const setMeta = (selector: string, attr: string, value: string) => {
-      let tag = document.querySelector<HTMLMetaElement>(selector);
-      if (!tag) {
-        tag = document.createElement("meta");
-        const [k, v] = selector
-          .replace(/^meta\[/, "")
-          .replace(/\]$/, "")
-          .split("=");
-        if (k && v) tag.setAttribute(k, v.replace(/['"]/g, ""));
-        document.head.appendChild(tag);
-      }
-      tag.setAttribute(attr, value);
-    };
-
-    setMeta('meta[name="description"]', "content", desc);
-    setMeta('meta[property="og:title"]', "content", artwork.title);
-    setMeta('meta[property="og:description"]', "content", desc);
-    setMeta('meta[property="og:type"]', "content", "product");
-    setMeta('meta[property="og:url"]', "content", url);
-    setMeta('meta[property="og:image"]', "content", imageUrl);
-    setMeta('meta[property="og:site_name"]', "content", "Canvas Hub");
-    setMeta('meta[name="twitter:card"]', "content", "summary_large_image");
-    setMeta('meta[name="twitter:title"]', "content", artwork.title);
-    setMeta('meta[name="twitter:description"]', "content", desc);
-    setMeta('meta[name="twitter:image"]', "content", imageUrl);
-  }, [artwork]);
+  // Compute SEO copy from the loaded artwork. Falls back to a generic
+  // "Painting — Canvas Hub" title while products are still loading, so a
+  // deep-linked product page never inherits the homepage's static title.
+  const productDescription = artwork
+    ? artwork.description ||
+      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`
+    : "View painting details, photos, and pricing on Canvas Hub.";
+  const productImage = artwork ? artwork.image : undefined;
+  useSEO({
+    title: artwork ? `${artwork.title} — Canvas Hub` : "Painting — Canvas Hub",
+    description: productDescription,
+    canonicalPath: `/product/${id}`,
+    ogType: "product",
+    image: productImage,
+    socialTitle: artwork?.title,
+  });
 
   const jsonLd = useMemo(() => {
     if (!artwork) return "{}";
@@ -228,6 +205,17 @@ function ProductPage() {
           ? "https://schema.org/PreOrder"
           : "https://schema.org/SoldOut";
 
+    // Google Merchant prefers a `priceValidUntil` on every offer; we use
+    // end-of-current-year so the field stays plausibly fresh without
+    // requiring per-product editorial input. Likewise, `shippingDetails`
+    // and `hasMerchantReturnPolicy` unlock the price-and-availability
+    // rich result; we expose the same nationwide shipping band the
+    // /policy/shipping page documents.
+    const endOfYear = new Date();
+    endOfYear.setMonth(11, 31);
+    endOfYear.setHours(23, 59, 59, 0);
+    const priceValidUntil = endOfYear.toISOString().slice(0, 10);
+
     const data: Record<string, unknown> = {
       "@context": "https://schema.org/",
       "@type": "Product",
@@ -237,14 +225,53 @@ function ProductPage() {
         `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`,
       image: imageUrls,
       sku: artwork.id,
+      mpn: artwork.id,
       brand: { "@type": "Brand", name: "Canvas Hub" },
       offers: {
         "@type": "Offer",
         url,
         priceCurrency: "PHP",
         price: getEffectivePrice(artwork),
+        priceValidUntil,
         availability,
         itemCondition: "https://schema.org/NewCondition",
+        seller: { "@type": "Organization", name: "Canvas Hub" },
+        shippingDetails: {
+          "@type": "OfferShippingDetails",
+          shippingDestination: {
+            "@type": "DefinedRegion",
+            addressCountry: "PH",
+          },
+          shippingRate: {
+            "@type": "MonetaryAmount",
+            currency: "PHP",
+            value: "0",
+          },
+          deliveryTime: {
+            "@type": "ShippingDeliveryTime",
+            handlingTime: {
+              "@type": "QuantitativeValue",
+              minValue: 7,
+              maxValue: 21,
+              unitCode: "DAY",
+            },
+            transitTime: {
+              "@type": "QuantitativeValue",
+              minValue: 2,
+              maxValue: 7,
+              unitCode: "DAY",
+            },
+          },
+        },
+        hasMerchantReturnPolicy: {
+          "@type": "MerchantReturnPolicy",
+          applicableCountry: "PH",
+          returnPolicyCategory:
+            "https://schema.org/MerchantReturnFiniteReturnWindow",
+          merchantReturnDays: 7,
+          returnMethod: "https://schema.org/ReturnByMail",
+          returnFees: "https://schema.org/FreeReturn",
+        },
       },
     };
     if (ratingStats) {
