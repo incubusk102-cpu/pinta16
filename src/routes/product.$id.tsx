@@ -6,6 +6,7 @@ import {
   Box,
   ChevronLeft,
   ChevronRight,
+  Frame,
   Heart,
   Loader2,
   ShoppingCart,
@@ -49,6 +50,11 @@ import { NotifyMeButton } from "@/components/NotifyMeButton";
 // button itself stays in the initial product-page bundle (it's just
 // an icon + label).
 const PaintingViewer3D = lazy(() => import("@/components/PaintingViewer3D"));
+// "View on your wall" — shares the same three.js runtime as the 3D
+// viewer above, so opening either modal warms the same chunk; we
+// still code-split it from the product page itself to keep the
+// initial bundle slim for the common case where neither is opened.
+const WallPreview3D = lazy(() => import("@/components/WallPreview3D"));
 
 interface ProductReview {
   orderId: string;
@@ -98,6 +104,7 @@ function ProductPage() {
   const [activeImage, setActiveImage] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [view3d, setView3d] = useState(false);
+  const [viewOnWall, setViewOnWall] = useState(false);
   const addToCartButtonRef = useRef<HTMLButtonElement>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -109,6 +116,7 @@ function ProductPage() {
     setActiveImage(0);
     setZoomed(false);
     setView3d(false);
+    setViewOnWall(false);
   }, [id]);
 
   // Track view in localStorage so the "recently viewed" strip can show this
@@ -497,6 +505,16 @@ function ProductPage() {
                 <div className="absolute bottom-4 right-4 flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setViewOnWall(true)}
+                    aria-label="View painting on your wall"
+                    title="View on your wall"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+                  >
+                    <Frame className="w-4 h-4" />
+                    <span className="hidden sm:inline">On your wall</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setView3d(true)}
                     aria-label="View painting in 3D"
                     title="View in 3D"
@@ -815,6 +833,27 @@ function ProductPage() {
             imageUrl={variantSrc(currentImage, "lg")}
             title={artwork.title}
             onClose={() => setView3d(false)}
+          />
+        </Suspense>
+      )}
+
+      {viewOnWall && (
+        <Suspense
+          fallback={
+            <div
+              className="fixed inset-0 z-[1100] bg-background/95 backdrop-blur-xl flex items-center justify-center"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          }
+        >
+          <WallPreview3D
+            imageUrl={variantSrc(currentImage, "lg")}
+            title={artwork.title}
+            dimensions={artwork.dimensions}
+            onClose={() => setViewOnWall(false)}
           />
         </Suspense>
       )}
