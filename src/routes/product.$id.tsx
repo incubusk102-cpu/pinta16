@@ -506,25 +506,23 @@ function ProductPage() {
                   {discount}% OFF
                 </span>
               )}
-              {!isVideoActive && (
+              {/* Hero overlay buttons (On your wall / View in 3D /
+                  Zoom) only appear on the 1st photo. Mockups, detail
+                  shots, and the studio-video tile stay view-only so
+                  customers can study the alternate angles without UI
+                  competing with the artwork. */}
+              {!isVideoActive && imageIndexForTile(activeImage) === 0 && (
                 <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                  {/* "On your wall" hangs the bare artwork (1st photo)
-                      inside a virtual frame on a virtual wall, so it's
-                      only meaningful while the 1st photo is active.
-                      Hide it on any additional uploads (mockups, detail
-                      shots) and on the studio-video tile. */}
-                  {imageIndexForTile(activeImage) === 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setViewOnWall(true)}
-                      aria-label="View painting on your wall"
-                      title="View on your wall"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
-                    >
-                      <Frame className="w-4 h-4" />
-                      <span className="hidden sm:inline">On your wall</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setViewOnWall(true)}
+                    aria-label="View painting on your wall"
+                    title="View on your wall"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+                  >
+                    <Frame className="w-4 h-4" />
+                    <span className="hidden sm:inline">On your wall</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setView3d(true)}
