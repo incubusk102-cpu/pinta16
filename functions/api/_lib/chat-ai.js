@@ -13,8 +13,9 @@
 // the free tier silently degrades to "no AI reply" (admin handles it
 // manually), so we never raise an error path that's visible to buyers.
 //
-// `GROQ_API_KEY` is read from the Pages env. Missing key → AI is off,
-// no errors thrown.
+// `GROQ_API_KEY` (or `GROQ_TOKEN` — both names are accepted, since the
+// canvhub Cloudflare Pages env happens to be named `GROQ_TOKEN`) is
+// read from the Pages env. Missing key → AI is off, no errors thrown.
 
 import { logError } from "./redact.js";
 
@@ -329,7 +330,8 @@ const cleanReply = (raw) => {
  *       — A reply was generated and should be appended as `from: "ai"`.
  *
  * Inputs:
- *   - env: Pages env (must contain GROQ_API_KEY for groq path)
+ *   - env: Pages env (must contain GROQ_API_KEY or GROQ_TOKEN for the
+ *          groq path)
  *   - thread: full thread object including the just-appended customer
  *             message
  *   - customerMessage: the body string of that latest message
@@ -386,8 +388,13 @@ export const generateAutoReply = async ({
   // log noisy errors when the gallery owner just hasn't set up Groq
   // yet — `chat.ai.enabled=true` plus missing key is a valid "I want
   // AI but haven't wired the key" state.
-  const apiKey = env?.GROQ_API_KEY;
-  if (!apiKey || typeof apiKey !== "string") {
+  // We accept either `GROQ_API_KEY` (the original Groq-recommended
+  // name) or `GROQ_TOKEN` (the name canvhub's Cloudflare Pages env is
+  // configured with) so admins can pick whichever convention they
+  // already use without redeploying.
+  const rawKey = env?.GROQ_API_KEY || env?.GROQ_TOKEN;
+  const apiKey = typeof rawKey === "string" ? rawKey.trim() : "";
+  if (!apiKey) {
     return { kind: "skip", reason: "no-groq-key" };
   }
 
