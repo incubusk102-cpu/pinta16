@@ -106,6 +106,40 @@ a launch — ~5k events/month.
   send. To turn it on for a debugging window only, set
   `VITE_SENTRY_SEND_PII=1` and re-deploy. Roll back when you're done.
 
+### Source maps (recommended)
+
+Without source maps, every Sentry event displays the minified bundle —
+e.g. `t.default at index-abc123.js:1:42891` — which is unusable for
+triage. `@sentry/vite-plugin` is wired into `vite.config.ts` to upload
+hidden source maps as part of each release.
+
+Enable in one step:
+
+1. Sentry → Settings → Auth Tokens → **Create New Token** with scopes
+   `project:releases` + `org:read`. (Internal Integration tokens work
+   too and are scoped to the org.)
+2. GitHub → repo Settings → Secrets and variables → Actions →
+   **New repository secret** named `SENTRY_AUTH_TOKEN`, paste the value.
+
+That's it. On the next push to `main`:
+
+- `.github/workflows/deploy.yml` reads `SENTRY_AUTH_TOKEN` and passes it
+  to `vite build`.
+- `@sentry/vite-plugin` emits hidden source maps (no `.map` files ship
+  to users; the deployed bundle stays minified) and uploads them to
+  Sentry under a release named after the commit SHA (`github.sha`).
+- The SPA also gets `VITE_SENTRY_RELEASE=${{ github.sha }}` so
+  `Sentry.init({ release })` tags each event with the same release ID.
+  Stack traces are now symbolicated to the original source location.
+
+When `SENTRY_AUTH_TOKEN` is unset (e.g. forks, local builds), the
+plugin is a no-op, source maps are not emitted, and the build still
+succeeds.
+
+Project / org slugs default to `incubus-6c` / `canvhub-web`. Override
+via `SENTRY_ORG` / `SENTRY_PROJECT` env vars in the workflow if you
+fork to a different Sentry project.
+
 ## 3. Sentry — Pages Functions SDK
 
 Errors thrown inside `functions/api/*` end up in Cloudflare's runtime
