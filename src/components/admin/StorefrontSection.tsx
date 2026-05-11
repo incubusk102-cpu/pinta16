@@ -134,6 +134,17 @@ interface AdminConfig {
     welcome: string;
     agentHandoff: boolean;
     faqs: ChatFaqItem[];
+    ai: {
+      enabled: boolean;
+      // Empty string → server falls back to the bundled prompt in
+      // chat-ai.js. Override only if you want a non-default tone /
+      // persona.
+      systemPrompt: string;
+      // Empty string → server uses the default Groq model. Tighten
+      // here if a future model serves canvhub better.
+      model: string;
+      handoffKeywords: string[];
+    };
   };
   vacationMode: {
     enabled: boolean;
@@ -188,6 +199,12 @@ const DEFAULTS: AdminConfig = {
     welcome: DEFAULT_CHAT_WELCOME,
     agentHandoff: true,
     faqs: DEFAULT_CHAT_FAQS,
+    ai: {
+      enabled: false,
+      systemPrompt: "",
+      model: "",
+      handoffKeywords: [],
+    },
   },
   vacationMode: {
     enabled: false,
@@ -828,6 +845,18 @@ export function StorefrontSection() {
             faqs: Array.isArray(data.config.chat?.faqs)
               ? data.config.chat.faqs
               : DEFAULTS.chat.faqs,
+            ai: {
+              ...DEFAULTS.chat.ai,
+              ...(data.config.chat?.ai &&
+              typeof data.config.chat.ai === "object"
+                ? data.config.chat.ai
+                : {}),
+              handoffKeywords: Array.isArray(
+                data.config.chat?.ai?.handoffKeywords,
+              )
+                ? data.config.chat.ai.handoffKeywords
+                : DEFAULTS.chat.ai.handoffKeywords,
+            },
           },
           vacationMode: {
             ...DEFAULTS.vacationMode,
@@ -1104,6 +1133,11 @@ export function StorefrontSection() {
         })
         .filter((f): f is ChatFaqItem => f !== null)
         .slice(0, CHAT_FAQ_MAX);
+      const cleanedKeywords = cfg.chat.ai.handoffKeywords
+        .map((kw) => kw.trim().toLowerCase())
+        .filter((kw) => kw.length >= 3)
+        .filter((kw, i, arr) => arr.indexOf(kw) === i)
+        .slice(0, 20);
       await post({
         action: "update-chat",
         chat: {
@@ -1111,6 +1145,12 @@ export function StorefrontSection() {
           welcome: cfg.chat.welcome.trim(),
           agentHandoff: cfg.chat.agentHandoff,
           faqs: cleanedFaqs,
+          ai: {
+            enabled: cfg.chat.ai.enabled,
+            systemPrompt: cfg.chat.ai.systemPrompt.trim(),
+            model: cfg.chat.ai.model.trim(),
+            handoffKeywords: cleanedKeywords,
+          },
         },
       });
       toast.success("Chat settings saved");
@@ -2503,6 +2543,120 @@ export function StorefrontSection() {
                 }))
               }
             />
+          </div>
+
+          {/* Groq AI auto-reply.
+              Off by default. When enabled, the customer's first message in
+              a thread (and any follow-up where you haven't replied in the
+              last 5 minutes) gets routed to Groq's free Llama 3.3 model.
+              The bundled system prompt grounds replies in the FAQ list +
+              live product catalogue. If the model can't answer
+              confidently, or the customer asks for a human, the thread
+              shows up here with a "needs you" badge instead. Requires a
+              free GROQ_API_KEY in the Cloudflare Pages env vars (see
+              README "Configuring environment variables"). */}
+          <div className="rounded-md bg-background/40 border border-border/40 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label className="text-sm flex items-center gap-2">
+                  AI auto-reply
+                  <span className="text-[9px] uppercase tracking-wide rounded-sm bg-accent/40 text-foreground px-1 py-px font-medium">
+                    Beta
+                  </span>
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Free Groq Llama 3.3 70B answers customer chat messages using
+                  your FAQs + product catalogue. Needs{" "}
+                  <code className="text-[11px]">GROQ_API_KEY</code> in Pages
+                  env.
+                </p>
+              </div>
+              <Switch
+                checked={cfg.chat.ai.enabled}
+                onCheckedChange={(v) =>
+                  setCfg((c) => ({
+                    ...c,
+                    chat: { ...c.chat, ai: { ...c.chat.ai, enabled: v } },
+                  }))
+                }
+              />
+            </div>
+
+            {cfg.chat.ai.enabled && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    System prompt override (optional)
+                  </Label>
+                  <Textarea
+                    value={cfg.chat.ai.systemPrompt}
+                    maxLength={4000}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        chat: {
+                          ...c.chat,
+                          ai: {
+                            ...c.chat.ai,
+                            systemPrompt: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    placeholder="Leave blank to use the default canvhub assistant prompt. Override here to change the AI's tone or persona."
+                    className="min-h-[88px] text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    Extra &ldquo;send to human&rdquo; keywords
+                  </Label>
+                  <Input
+                    value={cfg.chat.ai.handoffKeywords.join(", ")}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        chat: {
+                          ...c.chat,
+                          ai: {
+                            ...c.chat.ai,
+                            handoffKeywords: e.target.value
+                              .split(",")
+                              .map((s) => s.trim()),
+                          },
+                        },
+                      }))
+                    }
+                    placeholder="e.g. refund, complaint, urgent"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Comma-separated. If a customer message contains any of
+                    these, the AI steps aside and the thread waits for you.
+                    Defaults (human, agent, manager, &ldquo;real person&rdquo;,
+                    &hellip;) are always applied on top.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Model override (optional)</Label>
+                  <Input
+                    value={cfg.chat.ai.model}
+                    maxLength={80}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        chat: {
+                          ...c.chat,
+                          ai: { ...c.chat.ai, model: e.target.value },
+                        },
+                      }))
+                    }
+                    placeholder="llama-3.3-70b-versatile (default)"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-1.5">
