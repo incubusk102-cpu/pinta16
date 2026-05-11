@@ -20,6 +20,17 @@ import {
 } from "@/lib/shipment";
 import { jsonAuthHeaders } from "@/lib/api";
 import type { ShippingZone } from "@/lib/ph-regions";
+import type { PaintingSizeCm } from "@/lib/painting-sizes";
+import {
+  cartLineKey,
+  loadCartItemsFromStorage,
+  CART_STORAGE_KEY,
+} from "@/lib/cart-storage";
+export {
+  cartLineKey,
+  CART_STORAGE_KEY,
+  LEGACY_CART_STORAGE_KEY,
+} from "@/lib/cart-storage";
 
 export interface CartItem {
   id: string;
@@ -29,6 +40,14 @@ export interface CartItem {
   year: string;
   price: number;
   quantity: number;
+  /**
+   * Customer-selected size for this made-to-order line. Undefined for
+   * legacy items added before the size selector was wired into the
+   * cart — those are treated as "size to be confirmed via order notes"
+   * to stay backward-compatible with the previous copy-to-clipboard
+   * flow.
+   */
+  sizeCm?: PaintingSizeCm;
 }
 
 export interface OrderInfo {
@@ -374,8 +393,12 @@ interface CartContextType {
   isOpen: boolean;
   voucher: VoucherState;
   addToCart: (item: Omit<CartItem, "quantity">) => void;
-  removeFromCart: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
+  // Removed / quantity-updated by the per-line key returned from
+  // `cartLineKey(item)` so two same-product entries at different sizes
+  // are independently mutable. Backward-compatible: legacy items
+  // without a `sizeCm` keep their bare product id as the line key.
+  removeFromCart: (lineKey: string) => void;
+  updateQuantity: (lineKey: string, quantity: number) => void;
   clearCart: () => void;
   openCart: () => void;
   closeCart: () => void;
@@ -462,7 +485,11 @@ const DEFAULT_SHIPPING_FEE = 500;
 const LEGACY_ORDERS_STORAGE_KEY = "canvhub_orders";
 const ORDERS_STORAGE_PREFIX = "canvhub_orders__";
 const GUEST_ORDERS_STORAGE_KEY = `${ORDERS_STORAGE_PREFIX}guest`;
-const CART_STORAGE_KEY = "canvhub_cart";
+// Cart storage helpers live in `@/lib/cart-storage` so unit tests can
+// exercise them without pulling in the React-only surface of this
+// file; `cartLineKey`, `CART_STORAGE_KEY`, and `LEGACY_CART_STORAGE_KEY`
+// are re-exported at the top of the file for backward compatibility
+// with existing imports of `useCart` consumers.
 
 const normalizeUserEmail = (email: string | null | undefined): string | null =>
   email && email.trim() ? email.trim().toLowerCase() : null;
@@ -547,16 +574,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     ? (config.freeShipping.threshold ?? DEFAULT_FREE_SHIPPING_THRESHOLD)
     : Number.POSITIVE_INFINITY;
   const SHIPPING_FEE = config.freeShipping.shippingFee ?? DEFAULT_SHIPPING_FEE;
-  const [items, setItems] = useState<CartItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(CART_STORAGE_KEY);
-      const parsed = stored ? JSON.parse(stored) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
+  const [items, setItems] = useState<CartItem[]>(() =>
+    loadCartItemsFromStorage(),
+  );
 
   // Persist cart locally so it survives reloads + offline navigation.
   useEffect(() => {
@@ -738,10 +758,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const addToCart = useCallback((item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {
-      const existing = prev.find((i) => i.id === item.id);
+      const key = cartLineKey(item);
+      const existing = prev.find((i) => cartLineKey(i) === key);
       if (existing) {
         return prev.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i,
+          cartLineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i,
         );
       }
       return [...prev, { ...item, quantity: 1 }];
@@ -750,18 +771,19 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const removeFromCart = useCallback(
-    (id: string) => setItems((prev) => prev.filter((i) => i.id !== id)),
+    (lineKey: string) =>
+      setItems((prev) => prev.filter((i) => cartLineKey(i) !== lineKey)),
     [],
   );
 
   const updateQuantity = useCallback(
-    (id: string, quantity: number) => {
+    (lineKey: string, quantity: number) => {
       if (quantity <= 0) {
-        removeFromCart(id);
+        removeFromCart(lineKey);
         return;
       }
       setItems((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, quantity } : i)),
+        prev.map((i) => (cartLineKey(i) === lineKey ? { ...i, quantity } : i)),
       );
     },
     [removeFromCart],

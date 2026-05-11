@@ -11,12 +11,14 @@ import {
   Ruler,
   Users,
   UserMinus,
+  ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
   SIZE_PRESETS,
   type SizePreset,
+  type PaintingSizeCm,
   formatSize,
   formatSizeInches,
   defaultPresetFor,
@@ -49,6 +51,23 @@ interface WallPreview3DProps {
   title: string;
   dimensions?: string;
   onClose: () => void;
+  /**
+   * Pre-select a size in the preset palette — used when the modal is
+   * re-opened from the product page to edit a size already on a cart
+   * line. When omitted the modal falls through to `defaultPresetFor`
+   * with the product's free-form dimensions hint.
+   */
+  initialSizeCm?: PaintingSizeCm;
+  /**
+   * Optional confirm-and-add-to-cart callback. When provided, the
+   * panel renders a primary "Add to cart at this size" button next to
+   * the existing "Copy for checkout notes" affordance and invokes
+   * this with the picked size. The modal closes on confirm so the
+   * cart drawer can take over.
+   */
+  onConfirmSize?: (size: PaintingSizeCm) => void;
+  /** Label override for the confirm button (e.g. "Update size"). */
+  confirmLabel?: string;
 }
 
 const CM_PER_M = 100;
@@ -236,6 +255,9 @@ export default function WallPreview3D({
   title,
   dimensions,
   onClose,
+  initialSizeCm,
+  onConfirmSize,
+  confirmLabel,
 }: WallPreview3DProps) {
   // Honour `prefers-reduced-motion`: opt-outs get a fully manual
   // camera, no auto-rotation. Read once via useState's initializer
@@ -247,9 +269,17 @@ export default function WallPreview3D({
   const [resetKey, setResetKey] = useState(0);
   const [showHuman, setShowHuman] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [selected, setSelected] = useState<SizePreset>(() =>
-    defaultPresetFor(dimensions),
-  );
+  const [selected, setSelected] = useState<SizePreset>(() => {
+    if (initialSizeCm) {
+      const matching = SIZE_PRESETS.find(
+        (p) =>
+          p.widthCm === initialSizeCm.widthCm &&
+          p.heightCm === initialSizeCm.heightCm,
+      );
+      if (matching) return matching;
+    }
+    return defaultPresetFor(dimensions);
+  });
 
   const widthM = selected.widthCm / CM_PER_M;
   const heightM = selected.heightCm / CM_PER_M;
@@ -442,18 +472,36 @@ export default function WallPreview3D({
               <span className="text-foreground">{formatSize(selected)}</span>{" "}
               <span className="opacity-60">({formatSizeInches(selected)})</span>
             </p>
-            <button
-              type="button"
-              onClick={copySize}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-sm border border-border/60 hover:bg-accent/30 font-body text-[10px] tracking-[0.25em] uppercase text-foreground self-start sm:self-auto"
-            >
-              {copied ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-              {copied ? "Copied" : "Copy for checkout notes"}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 self-start sm:self-auto">
+              {onConfirmSize ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConfirmSize({
+                      widthCm: selected.widthCm,
+                      heightCm: selected.heightCm,
+                    });
+                    onClose();
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-sm bg-foreground text-background hover:bg-foreground/90 font-body text-[10px] tracking-[0.25em] uppercase"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" aria-hidden="true" />
+                  {confirmLabel ?? "Add to cart at this size"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={copySize}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-sm border border-border/60 hover:bg-accent/30 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                {copied ? "Copied" : "Copy for checkout notes"}
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>

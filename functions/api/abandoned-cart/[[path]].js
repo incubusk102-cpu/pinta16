@@ -104,13 +104,36 @@ const handleSync = async (event, env, store) => {
   if (!items.length) {
     return json(400, { error: "Cart is empty" });
   }
-  const sanitizedItems = items.map((it) => ({
-    id: String(it.id || "").slice(0, 100),
-    title: String(it.title || "").slice(0, 200),
-    price: Math.max(0, Number(it.price) || 0),
-    quantity: Math.max(1, Math.min(100, Number(it.quantity) || 1)),
-    image: String(it.image || "").slice(0, 500),
-  }));
+  const sanitizedItems = items.map((it) => {
+    const out = {
+      id: String(it.id || "").slice(0, 100),
+      title: String(it.title || "").slice(0, 200),
+      price: Math.max(0, Number(it.price) || 0),
+      quantity: Math.max(1, Math.min(100, Number(it.quantity) || 1)),
+      image: String(it.image || "").slice(0, 500),
+    };
+    // Preserve the customer-picked painting size on the abandoned-cart
+    // record so the recovery email can show "Your 60 × 90 cm canvas is
+    // waiting" instead of an ambiguous "your cart is waiting".
+    if (it.sizeCm && typeof it.sizeCm === "object") {
+      const w = Number(it.sizeCm.widthCm);
+      const h = Number(it.sizeCm.heightCm);
+      if (
+        Number.isFinite(w) &&
+        Number.isFinite(h) &&
+        w > 0 &&
+        h > 0 &&
+        w <= 500 &&
+        h <= 500
+      ) {
+        out.sizeCm = {
+          widthCm: Math.round(w * 10) / 10,
+          heightCm: Math.round(h * 10) / 10,
+        };
+      }
+    }
+    return out;
+  });
   const name = String(data.name || "")
     .trim()
     .slice(0, 100);

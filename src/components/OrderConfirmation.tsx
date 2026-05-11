@@ -16,6 +16,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import { useCart, ORDER_STEPS } from "@/contexts/CartContext";
 import { buildTrackingUrl } from "@/lib/shipment";
+import { formatSize } from "@/lib/painting-sizes";
 import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
 import DeliveredReviewPrompt from "./DeliveredReviewPrompt";
@@ -277,6 +278,11 @@ const OrderConfirmation = () => {
                     >
                       <span>
                         {item.title} × {item.quantity}
+                        {item.sizeCm ? (
+                          <span className="ml-1 text-muted-foreground">
+                            · {formatSize(item.sizeCm)}
+                          </span>
+                        ) : null}
                       </span>
                       <span>
                         ₱{(item.price * item.quantity).toLocaleString()}

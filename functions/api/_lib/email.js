@@ -489,22 +489,40 @@ const buildOrderTrackUrl = (orderId) =>
     ? `${PUBLIC_SITE_ORIGIN}/account?track=${encodeURIComponent(orderId)}#order-review-form`
     : "";
 
+// Format a `sizeCm` line-item field for human display in the order
+// email. Returns empty string when the line has no size on it (legacy
+// orders, or a customer who never opened "View on your wall"). One
+// decimal so 30 × 40 stays integer but 105.5 still renders.
+const formatSizeForEmail = (sizeCm) => {
+  if (!sizeCm || typeof sizeCm !== "object") return "";
+  const w = Number(sizeCm.widthCm);
+  const h = Number(sizeCm.heightCm);
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return "";
+  if (w <= 0 || h <= 0) return "";
+  const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  return `${fmt(w)} \u00d7 ${fmt(h)} cm`;
+};
+
 const renderItemsTable = (items = []) => {
   if (!items.length) return "";
   const rows = items
-    .map(
-      (i) => `
+    .map((i) => {
+      const sizeLabel = formatSizeForEmail(i.sizeCm);
+      const sizeLine = sizeLabel
+        ? `<div style="margin-top:2px;font-size:11px;color:#7a7468;">Size: ${escapeHtml(sizeLabel)}</div>`
+        : "";
+      return `
         <tr>
           <td style="padding:8px 0;font-size:13px;color:#1c1c1c;">
             ${escapeHtml(i.title)} <span style="color:#7a7468;">&times; ${
               Number(i.quantity) || 1
-            }</span>
+            }</span>${sizeLine}
           </td>
-          <td style="padding:8px 0;font-size:13px;text-align:right;color:#1c1c1c;">
+          <td style="padding:8px 0;font-size:13px;text-align:right;color:#1c1c1c;vertical-align:top;">
             ${formatPHP((Number(i.price) || 0) * (Number(i.quantity) || 1))}
           </td>
-        </tr>`,
-    )
+        </tr>`;
+    })
     .join("");
   return `
     <table role="presentation" width="100%" style="border-top:1px solid #efece4;border-bottom:1px solid #efece4;margin:16px 0;">

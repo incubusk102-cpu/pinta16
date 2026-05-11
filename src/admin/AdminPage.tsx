@@ -22,6 +22,7 @@ import {
   getAvailability,
 } from "@/lib/artworks";
 import { findUploadDuplicate } from "@/lib/imageHash";
+import { formatSize } from "@/lib/painting-sizes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -3874,8 +3875,13 @@ function OrdersSection() {
             <div className="text-xs text-muted-foreground space-y-0.5">
               {order.items.map((item) => (
                 <p key={item.id}>
-                  {item.title} × {item.quantity} — ₱
-                  {(item.price * item.quantity).toLocaleString()}
+                  {item.title} × {item.quantity}
+                  {item.sizeCm ? (
+                    <span className="ml-1 text-foreground/80">
+                      · {formatSize(item.sizeCm)}
+                    </span>
+                  ) : null}{" "}
+                  — ₱{(item.price * item.quantity).toLocaleString()}
                 </p>
               ))}
             </div>
