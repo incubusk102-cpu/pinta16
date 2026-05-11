@@ -17,11 +17,10 @@
 
 import { setCloudflareContext } from "./api/_lib/context.js";
 import { makeStore } from "./api/_lib/kv-store.js";
+import { getProductReviewSummary } from "./api/_lib/product-reviews.js";
 
 const PRODUCTS_KEY = "all-products";
 const SITE_NAME = "Canvas Hub";
-const SITE_DEFAULT_DESCRIPTION =
-  "Discover hand-crafted paintings that transform spaces. Original art, made to order.";
 
 const xmlEscape = (s = "") =>
   String(s)
@@ -87,7 +86,11 @@ const loadProduct = async (env, id) => {
 };
 
 // Build the per-product enrichment payload used by the rewriter.
-const buildProductMeta = (product, origin) => {
+// `reviewSummary` is optional; when present we attach an
+// `aggregateRating` block and embed the most recent reviews so the
+// Product rich-result eligibility threshold is met server-side
+// (it's just three short snippets, total HTML weight under ~1.5 KB).
+const buildProductMeta = (product, origin, reviewSummary = null) => {
   const url = `${origin}/product/${encodeURIComponent(product.id)}`;
   const description = truncate(
     product.description || `${product.title} — ${SITE_NAME}`,
@@ -125,6 +128,35 @@ const buildProductMeta = (product, origin) => {
       },
     },
   };
+  if (reviewSummary && reviewSummary.count > 0) {
+    productLd.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: reviewSummary.average.toFixed(2),
+      reviewCount: reviewSummary.count,
+      bestRating: 5,
+      worstRating: 1,
+    };
+    const recent = Array.isArray(reviewSummary.recent)
+      ? reviewSummary.recent
+      : [];
+    if (recent.length > 0) {
+      productLd.review = recent.map((r) => ({
+        "@type": "Review",
+        reviewRating: {
+          "@type": "Rating",
+          ratingValue: r.rating,
+          bestRating: 5,
+          worstRating: 1,
+        },
+        author: {
+          "@type": "Person",
+          name: r.customerName || "Customer",
+        },
+        datePublished: r.submittedAt || undefined,
+        reviewBody: r.text || undefined,
+      }));
+    }
+  }
   const breadcrumbsLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -153,11 +185,44 @@ const buildProductMeta = (product, origin) => {
   };
 };
 
+// Build the WebSite + Organization JSON-LD graphs that are safe to
+// emit on every HTML page. WebSite unlocks Google's sitelinks search
+// box; Organization lets the brand surface in knowledge-panel-ish
+// contexts. Both are tiny (~600 B combined) and harmless to repeat
+// across pages — schema.org explicitly de-duplicates on `@id`.
+const buildSiteWideLd = (origin) => {
+  const orgLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${origin}/#organization`,
+    name: SITE_NAME,
+    url: origin,
+    logo: `${origin}/icon-512.png`,
+  };
+  const siteLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${origin}/#website`,
+    name: SITE_NAME,
+    url: origin,
+    publisher: { "@id": `${origin}/#organization` },
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${origin}/?q={search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
+  return [orgLd, siteLd];
+};
+
 // Rewriter for the SPA shell. Injects per-page OG / JSON-LD without
 // buffering the response. Falls back gracefully when no per-page
 // payload is available — in that case we still ensure a canonical
 // link tag exists.
-const buildRewriter = ({ canonical, perPage }) => {
+const buildRewriter = ({ canonical, perPage, origin }) => {
   const rewriter = new HTMLRewriter();
 
   if (perPage) {
@@ -209,7 +274,10 @@ const buildRewriter = ({ canonical, perPage }) => {
 
     // Insert per-page JSON-LD blocks at the top of <head>. Two
     // graphs: Product+Offer and BreadcrumbList. Both standalone, so
-    // crawlers can pick whichever they understand.
+    // crawlers can pick whichever they understand. Site-wide
+    // Organization + WebSite graphs are appended alongside so
+    // crawlers can link the product offer to the brand entity.
+    const siteWide = buildSiteWideLd(origin);
     rewriter.on("head", {
       element(el) {
         el.append(
@@ -219,18 +287,38 @@ const buildRewriter = ({ canonical, perPage }) => {
             ).replace(/</g, "\\u003c")}</script>` +
             `<script type="application/ld+json">${JSON.stringify(
               perPage.breadcrumbsLd,
-            ).replace(/</g, "\\u003c")}</script>`,
+            ).replace(/</g, "\\u003c")}</script>` +
+            siteWide
+              .map(
+                (ld) =>
+                  `<script type="application/ld+json">${JSON.stringify(
+                    ld,
+                  ).replace(/</g, "\\u003c")}</script>`,
+              )
+              .join(""),
           { html: true },
         );
       },
     });
   } else {
-    // No per-page payload — just make sure a canonical link exists.
+    // No per-page payload — still emit a canonical link plus the
+    // site-wide Organization + WebSite graphs (home / policy /
+    // account etc. benefit from these too).
+    const siteWide = buildSiteWideLd(origin);
     rewriter.on("head", {
       element(el) {
-        el.append(`<link rel="canonical" href="${xmlEscape(canonical)}">`, {
-          html: true,
-        });
+        el.append(
+          `<link rel="canonical" href="${xmlEscape(canonical)}">` +
+            siteWide
+              .map(
+                (ld) =>
+                  `<script type="application/ld+json">${JSON.stringify(
+                    ld,
+                  ).replace(/</g, "\\u003c")}</script>`,
+              )
+              .join(""),
+          { html: true },
+        );
       },
     });
   }
@@ -277,12 +365,25 @@ export const onRequest = async ({ request, env, next }) => {
     try {
       const product = await loadProduct(env, id);
       if (product) {
-        perPage = buildProductMeta(product, origin);
+        // Fetch the aggregated review summary in parallel
+        // with… well, in parallel with nothing right now,
+        // but the await sits before the rewriter so the
+        // injected aggregateRating block is visible to
+        // crawlers in the very first HTML chunk. The helper
+        // colo-caches the result for 5 min so this only pays
+        // the orders-KV read once per product per cache slot.
+        let reviewSummary = null;
+        try {
+          reviewSummary = await getProductReviewSummary(env, id);
+        } catch {
+          reviewSummary = null;
+        }
+        perPage = buildProductMeta(product, origin, reviewSummary);
       }
     } catch {
       perPage = null;
     }
   }
 
-  return buildRewriter({ canonical, perPage }).transform(response);
+  return buildRewriter({ canonical, perPage, origin }).transform(response);
 };
