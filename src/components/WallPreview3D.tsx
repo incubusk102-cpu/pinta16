@@ -29,15 +29,14 @@ interface WallPreview3DProps {
   onClose: () => void;
 }
 
-// Comfortable real-world wall-plane size for the painting, in metres.
-// Tuned so a 4:3 landscape canvas reads as a comfortably hangable
-// piece next to the 1.7m human silhouette without looking either
-// dinky or oversized.
-const DEFAULT_WIDTH_M = 0.9;
-const MIN_WIDTH_M = 0.4;
-const MAX_WIDTH_M = 1.6;
-const MIN_HEIGHT_M = 0.3;
-const MAX_HEIGHT_M = 1.8;
+// Canvhub paintings are made to order on a standard 24″ × 36″ canvas
+// (60.96 × 91.44 cm). The 3D wall preview hangs that exact canvas at
+// real-world size, with orientation following the source photo:
+// landscape images get a 36 × 24 canvas, portrait images get a 24 × 36
+// canvas. Sits comfortably alongside the 1.7 m human silhouette.
+const INCH_TO_M = 0.0254;
+const CANVAS_LONG_M = 36 * INCH_TO_M; // 0.9144
+const CANVAS_SHORT_M = 24 * INCH_TO_M; // 0.6096
 
 // Y-position of the painting's centre, measured from the floor. A
 // real gallery hangs the centre at roughly eye-level (~1.5m); we use
@@ -257,23 +256,14 @@ export default function WallPreview3D({
   const [showHuman, setShowHuman] = useState(true);
   const aspect = useImageAspect(imageUrl);
 
-  // Pick a comfortable wall-plane size from the image's own aspect
-  // ratio. Landscape mockups widen up to MAX_WIDTH_M and clamp height;
-  // portrait mockups clamp height first and let width fall out of it.
+  // Canvas dimensions are fixed at 24″ × 36″; the source image's
+  // aspect only decides orientation (landscape vs portrait).
   const { widthM, heightM } = useMemo(() => {
-    let w = DEFAULT_WIDTH_M;
-    let h = DEFAULT_WIDTH_M / aspect;
-    if (h > MAX_HEIGHT_M) {
-      h = MAX_HEIGHT_M;
-      w = h * aspect;
-    }
-    if (w > MAX_WIDTH_M) {
-      w = MAX_WIDTH_M;
-      h = w / aspect;
-    }
-    if (w < MIN_WIDTH_M) w = MIN_WIDTH_M;
-    if (h < MIN_HEIGHT_M) h = MIN_HEIGHT_M;
-    return { widthM: w, heightM: h };
+    const isLandscape = aspect >= 1;
+    return {
+      widthM: isLandscape ? CANVAS_LONG_M : CANVAS_SHORT_M,
+      heightM: isLandscape ? CANVAS_SHORT_M : CANVAS_LONG_M,
+    };
   }, [aspect]);
 
   useEffect(() => {
