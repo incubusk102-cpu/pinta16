@@ -22,7 +22,7 @@ import { formatRelativeTime, linkifyMessage } from "@/lib/chat-format";
 
 interface ChatMessage {
   at: string;
-  from: "customer" | "admin" | "system";
+  from: "customer" | "admin" | "ai" | "system";
   body: string;
 }
 
@@ -228,7 +228,11 @@ export default function ChatWidget() {
       i < thread.messages.length;
       i++
     ) {
-      if (thread.messages[i].from === "admin") count++;
+      const sender = thread.messages[i].from;
+      // AI auto-replies count as unread support messages — the customer
+      // didn't write them, so they deserve a badge until the widget is
+      // opened, the same as a human admin reply.
+      if (sender === "admin" || sender === "ai") count++;
     }
     setUnreadCount(count);
   }, [thread, open]);
@@ -250,7 +254,10 @@ export default function ChatWidget() {
     }
     let latestAdminAt = "";
     for (const m of thread.messages) {
-      if (m.from === "admin" && m.at > latestAdminAt) latestAdminAt = m.at;
+      // Both admin and AI replies should ding — they're both "support
+      // wrote back" from the customer's perspective.
+      if ((m.from === "admin" || m.from === "ai") && m.at > latestAdminAt)
+        latestAdminAt = m.at;
     }
     const prior = lastAdminAtRef.current;
     lastAdminAtRef.current = latestAdminAt;
@@ -712,6 +719,7 @@ export default function ChatWidget() {
                         </div>
                       );
                     }
+                    const isAi = m.from === "ai";
                     return (
                       <div
                         key={`${m.at}-${idx}`}
@@ -732,7 +740,17 @@ export default function ChatWidget() {
                           className="text-[10px] text-muted-foreground mt-0.5 px-1"
                           title={new Date(m.at).toLocaleString()}
                         >
-                          {formatRelativeTime(m.at, nowTick)}
+                          {isAi ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="inline-block rounded-sm bg-foreground/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide">
+                                AI assistant
+                              </span>
+                              <span aria-hidden>·</span>
+                              <span>{formatRelativeTime(m.at, nowTick)}</span>
+                            </span>
+                          ) : (
+                            formatRelativeTime(m.at, nowTick)
+                          )}
                         </p>
                       </div>
                     );
