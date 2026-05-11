@@ -200,7 +200,11 @@ const ReviewsSection = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+            // Solid background, no backdrop-filter. backdrop-blur on a
+            // fullscreen overlay over a large image is GPU-heavy enough
+            // to crash mobile Chrome on lower-spec devices, so we stay
+            // cheap and opaque here.
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/95"
             role="dialog"
             aria-modal="true"
             aria-label="Review photo viewer"
@@ -248,16 +252,18 @@ const ReviewsSection = () => {
               </>
             )}
 
-            <motion.img
+            {/* Plain <img>, not motion.img. The framer-motion scaling
+                animation on a 2000×2000 decoded photo can blow past the
+                GPU memory budget on phones and crash the tab. The
+                overlay's own fade is enough motion. */}
+            <img
               key={photoView.images[photoView.index]}
               src={photoView.images[photoView.index]}
               alt={`Review photo ${photoView.index + 1}`}
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
               onClick={(e) => e.stopPropagation()}
-              className="max-h-[90vh] max-w-[92vw] object-contain rounded-md shadow-2xl"
+              draggable={false}
+              decoding="async"
+              className="max-h-[90vh] max-w-[92vw] object-contain rounded-md shadow-2xl select-none"
             />
           </motion.div>
         )}
