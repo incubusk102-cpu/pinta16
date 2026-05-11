@@ -36,12 +36,6 @@ import {
   useProducts,
 } from "@/contexts/ProductContext";
 import { useCart } from "@/contexts/CartContext";
-import {
-  defaultPresetFor,
-  formatSize,
-  formatSizeInches,
-  type PaintingSizeCm,
-} from "@/lib/painting-sizes";
 import { useWishlist } from "@/contexts/WishlistContext";
 import {
   AVAILABILITY_LABEL,
@@ -111,11 +105,6 @@ function ProductPage() {
   const [zoomed, setZoomed] = useState(false);
   const [view3d, setView3d] = useState(false);
   const [viewOnWall, setViewOnWall] = useState(false);
-  // Customer-picked painting size for this product. Seeded from the
-  // free-form `artwork.dimensions` field via `defaultPresetFor` so
-  // the line item always carries a size even if the customer never
-  // opens "View on your wall".
-  const [selectedSize, setSelectedSize] = useState<PaintingSizeCm | null>(null);
   const addToCartButtonRef = useRef<HTMLButtonElement>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -128,22 +117,7 @@ function ProductPage() {
     setZoomed(false);
     setView3d(false);
     setViewOnWall(false);
-    setSelectedSize(null);
   }, [id]);
-
-  // Seed the size selection from the artwork's free-form dimensions
-  // hint on first render of each product. Stays null until the
-  // artwork is resolved so the storefront doesn't display a
-  // misleading default before the product loads.
-  useEffect(() => {
-    if (!artwork) return;
-    if (selectedSize) return;
-    const preset = defaultPresetFor(artwork.dimensions);
-    setSelectedSize({
-      widthCm: preset.widthCm,
-      heightCm: preset.heightCm,
-    });
-  }, [artwork, selectedSize]);
 
   // Track view in localStorage so the "recently viewed" strip can show this
   // product on the home page and other product pages later.
@@ -366,6 +340,12 @@ function ProductPage() {
   const effectivePrice = getEffectivePrice(artwork);
   const galleryImages =
     artwork.images.length > 0 ? artwork.images : [{ url: artwork.image }];
+  // "View on your wall" should render the uploaded mockup photo
+  // (typically the 2nd upload — the painting hung on a wall in its
+  // real frame) rather than the bare artwork shot. Falls back to the
+  // 1st image when the artist only uploaded one photo.
+  const wallImage =
+    galleryImages.length >= 2 ? galleryImages[1] : galleryImages[0];
   // Optional studio video shows up as a leading "play" tile in the
   // thumbnail strip and switches the hero slot from `<img>` to
   // `<video controls>` when selected. We resolve the artwork-level
@@ -413,9 +393,8 @@ function ProductPage() {
     setActiveImage((i) => (i < totalGalleryItems - 1 ? i + 1 : 0));
   };
 
-  const handleAdd = (size?: PaintingSizeCm) => {
+  const handleAdd = () => {
     if (!purchasable) return;
-    const sizeCm = size ?? selectedSize ?? undefined;
     addToCart({
       id: artwork.id,
       image: artwork.image,
@@ -423,7 +402,6 @@ function ProductPage() {
       medium: artwork.medium,
       year: artwork.year,
       price: effectivePrice,
-      ...(sizeCm ? { sizeCm } : {}),
     });
   };
 
@@ -698,27 +676,6 @@ function ProductPage() {
               )}
             </div>
 
-            {selectedSize && purchasable ? (
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-body text-xs tracking-[0.2em] uppercase text-muted-foreground">
-                <span>
-                  Size{" "}
-                  <span className="text-foreground normal-case tracking-normal text-sm">
-                    {formatSize(selectedSize)}
-                  </span>{" "}
-                  <span className="opacity-60 normal-case tracking-normal text-[11px]">
-                    ({formatSizeInches(selectedSize)})
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setViewOnWall(true)}
-                  className="underline decoration-dotted underline-offset-4 hover:text-foreground transition-colors"
-                >
-                  Change size
-                </button>
-              </div>
-            ) : null}
-
             <p className="font-body text-sm md:text-base text-muted-foreground leading-relaxed first-letter:font-display first-letter:text-3xl first-letter:md:text-4xl first-letter:text-foreground first-letter:float-left first-letter:mr-1.5 first-letter:mt-1 first-letter:leading-none">
               {artwork.description}
             </p>
@@ -899,14 +856,8 @@ function ProductPage() {
           }
         >
           <WallPreview3D
-            imageUrl={variantSrc(currentImage, "lg")}
+            imageUrl={variantSrc(wallImage, "lg")}
             title={artwork.title}
-            dimensions={artwork.dimensions}
-            initialSizeCm={selectedSize ?? undefined}
-            onConfirmSize={(size) => {
-              setSelectedSize(size);
-              handleAdd(size);
-            }}
             onClose={() => setViewOnWall(false)}
           />
         </Suspense>
