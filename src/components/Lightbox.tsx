@@ -257,9 +257,23 @@ const Lightbox = ({
                   : purchasable
                     ? "Add to Cart"
                     : `${AVAILABILITY_LABEL[availability]}`;
+                // Show the availability chip for states the buyer
+                // can't act on the same way as "Available" — Reserved,
+                // Sold (button is disabled), Draft. We deliberately
+                // skip the "Made to order" chip here even though it's
+                // non-`available`: the gallery card the user just
+                // tapped already shows a prominent blue MADE TO ORDER
+                // chip (see ArtworkCard), so repeating the same label
+                // in the lightbox reads as noise. Made-to-order is
+                // still purchasable, so the Add to Cart button below
+                // works unchanged; the longer turnaround copy lives on
+                // the product page reached via "View details".
+                const showAvailabilityChip =
+                  availability !== "available" &&
+                  availability !== "made-to-order";
                 return (
                   <div className="flex flex-col gap-3">
-                    {availability !== "available" && (
+                    {showAvailabilityChip && (
                       <span className="inline-flex w-fit items-center px-2.5 py-1 bg-foreground text-background font-body text-[10px] tracking-[0.3em] uppercase rounded-sm">
                         {AVAILABILITY_LABEL[availability]}
                       </span>
