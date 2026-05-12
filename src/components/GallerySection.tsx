@@ -45,6 +45,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 const STOREFRONT_AVAILABILITIES: Availability[] = [
   "available",
+  "made-to-order",
   "reserved",
   "sold",
 ];

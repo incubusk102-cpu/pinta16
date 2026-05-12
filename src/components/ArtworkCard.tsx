@@ -50,6 +50,7 @@ interface ArtworkCardProps {
 
 const availabilityBadgeClass: Record<Availability, string> = {
   available: "",
+  "made-to-order": "bg-sky-600 text-white",
   reserved: "bg-amber-500 text-white",
   sold: "bg-slate-900 text-white",
   draft: "bg-muted text-foreground",

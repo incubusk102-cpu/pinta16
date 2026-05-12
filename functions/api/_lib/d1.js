@@ -1095,7 +1095,13 @@ export async function recentNotificationLog({
 // Allow-listed product availability states. The recorder and the
 // readback endpoint both filter against this so a refactor that
 // introduces a typo'd state can't pollute the table.
-export const STOCK_STATES = new Set(["available", "reserved", "sold", "draft"]);
+export const STOCK_STATES = new Set([
+  "available",
+  "made-to-order",
+  "reserved",
+  "sold",
+  "draft",
+]);
 
 // Sources of stock transitions. Tracks who/what changed the state so
 // the admin can answer "did I do that, or did checkout do that?".

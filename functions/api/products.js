@@ -235,7 +235,7 @@ const handle = async ({ request, env }) => {
         }
         if (
           typeof updates.availability === "string" &&
-          ["available", "reserved", "sold", "draft"].includes(
+          ["available", "made-to-order", "reserved", "sold", "draft"].includes(
             updates.availability,
           )
         ) {

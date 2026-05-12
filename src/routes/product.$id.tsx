@@ -95,6 +95,7 @@ export const Route = createFileRoute("/product/$id")({
 
 const availabilityBadgeClass: Record<Availability, string> = {
   available: "bg-emerald-600 text-white",
+  "made-to-order": "bg-sky-600 text-white",
   reserved: "bg-amber-500 text-white",
   sold: "bg-slate-900 text-white",
   draft: "bg-muted text-foreground",
@@ -204,9 +205,11 @@ function ProductPage() {
     const availability =
       artwork.availability === "available"
         ? "https://schema.org/InStock"
-        : artwork.availability === "reserved"
-          ? "https://schema.org/PreOrder"
-          : "https://schema.org/SoldOut";
+        : artwork.availability === "made-to-order"
+          ? "https://schema.org/MadeToOrder"
+          : artwork.availability === "reserved"
+            ? "https://schema.org/PreOrder"
+            : "https://schema.org/SoldOut";
 
     // Google Merchant prefers a `priceValidUntil` on every offer; we use
     // end-of-current-year so the field stays plausibly fresh without
@@ -714,6 +717,19 @@ function ProductPage() {
               {artwork.description}
             </p>
 
+            {artwork.availability === "made-to-order" && (
+              <div className="rounded-sm border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-foreground">
+                <p className="font-body text-[10px] tracking-[0.3em] uppercase text-sky-700 dark:text-sky-300 mb-1">
+                  Made to order
+                </p>
+                <p className="font-body text-xs md:text-sm text-muted-foreground">
+                  This piece is painted to order. Place your order today and the
+                  artist will start once payment is confirmed — typical
+                  turnaround is 2–4 weeks before it ships.
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-3">
               <MagneticButton
                 ref={addToCartButtonRef}
@@ -729,7 +745,9 @@ function ProductPage() {
               >
                 <ShoppingCart className="w-4 h-4" />
                 {purchasable
-                  ? "Add to cart"
+                  ? artwork.availability === "made-to-order"
+                    ? "Order this piece"
+                    : "Add to cart"
                   : `${AVAILABILITY_LABEL[artwork.availability]}`}
               </MagneticButton>
               <button
