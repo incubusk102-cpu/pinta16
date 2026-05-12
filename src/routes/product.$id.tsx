@@ -466,7 +466,7 @@ function ProductPage() {
           className="grid lg:grid-cols-[1.2fr_1fr] gap-8 md:gap-10 lg:gap-16"
         >
           <section className="space-y-4">
-            <div className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame">
+            <div className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame holo-frame">
               {isVideoActive && productVideo ? (
                 <div className="w-full bg-black flex items-center justify-center">
                   <video

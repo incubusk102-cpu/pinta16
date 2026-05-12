@@ -276,6 +276,13 @@ const GalleryNav = () => {
         </div>
       </div>
 
+      {/* Holographic hairline pinned to the bottom of the nav once
+          the visitor scrolls past the top. Drops the existing 1px
+          slate border for an animated brand-gold → teal → violet
+          gradient. Pure CSS keyframes (see `.nav-holo-edge` in
+          `src/styles.css`), so this layer never re-renders. */}
+      {scrolled && <span aria-hidden="true" className="nav-holo-edge" />}
+
       {/* Drawer is always mounted so the first hamburger tap on any page
           (including the homepage with its heavy hero) shows every option
           instantly — no AnimatePresence enter cost, no blank frame.

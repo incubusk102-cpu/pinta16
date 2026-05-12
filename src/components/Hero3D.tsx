@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { Float } from "@react-three/drei";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
@@ -13,6 +13,13 @@ import { Link } from "@tanstack/react-router";
 import { useProducts } from "@/contexts/ProductContext";
 import { getStorefrontArtworks, type DisplayArtwork } from "@/lib/artworks";
 import { variantSrc } from "@/lib/productImage";
+
+// Lazy WebGL particle field rendered as a sibling of the framed
+// painting inside the existing Canvas. Hero3D itself is already
+// gated to desktop / fine-pointer via HomeHero's media query, so
+// the additional cost only lands on visitors with hardware that can
+// already absorb the three.js scene.
+const HeroParticles = lazy(() => import("@/components/HeroParticles"));
 
 // Cinematic 3D landing hero. Renders a framed painting drifting in
 // space behind the Canvas Hub wordmark, lit with a warm three-point
@@ -139,6 +146,9 @@ function Scene({ imageUrl, reduced }: SceneProps) {
       <Float {...floatProps}>
         <FramedPainting imageUrl={imageUrl} />
       </Float>
+      <Suspense fallback={null}>
+        <HeroParticles reduced={reduced} />
+      </Suspense>
       {!reduced && (
         <EffectComposer multisampling={0}>
           <Bloom
