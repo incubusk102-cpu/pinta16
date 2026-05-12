@@ -11,6 +11,7 @@ import DailyFeature from "@/components/DailyFeature";
 import CinematicCollectionCTA from "@/components/CinematicCollectionCTA";
 import HomepageVideoMontage from "@/components/HomepageVideoMontage";
 import Ornament from "@/components/decor/Ornament";
+import SectionDivider from "@/components/SectionDivider";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
 // Below-the-fold sections — split out of the main entry chunk via
@@ -112,8 +113,10 @@ function Index() {
       {user && <GalleryNav />}
       {!user && <HeroOrFallback />}
       <PaintingMarquee />
+      <SectionDivider />
       <VisitorTicker />
       <DailyFeature />
+      <SectionDivider />
       {/* Optional studio reel — renders only when admin has set a
           videoUrl in /admin → Storefront → Studio reel; otherwise the
           page collapses straight from DailyFeature into the

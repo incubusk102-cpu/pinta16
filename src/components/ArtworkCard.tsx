@@ -77,6 +77,7 @@ const ArtworkCard = ({
   } = useStorefrontConfig();
   const wishlist = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
+  const [heartBurst, setHeartBurst] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const tiltX = useMotionValue(0);
@@ -121,6 +122,13 @@ const ArtworkCard = ({
       image,
       price: effectivePrice,
     });
+    // Fire the 3D burst only when the heart was just turned ON. The
+    // burst animation is decorative — toggling off should feel
+    // weightless, so we skip it on the removal path.
+    if (added && !reduceMotion) {
+      setHeartBurst(true);
+      window.setTimeout(() => setHeartBurst(false), 720);
+    }
     toast.success(
       added
         ? `Saved "${title}" to your wishlist`
@@ -166,7 +174,7 @@ const ArtworkCard = ({
         delay: (index % 4) * 0.035,
         ease: [0.16, 1, 0.3, 1],
       }}
-      className="break-inside-avoid group cursor-pointer [perspective:1200px]"
+      className="break-inside-avoid group gallery-dof-card cursor-pointer [perspective:1200px]"
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
@@ -236,7 +244,10 @@ const ArtworkCard = ({
           )}
         </AnimatePresence>
 
-        {/* Wishlist heart */}
+        {/* Wishlist heart — when the heart is toggled ON we burst it
+            in 3D (springy scale + rotate-X tumble) and emit four
+            short-lived sparks that fly outward. Pure framer-motion,
+            silent under `prefers-reduced-motion`. */}
         <button
           type="button"
           onClick={handleToggleWishlist}
@@ -246,13 +257,51 @@ const ArtworkCard = ({
               ? `Remove ${title} from wishlist`
               : `Save ${title} to wishlist`
           }
-          className="absolute top-3 right-3 z-[3] p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-colors"
+          className="absolute top-3 right-3 z-[3] p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-colors [perspective:600px]"
         >
-          <Heart
-            className={`w-4 h-4 transition-colors ${
-              inWishlist ? "fill-red-500 text-red-500" : "text-white/80"
-            }`}
-          />
+          <motion.span
+            aria-hidden="true"
+            initial={false}
+            animate={
+              heartBurst
+                ? {
+                    scale: [1, 1.55, 0.92, 1.12, 1],
+                    rotateX: [0, 180, 360],
+                  }
+                : { scale: 1, rotateX: 0 }
+            }
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="relative inline-flex items-center justify-center motion-reduce:!transform-none"
+            style={{ transformStyle: "preserve-3d" }}
+          >
+            <Heart
+              className={`w-4 h-4 transition-colors ${
+                inWishlist ? "fill-red-500 text-red-500" : "text-white/80"
+              }`}
+            />
+            <AnimatePresence>
+              {heartBurst && (
+                <>
+                  {[0, 90, 180, 270].map((angle) => (
+                    <motion.span
+                      key={angle}
+                      aria-hidden="true"
+                      initial={{ opacity: 1, x: 0, y: 0, scale: 0.4 }}
+                      animate={{
+                        opacity: 0,
+                        x: Math.cos((angle * Math.PI) / 180) * 18,
+                        y: Math.sin((angle * Math.PI) / 180) * 18,
+                        scale: 1.1,
+                      }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.55, ease: "easeOut" }}
+                      className="pointer-events-none absolute w-1 h-1 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.85)]"
+                    />
+                  ))}
+                </>
+              )}
+            </AnimatePresence>
+          </motion.span>
         </button>
 
         {/* Availability badge */}

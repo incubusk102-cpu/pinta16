@@ -574,6 +574,223 @@
       transform: none !important;
     }
   }
+
+  /* Holographic frame: iridescent ring + slow conic shimmer used on the
+     product hero image. Sits on top of the existing `.gallery-frame`
+     border, so the brown wood mat keeps its weight and the holographic
+     ring reads as a soft glow rather than a paint overlay. Coloured
+     with brand-gold + a teal accent so it complements the warm
+     storefront palette instead of fighting it. */
+  .holo-frame {
+    position: relative;
+    isolation: isolate;
+  }
+  .holo-frame::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from 0deg at 50% 50%,
+      color-mix(in oklab, var(--logo-color) 78%, transparent) 0%,
+      color-mix(in oklab, #4dd0e1 60%, transparent) 30%,
+      color-mix(in oklab, var(--logo-color) 78%, transparent) 60%,
+      color-mix(in oklab, #b388ff 55%, transparent) 85%,
+      color-mix(in oklab, var(--logo-color) 78%, transparent) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.55;
+    animation: holo-spin 9s linear infinite;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .holo-frame::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      125deg,
+      transparent 35%,
+      color-mix(in oklab, #ffffff 60%, transparent) 50%,
+      transparent 65%
+    );
+    background-size: 240% 240%;
+    mix-blend-mode: overlay;
+    opacity: 0.35;
+    animation: holo-sheen 7s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+  @keyframes holo-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes holo-sheen {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* Depth-of-field gallery grid: when ANY card inside the grid is
+     hovered, every other card softens (slight blur + desaturate +
+     scale-down) so the visitor's attention is naturally pulled into
+     the painting they're inspecting. Pure CSS via `:has()` — falls
+     back to no-op on browsers that don't support it (the cards just
+     keep their normal hover behaviour). Honours reduced-motion. */
+  .gallery-dof {
+    --dof-blur: 2.2px;
+    --dof-scale: 0.985;
+  }
+  .gallery-dof .gallery-dof-card {
+    transition:
+      filter 380ms var(--transition-smooth),
+      transform 380ms var(--transition-smooth);
+    will-change: filter, transform;
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .gallery-dof:has(.gallery-dof-card:hover) .gallery-dof-card:not(:hover) {
+      filter: blur(var(--dof-blur)) saturate(0.78) brightness(0.92);
+      transform: scale(var(--dof-scale));
+    }
+  }
+
+  /* Animated section divider: a thin gold hairline with a moving
+     highlight bead and a sparse particle drift. Used between major
+     editorial blocks on the homepage to break the page rhythm without
+     adding visual weight. */
+  .section-divider {
+    position: relative;
+    height: 56px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .section-divider-line {
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--logo-color) 65%, transparent) 50%,
+      transparent 100%
+    );
+  }
+  .section-divider-bead {
+    position: absolute;
+    top: 50%;
+    left: 12%;
+    width: 22%;
+    height: 2px;
+    transform: translateY(-50%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--logo-color) 90%, transparent) 50%,
+      transparent 100%
+    );
+    filter: blur(1px);
+    animation: section-divider-bead 6.5s ease-in-out infinite;
+  }
+  @keyframes section-divider-bead {
+    0%,
+    100% {
+      transform: translate(0%, -50%);
+      opacity: 0;
+    }
+    10%,
+    90% {
+      opacity: 1;
+    }
+    50% {
+      transform: translate(260%, -50%);
+      opacity: 1;
+    }
+  }
+  .section-divider-particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--logo-color) 85%, transparent);
+    box-shadow: 0 0 6px color-mix(in oklab, var(--logo-color) 55%, transparent);
+    animation: section-divider-drift linear infinite;
+    opacity: 0;
+  }
+  @keyframes section-divider-drift {
+    0% {
+      transform: translate3d(-20px, 6px, 0);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.9;
+    }
+    85% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate3d(120px, -6px, 0);
+      opacity: 0;
+    }
+  }
+
+  /* Holographic hairline pinned to the bottom of the GalleryNav once
+     the page has scrolled past the top. Same colour palette as
+     `.holo-frame` so the nav reads as part of the same visual layer
+     when the visitor scrolls into the catalogue. */
+  .nav-holo-edge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--logo-color) 70%, transparent) 18%,
+      color-mix(in oklab, #4dd0e1 55%, transparent) 38%,
+      color-mix(in oklab, #b388ff 55%, transparent) 60%,
+      color-mix(in oklab, var(--logo-color) 70%, transparent) 82%,
+      transparent 100%
+    );
+    background-size: 240% 100%;
+    animation: nav-holo-slide 9s linear infinite;
+    pointer-events: none;
+    opacity: 0.9;
+  }
+  @keyframes nav-holo-slide {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: -240% 50%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .holo-frame::before,
+    .holo-frame::after,
+    .section-divider-bead,
+    .section-divider-particle,
+    .nav-holo-edge {
+      animation: none !important;
+    }
+    .gallery-dof .gallery-dof-card {
+      transition: none !important;
+    }
+  }
 }
 
 html {

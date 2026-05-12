@@ -462,7 +462,7 @@ const GallerySection = () => {
           )}
         </div>
       ) : (
-        <div className="columns-1 sm:columns-2 xl:columns-3 2xl:columns-4 gap-4 sm:gap-6 xl:gap-8 space-y-4 sm:space-y-6 xl:space-y-8">
+        <div className="gallery-dof columns-1 sm:columns-2 xl:columns-3 2xl:columns-4 gap-4 sm:gap-6 xl:gap-8 space-y-4 sm:space-y-6 xl:space-y-8">
           {sortedArtworks.map((art, index) => (
             <ArtworkCard
               key={art.id}
