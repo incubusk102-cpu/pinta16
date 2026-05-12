@@ -773,7 +773,7 @@ export function StockListingsSection() {
                         display.availability === "available"
                           ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
                           : display.availability === "made-to-order"
-                            ? "bg-sky-500/20 text-sky-700 dark:text-sky-300"
+                            ? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
                             : display.availability === "reserved"
                               ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
                               : display.availability === "sold"
