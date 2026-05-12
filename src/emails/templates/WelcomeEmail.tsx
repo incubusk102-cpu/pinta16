@@ -252,9 +252,15 @@ export default function WelcomeEmail({
                 {rows.map((rowItems, rowIdx) => (
                   <Row key={rowIdx}>
                     {rowItems.map((p, idx) => {
+                      // Storefront route is `/product/$id` (singular) — the
+                      // TanStack file route is `src/routes/product.$id.tsx`.
+                      // Until now the welcome template emitted the plural
+                      // `/products/<id>`, which 404s, so clicking a suggested
+                      // product card in the email opened the SPA's not-found
+                      // page instead of the actual painting overview.
                       const href = p.__custom
                         ? `${PUBLIC_SITE_ORIGIN}/preview/${encodeURIComponent(p.id || "")}`
-                        : `${PUBLIC_SITE_ORIGIN}/products/${encodeURIComponent(p.id || "")}`;
+                        : `${PUBLIC_SITE_ORIGIN}/product/${encodeURIComponent(p.id || "")}`;
                       const showImg = isSafeImageUrl(p.imageUrl);
                       return (
                         <Column
