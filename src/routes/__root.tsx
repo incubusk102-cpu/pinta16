@@ -91,6 +91,23 @@ function HeartbeatBridge() {
   return null;
 }
 
+// Breadcrumb into `/public/boot-diagnostics.js`. Lets the static
+// stall-watchdog tell us whether the SPA ever reached its root
+// commit — if `root:mounted` shows up in the overlay we know
+// `createRoot.render()` ran *and* React committed at least one
+// frame, narrowing a blank-screen failure to something below the
+// providers chain. See main.tsx for the full breadcrumb sequence.
+function BootMountMark() {
+  useEffect(() => {
+    try {
+      window.__cvBoot?.mark("root:mounted");
+    } catch {
+      /* never let diagnostics crash a mount */
+    }
+  }, []);
+  return null;
+}
+
 function ReferralCaptureBridge() {
   useEffect(() => {
     captureReferralFromUrl();
@@ -197,6 +214,7 @@ function RootComponent() {
                             <CommandPaletteProvider>
                               <QuickSpinProvider>
                                 <SmoothScrollProvider>
+                                  <BootMountMark />
                                   <HeartbeatBridge />
                                   <ReferralCaptureBridge />
                                   <GoogleAuthHashBridge />
