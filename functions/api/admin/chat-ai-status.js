@@ -3,6 +3,9 @@
 //
 // Returns the worker's exact view of:
 //   - chat.ai.enabled persisted in STOREFRONT_CONFIG KV
+//   - whether the Cloudflare Workers AI binding (`env.AI`) is present,
+//     plus the result of a tiny live inference probe (1-token reply)
+//     against the same model the chat path uses by default
 //   - whether GROQ_API_KEY / GROQ_TOKEN env vars are bound and non-empty
 //   - length of each token (raw and trimmed) so we can detect stray
 //     whitespace without ever echoing the value itself
@@ -29,6 +32,10 @@ import { isAuthenticated } from "../_lib/admin-auth.js";
 const CONFIG_KEY = "config";
 const GROQ_MODELS_ENDPOINT = "https://api.groq.com/openai/v1/models";
 const GROQ_PROBE_TIMEOUT_MS = 4000;
+// Same model the chat-ai default path uses. The probe is a 1-token reply
+// so a few requests/day costs near-zero neurons.
+const WORKERS_AI_PROBE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const WORKERS_AI_PROBE_TIMEOUT_MS = 5000;
 
 const json = (status, body) =>
   new Response(JSON.stringify(body), {
@@ -114,6 +121,54 @@ const readStorefrontChatAi = async (env) => {
       typeof ai?.systemPrompt === "string" ? ai.systemPrompt.length : 0,
     faq_count: faqs.length,
     chat_widget_enabled: chat?.enabled === true,
+  };
+};
+
+const probeWorkersAi = async (env) => {
+  if (!env?.AI) {
+    return { attempted: false, reason: "no-binding" };
+  }
+  const startedAt = Date.now();
+  const inference = env.AI.run(WORKERS_AI_PROBE_MODEL, {
+    messages: [{ role: "user", content: "ping" }],
+    max_tokens: 1,
+  });
+  let ok = false;
+  let errorMessage = null;
+  let sampleLength = null;
+  try {
+    const result = await Promise.race([
+      inference,
+      new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(new Error(`timeout after ${WORKERS_AI_PROBE_TIMEOUT_MS}ms`)),
+          WORKERS_AI_PROBE_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    const text =
+      typeof result?.response === "string"
+        ? result.response
+        : typeof result?.choices?.[0]?.message?.content === "string"
+          ? result.choices[0].message.content
+          : null;
+    if (typeof text === "string") {
+      ok = true;
+      sampleLength = text.length;
+    } else {
+      errorMessage = "unexpected response shape";
+    }
+  } catch (err) {
+    errorMessage = err?.message || String(err);
+  }
+  return {
+    attempted: true,
+    ok,
+    model: WORKERS_AI_PROBE_MODEL,
+    duration_ms: Date.now() - startedAt,
+    sample_length: sampleLength,
+    error: errorMessage,
   };
 };
 
@@ -210,17 +265,33 @@ export const onRequestGet = async ({ request, env }) => {
   };
 
   const storefront = await readStorefrontChatAi(env);
-  const groqProbe = await probeGroq(resolvedRaw);
+  // Run both probes in parallel — they're independent and we want the
+  // diagnostic page to load fast even when one provider is slow.
+  const [workersAiProbe, groqProbe] = await Promise.all([
+    probeWorkersAi(env),
+    probeGroq(resolvedRaw),
+  ]);
+
+  // Mirror the provider-selection logic in chat-ai.js so the diagnostic
+  // tells the operator which provider the actual chat path is using.
+  const activeProvider = env?.AI
+    ? "workers-ai"
+    : resolvedKey.trimmed_length > 0
+      ? "groq"
+      : "none";
 
   return json(200, {
     ok: true,
     timestamp: new Date().toISOString(),
+    active_provider: activeProvider,
     storefront_config: storefront,
     env: {
+      ai_binding_present: Boolean(env?.AI),
       groq_api_key: groqApiKey,
       groq_token: groqToken,
       resolved: resolvedKey,
     },
+    workers_ai_probe: workersAiProbe,
     groq_probe: groqProbe,
   });
 };
