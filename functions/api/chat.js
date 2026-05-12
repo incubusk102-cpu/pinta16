@@ -43,6 +43,15 @@ const MAX_BODY_CHARS = 2000;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{16,64}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// What we tell the customer when the AI hands off to a human — either
+// because the customer asked for one (input-side keyword match) or
+// because the model decided it couldn't answer from the data
+// (output-side handoff token, possibly mangled). Without this ack the
+// widget just goes silent, which buyers read as "the bot is broken".
+// Admin can override via storefront-config (`chat.ai.handoffMessage`).
+const DEFAULT_HANDOFF_ACK =
+  "Thanks for reaching out \u2014 a real person will reply within a few hours. Salamat!";
+
 const json = (statusCode, body, extraHeaders = {}) => ({
   statusCode,
   headers: withSecurityHeaders(extraHeaders),
@@ -319,7 +328,50 @@ const maybePostAiReply = async ({
   if (!outcome || outcome.kind === "skip") return;
 
   if (outcome.kind === "handoff") {
+    // Post a short, deterministic ack so the customer sees that their
+    // message was received and routed to a human, instead of the
+    // widget silently doing nothing. The ack is appended as `from:
+    // "ai"` so it shares the same bubble styling as a real auto-reply.
+    // Best-effort: an append failure still leaves `needsHumanAt` set
+    // on the index, which is enough for the gallery owner to find it.
+    const ackRaw =
+      typeof chatConfig?.ai?.handoffMessage === "string"
+        ? chatConfig.ai.handoffMessage.trim()
+        : "";
+    const ackBody = ackRaw || DEFAULT_HANDOFF_ACK;
+    const at = nowISO();
+    const updated = await appendMessage(
+      store,
+      threadAfterCustomer.id,
+      { at, from: "ai", body: ackBody },
+      { rejectIfClosed: true },
+    );
+    // Still mark the thread for admin pickup regardless of whether the
+    // ack appended cleanly. The flag is what surfaces it in the admin
+    // Chat tab; the ack is just customer-facing UX.
     await markNeedsHuman(store, threadAfterCustomer.id);
+    if (updated && updated !== "closed") {
+      try {
+        await upsertIndexEntry(store, (threads) => {
+          const idx = threads.findIndex((t) => t.id === threadAfterCustomer.id);
+          if (idx === -1) return threads;
+          const prior = threads[idx];
+          return [
+            ...threads.slice(0, idx),
+            sanitizeIndexEntry({
+              ...prior,
+              updatedAt: at,
+              messageCount: (prior.messageCount || 0) + 1,
+              // Keep `needsHumanAt` set — `markNeedsHuman` already wrote
+              // it and the ack does not clear the flag.
+            }),
+            ...threads.slice(idx + 1),
+          ];
+        });
+      } catch {
+        // ignore index update failure
+      }
+    }
     return;
   }
 

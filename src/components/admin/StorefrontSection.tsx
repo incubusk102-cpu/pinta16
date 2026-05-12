@@ -144,6 +144,9 @@ interface AdminConfig {
       // here if a future model serves canvhub better.
       model: string;
       handoffKeywords: string[];
+      // Customer-facing ack shown when the AI hands off to a human.
+      // Empty string → chat.js falls back to its bundled default.
+      handoffMessage: string;
     };
   };
   vacationMode: {
@@ -204,6 +207,7 @@ const DEFAULTS: AdminConfig = {
       systemPrompt: "",
       model: "",
       handoffKeywords: [],
+      handoffMessage: "",
     },
   },
   vacationMode: {
@@ -856,6 +860,10 @@ export function StorefrontSection() {
               )
                 ? data.config.chat.ai.handoffKeywords
                 : DEFAULTS.chat.ai.handoffKeywords,
+              handoffMessage:
+                typeof data.config.chat?.ai?.handoffMessage === "string"
+                  ? data.config.chat.ai.handoffMessage
+                  : DEFAULTS.chat.ai.handoffMessage,
             },
           },
           vacationMode: {
@@ -1150,6 +1158,7 @@ export function StorefrontSection() {
             systemPrompt: cfg.chat.ai.systemPrompt.trim(),
             model: cfg.chat.ai.model.trim(),
             handoffKeywords: cleanedKeywords,
+            handoffMessage: cfg.chat.ai.handoffMessage.trim().slice(0, 280),
           },
         },
       });
@@ -2656,6 +2665,36 @@ export function StorefrontSection() {
                     }
                     placeholder="llama-3.3-70b-versatile (default)"
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    Handoff acknowledgement (optional)
+                  </Label>
+                  <Textarea
+                    value={cfg.chat.ai.handoffMessage}
+                    maxLength={280}
+                    onChange={(e) =>
+                      setCfg((c) => ({
+                        ...c,
+                        chat: {
+                          ...c.chat,
+                          ai: {
+                            ...c.chat.ai,
+                            handoffMessage: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    placeholder="Thanks for reaching out \u2014 a real person will reply within a few hours. Salamat!"
+                    className="min-h-[64px] text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Shown to the customer when the AI hands a thread off to you
+                    (either they asked for a human, or the model couldn't answer
+                    from the FAQ / artwork data). Leave blank to use the bundled
+                    default. Max 280 chars.
+                  </p>
                 </div>
               </>
             )}

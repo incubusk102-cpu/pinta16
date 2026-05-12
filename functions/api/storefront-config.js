@@ -46,8 +46,16 @@ const CHAT_AI_PROMPT_MAX = 4000;
 const CHAT_AI_KEYWORD_MAX = 40;
 const CHAT_AI_KEYWORDS_MAX_COUNT = 20;
 const CHAT_AI_MODEL_MAX = 80;
+// Customer-facing ack message shown when the AI hands off to a human.
+// Keep this well under the 280-char SMS-style ceiling so it fits one
+// line in the chat bubble on mobile.
+const CHAT_AI_HANDOFF_MESSAGE_MAX = 280;
 const DEFAULT_CHAT_AI_SYSTEM_PROMPT = "";
 const DEFAULT_CHAT_AI_HANDOFF_KEYWORDS = [];
+// Empty string → the chat handler falls back to its bundled default
+// (see DEFAULT_HANDOFF_ACK in chat.js). Stored as empty so the admin UI
+// can show the bundled copy in its placeholder.
+const DEFAULT_CHAT_AI_HANDOFF_MESSAGE = "";
 
 // Saved replies for the admin Messages section. These are admin-only
 // templates the gallery owner inserts into a chat reply with a click —
@@ -220,6 +228,12 @@ const sanitizeChatAi = (raw) => {
       .trim()
       .slice(0, CHAT_AI_MODEL_MAX),
     handoffKeywords,
+    // Customer-facing ack the chat handler posts when the AI hands off
+    // to a human. Empty string → use the bundled default in chat.js.
+    handoffMessage: String(data.handoffMessage ?? "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .trim()
+      .slice(0, CHAT_AI_HANDOFF_MESSAGE_MAX),
   };
 };
 
@@ -1093,6 +1107,9 @@ const DEFAULT_CONFIG = {
       // Additional words/phrases that, if they appear in a customer
       // message, force the AI to step aside so a human answers.
       handoffKeywords: DEFAULT_CHAT_AI_HANDOFF_KEYWORDS,
+      // Customer-facing ack message posted when the AI hands off.
+      // Empty string defers to the bundled default in chat.js.
+      handoffMessage: DEFAULT_CHAT_AI_HANDOFF_MESSAGE,
     },
   },
   // Saved replies (admin-only chat templates). Seed with the four
