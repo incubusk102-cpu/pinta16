@@ -95,7 +95,7 @@ export const Route = createFileRoute("/product/$id")({
 
 const availabilityBadgeClass: Record<Availability, string> = {
   available: "bg-emerald-600 text-white",
-  "made-to-order": "bg-sky-600 text-white",
+  "made-to-order": "bg-blue-600 text-white",
   reserved: "bg-amber-500 text-white",
   sold: "bg-slate-900 text-white",
   draft: "bg-muted text-foreground",
@@ -718,8 +718,8 @@ function ProductPage() {
             </p>
 
             {artwork.availability === "made-to-order" && (
-              <div className="rounded-sm border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-foreground">
-                <p className="font-body text-[10px] tracking-[0.3em] uppercase text-sky-700 dark:text-sky-300 mb-1">
+              <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
+                <p className="font-body text-[10px] tracking-[0.3em] uppercase text-blue-700 dark:text-blue-300 mb-1">
                   Made to order
                 </p>
                 <p className="font-body text-xs md:text-sm text-muted-foreground">
