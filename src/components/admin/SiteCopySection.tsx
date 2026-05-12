@@ -18,6 +18,7 @@ const cloneDefaults = (): SiteCopy => ({
   about: { ...DEFAULT_SITE_COPY.about },
   reviews: { ...DEFAULT_SITE_COPY.reviews },
   contact: { ...DEFAULT_SITE_COPY.contact },
+  newsletter: { ...DEFAULT_SITE_COPY.newsletter },
   madeToOrderNotice: { ...DEFAULT_SITE_COPY.madeToOrderNotice },
   productInfo: { ...DEFAULT_SITE_COPY.productInfo },
 });
@@ -50,6 +51,7 @@ export const SiteCopySection = () => {
       about: { ...config.siteCopy.about },
       reviews: { ...config.siteCopy.reviews },
       contact: { ...config.siteCopy.contact },
+      newsletter: { ...config.siteCopy.newsletter },
       madeToOrderNotice: { ...config.siteCopy.madeToOrderNotice },
       productInfo: { ...config.siteCopy.productInfo },
     });
@@ -82,6 +84,10 @@ export const SiteCopySection = () => {
             contact: {
               ...DEFAULT_SITE_COPY.contact,
               ...data.config.siteCopy.contact,
+            },
+            newsletter: {
+              ...DEFAULT_SITE_COPY.newsletter,
+              ...data.config.siteCopy.newsletter,
             },
             madeToOrderNotice: {
               ...DEFAULT_SITE_COPY.madeToOrderNotice,
@@ -254,6 +260,35 @@ export const SiteCopySection = () => {
             onChange: (v) =>
               setCopy((c) => ({ ...c, contact: { ...c.contact, title: v } })),
             placeholder: DEFAULT_SITE_COPY.contact.title,
+          },
+        ]}
+      />
+
+      <SectionEditor
+        title="Newsletter"
+        description="The strapline above the email subscribe form in the Contact section."
+        fields={[
+          {
+            label: "Eyebrow (small caps line)",
+            value: copy.newsletter.eyebrow,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                newsletter: { ...c.newsletter, eyebrow: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.newsletter.eyebrow,
+          },
+          {
+            label: "Headline",
+            value: copy.newsletter.title,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                newsletter: { ...c.newsletter, title: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.newsletter.title,
+            multiline: true,
+            rows: 3,
           },
         ]}
       />

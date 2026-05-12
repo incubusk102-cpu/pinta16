@@ -13,6 +13,7 @@ const ContactSection = () => {
   const { t } = useLocale();
   const { config } = useStorefrontConfig();
   const contactCopy = config.siteCopy.contact;
+  const newsletterCopy = config.siteCopy.newsletter;
   // Preserve i18n for Contact when the admin hasn't customised the copy.
   // The other sections were already English-only before this PR; Contact
   // was the only one wired to the locale-aware translations, so we fall
@@ -25,6 +26,18 @@ const ContactSection = () => {
     contactCopy.title === DEFAULT_SITE_COPY.contact.title
       ? t("contact.heading")
       : contactCopy.title;
+  // Same fallback shape for the newsletter strap — when the admin still
+  // has the default English copy saved, render the locale-aware string
+  // so Tagalog visitors keep the translated version. Once the admin
+  // customises either field, that override wins across locales.
+  const newsletterEyebrow =
+    newsletterCopy.eyebrow === DEFAULT_SITE_COPY.newsletter.eyebrow
+      ? t("newsletter.title")
+      : newsletterCopy.eyebrow;
+  const newsletterTitle =
+    newsletterCopy.title === DEFAULT_SITE_COPY.newsletter.title
+      ? t("newsletter.subtitle")
+      : newsletterCopy.title;
   return (
     <SectionReveal
       as="section"
@@ -93,10 +106,10 @@ const ContactSection = () => {
         className="mt-16 md:mt-24 border-t border-border/30 pt-12 flex flex-col items-center text-center"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-3">
-          {t("newsletter.title")}
+          {newsletterEyebrow}
         </p>
         <h3 className="font-display text-2xl md:text-3xl text-foreground mb-4 max-w-md">
-          {t("newsletter.subtitle")}
+          {newsletterTitle}
         </h3>
         <NewsletterForm source="footer" />
       </motion.div>
