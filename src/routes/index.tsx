@@ -26,6 +26,7 @@ import { useUserAuth } from "@/contexts/UserAuthContext";
 // experience is interactive on first paint.
 const RecommendedRow = lazy(() => import("@/components/RecommendedRow"));
 const RecentlyViewed = lazy(() => import("@/components/RecentlyViewed"));
+const InspiredByYouRail = lazy(() => import("@/components/InspiredByYouRail"));
 const AboutSection = lazy(() => import("@/components/AboutSection"));
 const ThankYouWall = lazy(() => import("@/components/ThankYouWall"));
 const ReviewsSection = lazy(() => import("@/components/ReviewsSection"));
@@ -127,6 +128,7 @@ function Index() {
         <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
           <RecommendedRow />
           <RecentlyViewed />
+          <InspiredByYouRail />
         </section>
         <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
           <Ornament label="The studio" />

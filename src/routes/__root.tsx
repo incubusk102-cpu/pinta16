@@ -23,6 +23,7 @@ import PageTransitions from "@/components/PageTransitions";
 import { QuickSpinProvider } from "@/contexts/QuickSpinContext";
 import { CompareProvider } from "@/contexts/CompareContext";
 import { FlyToCartProvider } from "@/contexts/FlyToCartContext";
+import { CommandPaletteProvider } from "@/contexts/CommandPaletteContext";
 import CompareDrawer from "@/components/CompareDrawer";
 import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
@@ -49,6 +50,7 @@ const WelcomeBonusCountdown = lazy(
   () => import("@/components/WelcomeBonusCountdown"),
 );
 const ArtistThankYou = lazy(() => import("@/components/ArtistThankYou"));
+const CommandPalette = lazy(() => import("@/components/CommandPalette"));
 
 function NotFoundComponent() {
   return (
@@ -174,28 +176,31 @@ function RootComponent() {
                       <CartProvider>
                         <CompareProvider>
                           <FlyToCartProvider>
-                            <QuickSpinProvider>
-                              <SmoothScrollProvider>
-                                <HeartbeatBridge />
-                                <ReferralCaptureBridge />
-                                <GoogleAuthHashBridge />
-                                <ConditionalAmbientChrome />
-                                <ConditionalAnnouncementBar />
-                                <PageTransitions>
-                                  <Outlet />
-                                </PageTransitions>
-                                <ConditionalSiteFooter />
-                                <Suspense fallback={null}>
-                                  <ConditionalOrderConfirmation />
-                                  <ChatWidget />
-                                  <NewUserModal />
-                                  <PwaPrompts />
-                                </Suspense>
-                                <ConditionalVisitorDelight />
-                                <CompareDrawer />
-                                <Toaster richColors position="top-right" />
-                              </SmoothScrollProvider>
-                            </QuickSpinProvider>
+                            <CommandPaletteProvider>
+                              <QuickSpinProvider>
+                                <SmoothScrollProvider>
+                                  <HeartbeatBridge />
+                                  <ReferralCaptureBridge />
+                                  <GoogleAuthHashBridge />
+                                  <ConditionalAmbientChrome />
+                                  <ConditionalAnnouncementBar />
+                                  <PageTransitions>
+                                    <Outlet />
+                                  </PageTransitions>
+                                  <ConditionalSiteFooter />
+                                  <Suspense fallback={null}>
+                                    <ConditionalOrderConfirmation />
+                                    <ChatWidget />
+                                    <NewUserModal />
+                                    <PwaPrompts />
+                                    <CommandPalette />
+                                  </Suspense>
+                                  <ConditionalVisitorDelight />
+                                  <CompareDrawer />
+                                  <Toaster richColors position="top-right" />
+                                </SmoothScrollProvider>
+                              </QuickSpinProvider>
+                            </CommandPaletteProvider>
                           </FlyToCartProvider>
                         </CompareProvider>
                       </CartProvider>

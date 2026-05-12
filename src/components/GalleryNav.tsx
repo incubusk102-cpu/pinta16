@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Truck,
   GitCompare,
+  Search,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCart, type CompletedOrder } from "@/contexts/CartContext";
@@ -24,6 +25,8 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useCompare } from "@/contexts/CompareContext";
 import { useFlyToCart } from "@/contexts/FlyToCartContext";
+import { useCommandPalette } from "@/contexts/CommandPaletteContext";
+import MiniCartHover from "@/components/MiniCartHover";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
 import ProfileEditor from "@/components/account/ProfileEditor";
@@ -62,6 +65,7 @@ const GalleryNav = () => {
   const { items: wishlistItems } = useWishlist();
   const compare = useCompare();
   const flyToCart = useFlyToCart();
+  const commandPalette = useCommandPalette();
   const { t } = useLocale();
   // Pulse the cart badge briefly when an item lands in the cart so the
   // visitor gets a small visual confirmation in the corner of the nav.
@@ -247,6 +251,32 @@ const GalleryNav = () => {
           {!onIndex && (
             <>
               <ThemeLocaleToggle />
+              {/* Storefront search trigger — opens the global command
+                  palette. Same shortcut (Cmd/Ctrl+K, /) works without
+                  this button; visible affordance keeps it discoverable
+                  for visitors who don't know the shortcut. */}
+              <button
+                type="button"
+                onClick={() => commandPalette.open()}
+                className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground border border-border/50 rounded hover:text-foreground hover:border-border transition-colors"
+                aria-label="Search the storefront"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span className="hidden md:inline tracking-[0.18em] uppercase text-[10px]">
+                  Search
+                </span>
+                <kbd className="hidden md:inline-flex items-center text-[9px] tracking-[0.18em] uppercase border border-border/40 rounded px-1 py-px ml-1 text-muted-foreground">
+                  ⌘K
+                </kbd>
+              </button>
+              <button
+                type="button"
+                onClick={() => commandPalette.open()}
+                className="sm:hidden p-2"
+                aria-label="Search the storefront"
+              >
+                <Search className="w-5 h-5 text-foreground" />
+              </button>
               {compare.count > 0 && (
                 <button
                   type="button"
@@ -263,26 +293,30 @@ const GalleryNav = () => {
                   </span>
                 </button>
               )}
-              <button
-                ref={cartButtonRef}
-                onClick={openCart}
-                className="relative p-2"
-                aria-label={t("nav.cart")}
-              >
-                <ShoppingCart className="w-5 h-5 text-foreground" />
-                {itemCount > 0 && (
-                  <motion.span
-                    key={itemCount}
-                    initial={false}
-                    animate={cartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }}
-                    transition={{ duration: 0.45, ease: "easeOut" }}
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center motion-reduce:animate-none"
-                    aria-live="polite"
-                  >
-                    {itemCount}
-                  </motion.span>
-                )}
-              </button>
+              <MiniCartHover>
+                <button
+                  ref={cartButtonRef}
+                  onClick={openCart}
+                  className="relative p-2"
+                  aria-label={t("nav.cart")}
+                >
+                  <ShoppingCart className="w-5 h-5 text-foreground" />
+                  {itemCount > 0 && (
+                    <motion.span
+                      key={itemCount}
+                      initial={false}
+                      animate={
+                        cartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }
+                      }
+                      transition={{ duration: 0.45, ease: "easeOut" }}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center motion-reduce:animate-none"
+                      aria-live="polite"
+                    >
+                      {itemCount}
+                    </motion.span>
+                  )}
+                </button>
+              </MiniCartHover>
             </>
           )}
           <button
