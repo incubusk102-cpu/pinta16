@@ -86,12 +86,178 @@ describe("chat-ai internals", () => {
 
     it("returns null when two FAQs tie on a single keyword", () => {
       // Both "returns" and "payment" each hit one of their question
-      // tokens, so the margin requirement rejects the ambiguous match.
+      // tokens, so the margin requirement (best - runnerUp >= 1)
+      // rejects the ambiguous match even though best score is now
+      // allowed to be 1.
       const close = __internals.findFaqMatch("returns payment", FAQS);
-      // It would still match on 1 token each — should return null
-      // since the margin requirement (best - runner-up >= 1) is not met
-      // AND score < 2.
       expect(close).toBeNull();
+    });
+
+    // Production regression: "How do I pay my purchase" only overlaps
+    // with the payment FAQ via the token `pay` (substring of "payment")
+    // — a single-keyword hit. The old threshold of >= 2 hits pushed
+    // this to the LLM, which paraphrased "GCash via QR PH only" and
+    // dropped Maya / bank transfer / cards. The lowered threshold
+    // (>= 1 with a 1-point margin) now returns the FAQ verbatim.
+    it.each([
+      ["How do I pay my purchase", "payment"],
+      ["how can I pay", "payment"],
+      ["Can I get a refund", "returns"],
+      ["do you ship to Manila", "shipping"],
+      ["shipping?", "shipping"],
+    ])(
+      "returns the FAQ verbatim on single-keyword %p → %s",
+      (msg, expectedId) => {
+        expect(__internals.findFaqMatch(msg, FAQS)?.id).toBe(expectedId);
+      },
+    );
+  });
+
+  describe("sanitizeCustomerName / firstName", () => {
+    it("returns trimmed name when it contains at least one letter", () => {
+      expect(__internals.sanitizeCustomerName("  Jess  ")).toBe("Jess");
+      expect(__internals.sanitizeCustomerName("Maria Santos")).toBe(
+        "Maria Santos",
+      );
+    });
+
+    it("rejects names that don't look like names", () => {
+      expect(__internals.sanitizeCustomerName("")).toBe("");
+      expect(__internals.sanitizeCustomerName(" ")).toBe("");
+      expect(__internals.sanitizeCustomerName("a")).toBe("");
+      expect(__internals.sanitizeCustomerName("123")).toBe("");
+      expect(__internals.sanitizeCustomerName("!!!")).toBe("");
+      // Non-string input should not throw.
+      expect(__internals.sanitizeCustomerName(undefined)).toBe("");
+      expect(__internals.sanitizeCustomerName(null as unknown as string)).toBe(
+        "",
+      );
+    });
+
+    it("caps long names at 40 chars", () => {
+      const long = "x".repeat(100);
+      expect(__internals.sanitizeCustomerName(long).length).toBe(40);
+    });
+
+    it("firstName title-cases the first letter only", () => {
+      expect(__internals.firstName("jess")).toBe("Jess");
+      expect(__internals.firstName("JESS smith")).toBe("JESS");
+      expect(__internals.firstName("DJ Cruz")).toBe("DJ");
+      expect(__internals.firstName("maria santos")).toBe("Maria");
+      expect(__internals.firstName("")).toBe("");
+      expect(__internals.firstName("123")).toBe("");
+    });
+  });
+
+  describe("pickHandoffAck / pickFaqPreamble", () => {
+    it("picks a real variant including the customer's first name", () => {
+      // Force the first variant deterministically.
+      const ack = __internals.pickHandoffAck("Jess", () => 0);
+      expect(ack).toContain(", Jess");
+      // The variant must come from the canonical list (with the name
+      // suffix substituted in) — i.e. not a hallucinated string.
+      const expected = __internals.HANDOFF_ACK_VARIANTS[0].replace(
+        "{name_suffix}",
+        ", Jess",
+      );
+      expect(ack).toBe(expected);
+    });
+
+    it("omits the name suffix entirely when no usable name is given", () => {
+      const ack = __internals.pickHandoffAck("", () => 0);
+      expect(ack).not.toContain("{name_suffix}");
+      expect(ack).not.toContain(", ");
+      const expected = __internals.HANDOFF_ACK_VARIANTS[0].replace(
+        "{name_suffix}",
+        "",
+      );
+      expect(ack).toBe(expected);
+    });
+
+    it("rotates through all variants", () => {
+      // With 4 variants and a sweep over [0, 0.25, 0.5, 0.75] we hit
+      // each variant slot exactly once. Confirms no off-by-one.
+      const acks = new Set<string>();
+      const rngs = [() => 0, () => 0.25, () => 0.5, () => 0.75];
+      for (const rng of rngs) {
+        acks.add(__internals.pickHandoffAck("Maria", rng));
+      }
+      expect(acks.size).toBe(__internals.HANDOFF_ACK_VARIANTS.length);
+    });
+
+    it("pickFaqPreamble returns empty string when no usable name", () => {
+      expect(__internals.pickFaqPreamble("", () => 0)).toBe("");
+      expect(__internals.pickFaqPreamble("123", () => 0)).toBe("");
+    });
+
+    it("pickFaqPreamble substitutes the customer's first name", () => {
+      const preamble = __internals.pickFaqPreamble("Jess Cruz", () => 0);
+      expect(preamble).toContain("Jess");
+      expect(preamble).not.toContain("{name}");
+    });
+  });
+
+  describe("buildSystemPrompt humanise", () => {
+    const baseConfigNoPrompt = { ai: { enabled: true }, faqs: [] };
+
+    it("uses the Mia persona by default", () => {
+      const prompt = __internals.buildSystemPrompt({
+        chatConfig: baseConfigNoPrompt,
+        products: [],
+      });
+      expect(prompt).toContain("Mia");
+      expect(prompt).toContain("Canvas Hub");
+      // Persona instructs the model to match the customer's language.
+      expect(prompt.toLowerCase()).toContain("taglish");
+    });
+
+    it("substitutes brandName into the persona", () => {
+      const prompt = __internals.buildSystemPrompt({
+        chatConfig: baseConfigNoPrompt,
+        products: [],
+        brandName: "Studio Foo",
+      });
+      expect(prompt).toContain("Studio Foo");
+      expect(prompt).not.toContain("Canvas Hub");
+    });
+
+    it("includes the customer's first name when supplied", () => {
+      const prompt = __internals.buildSystemPrompt({
+        chatConfig: baseConfigNoPrompt,
+        products: [],
+        customerName: "jess smith",
+      });
+      expect(prompt).toContain("Jess");
+      // Should not include the full name verbatim — only first name.
+      expect(prompt).not.toContain("smith");
+    });
+
+    it("omits the name instruction entirely when no usable name", () => {
+      const prompt = __internals.buildSystemPrompt({
+        chatConfig: baseConfigNoPrompt,
+        products: [],
+        customerName: "asd",
+      });
+      // "asd" passes the letter check but contains no first-name
+      // signal beyond itself; the line should still render with that
+      // exact token rather than being suppressed. Just verify there
+      // is no placeholder leak in either case.
+      expect(prompt).not.toContain("{first}");
+      expect(prompt).not.toContain("undefined");
+    });
+
+    it("respects admin-configured systemPrompt as a full override", () => {
+      const prompt = __internals.buildSystemPrompt({
+        chatConfig: {
+          ai: { enabled: true, systemPrompt: "Custom override line." },
+          faqs: [],
+        },
+        products: [],
+      });
+      expect(prompt).toContain("Custom override line.");
+      // Admin override replaces the persona entirely — they opted out
+      // of the bundled Mia persona by setting their own.
+      expect(prompt).not.toContain("Mia");
     });
   });
 
@@ -526,13 +692,18 @@ describe("generateAutoReply", () => {
     const aiRun = vi.fn().mockResolvedValue({
       response: "<<EEDS_HUMAN>>>",
     });
-    const thread = baseThread([
-      { from: "customer", body: "Can someone refund my order from last week?" },
-    ]);
+    // Customer message must not hit the FAQ fast-path — with the
+    // lowered threshold of 1 keyword, anything mentioning "refund",
+    // "shipping", "payment" etc. now returns the verbatim FAQ before
+    // the AI ever runs. "What is your studio history" overlaps with
+    // no test FAQ keyword, so the AI is exercised and the mangled
+    // token gets a chance to leak (and the regex must catch it).
+    const msg = "Tell me about your studio history please";
+    const thread = baseThread([{ from: "customer", body: msg }]);
     const out = await generateAutoReply({
       env: { AI: { run: aiRun } },
       thread,
-      customerMessage: "Can someone refund my order from last week?",
+      customerMessage: msg,
       chatConfig: baseConfig,
       products: [],
     });

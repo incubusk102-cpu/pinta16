@@ -31,7 +31,10 @@ import { isAuthenticated } from "./_lib/admin-auth.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { getCloudflareEnv } from "./_lib/context.js";
-import { generateAutoReply } from "./_lib/chat-ai.js";
+import {
+  generateAutoReply,
+  __internals as chatAiInternals,
+} from "./_lib/chat-ai.js";
 
 const STORE_NAME = "chat-threads";
 const INDEX_KEY = "index";
@@ -43,14 +46,24 @@ const MAX_BODY_CHARS = 2000;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{16,64}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// What we tell the customer when the AI hands off to a human — either
-// because the customer asked for one (input-side keyword match) or
-// because the model decided it couldn't answer from the data
-// (output-side handoff token, possibly mangled). Without this ack the
-// widget just goes silent, which buyers read as "the bot is broken".
-// Admin can override via storefront-config (`chat.ai.handoffMessage`).
-const DEFAULT_HANDOFF_ACK =
-  "Thanks for reaching out \u2014 a real person will reply within a few hours. Salamat!";
+// Server-side typing delay applied before every AI-authored message
+// (handoff ack, FAQ reply, LLM reply) lands in the thread. The FAQ
+// fast-path is zero-latency and an LLM reply takes ~400ms; both pop
+// in too fast to feel human. A random 600–1200ms pad makes the bot
+// feel like it's typing instead of teleporting. The customer's send
+// button stays in its loading state during this pad, which the
+// existing widget already shows as a "sending" indicator.
+const TYPING_DELAY_MIN_MS = 600;
+const TYPING_DELAY_MAX_MS = 1200;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const typingDelay = async () => {
+  const ms =
+    TYPING_DELAY_MIN_MS +
+    Math.random() * (TYPING_DELAY_MAX_MS - TYPING_DELAY_MIN_MS);
+  await sleep(ms);
+};
 
 const json = (statusCode, body, extraHeaders = {}) => ({
   statusCode,
@@ -328,17 +341,20 @@ const maybePostAiReply = async ({
   if (!outcome || outcome.kind === "skip") return;
 
   if (outcome.kind === "handoff") {
-    // Post a short, deterministic ack so the customer sees that their
-    // message was received and routed to a human, instead of the
-    // widget silently doing nothing. The ack is appended as `from:
-    // "ai"` so it shares the same bubble styling as a real auto-reply.
+    // Post a short ack so the customer sees that their message was
+    // received and routed to a human, instead of the widget silently
+    // doing nothing. Admin-configured copy wins; otherwise we rotate
+    // through warm variants that include the customer's first name
+    // when available, so consecutive handoffs don't read identically.
     // Best-effort: an append failure still leaves `needsHumanAt` set
     // on the index, which is enough for the gallery owner to find it.
     const ackRaw =
       typeof chatConfig?.ai?.handoffMessage === "string"
         ? chatConfig.ai.handoffMessage.trim()
         : "";
-    const ackBody = ackRaw || DEFAULT_HANDOFF_ACK;
+    const ackBody =
+      ackRaw || chatAiInternals.pickHandoffAck(threadAfterCustomer?.name);
+    await typingDelay();
     const at = nowISO();
     const updated = await appendMessage(
       store,
@@ -377,6 +393,11 @@ const maybePostAiReply = async ({
 
   if (outcome.kind !== "reply" || !outcome.body) return;
 
+  // Small typing delay so AI replies don't pop in instantly. Applied
+  // for both the FAQ fast-path (which is essentially zero-latency)
+  // and the LLM path (which is ~400ms — still too fast to feel
+  // human). Combined worst case stays well under the 6s AI timeout.
+  await typingDelay();
   const at = nowISO();
   const updated = await appendMessage(
     store,
