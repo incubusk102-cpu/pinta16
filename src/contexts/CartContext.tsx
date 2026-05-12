@@ -20,7 +20,6 @@ import {
 } from "@/lib/shipment";
 import { jsonAuthHeaders } from "@/lib/api";
 import type { ShippingZone } from "@/lib/ph-regions";
-import type { PaintingSizeCm } from "@/lib/painting-sizes";
 import {
   cartLineKey,
   loadCartItemsFromStorage,
@@ -41,13 +40,22 @@ export interface CartItem {
   price: number;
   quantity: number;
   /**
-   * Customer-selected size for this made-to-order line. Undefined for
-   * legacy items added before the size selector was wired into the
-   * cart — those are treated as "size to be confirmed via order notes"
-   * to stay backward-compatible with the previous copy-to-clipboard
-   * flow.
+   * Admin-provided dimensions string (free-form, e.g. `60 × 90 cm`)
+   * captured from the product editor at the time the customer added
+   * the item to their cart. Surfaces in the cart drawer, checkout
+   * summary, order confirmation, transactional email, and admin
+   * order detail. Optional for legacy lines added before this field
+   * existed.
    */
-  sizeCm?: PaintingSizeCm;
+  dimensions?: string;
+  /**
+   * Legacy customer-picked size for orders placed under the old
+   * S/M/L/XL/XXL selector. New cart lines no longer carry this; kept
+   * on the type so historical orders rendered by `OrderConfirmation`
+   * / `AdminPage` still typecheck and fall back to a formatted size
+   * label when `dimensions` is missing.
+   */
+  sizeCm?: { widthCm: number; heightCm: number };
 }
 
 export interface OrderInfo {
@@ -394,9 +402,7 @@ interface CartContextType {
   voucher: VoucherState;
   addToCart: (item: Omit<CartItem, "quantity">) => void;
   // Removed / quantity-updated by the per-line key returned from
-  // `cartLineKey(item)` so two same-product entries at different sizes
-  // are independently mutable. Backward-compatible: legacy items
-  // without a `sizeCm` keep their bare product id as the line key.
+  // `cartLineKey(item)` (currently the bare product id).
   removeFromCart: (lineKey: string) => void;
   updateQuantity: (lineKey: string, quantity: number) => void;
   clearCart: () => void;

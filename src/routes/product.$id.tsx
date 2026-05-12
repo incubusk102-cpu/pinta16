@@ -377,11 +377,11 @@ function ProductPage() {
   const effectivePrice = getEffectivePrice(artwork);
   const galleryImages =
     artwork.images.length > 0 ? artwork.images : [{ url: artwork.image }];
-  // "View on your wall" renders the bare artwork (1st uploaded photo)
-  // inside the same wooden frame used by PaintingViewer3D. The button
-  // only surfaces while the 1st photo is the active gallery tile, so
-  // this directly matches what the customer is looking at.
-  const wallImage = galleryImages[0];
+  // "View on your wall" shows the mockup photo (2nd uploaded image —
+  // typically the painting staged in a real interior) edge-to-edge.
+  // Falls back to the bare artwork (1st photo) when no mockup was
+  // uploaded so the modal always has something to render.
+  const wallImage = galleryImages[1] ?? galleryImages[0];
   // Optional studio video shows up as a leading "play" tile in the
   // thumbnail strip and switches the hero slot from `<img>` to
   // `<video controls>` when selected. We resolve the artwork-level
@@ -438,6 +438,7 @@ function ProductPage() {
       medium: artwork.medium,
       year: artwork.year,
       price: effectivePrice,
+      ...(artwork.dimensions ? { dimensions: artwork.dimensions } : {}),
     });
   };
 
@@ -911,6 +912,7 @@ function ProductPage() {
           <WallPreview3D
             imageUrl={variantSrc(wallImage, "lg")}
             title={artwork.title}
+            dimensions={artwork.dimensions}
             onClose={() => setViewOnWall(false)}
           />
         </Suspense>

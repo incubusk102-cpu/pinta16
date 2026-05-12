@@ -4,7 +4,6 @@ import {
   LEGACY_CART_STORAGE_KEY,
   cartLineKey,
   loadCartItemsFromStorage,
-  sanitiseSizeCm,
   sanitiseStoredItem,
 } from "@/lib/cart-storage";
 
@@ -41,89 +40,14 @@ describe("cart-storage", () => {
   });
 
   describe("cartLineKey", () => {
-    it("returns the bare id when no size is set (v3 backward compat)", () => {
+    it("returns the bare product id (same product collapses to one line)", () => {
       expect(cartLineKey({ id: "art-1" })).toBe("art-1");
     });
 
-    it("appends WxH for sized lines", () => {
-      expect(
-        cartLineKey({ id: "art-1", sizeCm: { widthCm: 60, heightCm: 90 } }),
-      ).toBe("art-1::60x90");
-    });
-
-    it("normalises fractional sizes to one decimal so 30 vs 30.0 collide", () => {
-      expect(
-        cartLineKey({
-          id: "art-1",
-          sizeCm: { widthCm: 30, heightCm: 40 },
-        }),
-      ).toBe(
-        cartLineKey({
-          id: "art-1",
-          sizeCm: { widthCm: 30.0, heightCm: 40.0 },
-        }),
+    it("treats different products as distinct lines", () => {
+      expect(cartLineKey({ id: "art-1" })).not.toBe(
+        cartLineKey({ id: "art-2" }),
       );
-    });
-
-    it("treats different sizes as distinct lines", () => {
-      const a = cartLineKey({
-        id: "art-1",
-        sizeCm: { widthCm: 30, heightCm: 40 },
-      });
-      const b = cartLineKey({
-        id: "art-1",
-        sizeCm: { widthCm: 60, heightCm: 90 },
-      });
-      expect(a).not.toBe(b);
-    });
-
-    it("treats the same size on different products as distinct lines", () => {
-      const a = cartLineKey({
-        id: "art-1",
-        sizeCm: { widthCm: 60, heightCm: 90 },
-      });
-      const b = cartLineKey({
-        id: "art-2",
-        sizeCm: { widthCm: 60, heightCm: 90 },
-      });
-      expect(a).not.toBe(b);
-    });
-  });
-
-  describe("sanitiseSizeCm", () => {
-    it("returns undefined for null/undefined/non-object input", () => {
-      expect(sanitiseSizeCm(null)).toBeUndefined();
-      expect(sanitiseSizeCm(undefined)).toBeUndefined();
-      expect(sanitiseSizeCm("60x90")).toBeUndefined();
-      expect(sanitiseSizeCm(42)).toBeUndefined();
-    });
-
-    it("returns undefined for non-finite or non-positive dimensions", () => {
-      expect(sanitiseSizeCm({ widthCm: NaN, heightCm: 90 })).toBeUndefined();
-      expect(
-        sanitiseSizeCm({ widthCm: Infinity, heightCm: 90 }),
-      ).toBeUndefined();
-      expect(sanitiseSizeCm({ widthCm: 0, heightCm: 90 })).toBeUndefined();
-      expect(sanitiseSizeCm({ widthCm: -10, heightCm: 90 })).toBeUndefined();
-    });
-
-    it("returns undefined for dimensions exceeding 500 cm (paranoia clamp)", () => {
-      expect(sanitiseSizeCm({ widthCm: 501, heightCm: 90 })).toBeUndefined();
-      expect(sanitiseSizeCm({ widthCm: 60, heightCm: 999 })).toBeUndefined();
-    });
-
-    it("accepts string-coerceable numbers (defensive)", () => {
-      expect(sanitiseSizeCm({ widthCm: "60", heightCm: "90" })).toEqual({
-        widthCm: 60,
-        heightCm: 90,
-      });
-    });
-
-    it("rounds to one decimal so storage keys stay stable", () => {
-      expect(sanitiseSizeCm({ widthCm: 60.444, heightCm: 89.555 })).toEqual({
-        widthCm: 60.4,
-        heightCm: 89.6,
-      });
     });
   });
 
@@ -145,27 +69,36 @@ describe("cart-storage", () => {
         price: 4500,
         quantity: 1,
       });
-      expect(item?.sizeCm).toBeUndefined();
+      expect(item?.dimensions).toBeUndefined();
     });
 
-    it("preserves a valid sizeCm field on round-trip", () => {
+    it("preserves a valid dimensions string on round-trip", () => {
       const item = sanitiseStoredItem({
         id: "art-1",
         price: 4500,
         quantity: 2,
-        sizeCm: { widthCm: 60, heightCm: 90 },
+        dimensions: "60 × 90 cm",
       });
-      expect(item?.sizeCm).toEqual({ widthCm: 60, heightCm: 90 });
+      expect(item?.dimensions).toBe("60 × 90 cm");
       expect(item?.quantity).toBe(2);
     });
 
-    it("drops an invalid sizeCm without rejecting the whole line", () => {
+    it("trims whitespace and clamps long dimensions strings", () => {
       const item = sanitiseStoredItem({
         id: "art-1",
-        sizeCm: { widthCm: -1, heightCm: 90 },
+        dimensions: `  ${"a".repeat(500)}  `,
       });
-      expect(item?.id).toBe("art-1");
-      expect(item?.sizeCm).toBeUndefined();
+      expect(item?.dimensions?.length).toBe(200);
+    });
+
+    it("drops an empty dimensions string", () => {
+      const item = sanitiseStoredItem({ id: "art-1", dimensions: "   " });
+      expect(item?.dimensions).toBeUndefined();
+    });
+
+    it("drops a non-string dimensions value", () => {
+      const item = sanitiseStoredItem({ id: "art-1", dimensions: 60 });
+      expect(item?.dimensions).toBeUndefined();
     });
 
     it("floors and clamps quantity to a minimum of 1", () => {
@@ -189,17 +122,17 @@ describe("cart-storage", () => {
             id: "art-1",
             price: 4500,
             quantity: 1,
-            sizeCm: { widthCm: 60, heightCm: 90 },
+            dimensions: "60 × 90 cm",
           },
         ]),
       );
       const items = loadCartItemsFromStorage();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe("art-1");
-      expect(items[0].sizeCm).toEqual({ widthCm: 60, heightCm: 90 });
+      expect(items[0].dimensions).toBe("60 × 90 cm");
     });
 
-    it("migrates a legacy v3 cart (no sizeCm) and removes the old key", () => {
+    it("migrates a legacy v3 cart and removes the old key", () => {
       window.localStorage.setItem(
         LEGACY_CART_STORAGE_KEY,
         JSON.stringify([
@@ -209,7 +142,7 @@ describe("cart-storage", () => {
       );
       const items = loadCartItemsFromStorage();
       expect(items).toHaveLength(2);
-      expect(items[0].sizeCm).toBeUndefined();
+      expect(items[0].dimensions).toBeUndefined();
       expect(window.localStorage.getItem(LEGACY_CART_STORAGE_KEY)).toBeNull();
     });
 
@@ -252,6 +185,28 @@ describe("cart-storage", () => {
       );
       const items = loadCartItemsFromStorage();
       expect(items.map((i) => i.id)).toEqual(["art-1", "art-2"]);
+    });
+
+    it("ignores a stale sizeCm field on a stored v4 row (forward compat)", () => {
+      // Carts persisted under the old size-picker may still have a
+      // structured sizeCm. The new sanitiser drops it silently; the
+      // line otherwise loads normally so the customer doesn't lose
+      // their cart.
+      window.localStorage.setItem(
+        CART_STORAGE_KEY,
+        JSON.stringify([
+          {
+            id: "art-1",
+            price: 4500,
+            quantity: 1,
+            sizeCm: { widthCm: 60, heightCm: 90 },
+          },
+        ]),
+      );
+      const items = loadCartItemsFromStorage();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe("art-1");
+      expect((items[0] as { sizeCm?: unknown }).sizeCm).toBeUndefined();
     });
   });
 });

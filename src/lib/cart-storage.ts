@@ -1,5 +1,3 @@
-import type { PaintingSizeCm } from "@/lib/painting-sizes";
-
 // Shape of a cart line in localStorage. Kept structurally compatible
 // with `CartItem` from `@/contexts/CartContext` so consumers can pass
 // either type around interchangeably; the context file re-exports
@@ -12,47 +10,25 @@ export interface StoredCartItem {
   year: string;
   price: number;
   quantity: number;
-  sizeCm?: PaintingSizeCm;
+  // Admin-provided dimensions string (e.g. `60 × 90 cm`). Comes
+  // straight from the product editor so the cart, checkout, and order
+  // emails all show the size the artist set rather than a customer
+  // pick. Optional for legacy items added before this field existed.
+  dimensions?: string;
 }
 
-// Bumped from "canvhub_cart" (v3) when made-to-order size selection
-// got wired into the cart line. On first load we read whichever key
-// is present, reshape into the v4 schema, and then forget the old
-// one — see `loadCartItemsFromStorage` below.
+// localStorage key for the cart. Reads from this key first; falls
+// back to the legacy v3 key on first load to migrate older clients.
+// See `loadCartItemsFromStorage` for the migration path.
 export const CART_STORAGE_KEY = "canvhub_cart_v4";
 export const LEGACY_CART_STORAGE_KEY = "canvhub_cart";
 
-// Stable per-line identity. Two entries with the same product id but
-// different sizes must collide on neither addToCart-merge nor
-// remove/quantity update, so we fold size into the key. Legacy items
-// without a size keep the bare product id (the v3 behaviour), so
-// guest carts persisted before this change keep merging quantities
-// the way users expect.
-export const cartLineKey = (
-  item: Pick<StoredCartItem, "id" | "sizeCm">,
-): string => {
-  if (!item.sizeCm) return item.id;
-  const w = Math.round(item.sizeCm.widthCm * 10) / 10;
-  const h = Math.round(item.sizeCm.heightCm * 10) / 10;
-  return `${item.id}::${w}x${h}`;
-};
-
-// Clamp to plausible canvas dimensions (0–500 cm per side) so a
-// malformed or hostile payload from localStorage can never blow up
-// downstream consumers. Returns `undefined` (not null) so it slots
-// straight into the optional field on `CartItem`.
-export const sanitiseSizeCm = (raw: unknown): PaintingSizeCm | undefined => {
-  if (!raw || typeof raw !== "object") return undefined;
-  const obj = raw as { widthCm?: unknown; heightCm?: unknown };
-  const w = Number(obj.widthCm);
-  const h = Number(obj.heightCm);
-  if (!Number.isFinite(w) || !Number.isFinite(h)) return undefined;
-  if (w <= 0 || h <= 0 || w > 500 || h > 500) return undefined;
-  return {
-    widthCm: Math.round(w * 10) / 10,
-    heightCm: Math.round(h * 10) / 10,
-  };
-};
+// Stable per-line identity. Same product id always collapses to the
+// same line so customers see qty bumps rather than duplicate lines —
+// dimensions are fixed per artwork (admin-controlled) so there is
+// nothing to disambiguate at the cart level.
+export const cartLineKey = (item: Pick<StoredCartItem, "id">): string =>
+  item.id;
 
 export const sanitiseStoredItem = (raw: unknown): StoredCartItem | null => {
   if (!raw || typeof raw !== "object") return null;
@@ -69,16 +45,17 @@ export const sanitiseStoredItem = (raw: unknown): StoredCartItem | null => {
     price: Number(r.price) || 0,
     quantity,
   };
-  const sizeCm = sanitiseSizeCm(r.sizeCm);
-  if (sizeCm) item.sizeCm = sizeCm;
+  if (typeof r.dimensions === "string" && r.dimensions.trim()) {
+    item.dimensions = r.dimensions.trim().slice(0, 200);
+  }
   return item;
 };
 
 // Read the persisted cart from localStorage, accepting both the v4
-// shape and the legacy unversioned shape (which had no `sizeCm`). On
-// migration, the legacy key is removed so we never have two sources
-// of truth and so future bumps can repeat the same pattern. Returns
-// an empty array (never throws) on any parse / storage failure.
+// shape and the legacy unversioned shape. On migration, the legacy
+// key is removed so we never have two sources of truth and so future
+// bumps can repeat the same pattern. Returns an empty array (never
+// throws) on any parse / storage failure.
 export const loadCartItemsFromStorage = (): StoredCartItem[] => {
   if (typeof window === "undefined") return [];
   try {

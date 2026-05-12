@@ -278,7 +278,11 @@ const OrderConfirmation = () => {
                     >
                       <span>
                         {item.title} × {item.quantity}
-                        {item.sizeCm ? (
+                        {item.dimensions ? (
+                          <span className="ml-1 text-muted-foreground">
+                            · {item.dimensions}
+                          </span>
+                        ) : item.sizeCm ? (
                           <span className="ml-1 text-muted-foreground">
                             · {formatSize(item.sizeCm)}
                           </span>

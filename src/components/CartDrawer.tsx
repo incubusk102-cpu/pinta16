@@ -14,7 +14,6 @@ import { useCart, cartLineKey } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { LALAMOVE_PAID_TO_RIDER } from "@/lib/shipment";
-import { formatSize } from "@/lib/painting-sizes";
 
 const CartDrawer = () => {
   const {
@@ -169,13 +168,13 @@ const CartDrawer = () => {
                         <p className="font-body text-[10px] text-muted-foreground">
                           {item.medium}
                         </p>
-                        {item.sizeCm ? (
+                        {item.dimensions ? (
                           <p className="font-body text-[10px] text-muted-foreground mt-0.5">
                             <span className="uppercase tracking-[0.2em] opacity-70">
-                              Size
+                              Dimensions
                             </span>{" "}
                             <span className="text-foreground">
-                              {formatSize(item.sizeCm)}
+                              {item.dimensions}
                             </span>
                           </p>
                         ) : null}

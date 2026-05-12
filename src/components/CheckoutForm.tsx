@@ -22,7 +22,6 @@ import {
   Truck,
 } from "lucide-react";
 import { useCart, type OrderInfo } from "@/contexts/CartContext";
-import { formatSize } from "@/lib/painting-sizes";
 import {
   useUserAuth,
   type PublicUser,
@@ -619,7 +618,7 @@ const CheckoutForm = () => {
             price: i.price,
             quantity: i.quantity,
             image: i.image,
-            ...(i.sizeCm ? { sizeCm: i.sizeCm } : {}),
+            ...(i.dimensions ? { dimensions: i.dimensions } : {}),
           })),
         }),
       }).catch(() => {});
@@ -1161,9 +1160,9 @@ const CheckoutForm = () => {
                             >
                               <span>
                                 {item.title} × {item.quantity}
-                                {item.sizeCm ? (
+                                {item.dimensions ? (
                                   <span className="ml-1 text-muted-foreground">
-                                    · {formatSize(item.sizeCm)}
+                                    · {item.dimensions}
                                   </span>
                                 ) : null}
                               </span>
