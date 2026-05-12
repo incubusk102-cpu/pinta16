@@ -3876,7 +3876,11 @@ function OrdersSection() {
               {order.items.map((item) => (
                 <p key={item.id}>
                   {item.title} × {item.quantity}
-                  {item.sizeCm ? (
+                  {item.dimensions ? (
+                    <span className="ml-1 text-foreground/80">
+                      · {item.dimensions}
+                    </span>
+                  ) : item.sizeCm ? (
                     <span className="ml-1 text-foreground/80">
                       · {formatSize(item.sizeCm)}
                     </span>

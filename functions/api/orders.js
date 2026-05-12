@@ -399,6 +399,11 @@ const sanitizeOrderItem = (item) => {
     quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
     image: typeof item.image === "string" ? item.image.slice(0, 2000) : "",
   };
+  if (typeof item.dimensions === "string" && item.dimensions.trim()) {
+    out.dimensions = item.dimensions.trim().slice(0, 200);
+  }
+  // Legacy: orders placed under the old size-picker carry a structured
+  // sizeCm; keep persisting it so historical analytics keep working.
   const sizeCm = sanitizeSizeCm(item.sizeCm);
   if (sizeCm) out.sizeCm = sizeCm;
   return out;

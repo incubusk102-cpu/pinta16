@@ -507,9 +507,14 @@ const renderItemsTable = (items = []) => {
   if (!items.length) return "";
   const rows = items
     .map((i) => {
-      const sizeLabel = formatSizeForEmail(i.sizeCm);
-      const sizeLine = sizeLabel
-        ? `<div style="margin-top:2px;font-size:11px;color:#7a7468;">Size: ${escapeHtml(sizeLabel)}</div>`
+      // Prefer the admin-provided dimensions string (new orders); fall
+      // back to the legacy structured sizeCm for historical orders.
+      const dimensionsLabel =
+        typeof i.dimensions === "string" && i.dimensions.trim()
+          ? i.dimensions.trim()
+          : formatSizeForEmail(i.sizeCm);
+      const sizeLine = dimensionsLabel
+        ? `<div style="margin-top:2px;font-size:11px;color:#7a7468;">Dimensions: ${escapeHtml(dimensionsLabel)}</div>`
         : "";
       return `
         <tr>

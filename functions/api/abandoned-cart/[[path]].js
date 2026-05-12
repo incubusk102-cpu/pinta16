@@ -112,9 +112,14 @@ const handleSync = async (event, env, store) => {
       quantity: Math.max(1, Math.min(100, Number(it.quantity) || 1)),
       image: String(it.image || "").slice(0, 500),
     };
-    // Preserve the customer-picked painting size on the abandoned-cart
-    // record so the recovery email can show "Your 60 × 90 cm canvas is
-    // waiting" instead of an ambiguous "your cart is waiting".
+    // Preserve the admin-provided dimensions string on the abandoned-
+    // cart record so the recovery email can quote the canvas size.
+    if (typeof it.dimensions === "string" && it.dimensions.trim()) {
+      out.dimensions = it.dimensions.trim().slice(0, 200);
+    }
+    // Legacy: structured sizeCm carried by carts persisted under the
+    // old size-picker. Kept for one release so in-flight abandoned
+    // carts don't lose their size when the recovery email is sent.
     if (it.sizeCm && typeof it.sizeCm === "object") {
       const w = Number(it.sizeCm.widthCm);
       const h = Number(it.sizeCm.heightCm);
