@@ -36,6 +36,8 @@ const availabilityToSchemaUrl = (a) => {
   switch (a) {
     case "available":
       return "https://schema.org/InStock";
+    case "made-to-order":
+      return "https://schema.org/MadeToOrder";
     case "reserved":
       return "https://schema.org/PreOrder";
     case "sold":

@@ -1507,7 +1507,11 @@ function ProductsSection() {
       const ids = [...selectedIds];
       if (bulkAction === "availability") {
         const val = bulkValue as ProductAvailability;
-        if (!["available", "reserved", "sold", "draft"].includes(val)) {
+        if (
+          !["available", "made-to-order", "reserved", "sold", "draft"].includes(
+            val,
+          )
+        ) {
           toast.error("Pick a valid availability");
           return;
         }

@@ -71,7 +71,12 @@ export interface ProductVideo {
   mimeType?: string;
 }
 
-export type ProductAvailability = "available" | "reserved" | "sold" | "draft";
+export type ProductAvailability =
+  | "available"
+  | "made-to-order"
+  | "reserved"
+  | "sold"
+  | "draft";
 
 export interface Product {
   id: string;

@@ -47,6 +47,7 @@ const mockEnv = (db: FakeDb | null) => {
 describe("STOCK_STATES / STOCK_SOURCES", () => {
   it("exports the canvhub availability enum", () => {
     expect(STOCK_STATES.has("available")).toBe(true);
+    expect(STOCK_STATES.has("made-to-order")).toBe(true);
     expect(STOCK_STATES.has("reserved")).toBe(true);
     expect(STOCK_STATES.has("sold")).toBe(true);
     expect(STOCK_STATES.has("draft")).toBe(true);
