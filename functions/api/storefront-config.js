@@ -258,6 +258,11 @@ const SITE_COPY_DEFAULTS = {
     eyebrow: "Get in touch",
     title: "Contact us",
   },
+  newsletter: {
+    eyebrow: "Get updates",
+    title:
+      "New drops, restocks, and the occasional studio update \u2014 straight to your inbox.",
+  },
   madeToOrderNotice: {
     heading: "Made to order",
     body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
@@ -886,6 +891,16 @@ const sanitizeSiteCopy = (raw) => {
       title: sanitizeSiteCopyField(
         data.contact?.title,
         SITE_COPY_DEFAULTS.contact.title,
+      ),
+    },
+    newsletter: {
+      eyebrow: sanitizeSiteCopyField(
+        data.newsletter?.eyebrow,
+        SITE_COPY_DEFAULTS.newsletter.eyebrow,
+      ),
+      title: sanitizeSiteCopyField(
+        data.newsletter?.title,
+        SITE_COPY_DEFAULTS.newsletter.title,
       ),
     },
     madeToOrderNotice: {
@@ -2091,6 +2106,11 @@ const handle = async ({ request, env }) => {
             contact: {
               ...existing.siteCopy.contact,
               ...(incoming.contact ?? {}),
+            },
+            newsletter: {
+              ...(existing.siteCopy.newsletter ??
+                SITE_COPY_DEFAULTS.newsletter),
+              ...(incoming.newsletter ?? {}),
             },
             madeToOrderNotice: {
               ...(existing.siteCopy.madeToOrderNotice ?? {}),

@@ -112,6 +112,7 @@ export interface SiteCopy {
   about: SiteCopyAbout;
   reviews: SiteCopySectionTwo;
   contact: SiteCopySectionTwo;
+  newsletter: SiteCopySectionTwo;
   madeToOrderNotice: SiteCopyMadeToOrder;
   productInfo: SiteCopyProductInfo;
 }
@@ -133,6 +134,11 @@ export const DEFAULT_SITE_COPY: SiteCopy = {
   contact: {
     eyebrow: "Get in touch",
     title: "Contact us",
+  },
+  newsletter: {
+    eyebrow: "Get updates",
+    title:
+      "New drops, restocks, and the occasional studio update \u2014 straight to your inbox.",
   },
   madeToOrderNotice: {
     heading: "Made to order",
@@ -530,6 +536,7 @@ const mergeSiteCopy = (raw: unknown): SiteCopy => {
     about: Partial<SiteCopyAbout>;
     reviews: Partial<SiteCopySectionTwo>;
     contact: Partial<SiteCopySectionTwo>;
+    newsletter: Partial<SiteCopySectionTwo>;
     madeToOrderNotice: Partial<SiteCopyMadeToOrder>;
     productInfo: Partial<SiteCopyProductInfo>;
   }>;
@@ -538,6 +545,10 @@ const mergeSiteCopy = (raw: unknown): SiteCopy => {
     about: { ...DEFAULT_SITE_COPY.about, ...(data.about ?? {}) },
     reviews: { ...DEFAULT_SITE_COPY.reviews, ...(data.reviews ?? {}) },
     contact: { ...DEFAULT_SITE_COPY.contact, ...(data.contact ?? {}) },
+    newsletter: {
+      ...DEFAULT_SITE_COPY.newsletter,
+      ...(data.newsletter ?? {}),
+    },
     madeToOrderNotice: {
       ...DEFAULT_SITE_COPY.madeToOrderNotice,
       ...(data.madeToOrderNotice ?? {}),
