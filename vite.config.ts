@@ -78,18 +78,50 @@ export default defineConfig({
           // with code that's already preloaded anyway.
           if (id.includes("preload-helper")) return "vendor";
           if (!id.includes("node_modules")) return undefined;
-          // React Email render pipeline (@react-email/render + components
-          // + prettier + html-to-text + their transitive deps). Only the
-          // admin Welcome email "preview" pane dynamically imports
-          // `@/emails/render`, so pin this whole subtree into a single
-          // lazy `email-render` chunk. Without an explicit assignment
-          // these heavy modules (prettier alone is ~2 MB unminified) get
-          // bucketed into `vendor` and inflate every storefront page's
-          // initial paint, even though only the admin needs them. See
-          // `src/components/admin/WelcomeEmailSection.tsx` for the
-          // dynamic import.
+          // Pin React, ReactDOM, and the scheduler FIRST so nothing
+          // downstream can drag the React runtime into a heavier
+          // bucket. Match the package root, not arbitrary substrings —
+          // `id.includes("/react/")` previously bucketed
+          // `@floating-ui/react-dom` into the `react` chunk, creating
+          // a circular dep with `vendor` (where the rest of
+          // `@floating-ui` lived). That manifested as
+          // `Cannot set properties of undefined (setting 'Activity')`
+          // because react-dom's module-level assignments ran before
+          // its dependencies were initialized.
+          if (
+            /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)
+          ) {
+            return "react";
+          }
+          // React Email render pipeline. Only the admin Welcome /
+          // Order email preview panes reach this code path, and they
+          // do so through a lazy `import("@/emails/render")` from
+          // `WelcomeEmailSection.tsx`. We deliberately leave the
+          // whole `@react-email/*` subtree (components + render) AND
+          // `@/emails/*` source modules to Rolldown's auto code
+          // splitter by returning `undefined` below — that way none
+          // of them become static dependencies of `vendor`. Without
+          // this exemption, `@react-email/components`'s
+          // `export * from "@react-email/render"` re-exports the
+          // heavy prettier + html-to-text subtree into whatever
+          // chunk holds `@react-email/components`. When that chunk
+          // is `vendor` (the catch-all), prettier/html-to-text
+          // become hard static dependencies of `<link rel="modulepreload">`
+          // on every page load — so a single failed fetch of the
+          // 377 KB `email-render-*.js` on a flaky mobile network
+          // silently takes the entire SPA down ("SPA module never
+          // executed"). The remaining email-only deps below
+          // (prettier, html-to-text, htmlparser2, …) stay manually
+          // pinned: they aren't reached from anywhere except the
+          // lazy `@react-email/render`, so grouping them keeps the
+          // single network round-trip when the admin needs them.
           if (
             id.includes("/@react-email/") ||
+            /[\\/]src[\\/]emails[\\/]/.test(id)
+          ) {
+            return undefined;
+          }
+          if (
             id.includes("/html-to-text/") ||
             id.includes("/@selderee/") ||
             id.includes("/selderee/") ||
@@ -98,17 +130,6 @@ export default defineConfig({
             )
           ) {
             return "email-render";
-          }
-          // Match the package root, not arbitrary substrings — `id.includes("/react/")`
-          // accidentally bucketed `@floating-ui/react-dom` into the `react` chunk,
-          // creating a circular dep with `vendor` (where the rest of @floating-ui
-          // lived). That manifested as `Cannot set properties of undefined (setting
-          // 'Activity')` because react-dom's module-level assignments ran before
-          // its dependencies were initialized.
-          if (
-            /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)
-          ) {
-            return "react";
           }
           if (id.includes("/@tanstack/")) return "tanstack";
           if (id.includes("/@radix-ui/")) return "radix";
