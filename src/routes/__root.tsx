@@ -17,6 +17,8 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import SiteFooter from "@/components/SiteFooter";
+import AmbientCursorGlow from "@/components/AmbientCursorGlow";
+import ScrollProgress from "@/components/ScrollProgress";
 import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
@@ -111,6 +113,22 @@ function ConditionalSiteFooter() {
   return <SiteFooter />;
 }
 
+// Cursor-following ambient spotlight + top-edge scroll-progress
+// hairline. Both are storefront-only — admin is a data-dense tool,
+// motion chrome there would just distract from the task.
+function ConditionalAmbientChrome() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return (
+    <>
+      <ScrollProgress />
+      <AmbientCursorGlow />
+    </>
+  );
+}
+
 // Mounted globally so the order-journey modal can be opened from anywhere
 // (My Orders panel in the hamburger sheet, account page, post-checkout, etc.)
 // rather than only on the homepage / product pages where it used to live.
@@ -153,6 +171,7 @@ function RootComponent() {
                           <HeartbeatBridge />
                           <ReferralCaptureBridge />
                           <GoogleAuthHashBridge />
+                          <ConditionalAmbientChrome />
                           <ConditionalAnnouncementBar />
                           <Outlet />
                           <ConditionalSiteFooter />

@@ -1,5 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import {
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import { useProducts } from "@/contexts/ProductContext";
 import { getStorefrontArtworks, type DisplayArtwork } from "@/lib/artworks";
 import { variantSrc } from "@/lib/productImage";
@@ -27,21 +34,70 @@ function StaticHero({ featured }: { featured: DisplayArtwork }) {
   // 2D fallback: a single full-bleed framed painting with the wordmark
   // floated underneath. No canvas, no postprocessing — works on a
   // cold mobile connection, holds layout while CSS paints.
+  //
+  // Layered on top of the plain background we now paint a slowly
+  // drifting gradient mesh and a cursor-tracked perspective tilt on
+  // the framed painting itself. Both layers are pure CSS / Framer
+  // Motion — no extra runtime cost — and degrade to a still image
+  // for `prefers-reduced-motion`.
   const featuredImage = featured.images?.[0]
     ? variantSrc(featured.images[0], "md")
     : featured.image;
 
+  const reduceMotion = useReducedMotion();
+  const sectionRef = useRef<HTMLElement>(null);
+  const tiltX = useMotionValue(0);
+  const tiltY = useMotionValue(0);
+  const springConfig = { stiffness: 260, damping: 28, mass: 0.4 };
+  const rotateX = useSpring(
+    useTransform(tiltY, [-0.5, 0.5], [5, -5]),
+    springConfig,
+  );
+  const rotateY = useSpring(
+    useTransform(tiltX, [-0.5, 0.5], [-5, 5]),
+    springConfig,
+  );
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    if (reduceMotion || e.pointerType !== "mouse") return;
+    const rect = sectionRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    tiltX.set((e.clientX - rect.left) / rect.width - 0.5);
+    tiltY.set((e.clientY - rect.top) / rect.height - 0.5);
+  };
+  const resetTilt = () => {
+    tiltX.set(0);
+    tiltY.set(0);
+  };
+
   return (
     <section
+      ref={sectionRef}
       aria-label="Canvas Hub — featured painting"
-      className="relative w-full h-[80vh] min-h-[520px] overflow-hidden bg-background"
+      className="relative w-full h-[80vh] min-h-[520px] overflow-hidden bg-background [perspective:1400px]"
+      onPointerMove={handlePointerMove}
+      onPointerLeave={resetTilt}
     >
+      {/* Animated gradient mesh — three slow-drifting radial blooms
+          on top of the brand-warm vignette. CSS-only, paused under
+          `prefers-reduced-motion`. */}
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(58,38,24,0.18),transparent_65%)]"
       />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 home-hero-mesh motion-reduce:animate-none"
+      />
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-[78vw] max-w-[420px] aspect-[4/5] shadow-[0_18px_60px_-12px_rgba(0,0,0,0.45)]">
+        <motion.div
+          style={{
+            rotateX,
+            rotateY,
+            transformStyle: "preserve-3d",
+          }}
+          className="relative w-[78vw] max-w-[420px] aspect-[4/5] shadow-[0_18px_60px_-12px_rgba(0,0,0,0.45)] motion-reduce:!transform-none"
+        >
           {/* Wood frame: a thick brown ring around the image. */}
           <div className="absolute inset-0 bg-[#3a2618]" />
           <img
@@ -51,7 +107,18 @@ function StaticHero({ featured }: { featured: DisplayArtwork }) {
             decoding="async"
             className="absolute inset-[6%] object-cover w-[88%] h-[88%]"
           />
-        </div>
+          {/* Brand-gold rim glow behind the frame. Hidden under
+              `prefers-reduced-motion` so the hero reads as a still
+              photo. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-3 -z-[1] rounded-sm opacity-50 blur-2xl motion-reduce:hidden"
+            style={{
+              background:
+                "radial-gradient(closest-side, color-mix(in oklab, var(--logo-color) 65%, transparent), transparent 75%)",
+            }}
+          />
+        </motion.div>
       </div>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-10 px-6 text-center">
         <h1 className="font-display text-4xl tracking-[0.04em] text-foreground drop-shadow-[0_2px_24px_rgba(0,0,0,0.18)]">
@@ -62,7 +129,7 @@ function StaticHero({ featured }: { featured: DisplayArtwork }) {
         </p>
         <Link
           to="/collection"
-          className="pointer-events-auto mt-6 inline-flex items-center justify-center font-body text-[11px] tracking-[0.3em] uppercase px-6 py-3 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300"
+          className="pointer-events-auto mt-6 inline-flex items-center justify-center font-body text-[11px] tracking-[0.3em] uppercase px-6 py-3 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 hover-glow-cta"
         >
           Browse the collection
         </Link>
