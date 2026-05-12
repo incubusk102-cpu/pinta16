@@ -51,6 +51,9 @@ const WelcomeBonusCountdown = lazy(
 );
 const ArtistThankYou = lazy(() => import("@/components/ArtistThankYou"));
 const CommandPalette = lazy(() => import("@/components/CommandPalette"));
+const KeyboardShortcutsOverlay = lazy(
+  () => import("@/components/KeyboardShortcutsOverlay"),
+);
 
 function NotFoundComponent() {
   return (
@@ -147,6 +150,21 @@ function ConditionalOrderConfirmation() {
   return <OrderConfirmation />;
 }
 
+// Storefront-only `?` keyboard cheat-sheet — admin already has its
+// own command palette and shortcuts, and we don't want the dialog
+// blocking admin keystrokes.
+function ConditionalKeyboardShortcuts() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return (
+    <Suspense fallback={null}>
+      <KeyboardShortcutsOverlay />
+    </Suspense>
+  );
+}
+
 function ConditionalVisitorDelight() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -196,6 +214,7 @@ function RootComponent() {
                                     <CommandPalette />
                                   </Suspense>
                                   <ConditionalVisitorDelight />
+                                  <ConditionalKeyboardShortcuts />
                                   <CompareDrawer />
                                   <Toaster richColors position="top-right" />
                                 </SmoothScrollProvider>
