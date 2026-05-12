@@ -7,13 +7,42 @@ import { registerPwa } from "./lib/pwa";
 import { installChunkReloadHandler } from "./lib/chunkReload";
 import "./styles.css";
 
+// Breadcrumb hook into the static boot diagnostics shipped from
+// `/public/boot-diagnostics.js`. If the SPA stalls before the
+// fallback is replaced, the diagnostic overlay surfaces the last
+// mark we reached — turning a silent "blank screen" into "stuck at
+// `router:created`, here's the chunk that failed" so we can fix it
+// without needing to reproduce the device locally.
+//
+// `window.__cvBoot` is defined synchronously by the diagnostics
+// script (loaded earlier in `index.html`); we still null-guard it
+// so the SPA keeps booting if a CDN ever fails to serve that file.
+declare global {
+  interface Window {
+    __cvBoot?: { mark: (name: string) => void };
+  }
+}
+const boot = (name: string) => {
+  try {
+    window.__cvBoot?.mark(name);
+  } catch {
+    /* never let diagnostics crash the boot */
+  }
+};
+
+boot("main:start");
+
 const router = getRouter();
+boot("router:created");
+
 installChunkReloadHandler();
 initObservability();
 registerPwa();
+boot("services:initialised");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RouterProvider router={router} />
   </StrictMode>,
 );
+boot("render:called");
