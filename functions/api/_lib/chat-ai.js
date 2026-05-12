@@ -94,7 +94,82 @@ const DEFAULT_HANDOFF_KEYWORDS = [
   "stop ai",
 ];
 
+// Default warm persona for the AI. Reads like an actual gallery
+// assistant rather than a corporate FAQ bot. Kept short so it doesn't
+// crowd out the data-grounding rules below. Admins who want a
+// different voice can override via chat.ai.systemPrompt.
+const DEFAULT_PERSONA =
+  "You are Mia, the friendly assistant at Canvas Hub \u2014 a small Filipino independent art studio that sells original hand-painted artworks. Be warm and conversational, like a thoughtful gallerist chatting with a buyer who walked in. Match the customer's language naturally (English, Tagalog, or Taglish \u2014 do not switch unprompted). Keep replies short: one short paragraph, never more than ~80 words. No emojis unless the customer used one first.";
+
+// Customer-facing acknowledgement variants posted when the AI hands
+// off to a human (either an input-side keyword match or an output-side
+// handoff token). Rotated randomly so consecutive handoffs don't read
+// identically. The `{name_suffix}` placeholder is replaced with `,
+// <First>` when a usable name is available, or with an empty string
+// otherwise — the surrounding punctuation already reads naturally in
+// both cases.
+const HANDOFF_ACK_VARIANTS = [
+  "Got it{name_suffix} \u2014 letting the gallery owner know now. Someone will get back to you within a few hours. Salamat sa pasensya!",
+  "Thanks for reaching out{name_suffix}! Passing this along to a real person from the team. We usually reply within a few hours.",
+  "Hi there{name_suffix} \u2014 flagging this for the gallery owner so a real person can help. Talk soon!",
+  "Noted{name_suffix}. The team has been pinged \u2014 you'll hear back from a real person shortly. Salamat!",
+];
+
+// Soft preamble variants prepended to a verbatim FAQ answer so the
+// reply doesn't read like an unchanged copy-paste. Returns the
+// preamble string + a trailing newline, or "" if no usable name was
+// supplied (in which case we just send the admin-edited FAQ answer
+// raw, which is the existing behaviour).
+const FAQ_PREAMBLE_VARIANTS = [
+  "Hi {name}! Here's the info:",
+  "Hey {name} \u2014 quick answer for you:",
+  "Hi {name}, happy to help with that:",
+  "Good question, {name}! Here's what we've got:",
+];
+
 const truthy = (v) => v !== undefined && v !== null && v !== "";
+
+// Returns a trimmed customer name only if it looks plausibly like a
+// real name. The chat widget requires *something* in the name field
+// but doesn't enforce shape, so "asdf", "123", or a 200-char paste
+// shouldn't end up in the prompt. Empty string → caller treats as
+// "no name available".
+const sanitizeCustomerName = (raw) => {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim().slice(0, 40);
+  if (trimmed.length < 2) return "";
+  // Require at least one ASCII letter so digit-only / symbol-only
+  // garbage doesn't get personalised against. Non-ASCII names (e.g.
+  // Ñ, accented characters) usually also contain ASCII letters; this
+  // is intentionally permissive.
+  if (!/[a-zA-Z]/.test(trimmed)) return "";
+  return trimmed;
+};
+
+const firstName = (raw) => {
+  const full = sanitizeCustomerName(raw);
+  if (!full) return "";
+  const first = full.split(/\s+/)[0].slice(0, 20);
+  // Title-case the first letter so "jess" → "Jess" without mangling
+  // intentionally-cased names like "DJ" (we only touch the first char).
+  return first.charAt(0).toUpperCase() + first.slice(1);
+};
+
+const pickHandoffAck = (customerName, randomFn = Math.random) => {
+  const first = firstName(customerName);
+  const idx = Math.floor(randomFn() * HANDOFF_ACK_VARIANTS.length);
+  const variant = HANDOFF_ACK_VARIANTS[idx] || HANDOFF_ACK_VARIANTS[0];
+  const suffix = first ? `, ${first}` : "";
+  return variant.replace("{name_suffix}", suffix);
+};
+
+const pickFaqPreamble = (customerName, randomFn = Math.random) => {
+  const first = firstName(customerName);
+  if (!first) return "";
+  const idx = Math.floor(randomFn() * FAQ_PREAMBLE_VARIANTS.length);
+  const variant = FAQ_PREAMBLE_VARIANTS[idx] || FAQ_PREAMBLE_VARIANTS[0];
+  return variant.replace("{name}", first);
+};
 
 const trimToChars = (raw, max) => {
   const str = String(raw ?? "").trim();
@@ -143,12 +218,18 @@ const containsHandoffPhrase = (message, keywords) => {
   return false;
 };
 
-// Lightweight FAQ keyword matcher — counts how many tokens from the
-// customer's message overlap with the FAQ's question text. If the best
-// FAQ has at least two distinct hits AND is meaningfully ahead of the
-// runner-up, we return its answer. This is good enough for "shipping?",
-// "returns", "how do I pay", and other short questions, and is free
-// (no API call).
+// Lightweight FAQ keyword matcher — counts how many distinct tokens
+// from the customer's message appear as substrings of the FAQ's
+// question text or id. If the best FAQ has at least one hit AND is
+// strictly ahead of the runner-up, we return its answer verbatim. The
+// previous threshold of >= 2 hits over-rejected short, very common
+// phrasings ("how do I pay", "can I get a refund", "do you ship") and
+// pushed them to the LLM, which then paraphrased the FAQ inaccurately
+// (e.g. answering "GCash via QR PH only" for the payment question
+// while the admin-configured FAQ lists GCash, Maya, bank transfer, and
+// cards). The margin-of-1 requirement still rejects genuine ties.
+// This is free (no API call) and deterministic, so prefer it whenever
+// a single FAQ stands out.
 const findFaqMatch = (message, faqs) => {
   if (!Array.isArray(faqs) || faqs.length === 0) return null;
   const tokens = String(message || "")
@@ -186,10 +267,14 @@ const findFaqMatch = (message, faqs) => {
   }
 
   if (!best) return null;
-  // Require at least 2 distinct keyword hits AND a 1-point margin over
-  // the runner-up so we don't fire "Shipping & delivery" on a generic
-  // "how much" question that hit nothing else.
-  if (bestScore < 2) return null;
+  // Require at least 1 keyword hit AND a 1-point margin over the
+  // runner-up. The hit floor rejects messages that overlap with
+  // nothing (e.g. "how much" hits no FAQ token at all), while the
+  // margin requirement rejects ambiguous ties like "returns payment"
+  // where two FAQs each score 1. Together they let "how do I pay"
+  // → payment FAQ verbatim while still keeping bare "how" off the
+  // fast path.
+  if (bestScore < 1) return null;
   if (bestScore - runnerUp < 1) return null;
   return best;
 };
@@ -236,12 +321,31 @@ const formatFaqsForPrompt = (faqs) => {
   return `Shop FAQ:\n${lines.join("\n\n")}`;
 };
 
-const buildSystemPrompt = ({ chatConfig, products, brandName }) => {
+const buildSystemPrompt = ({
+  chatConfig,
+  products,
+  brandName,
+  customerName,
+}) => {
   const customPreamble = String(chatConfig?.ai?.systemPrompt || "").trim();
 
-  const defaultPreamble = `You are the friendly customer-service assistant for ${
-    brandName || "Canvas Hub"
-  }, a Philippine gallery selling original hand-painted artwork. Reply to customers in their language (Tagalog, Taglish, or English — match the customer). Be warm, concise (1–3 sentences), and accurate.`;
+  // Default preamble was previously a generic "friendly customer-
+  // service assistant" line. The Mia persona reads as an actual
+  // person, encourages Taglish, and keeps replies short — all of
+  // which makes the bot feel less robotic to canvhub's market.
+  const defaultPreamble = customPreamble
+    ? customPreamble
+    : DEFAULT_PERSONA.replace("Canvas Hub", brandName || "Canvas Hub");
+
+  // Customer name is passed through from `thread.name` (captured
+  // when the customer started the chat). Used naturally by the
+  // model on the first reply so the conversation feels less
+  // anonymous. We do NOT ask the model to use it every message —
+  // that would read as creepy after the first reply.
+  const first = firstName(customerName);
+  const nameLine = first
+    ? `Customer's first name is ${first}. Address them by name naturally on your first reply (e.g. "Hi ${first} \u2014 ..."). Do not repeat their name in every message.`
+    : "";
 
   const guardrails = [
     "Ground every answer in the Shop FAQ and the active artworks list below.",
@@ -258,7 +362,8 @@ const buildSystemPrompt = ({ chatConfig, products, brandName }) => {
   ];
 
   const sections = [
-    customPreamble || defaultPreamble,
+    defaultPreamble,
+    nameLine,
     guardrails.map((g) => `• ${g}`).join("\n"),
     formatFaqsForPrompt(chatConfig?.faqs),
     formatProductsForPrompt(products),
@@ -450,9 +555,18 @@ export const generateAutoReply = async ({
   // FAQ fast path: zero-latency, free, deterministic.
   const faq = findFaqMatch(customerMessage, chatConfig?.faqs);
   if (faq) {
+    // Soft preamble ("Hi Jess! Here's the info:\n\n") on top of the
+    // admin-edited FAQ answer so the reply doesn't read as a bare
+    // copy-paste from the admin panel. Empty preamble when the
+    // customer didn't provide a usable name — keeps the existing
+    // raw-FAQ behaviour for those threads.
+    const preamble = pickFaqPreamble(thread?.name);
+    const body = preamble
+      ? trimToChars(`${preamble}\n\n${faq.answer}`, MAX_REPLY_CHARS)
+      : trimToChars(faq.answer, MAX_REPLY_CHARS);
     return {
       kind: "reply",
-      body: trimToChars(faq.answer, MAX_REPLY_CHARS),
+      body,
       source: "faq",
     };
   }
@@ -482,6 +596,7 @@ export const generateAutoReply = async ({
     chatConfig,
     products,
     brandName,
+    customerName: thread?.name,
   });
   const conversation = buildConversation(thread);
 
@@ -547,11 +662,18 @@ export const __internals = {
   HANDOFF_TOKEN_REGEX,
   looksLikeHandoffToken,
   ADMIN_COOLDOWN_MS,
+  DEFAULT_PERSONA,
+  HANDOFF_ACK_VARIANTS,
+  FAQ_PREAMBLE_VARIANTS,
   containsHandoffPhrase,
   findFaqMatch,
   buildSystemPrompt,
   buildConversation,
   cleanReply,
+  sanitizeCustomerName,
+  firstName,
+  pickHandoffAck,
+  pickFaqPreamble,
   isAiEnabled,
   lastAdminAt,
 };
