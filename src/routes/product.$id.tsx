@@ -30,6 +30,7 @@ import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import MagneticButton from "@/components/MagneticButton";
 import SplitText from "@/components/motion/SplitText";
+import CuratorsNoteTypewriter from "@/components/CuratorsNoteTypewriter";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { addStamp } from "@/lib/passport";
 import { imgAttrs, variantSrc } from "@/lib/productImage";
@@ -728,9 +729,7 @@ function ProductPage() {
               )}
             </div>
 
-            <p className="font-body text-sm md:text-base text-muted-foreground leading-relaxed first-letter:font-display first-letter:text-3xl first-letter:md:text-4xl first-letter:text-foreground first-letter:float-left first-letter:mr-1.5 first-letter:mt-1 first-letter:leading-none">
-              {artwork.description}
-            </p>
+            <CuratorsNoteTypewriter text={artwork.description} />
 
             {artwork.availability === "made-to-order" && (
               <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
