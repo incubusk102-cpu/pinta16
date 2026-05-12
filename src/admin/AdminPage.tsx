@@ -1507,7 +1507,11 @@ function ProductsSection() {
       const ids = [...selectedIds];
       if (bulkAction === "availability") {
         const val = bulkValue as ProductAvailability;
-        if (!["available", "reserved", "sold", "draft"].includes(val)) {
+        if (
+          !["available", "made-to-order", "reserved", "sold", "draft"].includes(
+            val,
+          )
+        ) {
           toast.error("Pick a valid availability");
           return;
         }
@@ -5096,7 +5100,7 @@ function ExportsSection() {
 
 interface ChatMessage {
   at: string;
-  from: "customer" | "admin" | "system";
+  from: "customer" | "admin" | "ai" | "system";
   body: string;
 }
 
@@ -5115,6 +5119,11 @@ interface ChatThreadIndexEntry {
   os?: string;
   device?: string;
   closedAt?: string;
+  // Set by the chat API when the AI auto-reply path explicitly handed
+  // off to a human (customer asked for an agent, or the model emitted
+  // its handoff token). Surfaced in the thread list as a small badge so
+  // the gallery owner knows which threads the bot couldn't close.
+  needsHumanAt?: string;
 }
 
 interface ChatThreadDetail {
@@ -5421,6 +5430,14 @@ function MessagesSection() {
                         {unread && (
                           <span className="h-2 w-2 rounded-full bg-primary inline-block" />
                         )}
+                        {t.needsHumanAt && (
+                          <span
+                            className="text-[9px] uppercase tracking-wide rounded-sm bg-accent/40 text-foreground px-1 py-px font-medium"
+                            title="AI couldn't answer — needs you"
+                          >
+                            needs you
+                          </span>
+                        )}
                         <span className="text-[10px] text-muted-foreground ml-auto">
                           {new Date(t.updatedAt).toLocaleString(undefined, {
                             month: "short",
@@ -5502,6 +5519,11 @@ function MessagesSection() {
                       </div>
                     );
                   }
+                  const isAi = m.from === "ai";
+                  // AI auto-replies sit on the left like customer messages
+                  // but with a tinted background + explicit label so the
+                  // gallery owner can tell at a glance which messages were
+                  // bot-generated and may need a follow-up.
                   return (
                     <div
                       key={`${m.at}-${idx}`}
@@ -5513,14 +5535,20 @@ function MessagesSection() {
                         className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
                           m.from === "admin"
                             ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-foreground"
+                            : isAi
+                              ? "bg-accent/30 text-foreground border border-accent/40"
+                              : "bg-muted text-foreground"
                         }`}
                       >
                         {linkifyMessage(m.body)}
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
-                        {m.from === "admin" ? "You" : activeThread.name} ·{" "}
-                        {new Date(m.at).toLocaleString()}
+                        {m.from === "admin"
+                          ? "You"
+                          : isAi
+                            ? "AI auto-reply"
+                            : activeThread.name}{" "}
+                        · {new Date(m.at).toLocaleString()}
                       </p>
                     </div>
                   );

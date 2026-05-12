@@ -14,21 +14,13 @@ import {
   MapPin,
   ChevronRight,
   ChevronDown,
-  FileText,
-  ShieldCheck,
   Truck,
-  RotateCcw,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCart, type CompletedOrder } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useWishlist } from "@/contexts/WishlistContext";
-import {
-  POLICY_SLUGS,
-  type PolicySlug,
-  usePolicies,
-} from "@/contexts/PoliciesContext";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
 import ProfileEditor from "@/components/account/ProfileEditor";
@@ -38,31 +30,11 @@ import AddressBook from "@/components/account/AddressBook";
 
 type AccountDropdown = "profile" | "tracker" | "wishlist" | "addresses";
 
-const SLUG_ICON: Record<
-  PolicySlug,
-  React.ComponentType<{ className?: string }>
-> = {
-  terms: FileText,
-  refund: RotateCcw,
-  shipping: Truck,
-  privacy: ShieldCheck,
-};
-
 const ORDER_STATUS_LABEL: Record<CompletedOrder["status"], string> = {
   confirmed: "Confirmed",
   in_progress: "In progress",
   out_for_delivery: "Out for delivery",
   received: "Received",
-};
-
-const SLUG_LABEL_KEYS: Record<
-  PolicySlug,
-  "footer.terms" | "footer.refund" | "footer.shipping" | "footer.privacy"
-> = {
-  terms: "footer.terms",
-  refund: "footer.refund",
-  shipping: "footer.shipping",
-  privacy: "footer.privacy",
 };
 
 const GalleryNav = () => {
@@ -98,7 +70,6 @@ const GalleryNav = () => {
   }, [itemCount]);
   const { user, logout } = useUserAuth();
   const { items: wishlistItems } = useWishlist();
-  const { policies } = usePolicies();
   const { t } = useLocale();
   const navigate = useNavigate();
   const pathname = useRouterState({
@@ -316,7 +287,7 @@ const GalleryNav = () => {
         aria-modal="false"
         aria-label="Site menu"
         aria-hidden={!menuOpen}
-        className={`fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card/40 supports-[backdrop-filter]:bg-card/25 backdrop-blur-xl border-l border-border/40 shadow-2xl flex flex-col transform transition-transform duration-200 ease-out ${
+        className={`fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card border-l border-border/40 shadow-2xl flex flex-col transform transition-transform duration-200 ease-out ${
           menuOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
         }`}
       >
@@ -546,38 +517,10 @@ const GalleryNav = () => {
                 </div>
               )}
 
-              {/* Policies — open by default so visitors see every link
-                    (Shipping / Refund / Privacy / Terms) immediately on
-                    the first hamburger tap, no extra click required. */}
-              <DrawerSection
-                label={t("footer.policies")}
-                storageKey="policies"
-                defaultOpen={true}
-              >
-                {POLICY_SLUGS.map((slug) => {
-                  const Icon = SLUG_ICON[slug];
-                  return (
-                    <Link
-                      key={slug}
-                      to="/policy/$slug"
-                      params={{ slug }}
-                      onClick={closeMenu}
-                      className="flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
-                    >
-                      <Icon className="w-4 h-4 text-muted-foreground" />
-                      <span className="flex-1">
-                        {policies[slug]?.title || t(SLUG_LABEL_KEYS[slug])}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </Link>
-                  );
-                })}
-              </DrawerSection>
-
-              {/* Preferences (theme + locale) live in the top navbar now,
-                    not in the drawer. The signed-in user's Sign out lives
-                    above Policies (compact button) — no duplicate after
-                    Privacy Policy. */}
+              {/* Policy links (Shipping / Refund / Privacy / Terms) and
+                    locale/theme toggles all live in the site footer and
+                    top navbar respectively, so the drawer focuses on
+                    account navigation only. */}
             </>
           )}
         </div>

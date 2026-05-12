@@ -772,11 +772,13 @@ export function StockListingsSection() {
                       className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded ${
                         display.availability === "available"
                           ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                          : display.availability === "reserved"
-                            ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                            : display.availability === "sold"
-                              ? "bg-slate-700 text-white"
-                              : "bg-muted text-foreground"
+                          : display.availability === "made-to-order"
+                            ? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                            : display.availability === "reserved"
+                              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                              : display.availability === "sold"
+                                ? "bg-slate-700 text-white"
+                                : "bg-muted text-foreground"
                       }`}
                     >
                       {AVAILABILITY_LABEL[display.availability]}

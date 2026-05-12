@@ -4,10 +4,16 @@ import {
   type ProductImage,
 } from "@/contexts/ProductContext";
 
-export type Availability = "available" | "reserved" | "sold" | "draft";
+export type Availability =
+  | "available"
+  | "made-to-order"
+  | "reserved"
+  | "sold"
+  | "draft";
 
 export const AVAILABILITY_OPTIONS: { value: Availability; label: string }[] = [
   { value: "available", label: "Available" },
+  { value: "made-to-order", label: "Made to order" },
   { value: "reserved", label: "Reserved" },
   { value: "sold", label: "Sold" },
   { value: "draft", label: "Draft (hidden)" },
@@ -15,6 +21,7 @@ export const AVAILABILITY_OPTIONS: { value: Availability; label: string }[] = [
 
 export const AVAILABILITY_LABEL: Record<Availability, string> = {
   available: "Available",
+  "made-to-order": "Made to order",
   reserved: "Reserved",
   sold: "Sold",
   draft: "Draft",
@@ -26,8 +33,11 @@ export const getAvailability = (
   return (product.availability as Availability) || "available";
 };
 
+// Made-to-order is purchasable too — the customer can place an order
+// now and we paint it for them. The product page surfaces the longer
+// turnaround in its copy.
 export const isPurchasable = (availability: Availability): boolean =>
-  availability === "available";
+  availability === "available" || availability === "made-to-order";
 
 export interface DisplayArtwork {
   id: string;

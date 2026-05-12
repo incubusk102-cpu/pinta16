@@ -19,25 +19,35 @@ interface PaintingViewer3DProps {
   onClose: () => void;
 }
 
-// Load the painting as a texture and stretch it across the front face
-// of a thin canvas. Aspect ratio comes from the loaded texture itself
-// — we don't need to parse the artwork's `dimensions` string (which
-// is free-form like "60x40 cm") to get the right shape.
+// Canvhub paintings are made to order on a standard 24″ × 36″ canvas
+// (60.96 × 91.44 cm). Orientation follows the source photo: landscape
+// images get a 36 × 24 canvas, portrait images get a 24 × 36 canvas.
+// The customer's photo is UV-mapped onto the front face — modest
+// stretch is expected and acceptable since the real-world painting
+// will be repainted to fit the standard size anyway.
+const CANVAS_LONG_IN = 36;
+const CANVAS_SHORT_IN = 24;
+const CANVAS_SHORT_TO_LONG = CANVAS_SHORT_IN / CANVAS_LONG_IN; // 24/36 = 2/3
 function PaintingPlane({ imageUrl }: { imageUrl: string }) {
   const texture = useLoader(TextureLoader, imageUrl);
-  const aspect = useMemo(() => {
+  // Use the source image's aspect only to pick orientation
+  // (landscape vs portrait); the canvas dimensions themselves are
+  // fixed at 24×36 inches.
+  const isLandscape = useMemo(() => {
     const w = texture.image?.naturalWidth || texture.image?.width || 4;
     const h = texture.image?.naturalHeight || texture.image?.height || 3;
-    return w / h;
+    return w >= h;
   }, [texture]);
 
-  // Pick the longer side as 4 world units so any aspect fits the
-  // initial camera framing. Canvas thickness is ~3 cm in real life;
-  // map that to a visible 0.05 world units so the side of the canvas
-  // shows when the customer rotates the painting.
+  // Pick the long side as 4 world units so the initial camera framing
+  // still fits comfortably. The short side falls out at 4 * 24/36
+  // ≈ 2.667. Canvas thickness is ~3 cm in real life; map that to a
+  // visible 0.05 world units so the side of the canvas shows when the
+  // customer rotates the painting.
   const longSide = 4;
-  const width = aspect >= 1 ? longSide : longSide * aspect;
-  const height = aspect >= 1 ? longSide / aspect : longSide;
+  const shortSide = longSide * CANVAS_SHORT_TO_LONG;
+  const width = isLandscape ? longSide : shortSide;
+  const height = isLandscape ? shortSide : longSide;
   const depth = 0.05;
   const frameThickness = 0.18;
   const frameDepth = 0.22;

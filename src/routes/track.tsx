@@ -3,6 +3,7 @@ import { Package } from "lucide-react";
 import GalleryNav from "@/components/GalleryNav";
 import OrderTracker from "@/components/account/OrderTracker";
 import SiteFooter from "@/components/SiteFooter";
+import { useSEO } from "@/hooks/useSEO";
 
 // Read `?id=` from the live URL once at module level / render time
 // (we're not using validateSearch — the param is optional and we want
@@ -43,6 +44,13 @@ export const Route = createFileRoute("/track")({
 });
 
 function TrackPage() {
+  useSEO({
+    title: "Track your order — Canvas Hub",
+    description:
+      "Look up the status of any Canvas Hub order using your order number. No account required.",
+    canonicalPath: "/track",
+    noindex: true,
+  });
   // Mirrors the pattern in /account's `?track=` deep link: read once,
   // pass into the tracker as initial state. No effect / setState pair
   // needed — the lookup runs from inside <OrderTracker /> when an

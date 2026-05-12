@@ -22,7 +22,7 @@ import { formatRelativeTime, linkifyMessage } from "@/lib/chat-format";
 
 interface ChatMessage {
   at: string;
-  from: "customer" | "admin" | "system";
+  from: "customer" | "admin" | "ai" | "system";
   body: string;
 }
 
@@ -147,6 +147,50 @@ export default function ChatWidget() {
   const [email, setEmail] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  // True when a customer-sent fetch is in flight long enough that we
+  // should show a "Mia is typing…" bubble. The server adds a 600–1200ms
+  // typing delay before posting an AI reply (see functions/api/chat.js
+  // TYPING_DELAY_MIN_MS / MAX), which is invisible to the customer
+  // unless the widget surfaces it as a real typing indicator. This
+  // mirrors the existing admin-typing dots design but is driven
+  // entirely client-side so it stops the moment the server response
+  // (with the new AI message) lands. A 200ms grace timer prevents the
+  // indicator from flashing when AI is disabled and the fetch returns
+  // almost instantly.
+  const [aiTyping, setAiTyping] = useState(false);
+  const aiTypingTimerRef = useRef<number | null>(null);
+
+  const startAiTypingIndicator = () => {
+    if (aiTypingTimerRef.current !== null) {
+      window.clearTimeout(aiTypingTimerRef.current);
+    }
+    aiTypingTimerRef.current = window.setTimeout(() => {
+      setAiTyping(true);
+      aiTypingTimerRef.current = null;
+    }, 200);
+  };
+
+  const stopAiTypingIndicator = () => {
+    if (aiTypingTimerRef.current !== null) {
+      window.clearTimeout(aiTypingTimerRef.current);
+      aiTypingTimerRef.current = null;
+    }
+    setAiTyping(false);
+  };
+
+  // Make sure a pending grace timer doesn't fire after the widget
+  // unmounts (would otherwise log a React update-on-unmounted warning
+  // when the customer closes the bubble mid-fetch).
+  useEffect(
+    () => () => {
+      if (aiTypingTimerRef.current !== null) {
+        window.clearTimeout(aiTypingTimerRef.current);
+        aiTypingTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
   const [unreadCount, setUnreadCount] = useState(0);
   const [view, setView] = useState<UnstartedView>("faq-list");
   const [activeFaqId, setActiveFaqId] = useState<string | null>(null);
@@ -228,7 +272,11 @@ export default function ChatWidget() {
       i < thread.messages.length;
       i++
     ) {
-      if (thread.messages[i].from === "admin") count++;
+      const sender = thread.messages[i].from;
+      // AI auto-replies count as unread support messages — the customer
+      // didn't write them, so they deserve a badge until the widget is
+      // opened, the same as a human admin reply.
+      if (sender === "admin" || sender === "ai") count++;
     }
     setUnreadCount(count);
   }, [thread, open]);
@@ -250,7 +298,10 @@ export default function ChatWidget() {
     }
     let latestAdminAt = "";
     for (const m of thread.messages) {
-      if (m.from === "admin" && m.at > latestAdminAt) latestAdminAt = m.at;
+      // Both admin and AI replies should ding — they're both "support
+      // wrote back" from the customer's perspective.
+      if ((m.from === "admin" || m.from === "ai") && m.at > latestAdminAt)
+        latestAdminAt = m.at;
     }
     const prior = lastAdminAtRef.current;
     lastAdminAtRef.current = latestAdminAt;
@@ -370,6 +421,7 @@ export default function ChatWidget() {
       return;
     }
     setBusy(true);
+    startAiTypingIndicator();
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -400,6 +452,7 @@ export default function ChatWidget() {
       toast.error(err instanceof Error ? err.message : "Could not start chat");
     } finally {
       setBusy(false);
+      stopAiTypingIndicator();
     }
   };
 
@@ -408,6 +461,7 @@ export default function ChatWidget() {
     const trimmed = draft.trim();
     if (!trimmed) return;
     setBusy(true);
+    startAiTypingIndicator();
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -427,6 +481,7 @@ export default function ChatWidget() {
       toast.error(err instanceof Error ? err.message : "Could not send");
     } finally {
       setBusy(false);
+      stopAiTypingIndicator();
     }
   };
 
@@ -712,6 +767,7 @@ export default function ChatWidget() {
                         </div>
                       );
                     }
+                    const isAi = m.from === "ai";
                     return (
                       <div
                         key={`${m.at}-${idx}`}
@@ -732,7 +788,17 @@ export default function ChatWidget() {
                           className="text-[10px] text-muted-foreground mt-0.5 px-1"
                           title={new Date(m.at).toLocaleString()}
                         >
-                          {formatRelativeTime(m.at, nowTick)}
+                          {isAi ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="inline-block rounded-sm bg-foreground/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide">
+                                AI assistant
+                              </span>
+                              <span aria-hidden>·</span>
+                              <span>{formatRelativeTime(m.at, nowTick)}</span>
+                            </span>
+                          ) : (
+                            formatRelativeTime(m.at, nowTick)
+                          )}
                         </p>
                       </div>
                     );
@@ -746,6 +812,26 @@ export default function ChatWidget() {
                   >
                     <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
                       <span className="sr-only">Support is typing</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />
+                    </div>
+                  </div>
+                )}
+                {/* Only show the AI typing indicator when the human admin
+                    isn't already typing — if the admin took over, we want
+                    the customer to see *that* instead. */}
+                {aiTyping && !showAdminTyping && (
+                  <div
+                    className="flex items-start gap-2"
+                    aria-live="polite"
+                    aria-label="Mia is typing"
+                  >
+                    <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
+                      <span className="sr-only">Mia is typing</span>
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mr-1">
+                        Mia
+                      </span>
                       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
                       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
                       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />

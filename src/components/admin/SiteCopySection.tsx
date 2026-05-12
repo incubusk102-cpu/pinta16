@@ -18,6 +18,8 @@ const cloneDefaults = (): SiteCopy => ({
   about: { ...DEFAULT_SITE_COPY.about },
   reviews: { ...DEFAULT_SITE_COPY.reviews },
   contact: { ...DEFAULT_SITE_COPY.contact },
+  madeToOrderNotice: { ...DEFAULT_SITE_COPY.madeToOrderNotice },
+  productInfo: { ...DEFAULT_SITE_COPY.productInfo },
 });
 
 export const SiteCopySection = () => {
@@ -48,6 +50,8 @@ export const SiteCopySection = () => {
       about: { ...config.siteCopy.about },
       reviews: { ...config.siteCopy.reviews },
       contact: { ...config.siteCopy.contact },
+      madeToOrderNotice: { ...config.siteCopy.madeToOrderNotice },
+      productInfo: { ...config.siteCopy.productInfo },
     });
   }, [config.siteCopy]);
 
@@ -78,6 +82,14 @@ export const SiteCopySection = () => {
             contact: {
               ...DEFAULT_SITE_COPY.contact,
               ...data.config.siteCopy.contact,
+            },
+            madeToOrderNotice: {
+              ...DEFAULT_SITE_COPY.madeToOrderNotice,
+              ...data.config.siteCopy.madeToOrderNotice,
+            },
+            productInfo: {
+              ...DEFAULT_SITE_COPY.productInfo,
+              ...data.config.siteCopy.productInfo,
             },
           };
           setCopy(next);
@@ -242,6 +254,86 @@ export const SiteCopySection = () => {
             onChange: (v) =>
               setCopy((c) => ({ ...c, contact: { ...c.contact, title: v } })),
             placeholder: DEFAULT_SITE_COPY.contact.title,
+          },
+        ]}
+      />
+
+      <SectionEditor
+        title="Product page — shipping & care"
+        description="The two small lines at the bottom of every product page."
+        fields={[
+          {
+            label: "Shipping label (small caps)",
+            value: copy.productInfo.shippingLabel,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, shippingLabel: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.shippingLabel,
+          },
+          {
+            label: "Shipping body",
+            value: copy.productInfo.shippingBody,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, shippingBody: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.shippingBody,
+            multiline: true,
+            rows: 3,
+          },
+          {
+            label: "Care label (small caps)",
+            value: copy.productInfo.careLabel,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, careLabel: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.careLabel,
+          },
+          {
+            label: "Care body",
+            value: copy.productInfo.careBody,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, careBody: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.careBody,
+            multiline: true,
+            rows: 3,
+          },
+        ]}
+      />
+
+      <SectionEditor
+        title="Made to order notice"
+        description="The blue info box shown on a product page when its availability is set to Made to order."
+        fields={[
+          {
+            label: "Heading (small caps line)",
+            value: copy.madeToOrderNotice.heading,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                madeToOrderNotice: { ...c.madeToOrderNotice, heading: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.madeToOrderNotice.heading,
+          },
+          {
+            label: "Body (line breaks preserved)",
+            value: copy.madeToOrderNotice.body,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                madeToOrderNotice: { ...c.madeToOrderNotice, body: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.madeToOrderNotice.body,
+            multiline: true,
+            rows: 5,
           },
         ]}
       />

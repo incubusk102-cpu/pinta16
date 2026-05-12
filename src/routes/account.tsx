@@ -31,6 +31,7 @@ import {
 import { useWishlist } from "@/contexts/WishlistContext";
 import { buildTrackingUrl } from "@/lib/shipment";
 import OrderReviewForm from "@/components/OrderReviewForm";
+import { useSEO } from "@/hooks/useSEO";
 import RefundBanner from "@/components/RefundBanner";
 import ReturnRequestPanel from "@/components/ReturnRequestPanel";
 import ProfileEditor from "@/components/account/ProfileEditor";
@@ -549,6 +550,13 @@ function WishlistSection() {
 }
 
 function AccountPage() {
+  useSEO({
+    title: "My account — Canvas Hub",
+    description:
+      "Manage your Canvas Hub account, view your orders, and update your profile.",
+    canonicalPath: "/account",
+    noindex: true,
+  });
   const { user, token } = useUserAuth();
   const navigate = useNavigate();
   const hash = useRouterState({ select: (s) => s.location.hash });

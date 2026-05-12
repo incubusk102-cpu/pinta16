@@ -38,6 +38,25 @@ const CHAT_FAQ_MAX = 12;
 const CHAT_FAQ_QUESTION_MAX = 80;
 const CHAT_FAQ_ANSWER_MAX = 1200;
 
+// AI auto-reply (Groq) settings. Admin-only — none of these leak into
+// the public storefront config payload. The system prompt + handoff
+// keywords are tunable so the gallery owner can shape the AI's tone
+// without redeploying.
+const CHAT_AI_PROMPT_MAX = 4000;
+const CHAT_AI_KEYWORD_MAX = 40;
+const CHAT_AI_KEYWORDS_MAX_COUNT = 20;
+const CHAT_AI_MODEL_MAX = 80;
+// Customer-facing ack message shown when the AI hands off to a human.
+// Keep this well under the 280-char SMS-style ceiling so it fits one
+// line in the chat bubble on mobile.
+const CHAT_AI_HANDOFF_MESSAGE_MAX = 280;
+const DEFAULT_CHAT_AI_SYSTEM_PROMPT = "";
+const DEFAULT_CHAT_AI_HANDOFF_KEYWORDS = [];
+// Empty string → the chat handler falls back to its bundled default
+// (see DEFAULT_HANDOFF_ACK in chat.js). Stored as empty so the admin UI
+// can show the bundled copy in its placeholder.
+const DEFAULT_CHAT_AI_HANDOFF_MESSAGE = "";
+
 // Saved replies for the admin Messages section. These are admin-only
 // templates the gallery owner inserts into a chat reply with a click —
 // never shown to buyers, so they can be slightly more "operational" in
@@ -176,6 +195,48 @@ const sanitizeChatFaqs = (raw) => {
   return out;
 };
 
+const sanitizeChatAi = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const handoffSource = Array.isArray(data.handoffKeywords)
+    ? data.handoffKeywords
+    : [];
+  const seen = new Set();
+  const handoffKeywords = [];
+  for (const entry of handoffSource) {
+    const kw = String(entry ?? "")
+      .trim()
+      .toLowerCase()
+      .slice(0, CHAT_AI_KEYWORD_MAX);
+    // 3-char minimum mirrors the matcher in chat-ai.js — anything
+    // shorter would fire on every message ("ok", "no", etc.).
+    if (kw.length < 3) continue;
+    if (seen.has(kw)) continue;
+    seen.add(kw);
+    handoffKeywords.push(kw);
+    if (handoffKeywords.length >= CHAT_AI_KEYWORDS_MAX_COUNT) break;
+  }
+  return {
+    enabled: data.enabled === true,
+    // Strip control chars (same logic as elsewhere in this file) so a
+    // pasted system prompt can't smuggle in an ANSI escape sequence
+    // that survives in the admin log redactor.
+    systemPrompt: String(data.systemPrompt ?? "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .trim()
+      .slice(0, CHAT_AI_PROMPT_MAX),
+    model: String(data.model ?? "")
+      .trim()
+      .slice(0, CHAT_AI_MODEL_MAX),
+    handoffKeywords,
+    // Customer-facing ack the chat handler posts when the AI hands off
+    // to a human. Empty string → use the bundled default in chat.js.
+    handoffMessage: String(data.handoffMessage ?? "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .trim()
+      .slice(0, CHAT_AI_HANDOFF_MESSAGE_MAX),
+  };
+};
+
 // Site-copy defaults match the strings hard-coded in the React components.
 // When admin saves a blank field we fall back to these so the storefront
 // never shows an empty heading.
@@ -196,6 +257,17 @@ const SITE_COPY_DEFAULTS = {
   contact: {
     eyebrow: "Get in touch",
     title: "Contact us",
+  },
+  madeToOrderNotice: {
+    heading: "Made to order",
+    body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
+  },
+  productInfo: {
+    shippingLabel: "Shipping",
+    shippingBody:
+      "Lalamove courier within Luzon — live tracking, fare paid to the rider on delivery.",
+    careLabel: "Care",
+    careBody: "Keep out of direct sunlight and humid spaces for longevity.",
   },
 };
 
@@ -816,6 +888,37 @@ const sanitizeSiteCopy = (raw) => {
         SITE_COPY_DEFAULTS.contact.title,
       ),
     },
+    madeToOrderNotice: {
+      heading: sanitizeSiteCopyField(
+        data.madeToOrderNotice?.heading,
+        SITE_COPY_DEFAULTS.madeToOrderNotice.heading,
+      ),
+      body: sanitizeSiteCopyField(
+        data.madeToOrderNotice?.body,
+        SITE_COPY_DEFAULTS.madeToOrderNotice.body,
+        SITE_COPY_BODY_MAX,
+      ),
+    },
+    productInfo: {
+      shippingLabel: sanitizeSiteCopyField(
+        data.productInfo?.shippingLabel,
+        SITE_COPY_DEFAULTS.productInfo.shippingLabel,
+      ),
+      shippingBody: sanitizeSiteCopyField(
+        data.productInfo?.shippingBody,
+        SITE_COPY_DEFAULTS.productInfo.shippingBody,
+        SITE_COPY_BODY_MAX,
+      ),
+      careLabel: sanitizeSiteCopyField(
+        data.productInfo?.careLabel,
+        SITE_COPY_DEFAULTS.productInfo.careLabel,
+      ),
+      careBody: sanitizeSiteCopyField(
+        data.productInfo?.careBody,
+        SITE_COPY_DEFAULTS.productInfo.careBody,
+        SITE_COPY_BODY_MAX,
+      ),
+    },
   };
 };
 
@@ -1033,6 +1136,23 @@ const DEFAULT_CONFIG = {
     welcome: DEFAULT_CHAT_WELCOME,
     agentHandoff: true,
     faqs: DEFAULT_CHAT_FAQS,
+    ai: {
+      // Off by default — admin must opt in from /admin → Messages → AI.
+      // This avoids surprising the gallery owner with auto-replies the
+      // first time they deploy a build that includes this feature.
+      enabled: false,
+      // Optional override; empty string falls back to the bundled prompt
+      // (see chat-ai.js → buildSystemPrompt).
+      systemPrompt: DEFAULT_CHAT_AI_SYSTEM_PROMPT,
+      // Optional override; Groq Llama 3.3 70B is the free-tier default.
+      model: "",
+      // Additional words/phrases that, if they appear in a customer
+      // message, force the AI to step aside so a human answers.
+      handoffKeywords: DEFAULT_CHAT_AI_HANDOFF_KEYWORDS,
+      // Customer-facing ack message posted when the AI hands off.
+      // Empty string defers to the bundled default in chat.js.
+      handoffMessage: DEFAULT_CHAT_AI_HANDOFF_MESSAGE,
+    },
   },
   // Saved replies (admin-only chat templates). Seed with the four
   // canonical messages a soloist gallery owner ends up retyping
@@ -1431,6 +1551,7 @@ const sanitizeConfig = (raw) => {
       ).slice(0, CHAT_WELCOME_MAX),
       agentHandoff: chatRaw.agentHandoff !== false,
       faqs: faqsExplicit ? sanitizedFaqs : DEFAULT_CHAT_FAQS,
+      ai: sanitizeChatAi(chatRaw.ai),
     },
     // Admin-only saved replies. Treat an undefined `savedReplies` field
     // as "use the seed defaults" (first time admin loads the section);
@@ -1623,7 +1744,15 @@ const publicView = (config) => {
       : [],
     siteCopy: config.siteCopy,
     promoCodes: livePromos,
-    chat: config.chat,
+    // Public chat block intentionally omits the AI sub-tree — the system
+    // prompt + handoff keywords are admin-only configuration. The
+    // customer-facing widget only needs to know whether the chat itself
+    // is enabled, the welcome blurb, and the FAQ shortcuts.
+    chat: (() => {
+      const publicChat = { ...(config.chat || {}) };
+      delete publicChat.ai;
+      return publicChat;
+    })(),
     welcomeEmailPreview: publicWelcomePreview(config.welcomeEmail),
     newUserModal: {
       enabled: config.newUserModal.enabled,
@@ -1962,6 +2091,14 @@ const handle = async ({ request, env }) => {
             contact: {
               ...existing.siteCopy.contact,
               ...(incoming.contact ?? {}),
+            },
+            madeToOrderNotice: {
+              ...(existing.siteCopy.madeToOrderNotice ?? {}),
+              ...(incoming.madeToOrderNotice ?? {}),
+            },
+            productInfo: {
+              ...(existing.siteCopy.productInfo ?? {}),
+              ...(incoming.productInfo ?? {}),
             },
           },
         });

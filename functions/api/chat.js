@@ -5,15 +5,23 @@
 // Storage shape (Netlify Blobs `chat-threads/index`):
 //   { threads: [{ id, name, email, createdAt, updatedAt, lastFromAdmin,
 //                 lastReadByAdminAt, customerLastMessageAt, ip, browser,
-//                 os, device, messageCount, closedAt }] }
+//                 os, device, messageCount, closedAt, needsHumanAt }] }
 // Per-thread blob (`chat-threads/<id>`):
 //   { id, name, email, createdAt, closedAt?, closedBy?,
-//     messages: [{ at, from: 'customer'|'admin'|'system', body }] }
+//     messages: [{ at, from: 'customer'|'admin'|'ai'|'system', body }] }
 // Per-thread typing-indicator blob (`chat-threads/typing__<id>`):
 //   { at, by: 'admin' }   // small, no CAS — latest write wins
 //
 // Public POSTs are rate-limited per IP. Admin reads/writes require a session
 // token. Audit log gets `chat.message` events.
+//
+// AI auto-reply (optional): when `chat.ai.enabled` is true in
+// storefront-config and `GROQ_TOKEN` (or `GROQ_API_KEY`) is set in the
+// Pages env, customer
+// messages that don't match an admin recently-active thread will trigger
+// a Groq-backed reply, appended as `from: "ai"`. The path is best-effort
+// — any failure or timeout silently degrades to "no auto-reply" and the
+// thread waits in the admin Chat tab for the gallery owner to take over.
 
 import { connectLambda, getStore } from "./_lib/kv-stores.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
@@ -22,14 +30,40 @@ import { appendAuditEvent } from "./_lib/audit-log.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { captureRequestMeta } from "./_lib/request-info.js";
 import { wrapHandler } from "./_lib/handler-wrapper.js";
+import { getCloudflareEnv } from "./_lib/context.js";
+import {
+  generateAutoReply,
+  __internals as chatAiInternals,
+} from "./_lib/chat-ai.js";
 
 const STORE_NAME = "chat-threads";
 const INDEX_KEY = "index";
+const CONFIG_KEY = "config";
+const PRODUCTS_KEY = "all-products";
 const MAX_THREADS = 200; // Older threads beyond this are pruned from the index.
 const MAX_MESSAGES_PER_THREAD = 200;
 const MAX_BODY_CHARS = 2000;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{16,64}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Server-side typing delay applied before every AI-authored message
+// (handoff ack, FAQ reply, LLM reply) lands in the thread. The FAQ
+// fast-path is zero-latency and an LLM reply takes ~400ms; both pop
+// in too fast to feel human. A random 600–1200ms pad makes the bot
+// feel like it's typing instead of teleporting. The customer's send
+// button stays in its loading state during this pad, which the
+// existing widget already shows as a "sending" indicator.
+const TYPING_DELAY_MIN_MS = 600;
+const TYPING_DELAY_MAX_MS = 1200;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const typingDelay = async () => {
+  const ms =
+    TYPING_DELAY_MIN_MS +
+    Math.random() * (TYPING_DELAY_MAX_MS - TYPING_DELAY_MIN_MS);
+  await sleep(ms);
+};
 
 const json = (statusCode, body, extraHeaders = {}) => ({
   statusCode,
@@ -77,6 +111,11 @@ const sanitizeIndexEntry = (entry) => ({
   os: trimString(entry.os, 40),
   device: trimString(entry.device, 30),
   closedAt: entry.closedAt ? String(entry.closedAt) : "",
+  // Set when an AI auto-reply path bailed out and explicitly asked for a
+  // human (handoff keyword in the customer message OR the model emitted
+  // the `<<<NEEDS_HUMAN>>>` token). Surfaced in the admin Chat list so
+  // the gallery owner can prioritise threads the AI couldn't close.
+  needsHumanAt: entry.needsHumanAt ? String(entry.needsHumanAt) : "",
 });
 
 const readIndexWithMeta = async (store) => {
@@ -218,6 +257,192 @@ const appendMessage = async (
   return null;
 };
 
+// Read storefront-config from KV without throwing on missing binding.
+// Returns the raw config object or `null` if anything goes wrong; callers
+// must handle the null case so a misconfigured `STOREFRONT_CONFIG` binding
+// never breaks the customer's chat send.
+const readStorefrontConfig = async () => {
+  try {
+    const env = getCloudflareEnv();
+    if (!env?.STOREFRONT_CONFIG) return null;
+    const value = await env.STOREFRONT_CONFIG.get(CONFIG_KEY, { type: "json" });
+    return value && typeof value === "object" ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+const readProductsForAi = async () => {
+  try {
+    const env = getCloudflareEnv();
+    if (!env?.PRODUCTS) return [];
+    const value = await env.PRODUCTS.get(PRODUCTS_KEY, { type: "json" });
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+};
+
+// Mark the thread index entry as awaiting human follow-up. Best-effort —
+// a missed flag is preferable to retrying CAS aggressively and starving
+// the customer's poll.
+const markNeedsHuman = async (store, id) => {
+  const at = nowISO();
+  try {
+    await upsertIndexEntry(store, (threads) => {
+      const idx = threads.findIndex((t) => t.id === id);
+      if (idx === -1) return threads;
+      const prior = threads[idx];
+      return [
+        ...threads.slice(0, idx),
+        sanitizeIndexEntry({ ...prior, needsHumanAt: at, updatedAt: at }),
+        ...threads.slice(idx + 1),
+      ];
+    });
+  } catch {
+    // ignore
+  }
+};
+
+// Try to post an AI auto-reply for a freshly-appended customer message.
+// Always best-effort: errors, timeouts, missing config, missing API key,
+// or a model that refuses to answer all collapse into "do nothing". The
+// customer's response is not blocked on this — we wait long enough for
+// Groq's typical latency (~0.7s) but the GROQ_TIMEOUT_MS inside the AI
+// library bounds the worst case.
+const maybePostAiReply = async ({
+  store,
+  threadAfterCustomer,
+  customerMessage,
+}) => {
+  let chatConfig = null;
+  let products = [];
+  try {
+    const config = await readStorefrontConfig();
+    chatConfig = config?.chat || null;
+    if (!chatConfig?.ai?.enabled) return; // fast-path skip
+    products = await readProductsForAi();
+  } catch {
+    return;
+  }
+
+  let outcome;
+  try {
+    outcome = await generateAutoReply({
+      env: getCloudflareEnv(),
+      thread: threadAfterCustomer,
+      customerMessage,
+      chatConfig,
+      products,
+    });
+  } catch {
+    return;
+  }
+  if (!outcome || outcome.kind === "skip") return;
+
+  if (outcome.kind === "handoff") {
+    // Post a short ack so the customer sees that their message was
+    // received and routed to a human, instead of the widget silently
+    // doing nothing. Admin-configured copy wins; otherwise we rotate
+    // through warm variants that include the customer's first name
+    // when available, so consecutive handoffs don't read identically.
+    // Best-effort: an append failure still leaves `needsHumanAt` set
+    // on the index, which is enough for the gallery owner to find it.
+    //
+    // Two ack flavours depending on *why* we're handing off:
+    //   • customer-requested-human — customer explicitly asked for a
+    //     real person. Mia introduces herself warmly and offers to help
+    //     in the meantime (greeting variants).
+    //   • ai-uncertain / ai-empty — Mia tried to answer but couldn't,
+    //     so dropping a "Hi, I'm Mia" intro mid-thread would read as
+    //     out of place. Keep the terse ack.
+    const ackRaw =
+      typeof chatConfig?.ai?.handoffMessage === "string"
+        ? chatConfig.ai.handoffMessage.trim()
+        : "";
+    const customerAskedForHuman = outcome.reason === "customer-requested-human";
+    const pickedAck = customerAskedForHuman
+      ? chatAiInternals.pickGreetingHandoffAck(threadAfterCustomer?.name)
+      : chatAiInternals.pickHandoffAck(threadAfterCustomer?.name);
+    const ackBody = ackRaw || pickedAck;
+    await typingDelay();
+    const at = nowISO();
+    const updated = await appendMessage(
+      store,
+      threadAfterCustomer.id,
+      { at, from: "ai", body: ackBody },
+      { rejectIfClosed: true },
+    );
+    // Still mark the thread for admin pickup regardless of whether the
+    // ack appended cleanly. The flag is what surfaces it in the admin
+    // Chat tab; the ack is just customer-facing UX.
+    await markNeedsHuman(store, threadAfterCustomer.id);
+    if (updated && updated !== "closed") {
+      try {
+        await upsertIndexEntry(store, (threads) => {
+          const idx = threads.findIndex((t) => t.id === threadAfterCustomer.id);
+          if (idx === -1) return threads;
+          const prior = threads[idx];
+          return [
+            ...threads.slice(0, idx),
+            sanitizeIndexEntry({
+              ...prior,
+              updatedAt: at,
+              messageCount: (prior.messageCount || 0) + 1,
+              // Keep `needsHumanAt` set — `markNeedsHuman` already wrote
+              // it and the ack does not clear the flag.
+            }),
+            ...threads.slice(idx + 1),
+          ];
+        });
+      } catch {
+        // ignore index update failure
+      }
+    }
+    return;
+  }
+
+  if (outcome.kind !== "reply" || !outcome.body) return;
+
+  // Small typing delay so AI replies don't pop in instantly. Applied
+  // for both the FAQ fast-path (which is essentially zero-latency)
+  // and the LLM path (which is ~400ms — still too fast to feel
+  // human). Combined worst case stays well under the 6s AI timeout.
+  await typingDelay();
+  const at = nowISO();
+  const updated = await appendMessage(
+    store,
+    threadAfterCustomer.id,
+    { at, from: "ai", body: outcome.body },
+    { rejectIfClosed: true },
+  );
+  if (!updated || updated === "closed") return;
+
+  try {
+    await upsertIndexEntry(store, (threads) => {
+      const idx = threads.findIndex((t) => t.id === threadAfterCustomer.id);
+      if (idx === -1) return threads;
+      const prior = threads[idx];
+      return [
+        ...threads.slice(0, idx),
+        sanitizeIndexEntry({
+          ...prior,
+          updatedAt: at,
+          // AI replies don't flip `lastFromAdmin` — the admin still owes
+          // the customer a real read if the conversation continues.
+          messageCount: (prior.messageCount || 0) + 1,
+          // Auto-reply landed; clear any stale needs-human flag so the
+          // thread doesn't sit pinned in the admin list forever.
+          needsHumanAt: "",
+        }),
+        ...threads.slice(idx + 1),
+      ];
+    });
+  } catch {
+    // ignore index update failure — the message itself landed
+  }
+};
+
 export const handler = async (event) => {
   try {
     const store = getChatStore(event);
@@ -340,13 +565,30 @@ export const handler = async (event) => {
       } catch {
         // ignore
       }
+      // Best-effort auto-reply on the very first message. Wrap in a
+      // try/catch even though the helper swallows its own errors — the
+      // customer's response must never depend on AI succeeding.
+      try {
+        await maybePostAiReply({
+          store,
+          threadAfterCustomer: thread,
+          customerMessage: initialMessage,
+        });
+      } catch {
+        // ignore
+      }
+      // Re-read the thread so the response includes the AI reply (if one
+      // landed). Falls back to the original snapshot if the re-read fails
+      // — the widget's 5s poll will pick up the AI reply on the next tick.
+      const refreshed = await readThread(store, id);
+      const finalThread = refreshed || thread;
       return json(200, {
         thread: {
           id,
           name,
           email,
           createdAt,
-          messages: thread.messages,
+          messages: finalThread.messages,
         },
       });
     }
@@ -407,16 +649,29 @@ export const handler = async (event) => {
       } catch {
         // ignore
       }
+      try {
+        await maybePostAiReply({
+          store,
+          threadAfterCustomer: updated,
+          customerMessage: message,
+        });
+      } catch {
+        // ignore
+      }
+      // Same pattern as `start` — re-read so the response can include any
+      // AI reply that just landed; fall back to the pre-AI snapshot.
+      const refreshed = await readThread(store, id);
+      const finalThread = refreshed || updated;
       const adminTypingAt = await readAdminTyping(store, id);
       return json(200, {
         thread: {
           id,
-          name: updated.name,
-          email: updated.email,
-          createdAt: updated.createdAt,
-          messages: updated.messages,
-          closedAt: updated.closedAt || "",
-          closedBy: updated.closedBy || "",
+          name: finalThread.name,
+          email: finalThread.email,
+          createdAt: finalThread.createdAt,
+          messages: finalThread.messages,
+          closedAt: finalThread.closedAt || "",
+          closedBy: finalThread.closedBy || "",
           adminTypingAt,
         },
       });
@@ -460,12 +715,14 @@ export const handler = async (event) => {
             lastFromAdmin: true,
             lastReadByAdminAt: at,
             messageCount: prior.messageCount + 1,
+            // Admin took over — clear the "needs human" badge.
+            needsHumanAt: "",
           }),
           ...threads.slice(idx + 1),
         ];
       });
       // Sending clears the typing indicator so the customer doesn't see a
-      // ghost "Support is typing\u2026" right after the reply lands.
+      // ghost "Support is typing…" right after the reply lands.
       try {
         await store.delete(typingKey(id));
       } catch {
@@ -642,7 +899,13 @@ export const handler = async (event) => {
         const prior = threads[idx];
         return [
           ...threads.slice(0, idx),
-          sanitizeIndexEntry({ ...prior, lastReadByAdminAt: at }),
+          sanitizeIndexEntry({
+            ...prior,
+            lastReadByAdminAt: at,
+            // Admin acknowledged the thread — clear the AI handoff badge
+            // so the list doesn't pin it forever.
+            needsHumanAt: "",
+          }),
           ...threads.slice(idx + 1),
         ];
       });

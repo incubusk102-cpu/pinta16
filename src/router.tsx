@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { captureException } from "./lib/observability";
 
 function DefaultErrorComponent({
   error,
@@ -9,6 +11,16 @@ function DefaultErrorComponent({
   reset: () => void;
 }) {
   const router = useRouter();
+
+  // TanStack Router catches render-time errors and routes them here
+  // instead of letting them propagate to the global handler that the
+  // Sentry browser SDK installs. Forward them explicitly so they still
+  // land in Sentry. No-ops when Sentry isn't configured.
+  useEffect(() => {
+    void captureException(error, {
+      source: "router-default-error-component",
+    });
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">

@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import SectionReveal from "@/components/motion/SectionReveal";
 import SplitText from "@/components/motion/SplitText";
+import ReviewPhotoLightbox, {
+  type ReviewPhotoView,
+} from "@/components/ReviewPhotoLightbox";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { usePublishedReviews } from "@/hooks/usePublishedReviews";
 
@@ -34,6 +38,12 @@ const ReviewsSection = () => {
   const { config } = useStorefrontConfig();
   const reviewsCopy = config.siteCopy.reviews;
   const { reviews, loading } = usePublishedReviews();
+
+  // Lightbox state. Holds the gallery (review photos for one review)
+  // and the currently-shown index within it. Null = closed. The
+  // viewer itself lives in <ReviewPhotoLightbox /> so the same
+  // GPU-safe rendering is used on the product page too.
+  const [photoView, setPhotoView] = useState<ReviewPhotoView | null>(null);
 
   if (loading || reviews.length === 0) return null;
 
@@ -105,23 +115,28 @@ const ReviewsSection = () => {
             </p>
             {(r.images?.length ?? 0) > 0 && (
               <div className="grid grid-cols-3 gap-1.5">
-                {(r.images ?? []).slice(0, 3).map((src, j) => (
-                  <a
-                    key={j}
-                    href={src}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <img
-                      src={src}
-                      alt={`Review photo ${j + 1}`}
-                      className="aspect-square w-full object-cover rounded-md border border-border/40"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
-                ))}
+                {(r.images ?? []).slice(0, 3).map((src, j) => {
+                  const reviewImages = (r.images ?? []).slice(0, 3);
+                  return (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() =>
+                        setPhotoView({ images: reviewImages, index: j })
+                      }
+                      aria-label={`Open review photo ${j + 1}`}
+                      className="block aspect-square w-full overflow-hidden rounded-md border border-border/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <img
+                        src={src}
+                        alt={`Review photo ${j + 1}`}
+                        className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
@@ -141,6 +156,8 @@ const ReviewsSection = () => {
           </motion.article>
         ))}
       </div>
+
+      <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </SectionReveal>
   );
 };

@@ -2,10 +2,54 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from "path";
 
+// Sentry source-map upload + release tagging.
+//
+// Both opt-in: the plugin is a no-op unless SENTRY_AUTH_TOKEN is set in the
+// build environment. SENTRY_ORG / SENTRY_PROJECT default to the canvhub
+// project; override via env if you ever fork to a different Sentry project.
+//
+// `SENTRY_RELEASE` is the release identifier Sentry groups events under;
+// in CI we pass `github.sha` so the release matches the deployed commit
+// (`@sentry/vite-plugin` also auto-detects this from common CI env vars
+// when not set explicitly, but we set it ourselves for clarity).
+const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN;
+const SENTRY_ORG = process.env.SENTRY_ORG || "incubus-6c";
+const SENTRY_PROJECT = process.env.SENTRY_PROJECT || "canvhub-web";
+const SENTRY_RELEASE = process.env.SENTRY_RELEASE;
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), tsconfigPaths()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    tsconfigPaths(),
+    // Must come last so the plugin can read the final emitted bundle
+    // and upload its source maps. Silently no-ops without an auth
+    // token, so local `npm run build` keeps working unchanged.
+    sentryVitePlugin({
+      org: SENTRY_ORG,
+      project: SENTRY_PROJECT,
+      authToken: SENTRY_AUTH_TOKEN,
+      release: SENTRY_RELEASE ? { name: SENTRY_RELEASE } : undefined,
+      sourcemaps: {
+        // Delete `.map` files from `dist/` once they've been uploaded to
+        // Sentry. Combined with Vite's `build.sourcemap: "hidden"` below,
+        // this guarantees we ship the minified bundle to users with no
+        // way (URL guess or comment) to recover the original source.
+        filesToDeleteAfterUpload: ["./dist/**/*.map"],
+      },
+      // Don't fail the build if Sentry is unreachable / token is bad.
+      // We'd rather ship the deploy than block on observability tooling.
+      errorHandler: (err) => {
+        console.warn("[sentry-vite-plugin]", err.message);
+      },
+      // Plugin defaults disable telemetry, but be explicit.
+      telemetry: false,
+      disable: !SENTRY_AUTH_TOKEN,
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -14,6 +58,11 @@ export default defineConfig({
   build: {
     outDir: "dist",
     chunkSizeWarningLimit: 700,
+    // Emit hidden source maps so Sentry can symbolicate without
+    // shipping `.map` files (or `//# sourceMappingURL=` comments)
+    // to end users. The plugin uploads them server-side; the
+    // deployed bundle stays minified.
+    sourcemap: SENTRY_AUTH_TOKEN ? "hidden" : false,
     rollupOptions: {
       output: {
         manualChunks(id) {

@@ -11,6 +11,24 @@ breaks at 2 AM unless you wire them up.
 | Sentry (browser SDK)         | Captures uncaught JS errors + soft errors from the SPA, with stack traces and breadcrumbs | Free tier: 5k events/month, then paid     |
 | Sentry (Pages Functions SDK) | Captures uncaught errors from `functions/api/*` via `toucan-js`                           | Same Sentry plan; same DSN works for both |
 
+## Where to put each env var
+
+This project's deploy is split between two systems, and that affects
+where each env var lives:
+
+- **Build runs in GitHub Actions** (`.github/workflows/deploy.yml`).
+  Vite inlines anything prefixed `VITE_*` into the bundle at build
+  time. Those values must therefore live in **GitHub Actions secrets**
+  (`Settings → Secrets and variables → Actions`). Cloudflare Pages
+  env vars are not visible to this build.
+- **Pages Functions run on Cloudflare Workers**, which read env vars
+  at request time. Anything without the `VITE_` prefix (e.g.
+  `SENTRY_DSN` for `toucan-js`) lives in **Cloudflare Pages env vars**
+  (`Pages → canvhub → Settings → Environment variables`).
+
+TL;DR: `VITE_*` → GitHub Actions secrets. Everything else → Cloudflare
+Pages env vars. Each section below restates this where relevant.
+
 ## 1. Cloudflare Web Analytics
 
 This is the right first step — it's free, it's already running on
@@ -33,17 +51,21 @@ cookies (so we don't need a consent banner under EU/PH rules).
 
    **Copy only the token** (the value of `token`, not the whole script).
 
-4. In Cloudflare Pages → **canvhub** → Settings → Environment variables
-   → Production, add:
+4. GitHub → repo Settings → Secrets and variables → Actions →
+   **New repository secret**:
 
    | Variable                  | Value                 |
    | ------------------------- | --------------------- |
    | `VITE_CF_ANALYTICS_TOKEN` | the token from step 3 |
 
-5. Re-deploy (push to `main` or click "Retry deployment" in the Pages
-   dashboard). On next page load, `src/lib/observability.ts` injects
-   the beacon at runtime, and analytics start populating in the
-   Cloudflare dashboard within a few minutes.
+   (This lives in GitHub Actions secrets — not Cloudflare Pages env
+   vars — because Vite inlines it at build time. The build runs in
+   GitHub Actions, so Pages env vars never reach it.)
+
+5. Re-deploy (push to `main`, or re-run the latest deploy workflow in
+   GitHub Actions). On next page load, `src/lib/observability.ts`
+   injects the beacon at runtime, and analytics start populating in
+   the Cloudflare dashboard within a few minutes.
 
 ### Verify
 
@@ -72,7 +94,8 @@ a launch — ~5k events/month.
 1. Sign up at https://sentry.io (or use existing org).
 2. Create a project: **Platform → React**, name it `canvhub-web`.
 3. Copy the **DSN** (looks like `https://abc123@o12345.ingest.us.sentry.io/67890`).
-4. Cloudflare Pages → **canvhub** → Settings → Environment variables → Production:
+4. GitHub → repo Settings → Secrets and variables → Actions →
+   **New repository secret** for each of:
 
    | Variable                         | Value                                                  | Required? |
    | -------------------------------- | ------------------------------------------------------ | --------- |
@@ -80,13 +103,24 @@ a launch — ~5k events/month.
    | `VITE_SENTRY_ENVIRONMENT`        | `production`                                           | optional  |
    | `VITE_SENTRY_TRACES_SAMPLE_RATE` | `0.1` (10% — default), `0` to disable tracing entirely | optional  |
 
-5. Add the same `VITE_SENTRY_DSN` to **Preview** with environment
-   `preview` so PR previews report errors to the same project under a
-   distinguishable tag, or skip it for previews if you'd rather keep
-   the noise out.
-6. Re-deploy. `src/lib/observability.ts` lazy-imports `@sentry/react`
-   only when `VITE_SENTRY_DSN` is set, so unconfigured deploys still
-   pay zero cost.
+   These live in GitHub Actions secrets (not Cloudflare Pages env
+   vars) because Vite inlines them at build time and the build runs in
+   GitHub Actions. The DSN is **public** — it's intentionally
+   embedded in the bundle — so "secret" here just means "opaque
+   value managed by GitHub", not "never expose". See PR previews
+   below if you want to keep PR errors out of the production project.
+
+5. _(Optional)_ For PR previews. The same `VITE_SENTRY_DSN` secret
+   is already passed to `pull_request`-triggered builds, so previews
+   send to the same Sentry project automatically. Set
+   `VITE_SENTRY_ENVIRONMENT=preview` if you want to filter previews
+   out of your prod views, or unset `VITE_SENTRY_DSN` for preview
+   triggers (advanced; requires a separate workflow path) to keep
+   them silent.
+6. Re-deploy (push to `main`, or re-run the latest deploy workflow).
+   `src/lib/observability.ts` lazy-imports `@sentry/react` only when
+   `VITE_SENTRY_DSN` is set, so unconfigured deploys still pay zero
+   cost.
 
 ### Verify
 
@@ -105,6 +139,40 @@ a launch — ~5k events/month.
 - `sendDefaultPii: false` — we strip emails, IPs, and headers before
   send. To turn it on for a debugging window only, set
   `VITE_SENTRY_SEND_PII=1` and re-deploy. Roll back when you're done.
+
+### Source maps (recommended)
+
+Without source maps, every Sentry event displays the minified bundle —
+e.g. `t.default at index-abc123.js:1:42891` — which is unusable for
+triage. `@sentry/vite-plugin` is wired into `vite.config.ts` to upload
+hidden source maps as part of each release.
+
+Enable in one step:
+
+1. Sentry → Settings → Auth Tokens → **Create New Token** with scopes
+   `project:releases` + `org:read`. (Internal Integration tokens work
+   too and are scoped to the org.)
+2. GitHub → repo Settings → Secrets and variables → Actions →
+   **New repository secret** named `SENTRY_AUTH_TOKEN`, paste the value.
+
+That's it. On the next push to `main`:
+
+- `.github/workflows/deploy.yml` reads `SENTRY_AUTH_TOKEN` and passes it
+  to `vite build`.
+- `@sentry/vite-plugin` emits hidden source maps (no `.map` files ship
+  to users; the deployed bundle stays minified) and uploads them to
+  Sentry under a release named after the commit SHA (`github.sha`).
+- The SPA also gets `VITE_SENTRY_RELEASE=${{ github.sha }}` so
+  `Sentry.init({ release })` tags each event with the same release ID.
+  Stack traces are now symbolicated to the original source location.
+
+When `SENTRY_AUTH_TOKEN` is unset (e.g. forks, local builds), the
+plugin is a no-op, source maps are not emitted, and the build still
+succeeds.
+
+Project / org slugs default to `incubus-6c` / `canvhub-web`. Override
+via `SENTRY_ORG` / `SENTRY_PROJECT` env vars in the workflow if you
+fork to a different Sentry project.
 
 ## 3. Sentry — Pages Functions SDK
 

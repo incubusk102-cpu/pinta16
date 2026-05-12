@@ -22,6 +22,9 @@ import CheckoutForm from "@/components/CheckoutForm";
 import RelatedProducts from "@/components/RelatedProducts";
 import SimilarPaintingsRail from "@/components/SimilarPaintingsRail";
 import RecentlyViewed from "@/components/RecentlyViewed";
+import ReviewPhotoLightbox, {
+  type ReviewPhotoView,
+} from "@/components/ReviewPhotoLightbox";
 import ZoomableImage from "@/components/ZoomableImage";
 import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
@@ -36,6 +39,7 @@ import {
   useProducts,
 } from "@/contexts/ProductContext";
 import { useCart } from "@/contexts/CartContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import {
   AVAILABILITY_LABEL,
@@ -44,6 +48,7 @@ import {
   type Availability,
 } from "@/lib/artworks";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
+import { useSEO } from "@/hooks/useSEO";
 
 // 3D viewer ships ~120 KB gz of three.js + r3f + drei runtime, so
 // load it on-demand only when a customer taps "View in 3D". The
@@ -91,6 +96,7 @@ export const Route = createFileRoute("/product/$id")({
 
 const availabilityBadgeClass: Record<Availability, string> = {
   available: "bg-emerald-600 text-white",
+  "made-to-order": "bg-blue-600 text-white",
   reserved: "bg-amber-500 text-white",
   sold: "bg-slate-900 text-white",
   draft: "bg-muted text-foreground",
@@ -109,6 +115,9 @@ function ProductPage() {
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const { addToCart } = useCart();
+  const { config } = useStorefrontConfig();
+  const madeToOrderNotice = config.siteCopy.madeToOrderNotice;
+  const productInfoCopy = config.siteCopy.productInfo;
   const wishlist = useWishlist();
   const inWishlist = wishlist.has(id);
 
@@ -171,46 +180,22 @@ function ProductPage() {
     return { count: reviews.length, average: sum / reviews.length };
   }, [reviews]);
 
-  // Update document head dynamically with rich product metadata for sharing.
-  useEffect(() => {
-    if (!artwork || typeof document === "undefined") return;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/product/${artwork.id}`;
-    const desc =
-      artwork.description ||
-      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`;
-    const imageUrl = artwork.image.startsWith("http")
-      ? artwork.image
-      : `${origin}${artwork.image}`;
-
-    document.title = `${artwork.title} — Canvas Hub`;
-
-    const setMeta = (selector: string, attr: string, value: string) => {
-      let tag = document.querySelector<HTMLMetaElement>(selector);
-      if (!tag) {
-        tag = document.createElement("meta");
-        const [k, v] = selector
-          .replace(/^meta\[/, "")
-          .replace(/\]$/, "")
-          .split("=");
-        if (k && v) tag.setAttribute(k, v.replace(/['"]/g, ""));
-        document.head.appendChild(tag);
-      }
-      tag.setAttribute(attr, value);
-    };
-
-    setMeta('meta[name="description"]', "content", desc);
-    setMeta('meta[property="og:title"]', "content", artwork.title);
-    setMeta('meta[property="og:description"]', "content", desc);
-    setMeta('meta[property="og:type"]', "content", "product");
-    setMeta('meta[property="og:url"]', "content", url);
-    setMeta('meta[property="og:image"]', "content", imageUrl);
-    setMeta('meta[property="og:site_name"]', "content", "Canvas Hub");
-    setMeta('meta[name="twitter:card"]', "content", "summary_large_image");
-    setMeta('meta[name="twitter:title"]', "content", artwork.title);
-    setMeta('meta[name="twitter:description"]', "content", desc);
-    setMeta('meta[name="twitter:image"]', "content", imageUrl);
-  }, [artwork]);
+  // Compute SEO copy from the loaded artwork. Falls back to a generic
+  // "Painting — Canvas Hub" title while products are still loading, so a
+  // deep-linked product page never inherits the homepage's static title.
+  const productDescription = artwork
+    ? artwork.description ||
+      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`
+    : "View painting details, photos, and pricing on Canvas Hub.";
+  const productImage = artwork ? artwork.image : undefined;
+  useSEO({
+    title: artwork ? `${artwork.title} — Canvas Hub` : "Painting — Canvas Hub",
+    description: productDescription,
+    canonicalPath: `/product/${id}`,
+    ogType: "product",
+    image: productImage,
+    socialTitle: artwork?.title,
+  });
 
   const jsonLd = useMemo(() => {
     if (!artwork) return "{}";
@@ -224,9 +209,22 @@ function ProductPage() {
     const availability =
       artwork.availability === "available"
         ? "https://schema.org/InStock"
-        : artwork.availability === "reserved"
-          ? "https://schema.org/PreOrder"
-          : "https://schema.org/SoldOut";
+        : artwork.availability === "made-to-order"
+          ? "https://schema.org/MadeToOrder"
+          : artwork.availability === "reserved"
+            ? "https://schema.org/PreOrder"
+            : "https://schema.org/SoldOut";
+
+    // Google Merchant prefers a `priceValidUntil` on every offer; we use
+    // end-of-current-year so the field stays plausibly fresh without
+    // requiring per-product editorial input. Likewise, `shippingDetails`
+    // and `hasMerchantReturnPolicy` unlock the price-and-availability
+    // rich result; we expose the same nationwide shipping band the
+    // /policy/shipping page documents.
+    const endOfYear = new Date();
+    endOfYear.setMonth(11, 31);
+    endOfYear.setHours(23, 59, 59, 0);
+    const priceValidUntil = endOfYear.toISOString().slice(0, 10);
 
     const data: Record<string, unknown> = {
       "@context": "https://schema.org/",
@@ -237,14 +235,53 @@ function ProductPage() {
         `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`,
       image: imageUrls,
       sku: artwork.id,
+      mpn: artwork.id,
       brand: { "@type": "Brand", name: "Canvas Hub" },
       offers: {
         "@type": "Offer",
         url,
         priceCurrency: "PHP",
         price: getEffectivePrice(artwork),
+        priceValidUntil,
         availability,
         itemCondition: "https://schema.org/NewCondition",
+        seller: { "@type": "Organization", name: "Canvas Hub" },
+        shippingDetails: {
+          "@type": "OfferShippingDetails",
+          shippingDestination: {
+            "@type": "DefinedRegion",
+            addressCountry: "PH",
+          },
+          shippingRate: {
+            "@type": "MonetaryAmount",
+            currency: "PHP",
+            value: "0",
+          },
+          deliveryTime: {
+            "@type": "ShippingDeliveryTime",
+            handlingTime: {
+              "@type": "QuantitativeValue",
+              minValue: 7,
+              maxValue: 21,
+              unitCode: "DAY",
+            },
+            transitTime: {
+              "@type": "QuantitativeValue",
+              minValue: 2,
+              maxValue: 7,
+              unitCode: "DAY",
+            },
+          },
+        },
+        hasMerchantReturnPolicy: {
+          "@type": "MerchantReturnPolicy",
+          applicableCountry: "PH",
+          returnPolicyCategory:
+            "https://schema.org/MerchantReturnFiniteReturnWindow",
+          merchantReturnDays: 7,
+          returnMethod: "https://schema.org/ReturnByMail",
+          returnFees: "https://schema.org/FreeReturn",
+        },
       },
     };
     if (ratingStats) {
@@ -340,6 +377,11 @@ function ProductPage() {
   const effectivePrice = getEffectivePrice(artwork);
   const galleryImages =
     artwork.images.length > 0 ? artwork.images : [{ url: artwork.image }];
+  // "View on your wall" shows the mockup photo (2nd uploaded image —
+  // typically the painting staged in a real interior) edge-to-edge.
+  // Falls back to the bare artwork (1st photo) when no mockup was
+  // uploaded so the modal always has something to render.
+  const wallImage = galleryImages[1] ?? galleryImages[0];
   // Optional studio video shows up as a leading "play" tile in the
   // thumbnail strip and switches the hero slot from `<img>` to
   // `<video controls>` when selected. We resolve the artwork-level
@@ -502,7 +544,12 @@ function ProductPage() {
                   {discount}% OFF
                 </span>
               )}
-              {!isVideoActive && (
+              {/* Hero overlay buttons (On your wall / View in 3D /
+                  Zoom) only appear on the 1st photo. Mockups, detail
+                  shots, and the studio-video tile stay view-only so
+                  customers can study the alternate angles without UI
+                  competing with the artwork. */}
+              {!isVideoActive && imageIndexForTile(activeImage) === 0 && (
                 <div className="absolute bottom-4 right-4 flex items-center gap-2">
                   <button
                     type="button"
@@ -675,6 +722,17 @@ function ProductPage() {
               {artwork.description}
             </p>
 
+            {artwork.availability === "made-to-order" && (
+              <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
+                <p className="font-body text-[10px] tracking-[0.3em] uppercase text-blue-700 dark:text-blue-300 mb-1">
+                  {madeToOrderNotice.heading}
+                </p>
+                <p className="font-body text-xs md:text-sm text-muted-foreground whitespace-pre-line">
+                  {madeToOrderNotice.body}
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-3">
               <MagneticButton
                 ref={addToCartButtonRef}
@@ -690,7 +748,9 @@ function ProductPage() {
               >
                 <ShoppingCart className="w-4 h-4" />
                 {purchasable
-                  ? "Add to cart"
+                  ? artwork.availability === "made-to-order"
+                    ? "Order this piece"
+                    : "Add to cart"
                   : `${AVAILABILITY_LABEL[artwork.availability]}`}
               </MagneticButton>
               <button
@@ -767,18 +827,17 @@ function ProductPage() {
             </div>
 
             <div className="border-t border-border/40 pt-6 space-y-2 font-body text-xs text-muted-foreground tracking-[0.05em]">
-              <p>
+              <p className="whitespace-pre-line">
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  Shipping
+                  {productInfoCopy.shippingLabel}
                 </span>
-                Lalamove courier within Luzon — live tracking, fare paid to the
-                rider on delivery.
+                {productInfoCopy.shippingBody}
               </p>
-              <p>
+              <p className="whitespace-pre-line">
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  Care
+                  {productInfoCopy.careLabel}
                 </span>
-                Keep out of direct sunlight and humid spaces for longevity.
+                {productInfoCopy.careBody}
               </p>
             </div>
           </section>
@@ -851,7 +910,7 @@ function ProductPage() {
           }
         >
           <WallPreview3D
-            imageUrl={artwork.mockup ?? artwork.image}
+            imageUrl={variantSrc(wallImage, "lg")}
             title={artwork.title}
             dimensions={artwork.dimensions}
             onClose={() => setViewOnWall(false)}
@@ -897,6 +956,14 @@ function ProductReviews({
   loading: boolean;
   reviews: ProductReview[];
 }) {
+  // Lightbox state. Review photos are stored as base64 data URIs
+  // (~600 KB each). The previous implementation opened them as
+  // `<a href={dataUri} target="_blank">`, which on mobile Chrome
+  // OOMs the renderer process and looks to the customer like the
+  // browser tab just closed. Rendering the photo inside an in-page
+  // <ReviewPhotoLightbox /> avoids that — same GPU-safe pattern
+  // already used by the home-page reviews carousel.
+  const [photoView, setPhotoView] = useState<ReviewPhotoView | null>(null);
   if (loading) {
     return (
       <section className="mt-16 border-t border-border/40 pt-10">
@@ -977,22 +1044,28 @@ function ProductReviews({
             </p>
             {r.images.length > 0 && (
               <div className="grid grid-cols-3 gap-2">
-                {r.images.slice(0, 3).map((src, j) => (
-                  <a
-                    key={j}
-                    href={src}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      src={src}
-                      alt={`Review photo ${j + 1}`}
-                      className="aspect-square w-full object-cover rounded-md border border-border/40"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
-                ))}
+                {r.images.slice(0, 3).map((src, j) => {
+                  const reviewImages = r.images.slice(0, 3);
+                  return (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() =>
+                        setPhotoView({ images: reviewImages, index: j })
+                      }
+                      aria-label={`Open review photo ${j + 1}`}
+                      className="block aspect-square w-full overflow-hidden rounded-md border border-border/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <img
+                        src={src}
+                        alt={`Review photo ${j + 1}`}
+                        className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-auto">
@@ -1002,6 +1075,7 @@ function ProductReviews({
           </article>
         ))}
       </div>
+      <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </section>
   );
 }
