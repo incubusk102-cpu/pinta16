@@ -31,6 +31,8 @@ import ImageWithFallback from "@/components/ImageWithFallback";
 import MagneticButton from "@/components/MagneticButton";
 import SplitText from "@/components/motion/SplitText";
 import CuratorsNoteTypewriter from "@/components/CuratorsNoteTypewriter";
+import DominantColorChips from "@/components/DominantColorChips";
+import PaintingNotes from "@/components/PaintingNotes";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { addStamp } from "@/lib/passport";
 import { imgAttrs, variantSrc } from "@/lib/productImage";
@@ -730,6 +732,10 @@ function ProductPage() {
             </div>
 
             <CuratorsNoteTypewriter text={artwork.description} />
+
+            <DominantColorChips imageUrl={artwork.image} />
+
+            <PaintingNotes productId={artwork.id} title={artwork.title} />
 
             {artwork.availability === "made-to-order" && (
               <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
