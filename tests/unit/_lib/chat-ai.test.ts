@@ -149,6 +149,57 @@ describe("chat-ai internals", () => {
         __internals.cleanReply("sorry " + __internals.NEEDS_HUMAN_TOKEN),
       ).toBe("");
     });
+
+    // Workers AI's 8B Llama occasionally mangles the handoff token —
+    // dropping a `<`, the `N`, the `_`, or the entire `NEEDS_` prefix.
+    // The regex-based detector must catch those variants so they never
+    // leak to the customer as a literal chat message.
+    it.each([
+      "<<EEDS_HUMAN>>>", // observed in production: dropped first `<` and `N`
+      "<<<EEDS_HUMAN>>>",
+      "<<<HUMAN>>>",
+      "<<<NEEDSHUMAN>>>",
+      "<<< NEEDS HUMAN >>>",
+      "<<NEEDS_HUMAN>>",
+      "prefix text <<<NEEDS_HUMAN>>> trailing",
+      "<<<needs_human>>>", // case-insensitive
+    ])("strips mangled handoff variant %p", (variant) => {
+      expect(__internals.cleanReply(variant)).toBe("");
+    });
+
+    it("does not over-match plain replies that mention 'human'", () => {
+      // No angle brackets → should pass through untouched.
+      expect(
+        __internals.cleanReply("Our paintings are hand-made by humans."),
+      ).toBe("Our paintings are hand-made by humans.");
+    });
+  });
+
+  describe("looksLikeHandoffToken", () => {
+    it("matches the canonical token exactly", () => {
+      expect(
+        __internals.looksLikeHandoffToken(__internals.NEEDS_HUMAN_TOKEN),
+      ).toBe(true);
+    });
+
+    it("matches common mangled variants", () => {
+      for (const v of [
+        "<<EEDS_HUMAN>>>",
+        "<<<HUMAN>>>",
+        "<<<NEEDSHUMAN>>>",
+        "<<NEEDS_HUMAN>>",
+      ]) {
+        expect(__internals.looksLikeHandoffToken(v)).toBe(true);
+      }
+    });
+
+    it("rejects plain prose mentioning 'human'", () => {
+      expect(
+        __internals.looksLikeHandoffToken("We are humans, not robots."),
+      ).toBe(false);
+      expect(__internals.looksLikeHandoffToken("")).toBe(false);
+      expect(__internals.looksLikeHandoffToken(null)).toBe(false);
+    });
   });
 });
 
@@ -459,6 +510,29 @@ describe("generateAutoReply", () => {
       env,
       thread,
       customerMessage: "What's the status of order #1234?",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    expect(out.kind).toBe("handoff");
+    expect(out.reason).toBe("ai-uncertain");
+  });
+
+  // Regression: Workers AI's 8B Llama emitted `<<EEDS_HUMAN>>>` in
+  // production (dropped first `<` and `N`). The old strict
+  // `.includes("<<<NEEDS_HUMAN>>>")` check missed this and the malformed
+  // token leaked to the customer as a literal chat message. The
+  // regex-based detector must hand off instead of replying.
+  it("hands off when the model emits a mangled handoff token", async () => {
+    const aiRun = vi.fn().mockResolvedValue({
+      response: "<<EEDS_HUMAN>>>",
+    });
+    const thread = baseThread([
+      { from: "customer", body: "Can someone refund my order from last week?" },
+    ]);
+    const out = await generateAutoReply({
+      env: { AI: { run: aiRun } },
+      thread,
+      customerMessage: "Can someone refund my order from last week?",
       chatConfig: baseConfig,
       products: [],
     });
