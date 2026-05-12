@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import SplitText from "@/components/motion/SplitText";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
 import {
@@ -18,6 +18,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   AVAILABILITY_LABEL,
   getStorefrontArtworks,
@@ -50,12 +60,17 @@ const STOREFRONT_AVAILABILITIES: Availability[] = [
   "sold",
 ];
 
+// Price buckets used to chip out the range filter into a small set of
+// shoppable bands. The `value` is what we store in URL/state, the
+// `label` is what the user sees, and `match` decides whether an
+// effective price falls into that bucket. The filter is multi-select
+// (an empty selection means "show every price"), so each bucket is
+// purely additive and there's no longer an "Any price" option here.
 const PRICE_BUCKETS: {
   value: string;
   label: string;
   match: (price: number) => boolean;
 }[] = [
-  { value: "all", label: "Any price", match: () => true },
   { value: "lt-3000", label: "Under ₱3,000", match: (p) => p < 3000 },
   {
     value: "3000-3500",
@@ -75,21 +90,32 @@ const PRICE_BUCKETS: {
   { value: "gt-4500", label: "Over ₱4,500", match: (p) => p > 4500 },
 ];
 
+const UNCATEGORIZED_VALUE = "__uncategorized__";
+
 const matchesArtwork = (
   art: DisplayArtwork,
   query: string,
-  category: string,
-  availability: string,
-  priceBucket: string,
+  categories: string[],
+  availabilities: string[],
+  priceBuckets: string[],
 ): boolean => {
-  if (availability !== "all" && art.availability !== availability) return false;
-  if (category !== "all") {
-    if (category === "__uncategorized__") {
-      if (art.category && art.category.trim()) return false;
-    } else if ((art.category || "") !== category) return false;
+  if (availabilities.length > 0 && !availabilities.includes(art.availability))
+    return false;
+  if (categories.length > 0) {
+    const cat = (art.category || "").trim();
+    const ok = cat
+      ? categories.includes(cat)
+      : categories.includes(UNCATEGORIZED_VALUE);
+    if (!ok) return false;
   }
-  const bucket = PRICE_BUCKETS.find((b) => b.value === priceBucket);
-  if (bucket && !bucket.match(getEffectivePrice(art))) return false;
+  if (priceBuckets.length > 0) {
+    const price = getEffectivePrice(art);
+    const hit = priceBuckets.some((value) => {
+      const bucket = PRICE_BUCKETS.find((b) => b.value === value);
+      return bucket ? bucket.match(price) : false;
+    });
+    if (!hit) return false;
+  }
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const haystack = [
@@ -106,19 +132,33 @@ const matchesArtwork = (
   return haystack.includes(q);
 };
 
+// Helper: toggle a value inside a string-set state.
+const toggleValue = (
+  list: string[],
+  value: string,
+  setter: (next: string[]) => void,
+) => {
+  setter(
+    list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
+  );
+};
+
 const GallerySection = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("featured");
   const [query, setQuery] = useState("");
-  const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [filterAvailability, setFilterAvailability] = useState<string>("all");
-  const [filterPrice, setFilterPrice] = useState<string>("all");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterCategories, setFilterCategories] = useState<string[]>([]);
+  const [filterAvailabilities, setFilterAvailabilities] = useState<string[]>(
+    [],
+  );
+  const [filterPriceBuckets, setFilterPriceBuckets] = useState<string[]>([]);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const { products } = useProducts();
   const { user } = useUserAuth();
   const { config } = useStorefrontConfig();
   const galleryCopy = config.siteCopy.gallery;
   const isLoggedIn = Boolean(user);
+  const isMobile = useIsMobile();
 
   const allArtworks = useMemo(
     () =>
@@ -144,18 +184,18 @@ const GallerySection = () => {
       matchesArtwork(
         art,
         query,
-        filterCategory,
-        filterAvailability,
-        filterPrice,
+        filterCategories,
+        filterAvailabilities,
+        filterPriceBuckets,
       ),
     );
   }, [
     allArtworks,
     isLoggedIn,
     query,
-    filterCategory,
-    filterAvailability,
-    filterPrice,
+    filterCategories,
+    filterAvailabilities,
+    filterPriceBuckets,
   ]);
 
   const sortedArtworks = useMemo(() => {
@@ -200,10 +240,15 @@ const GallerySection = () => {
             : `se_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
         query: trimmed,
         resultsCount: sortedArtworks.length,
-        filterCategory: filterCategory === "all" ? null : filterCategory,
-        filterAvailability:
-          filterAvailability === "all" ? null : filterAvailability,
-        filterPrice: filterPrice === "all" ? null : filterPrice,
+        filterCategory: filterCategories.length
+          ? filterCategories.join(",")
+          : null,
+        filterAvailability: filterAvailabilities.length
+          ? filterAvailabilities.join(",")
+          : null,
+        filterPrice: filterPriceBuckets.length
+          ? filterPriceBuckets.join(",")
+          : null,
       };
       lastBeaconedQueryRef.current = trimmed.toLowerCase();
       void fetch("/api/search-events", {
@@ -221,30 +266,59 @@ const GallerySection = () => {
     query,
     isLoggedIn,
     sortedArtworks.length,
-    filterCategory,
-    filterAvailability,
-    filterPrice,
+    filterCategories,
+    filterAvailabilities,
+    filterPriceBuckets,
   ]);
 
-  const hasFilters =
-    query.trim().length > 0 ||
-    filterCategory !== "all" ||
-    filterAvailability !== "all" ||
-    filterPrice !== "all";
-
-  // Count of active dropdown filters (search box has its own clear affordance,
-  // sort isn't really a "filter") — used for the mobile Filters toggle badge.
   const activeFilterCount =
-    (filterCategory !== "all" ? 1 : 0) +
-    (filterAvailability !== "all" ? 1 : 0) +
-    (filterPrice !== "all" ? 1 : 0);
+    filterCategories.length +
+    filterAvailabilities.length +
+    filterPriceBuckets.length;
+  const hasActiveFilters = activeFilterCount > 0;
+  const hasAnyConstraint = hasActiveFilters || query.trim().length > 0;
 
-  const clearFilters = () => {
-    setQuery("");
-    setFilterCategory("all");
-    setFilterAvailability("all");
-    setFilterPrice("all");
+  const clearAllFilters = () => {
+    setFilterCategories([]);
+    setFilterAvailabilities([]);
+    setFilterPriceBuckets([]);
   };
+
+  const clearEverything = () => {
+    setQuery("");
+    clearAllFilters();
+  };
+
+  const categoryLabel = (value: string): string =>
+    value === UNCATEGORIZED_VALUE ? "Uncategorized" : value;
+
+  // Active filter pills the shopper can drop one-by-one without
+  // re-opening the sheet. Each entry knows which list it lives in,
+  // so removing a pill just calls the matching setter.
+  type ActivePill = {
+    key: string;
+    label: string;
+    remove: () => void;
+  };
+  const activePills: ActivePill[] = [
+    ...filterCategories.map((v) => ({
+      key: `c-${v}`,
+      label: categoryLabel(v),
+      remove: () => setFilterCategories((prev) => prev.filter((x) => x !== v)),
+    })),
+    ...filterPriceBuckets.map((v) => ({
+      key: `p-${v}`,
+      label: PRICE_BUCKETS.find((b) => b.value === v)?.label ?? v,
+      remove: () =>
+        setFilterPriceBuckets((prev) => prev.filter((x) => x !== v)),
+    })),
+    ...filterAvailabilities.map((v) => ({
+      key: `a-${v}`,
+      label: AVAILABILITY_LABEL[v as Availability] ?? v,
+      remove: () =>
+        setFilterAvailabilities((prev) => prev.filter((x) => x !== v)),
+    })),
+  ];
 
   return (
     <section
@@ -256,7 +330,7 @@ const GallerySection = () => {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
-        className="text-center mb-10 sm:mb-16"
+        className="text-center mb-12 sm:mb-20"
       >
         <p className="font-body text-xs tracking-[0.4em] uppercase text-muted-foreground mb-4">
           {galleryCopy.eyebrow}
@@ -274,7 +348,7 @@ const GallerySection = () => {
       </motion.div>
 
       {isLoggedIn && (
-        <div className="space-y-3 mb-8">
+        <div className="space-y-6 mb-12 sm:mb-16">
           <div className="relative max-w-md mx-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
@@ -283,7 +357,7 @@ const GallerySection = () => {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search paintings, mediums, or styles…"
               aria-label="Search paintings"
-              className="pl-9 pr-9 h-10 font-body text-sm"
+              className="pl-9 pr-9 h-11 font-body text-sm"
             />
             {query && (
               <button
@@ -297,111 +371,22 @@ const GallerySection = () => {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-expanded={filtersOpen}
-            aria-controls="gallery-filter-row"
-            className="sm:hidden flex w-fit mx-auto items-center justify-center gap-2 font-body text-[11px] tracking-[0.2em] uppercase text-foreground border border-border/60 rounded-sm px-4 py-2 hover:bg-accent transition-colors"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-foreground text-background font-body text-[10px] tracking-normal">
-                {activeFilterCount}
-              </span>
-            )}
-            <ChevronDown
-              className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => setFilterSheetOpen(true)}
+              className="inline-flex items-center justify-center gap-2 font-body text-[11px] tracking-[0.2em] uppercase text-foreground border border-border/60 rounded-sm px-5 py-2.5 hover:bg-accent transition-colors"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-foreground text-background font-body text-[10px] tracking-normal">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
 
-          <div
-            id="gallery-filter-row"
-            className={`${filtersOpen ? "grid grid-cols-2" : "hidden"} sm:flex sm:flex-wrap items-end sm:justify-center gap-3`}
-          >
-            <div className="flex flex-col gap-1 min-w-0">
-              <label
-                htmlFor="filter-category"
-                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-              >
-                Category
-              </label>
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger
-                  id="filter-category"
-                  className="w-full sm:w-[170px] font-body text-xs"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  <SelectItem value="__uncategorized__">
-                    Uncategorized
-                  </SelectItem>
-                  {availableCategories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1 min-w-0">
-              <label
-                htmlFor="filter-price"
-                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-              >
-                Price
-              </label>
-              <Select value={filterPrice} onValueChange={setFilterPrice}>
-                <SelectTrigger
-                  id="filter-price"
-                  className="w-full sm:w-[170px] font-body text-xs"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRICE_BUCKETS.map((b) => (
-                    <SelectItem key={b.value} value={b.value}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1 min-w-0">
-              <label
-                htmlFor="filter-availability"
-                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-              >
-                Availability
-              </label>
-              <Select
-                value={filterAvailability}
-                onValueChange={setFilterAvailability}
-              >
-                <SelectTrigger
-                  id="filter-availability"
-                  className="w-full sm:w-[170px] font-body text-xs"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  {STOREFRONT_AVAILABILITIES.map((a) => (
-                    <SelectItem key={a} value={a}>
-                      {AVAILABILITY_LABEL[a]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1 min-w-0">
+            <div className="flex items-center gap-2">
               <label
                 htmlFor="gallery-sort"
                 className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
@@ -414,7 +399,7 @@ const GallerySection = () => {
               >
                 <SelectTrigger
                   id="gallery-sort"
-                  className="w-full sm:w-[170px] font-body text-xs"
+                  className="w-[170px] font-body text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -428,21 +413,174 @@ const GallerySection = () => {
               </Select>
             </div>
 
-            {hasFilters && (
+            {hasAnyConstraint && (
               <button
                 type="button"
-                onClick={clearFilters}
-                className="col-span-2 sm:col-auto justify-self-center sm:justify-self-auto font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline pb-2"
+                onClick={clearEverything}
+                className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
               >
-                Clear filters
+                Clear all
               </button>
             )}
           </div>
+
+          {activePills.length > 0 && (
+            <ul className="flex flex-wrap items-center justify-center gap-2">
+              {activePills.map((pill) => (
+                <li key={pill.key}>
+                  <button
+                    type="button"
+                    onClick={pill.remove}
+                    aria-label={`Remove filter ${pill.label}`}
+                    className="inline-flex items-center gap-1.5 font-body text-[11px] tracking-[0.1em] uppercase rounded-full border border-border/60 bg-background px-3 py-1.5 text-foreground hover:bg-accent transition-colors"
+                  >
+                    {pill.label}
+                    <X className="w-3 h-3" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
             {sortedArtworks.length}{" "}
             {sortedArtworks.length === 1 ? "piece" : "pieces"}
           </p>
+
+          <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
+            <SheetContent
+              side={isMobile ? "bottom" : "right"}
+              className={
+                isMobile
+                  ? "h-[85vh] rounded-t-2xl p-0 flex flex-col"
+                  : "w-full sm:max-w-md p-0 flex flex-col"
+              }
+            >
+              <SheetHeader className="px-6 pt-6 pb-3 border-b border-border/40 text-left">
+                <SheetTitle className="font-display text-2xl">
+                  Filter
+                </SheetTitle>
+                <SheetDescription className="font-body text-xs tracking-[0.15em] uppercase text-muted-foreground">
+                  {activeFilterCount === 0
+                    ? "Narrow the collection by category, price, and availability."
+                    : `${activeFilterCount} active`}
+                </SheetDescription>
+              </SheetHeader>
+
+              <ScrollArea className="flex-1">
+                <div className="px-6 py-6 space-y-8">
+                  <section aria-labelledby="filter-categories-heading">
+                    <h3
+                      id="filter-categories-heading"
+                      className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
+                    >
+                      Categories
+                    </h3>
+                    <ul className="space-y-3">
+                      <FilterCheckbox
+                        id="filter-cat-uncategorized"
+                        checked={filterCategories.includes(UNCATEGORIZED_VALUE)}
+                        onCheckedChange={() =>
+                          toggleValue(
+                            filterCategories,
+                            UNCATEGORIZED_VALUE,
+                            setFilterCategories,
+                          )
+                        }
+                        label="Uncategorized"
+                      />
+                      {availableCategories.map((c) => (
+                        <FilterCheckbox
+                          key={c}
+                          id={`filter-cat-${c}`}
+                          checked={filterCategories.includes(c)}
+                          onCheckedChange={() =>
+                            toggleValue(
+                              filterCategories,
+                              c,
+                              setFilterCategories,
+                            )
+                          }
+                          label={c}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section aria-labelledby="filter-price-heading">
+                    <h3
+                      id="filter-price-heading"
+                      className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
+                    >
+                      Price
+                    </h3>
+                    <ul className="space-y-3">
+                      {PRICE_BUCKETS.map((b) => (
+                        <FilterCheckbox
+                          key={b.value}
+                          id={`filter-price-${b.value}`}
+                          checked={filterPriceBuckets.includes(b.value)}
+                          onCheckedChange={() =>
+                            toggleValue(
+                              filterPriceBuckets,
+                              b.value,
+                              setFilterPriceBuckets,
+                            )
+                          }
+                          label={b.label}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section aria-labelledby="filter-availability-heading">
+                    <h3
+                      id="filter-availability-heading"
+                      className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
+                    >
+                      Availability
+                    </h3>
+                    <ul className="space-y-3">
+                      {STOREFRONT_AVAILABILITIES.map((a) => (
+                        <FilterCheckbox
+                          key={a}
+                          id={`filter-avail-${a}`}
+                          checked={filterAvailabilities.includes(a)}
+                          onCheckedChange={() =>
+                            toggleValue(
+                              filterAvailabilities,
+                              a,
+                              setFilterAvailabilities,
+                            )
+                          }
+                          label={AVAILABILITY_LABEL[a]}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                </div>
+              </ScrollArea>
+
+              <div className="border-t border-border/40 px-6 py-4 flex items-center justify-between gap-3 bg-background">
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  disabled={!hasActiveFilters}
+                  className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
+                >
+                  Clear filters
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterSheetOpen(false)}
+                  className="font-body text-[11px] tracking-[0.2em] uppercase text-background bg-foreground hover:bg-foreground/90 rounded-sm px-6 py-2.5 transition-colors"
+                >
+                  Show {sortedArtworks.length}{" "}
+                  {sortedArtworks.length === 1 ? "result" : "results"}
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       )}
 
@@ -451,13 +589,13 @@ const GallerySection = () => {
           <p className="font-body text-sm text-muted-foreground">
             No paintings match your filters yet.
           </p>
-          {hasFilters && (
+          {hasAnyConstraint && (
             <button
               type="button"
-              onClick={clearFilters}
+              onClick={clearEverything}
               className="mt-4 font-body text-xs tracking-[0.25em] uppercase text-foreground underline underline-offset-4"
             >
-              Clear filters
+              Clear all
             </button>
           )}
         </div>
@@ -498,5 +636,34 @@ const GallerySection = () => {
     </section>
   );
 };
+
+interface FilterCheckboxProps {
+  id: string;
+  checked: boolean;
+  onCheckedChange: () => void;
+  label: string;
+}
+
+const FilterCheckbox = ({
+  id,
+  checked,
+  onCheckedChange,
+  label,
+}: FilterCheckboxProps) => (
+  <li className="flex items-center gap-3">
+    <Checkbox
+      id={id}
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      className="h-5 w-5 rounded"
+    />
+    <label
+      htmlFor={id}
+      className="font-body text-sm text-foreground cursor-pointer select-none flex-1"
+    >
+      {label}
+    </label>
+  </li>
+);
 
 export default GallerySection;
