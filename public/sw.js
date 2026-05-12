@@ -15,11 +15,14 @@
 // dropped). Content-hashed Vite assets normally make this unnecessary,
 // but bump it whenever the SW logic itself changes or when we ship a
 // fix that users on stale chunks must pick up immediately. Last bump:
-// v10 (splash removal: index.html no longer references /splash.css or
-// /splash.js, and both files are deleted from /public. Bumping the SW
-// VERSION drops the v9 ASSETS bucket so existing devices stop serving
-// the now-orphaned files cache-first on first reload after deploy).
-const VERSION = "v10";
+// v11 — mobile blank-screen incident: at least one device's v10 ASSETS
+// bucket appears to be serving a broken cached chunk for the SPA
+// entry, causing `<script type="module">` to silently fail load on
+// /. Bumping to v11 forces the activate handler to drop every v10
+// cache so the next navigation refetches the entire bundle tree from
+// origin. Pair with the new "Reset & reload" button in
+// /public/boot-diagnostics.js for devices that are already stuck.
+const VERSION = "v11";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;

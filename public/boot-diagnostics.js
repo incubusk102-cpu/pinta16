@@ -44,6 +44,7 @@
 
   var firstError = null;
   var preloadErrorDeps = [];
+  var moduleErrors = [];
   var shown = false;
   var marks = [];
 
@@ -104,6 +105,9 @@
     var preloadLine = preloadErrorDeps.length
       ? "Chunk failures: " + preloadErrorDeps.join(", ")
       : "";
+    var moduleLine = moduleErrors.length
+      ? "Module load failures: " + moduleErrors.join("; ")
+      : "";
     stillMountingFallback.innerHTML =
       '<div style="max-width: 480px; padding: 24px; text-align: center;">' +
       '<div style="font-size: 11px; letter-spacing: 0.3em;' +
@@ -127,21 +131,104 @@
       (detail ? "\n\n" + escapeHtml(detail) : "") +
       "\n\n" +
       escapeHtml(marksLine) +
+      (moduleLine ? "\n" + escapeHtml(moduleLine) : "") +
       (preloadLine ? "\n" + escapeHtml(preloadLine) : "") +
       "\n\n<strong>UA:</strong> " +
       escapeHtml(navigator.userAgent) +
       "</pre>" +
-      '<button type="button" id="canvhub-boot-reload" style="' +
+      '<div style="display: flex; gap: 8px; justify-content: center;' +
+      ' flex-wrap: wrap;">' +
+      '<button type="button" id="canvhub-boot-reset" style="' +
       "background: #f5f3ee; color: #1c1c1c; border: none;" +
       " border-radius: 999px; padding: 10px 24px; font-size: 13px;" +
       " letter-spacing: 0.18em; text-transform: uppercase;" +
+      ' cursor: pointer;">Reset &amp; reload</button>' +
+      '<button type="button" id="canvhub-boot-reload" style="' +
+      "background: transparent; color: #f5f3ee;" +
+      " border: 1px solid rgba(245, 243, 238, 0.4);" +
+      " border-radius: 999px; padding: 10px 24px; font-size: 13px;" +
+      " letter-spacing: 0.18em; text-transform: uppercase;" +
       ' cursor: pointer;">Reload</button>' +
+      "</div>" +
+      '<p style="margin: 12px 0 0; font-size: 11px;' +
+      " opacity: 0.6;\">Reset &amp; reload clears this site's cache + the" +
+      " service worker, which fixes most stuck-on-old-bundle issues." +
+      "</p>" +
       "</div>";
     var btn = document.getElementById("canvhub-boot-reload");
     if (btn)
       btn.addEventListener("click", function () {
         window.location.reload();
       });
+    var resetBtn = document.getElementById("canvhub-boot-reset");
+    if (resetBtn)
+      resetBtn.addEventListener("click", function () {
+        resetBtn.disabled = true;
+        resetBtn.textContent = "Resetting…";
+        resetAndReload();
+      });
+  }
+
+  // Wipe any cached app shell + unregister the service worker, then
+  // reload. This is the recovery path when a previous deploy
+  // poisoned the service-worker cache (e.g. broken precache entry,
+  // stale `/assets/index-*.js` reference) and the visitor can't get
+  // back to a working bundle through a plain refresh. Falls back to
+  // a normal reload if any of the cleanup steps throw — better to
+  // try the refresh than leave the user stuck.
+  function resetAndReload() {
+    var jobs = [];
+    try {
+      if ("caches" in window) {
+        jobs.push(
+          window.caches.keys().then(function (keys) {
+            return Promise.all(
+              keys.map(function (k) {
+                return window.caches.delete(k);
+              }),
+            );
+          }),
+        );
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    try {
+      if (
+        navigator &&
+        navigator.serviceWorker &&
+        typeof navigator.serviceWorker.getRegistrations === "function"
+      ) {
+        jobs.push(
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(
+              regs.map(function (r) {
+                return r.unregister();
+              }),
+            );
+          }),
+        );
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    var finish = function () {
+      // Bypass HTTP cache on the reload itself. Some Android Chrome
+      // builds still ignore `location.reload(true)` (the boolean
+      // arg was removed from the spec), so we also bump a cache
+      // buster on the URL as a belt-and-braces measure.
+      try {
+        var u = new URL(window.location.href);
+        u.searchParams.set("__cv_reset", String(Date.now()));
+        window.location.replace(u.toString());
+      } catch (e) {
+        window.location.reload();
+      }
+    };
+    if (!jobs.length) return finish();
+    Promise.all(jobs).then(finish, finish);
+    // Safety: never wait longer than 4 s to actually reload.
+    window.setTimeout(finish, 4000);
   }
 
   function captureError(ev) {
@@ -173,6 +260,25 @@
   window.addEventListener("unhandledrejection", captureError);
   window.addEventListener("vite:preloadError", capturePreloadError);
 
+  // Surface failures of the actual SPA entry script. `<script
+  // type="module">` swallows fetch / parse errors by default — the
+  // browser logs to DevTools but doesn't dispatch a window `error`
+  // event the way classic scripts do, so a bundled `index-*.js`
+  // that 404s on a stale-cache phone manifests here as silence. We
+  // attach a capture-phase `error` listener directly to each
+  // `<script>` so those failures land in `moduleErrors` and show
+  // up alongside the stall message.
+  var captureModuleError = function (ev) {
+    var t = ev && ev.target;
+    if (!t) return;
+    if (t.tagName !== "SCRIPT" && t.tagName !== "LINK") return;
+    var src = (t.tagName === "SCRIPT" ? t.src : t.href) || "<unknown asset>";
+    moduleErrors.push(src);
+  };
+  // Bubbling skips `error` events on individual elements; capture
+  // is required to see them at the window level.
+  window.addEventListener("error", captureModuleError, true);
+
   var stallTimer = window.setTimeout(function () {
     showOverlay("The app did not finish loading.");
   }, STALL_MS);
@@ -191,6 +297,7 @@
       window.removeEventListener("error", captureError);
       window.removeEventListener("unhandledrejection", captureError);
       window.removeEventListener("vite:preloadError", capturePreloadError);
+      window.removeEventListener("error", captureModuleError, true);
     }
   }, 200);
 })();
