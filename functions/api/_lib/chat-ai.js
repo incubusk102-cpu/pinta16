@@ -40,6 +40,21 @@ const DEFAULT_WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 // would never appear in a real reply.
 const NEEDS_HUMAN_TOKEN = "<<<NEEDS_HUMAN>>>";
 
+// Workers AI's 8B Llama in particular has been observed to mangle the
+// handoff token in production — dropping a leading `<`, swallowing the
+// `N` in `NEEDS_`, eating the underscore, or omitting the `NEEDS_`
+// prefix entirely. A strict `.includes("<<<NEEDS_HUMAN>>>")` check
+// missed those variants and the malformed token leaked to the
+// customer as a literal chat message. This regex tolerates those
+// mangled variants: 2+ angle brackets on either side surrounding a
+// small chunk of optional prefix characters and the word `HUMAN`.
+// Examples it now catches that the strict check did not:
+//   `<<EEDS_HUMAN>>>`, `<<<HUMAN>>>`, `<<<NEEDSHUMAN>>>`,
+//   `<<< NEEDS HUMAN >>>`, `<<NEEDS_HUMAN>>`.
+const HANDOFF_TOKEN_REGEX = /<{2,}[^<>]{0,20}HUMAN[^<>]{0,5}>{2,}/i;
+const looksLikeHandoffToken = (s) =>
+  typeof s === "string" && HANDOFF_TOKEN_REGEX.test(s);
+
 // Keep AI replies short — chat is a quick-question medium. Anything
 // over ~120 words and customers stop reading.
 const MAX_REPLY_CHARS = 800;
@@ -231,20 +246,15 @@ const buildSystemPrompt = ({ chatConfig, products, brandName }) => {
   const guardrails = [
     "Ground every answer in the Shop FAQ and the active artworks list below.",
     "If the customer asks about pricing, shipping, payment, returns, sizing, custom commissions, or stock, answer using the data provided — never invent numbers.",
-    "If the customer asks something you cannot answer from the data (e.g. order status, refund timing for a specific order, complaints, urgent issues, anything legal or medical), reply with exactly the token " +
-      NEEDS_HUMAN_TOKEN +
-      " and nothing else, so a human takes over.",
-    "If the customer asks to talk to a human / live agent / owner, reply with exactly the token " +
-      NEEDS_HUMAN_TOKEN +
-      ".",
-    "Never invent product titles, prices, promo codes, or shipping fees not present in the data. If unsure, return " +
-      NEEDS_HUMAN_TOKEN +
-      ".",
-    "Never collect or echo back credit-card numbers, passwords, or OTPs. If a customer pastes one, return " +
-      NEEDS_HUMAN_TOKEN +
-      ".",
+    "Never invent product titles, prices, promo codes, or shipping fees not present in the data.",
+    "Never collect or echo back credit-card numbers, passwords, or OTPs.",
     "Currency is Philippine Peso (PHP). Format numbers as PHP 1,234.",
     "Keep responses under 120 words.",
+    // Handoff guidance is consolidated into a single rule with a strict
+    // format clause. Workers AI's 8B Llama has been observed to (a)
+    // overuse the handoff token on greetings/small-talk and (b) mangle
+    // its spelling. Both are addressed here.
+    `Handoff rule: reply with the literal token ${NEEDS_HUMAN_TOKEN} (three "<", the word NEEDS_HUMAN, three ">", nothing else, no extra punctuation) ONLY when the customer explicitly asks for a human / live agent / owner, OR asks something genuinely outside the data above (e.g. "where is my order #1234", refund timing for a specific order, legal/medical/complaints). Greetings, small talk, thanks, and any question answerable from the FAQ or artworks list must get a normal helpful reply — do NOT emit the handoff token. If you cannot reproduce the token exactly as written, give a normal short answer instead of an approximation.`,
   ];
 
   const sections = [
@@ -371,7 +381,7 @@ const callWorkersAI = async ({
 const cleanReply = (raw) => {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return "";
-  if (trimmed.includes(NEEDS_HUMAN_TOKEN)) return "";
+  if (looksLikeHandoffToken(trimmed)) return "";
   // Strip any role-play prefixes the model sometimes leaks ("Assistant:",
   // "AI:", etc.) and over-long replies.
   const stripped = trimmed
@@ -518,7 +528,10 @@ export const generateAutoReply = async ({
   }
 
   // The model was told to emit the handoff token when it can't answer.
-  if (typeof raw === "string" && raw.includes(NEEDS_HUMAN_TOKEN)) {
+  // Use the regex-based check so common mangled variants emitted by
+  // small models (e.g. `<<EEDS_HUMAN>>>`, `<<<HUMAN>>>`) still trigger
+  // the handoff rather than leaking to the customer verbatim.
+  if (looksLikeHandoffToken(raw)) {
     return { kind: "handoff", reason: "ai-uncertain" };
   }
 
@@ -531,6 +544,8 @@ export const generateAutoReply = async ({
 // Exported for unit tests.
 export const __internals = {
   NEEDS_HUMAN_TOKEN,
+  HANDOFF_TOKEN_REGEX,
+  looksLikeHandoffToken,
   ADMIN_COOLDOWN_MS,
   containsHandoffPhrase,
   findFaqMatch,
