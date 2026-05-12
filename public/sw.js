@@ -15,14 +15,24 @@
 // dropped). Content-hashed Vite assets normally make this unnecessary,
 // but bump it whenever the SW logic itself changes or when we ship a
 // fix that users on stale chunks must pick up immediately. Last bump:
+// v12 — boot-watchdog auto-recovery: the SW now handles a
+// `{type:"reset"}` postMessage by deleting every cache it owns and
+// unregistering itself, so the boot watchdog in
+// /public/boot-diagnostics.js can silently self-heal a stuck-on-old-
+// bundle phone without ever showing the visitor the overlay. Bumping
+// to v12 forces the activate handler to drop every v11 ASSETS / shell
+// bucket so the first navigation after the deploy refetches the
+// entire bundle tree from origin, picking up the new auto-recovery
+// code path. Previous v11 history below.
+//
 // v11 — mobile blank-screen incident: at least one device's v10 ASSETS
 // bucket appears to be serving a broken cached chunk for the SPA
 // entry, causing `<script type="module">` to silently fail load on
-// /. Bumping to v11 forces the activate handler to drop every v10
-// cache so the next navigation refetches the entire bundle tree from
-// origin. Pair with the new "Reset & reload" button in
-// /public/boot-diagnostics.js for devices that are already stuck.
-const VERSION = "v11";
+// /. Bumping to v11 forced the activate handler to drop every v10
+// cache so the next navigation refetched the entire bundle tree from
+// origin. Paired with the "Reset & reload" button in
+// /public/boot-diagnostics.js for devices that were already stuck.
+const VERSION = "v12";
 const APP_SHELL = `canvhub-shell-${VERSION}`;
 const ASSETS = `canvhub-assets-${VERSION}`;
 const RUNTIME = `canvhub-runtime-${VERSION}`;
@@ -107,6 +117,35 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data === "skipWaiting" || event.data?.type === "skipWaiting") {
     self.skipWaiting();
+    return;
+  }
+  // Boot-watchdog escape hatch. When the diagnostic script in
+  // /public/boot-diagnostics.js detects that boot is stuck (stall
+  // timer fires, preload error, or capture-phase script `error`)
+  // it asks us to wipe every cache we own and unregister ourselves
+  // before the page reloads. Doing the cache wipe from inside the
+  // SW scope is more reliable than the page-side `caches.delete()`
+  // calls because we own those Cache instances and can drop them
+  // without racing an in-flight fetch handler. We also call
+  // `self.registration.unregister()` so the new navigation comes
+  // up SW-less; the SPA's own `pwa:registered` step on the next
+  // boot will register a fresh SW instance with the new VERSION.
+  if (event.data?.type === "reset") {
+    event.waitUntil(
+      (async () => {
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        } catch {
+          /* ignore */
+        }
+        try {
+          await self.registration.unregister();
+        } catch {
+          /* ignore */
+        }
+      })(),
+    );
   }
 });
 

@@ -18,9 +18,25 @@
 //      where the module is fetched OK but never executes, or a
 //      synchronous infinite loop in a vendor chunk).
 //
-// When any fires we replace the boot fallback with a visible
-// message that includes the captured error / reason, the last
-// checkpoint the SPA reached, a reload button, and a link to
+// Auto-recovery: before painting the visible overlay we try to
+// silently self-heal the most common stuck-bundle root cause —
+// a poisoned service-worker cache pinning a broken / outdated
+// chunk. The first time boot fails we wipe `caches.keys()`,
+// unregister every service-worker registration on this origin,
+// and reload the page with a cache-bust query param so the next
+// boot pulls a clean bundle tree directly from origin. The attempt
+// counter lives in `sessionStorage` so it survives the reload but
+// resets when the visitor opens a new tab / closes the browser,
+// preventing a refresh loop. We cap silent retries at
+// `RECOVERY_MAX_ATTEMPTS` and only paint the visible overlay once
+// auto-recovery itself fails that many times in a row — at which
+// point the visitor sees the manual "Reset & reload" button and
+// the last checkpoint reached. The counter clears on a successful
+// mount so a future boot failure starts from zero.
+//
+// When the overlay does fire we replace the boot fallback with a
+// visible message that includes the captured error / reason, the
+// last checkpoint the SPA reached, a reload button, and a link to
 // support. Lives in /public so it ships as a top-level
 // `/boot-diagnostics.js` — an inline `<script>` in index.html
 // would be blocked by our CSP (`script-src 'self'` with no
@@ -41,11 +57,26 @@
   // network pulling ~700 KB of JS and a slow CPU parsing it, while
   // still surfacing genuine stalls before the visitor gives up.
   var STALL_MS = 25000;
+  // How long to wait after an asset / preload / module error before
+  // attempting silent auto-recovery. Gives Vite's built-in
+  // `chunkReload` (one-shot per session) a chance to recover the
+  // failed import on its own before we nuke the whole SW + cache.
+  var ASSET_ERROR_RECOVERY_DELAY_MS = 4000;
+  // Hard cap on silent recoveries before the visible overlay takes
+  // over. Counter lives in `sessionStorage` (RECOVERY_KEY) and
+  // survives the auto-reload but resets when the SPA finally
+  // mounts. "2" means: first stuck boot → silent recovery #1;
+  // still stuck after that → silent recovery #2; still stuck after
+  // *that* → visible overlay so the visitor can take action.
+  var RECOVERY_MAX_ATTEMPTS = 2;
+  var RECOVERY_KEY = "canvhub_boot_recovery_v1";
 
   var firstError = null;
   var preloadErrorDeps = [];
   var moduleErrors = [];
   var shown = false;
+  var recovering = false;
+  var assetErrorRecoveryScheduled = false;
   var marks = [];
 
   function escapeHtml(s) {
@@ -69,6 +100,63 @@
 
   window.__cvBoot = { mark: mark, marks: marks };
 
+  // Persisted (per-tab) attempt counter for the silent auto-recovery
+  // path. sessionStorage is the right scope: survives the reload
+  // we trigger but clears when the visitor closes the tab / opens
+  // a fresh window, so a permanently broken environment can't
+  // hide the overlay forever. All helpers are best-effort —
+  // Safari Private Browsing throws on `setItem`, in which case we
+  // treat the counter as 0 and the auto-recovery never escalates
+  // past attempt #1 (still better than no recovery at all).
+  function readRecoveryAttempts() {
+    try {
+      var raw = window.sessionStorage.getItem(RECOVERY_KEY);
+      if (!raw) return 0;
+      var n = parseInt(raw, 10);
+      return isNaN(n) || n < 0 ? 0 : n;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function writeRecoveryAttempts(n) {
+    try {
+      window.sessionStorage.setItem(RECOVERY_KEY, String(n));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function clearRecoveryAttempts() {
+    try {
+      window.sessionStorage.removeItem(RECOVERY_KEY);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  // Silent self-heal: wipe `caches.*` + unregister every SW on
+  // this origin, then reload with a cache-bust query param. Used
+  // when boot is stuck before the SPA has had a chance to render
+  // anything, so we recover without ever showing the user the
+  // overlay. Returns true if a recovery attempt was actually
+  // started (caller should NOT also call showOverlay in that
+  // case); returns false if we've already exhausted the attempt
+  // budget and the caller should fall through to showOverlay.
+  function tryAutoRecover(reason) {
+    if (recovering || shown) return true;
+    var fallbackEl = document.getElementById("canvhub-boot-fallback");
+    // If React has already replaced #root, the SPA is alive — do
+    // nothing.
+    if (!fallbackEl) return true;
+    var attempts = readRecoveryAttempts();
+    if (attempts >= RECOVERY_MAX_ATTEMPTS) return false;
+    recovering = true;
+    writeRecoveryAttempts(attempts + 1);
+    resetAndReload({ silent: true, reason: reason || "auto-recover" });
+    return true;
+  }
+
   function showOverlay(reason) {
     if (shown) return;
     var stillMountingFallback = document.getElementById(
@@ -78,6 +166,7 @@
     // gone), the app is alive and we should not paint over it.
     if (!stillMountingFallback) return;
     shown = true;
+    var recoveryAttempts = readRecoveryAttempts();
     var errMessage =
       (firstError && (firstError.message || firstError.toString())) || "";
     var headline = errMessage || reason || "The page could not load.";
@@ -108,6 +197,13 @@
     var moduleLine = moduleErrors.length
       ? "Module load failures: " + moduleErrors.join("; ")
       : "";
+    var recoveryLine = recoveryAttempts
+      ? "Auto-recovery attempts: " +
+        recoveryAttempts +
+        "/" +
+        RECOVERY_MAX_ATTEMPTS +
+        " (silent cache + SW reset already retried; falling back to manual reset)"
+      : "";
     stillMountingFallback.innerHTML =
       '<div style="max-width: 480px; padding: 24px; text-align: center;">' +
       '<div style="font-size: 11px; letter-spacing: 0.3em;' +
@@ -133,6 +229,7 @@
       escapeHtml(marksLine) +
       (moduleLine ? "\n" + escapeHtml(moduleLine) : "") +
       (preloadLine ? "\n" + escapeHtml(preloadLine) : "") +
+      (recoveryLine ? "\n" + escapeHtml(recoveryLine) : "") +
       "\n\n<strong>UA:</strong> " +
       escapeHtml(navigator.userAgent) +
       "</pre>" +
@@ -165,7 +262,11 @@
       resetBtn.addEventListener("click", function () {
         resetBtn.disabled = true;
         resetBtn.textContent = "Resetting…";
-        resetAndReload();
+        // Clear the attempt counter so a successful manual reset
+        // doesn't immediately exhaust the silent-recovery budget
+        // on the next deploy.
+        clearRecoveryAttempts();
+        resetAndReload({ silent: false, reason: "user" });
       });
   }
 
@@ -176,8 +277,42 @@
   // back to a working bundle through a plain refresh. Falls back to
   // a normal reload if any of the cleanup steps throw — better to
   // try the refresh than leave the user stuck.
-  function resetAndReload() {
+  //
+  // `opts.silent`: when true, this is being triggered by the
+  // boot watchdog *before* the visitor has seen the overlay. We
+  // skip any UI updates and just kick off the cleanup + reload
+  // so the recovery is invisible from the visitor's perspective.
+  // When false (or omitted), the function is invoked from the
+  // user-tapped "Reset & reload" button in the visible overlay.
+  function resetAndReload(opts) {
+    var silent = !!(opts && opts.silent);
+    var reason = (opts && opts.reason) || (silent ? "auto" : "user");
     var jobs = [];
+    // Ask the active SW to nuke its own caches + unregister itself
+    // first. The page can do this from outside (via the `caches`
+    // API + `registration.unregister()` below), but a SW that's
+    // mid-fetch when we navigate away may still hand its cached
+    // copy to the next load. Posting `{type:"reset"}` lets the SW
+    // delete its caches from inside its own scope, which on
+    // Android Chrome reliably empties them before the new
+    // navigation begins. Best-effort: if there's no controller
+    // yet, or postMessage throws, we fall back to the page-side
+    // cleanup below.
+    try {
+      if (
+        navigator &&
+        navigator.serviceWorker &&
+        navigator.serviceWorker.controller &&
+        typeof navigator.serviceWorker.controller.postMessage === "function"
+      ) {
+        navigator.serviceWorker.controller.postMessage({
+          type: "reset",
+          reason: reason,
+        });
+      }
+    } catch (e) {
+      /* ignore */
+    }
     try {
       if ("caches" in window) {
         jobs.push(
@@ -220,6 +355,9 @@
       try {
         var u = new URL(window.location.href);
         u.searchParams.set("__cv_reset", String(Date.now()));
+        // Tag silent recoveries so server-side logs / Sentry can
+        // tell user-initiated from watchdog-initiated reloads.
+        if (silent) u.searchParams.set("__cv_auto", "1");
         window.location.replace(u.toString());
       } catch (e) {
         window.location.reload();
@@ -229,6 +367,27 @@
     Promise.all(jobs).then(finish, finish);
     // Safety: never wait longer than 4 s to actually reload.
     window.setTimeout(finish, 4000);
+  }
+
+  // Schedule an auto-recovery attempt for an asset / module / preload
+  // error, but only after a short delay so Vite's built-in
+  // `chunkReload` can try first. We schedule at most one such
+  // attempt per page-load — if the timer fires and the SPA is
+  // still stuck, we recover; if the SPA mounted in the meantime
+  // the timer no-ops cleanly via the existing fallback-gone /
+  // mount-mark checks.
+  function scheduleAssetErrorRecovery(reason) {
+    if (assetErrorRecoveryScheduled || recovering || shown) return;
+    assetErrorRecoveryScheduled = true;
+    window.setTimeout(function () {
+      if (recovering || shown) return;
+      var fallbackGone = !document.getElementById("canvhub-boot-fallback");
+      var spaSignaledMount = marks.some(function (m) {
+        return m.name === "root:mounted";
+      });
+      if (fallbackGone || spaSignaledMount) return;
+      tryAutoRecover(reason || "asset-error");
+    }, ASSET_ERROR_RECOVERY_DELAY_MS);
   }
 
   function captureError(ev) {
@@ -254,6 +413,7 @@
         ? payload.message
         : "";
     if (url) preloadErrorDeps.push(url);
+    scheduleAssetErrorRecovery("preload-error");
   }
 
   window.addEventListener("error", captureError);
@@ -274,18 +434,26 @@
     if (t.tagName !== "SCRIPT" && t.tagName !== "LINK") return;
     var src = (t.tagName === "SCRIPT" ? t.src : t.href) || "<unknown asset>";
     moduleErrors.push(src);
+    scheduleAssetErrorRecovery("module-error");
   };
   // Bubbling skips `error` events on individual elements; capture
   // is required to see them at the window level.
   window.addEventListener("error", captureModuleError, true);
 
   var stallTimer = window.setTimeout(function () {
+    // Try silent self-heal first; only paint the visible overlay
+    // once we've burned through the auto-recovery budget.
+    if (tryAutoRecover("stall")) return;
     showOverlay("The app did not finish loading.");
   }, STALL_MS);
 
   // Tear everything down once React has replaced the fallback (or
   // the SPA explicitly marks `root:mounted`) — at that point any
-  // later error belongs to the in-app ErrorBoundary, not us.
+  // later error belongs to the in-app ErrorBoundary, not us. Also
+  // clear the silent-recovery attempt counter: a successful boot
+  // means whatever caused the previous failure is now resolved,
+  // so a future boot failure should get its own full budget of
+  // retries.
   var pollMounted = window.setInterval(function () {
     var fallbackGone = !document.getElementById("canvhub-boot-fallback");
     var spaSignaledMount = marks.some(function (m) {
@@ -298,6 +466,7 @@
       window.removeEventListener("unhandledrejection", captureError);
       window.removeEventListener("vite:preloadError", capturePreloadError);
       window.removeEventListener("error", captureModuleError, true);
+      clearRecoveryAttempts();
     }
   }, 200);
 })();
