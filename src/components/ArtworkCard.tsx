@@ -8,12 +8,14 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
-import { ShoppingCart, Eye, Heart, Box } from "lucide-react";
+import { ShoppingCart, Eye, Heart, Box, GitCompare } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useQuickSpin } from "@/contexts/QuickSpinContext";
+import { useCompare } from "@/contexts/CompareContext";
+import { useFlyToCart } from "@/contexts/FlyToCartContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
@@ -78,9 +80,12 @@ const ArtworkCard = ({
   } = useStorefrontConfig();
   const wishlist = useWishlist();
   const quickSpin = useQuickSpin();
+  const compare = useCompare();
+  const flyToCart = useFlyToCart();
   const [isHovered, setIsHovered] = useState(false);
   const [heartBurst, setHeartBurst] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const reduceMotion = useReducedMotion();
   const tiltX = useMotionValue(0);
   const tiltY = useMotionValue(0);
@@ -141,6 +146,13 @@ const ArtworkCard = ({
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!purchasable) return;
+    // Project a thumbnail from the artwork's hero image into the
+    // cart icon. The cart state update happens unconditionally; the
+    // animation is purely chrome and silent under reduced motion.
+    const rect = imgRef.current?.getBoundingClientRect();
+    if (rect) {
+      flyToCart.trigger({ imageUrl: image, fromRect: rect });
+    }
     addToCart({
       id,
       image,
@@ -149,6 +161,33 @@ const ArtworkCard = ({
       year,
       price: effectivePrice,
     });
+  };
+
+  const inCompare = compare.has(id);
+  const handleToggleCompare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const result = compare.toggle({
+      id,
+      title,
+      image,
+      medium,
+      year,
+      price,
+      salePrice,
+      availability,
+    });
+    if (result.rejected) {
+      toast.error(
+        `Compare list is full (max ${compare.limit}). Remove a painting to add another.`,
+      );
+      return;
+    }
+    toast.success(
+      result.added
+        ? `Added "${title}" to compare`
+        : `Removed "${title}" from compare`,
+    );
+    if (result.added) compare.open();
   };
 
   // Decide which ProductImage record (if any) backs the currently
@@ -206,6 +245,7 @@ const ArtworkCard = ({
         />
         <AnimatePresence mode="wait">
           <motion.img
+            ref={imgRef}
             key={responsiveAttrs.src || displayImage}
             src={responsiveAttrs.src || displayImage}
             srcSet={responsiveAttrs.srcSet}
@@ -252,17 +292,38 @@ const ArtworkCard = ({
             card's primary image. The icon only appears on hover for
             fine-pointer visitors; touch users get the persistent
             button alongside the wishlist heart on the other side. */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            quickSpin.open({ imageUrl: image, title });
-          }}
-          aria-label={`Spin ${title} in 3D`}
-          className="absolute top-3 left-3 z-[3] p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-        >
-          <Box className="w-4 h-4 text-white/85" />
-        </button>
+        <div className="absolute top-3 left-3 z-[3] flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              quickSpin.open({ imageUrl: image, title });
+            }}
+            aria-label={`Spin ${title} in 3D`}
+            className="p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <Box className="w-4 h-4 text-white/85" />
+          </button>
+          {/* Compare toggle — pinned below the quick-spin button so the
+              hover badges stay aligned on the left edge. */}
+          <button
+            type="button"
+            onClick={handleToggleCompare}
+            aria-pressed={inCompare}
+            aria-label={
+              inCompare
+                ? `Remove ${title} from compare`
+                : `Add ${title} to compare`
+            }
+            className={`p-2 rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ${
+              inCompare
+                ? "bg-white text-foreground"
+                : "bg-black/40 text-white/85 hover:bg-black/60"
+            }`}
+          >
+            <GitCompare className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Wishlist heart — when the heart is toggled ON we burst it
             in 3D (springy scale + rotate-X tumble) and emit four
@@ -324,18 +385,19 @@ const ArtworkCard = ({
           </motion.span>
         </button>
 
-        {/* Availability badge */}
+        {/* Availability + discount badges — bottom-left rail so they
+            don't collide with the new quick-spin / compare buttons
+            stacked along the top-left. */}
         {availability !== "available" && (
           <div
-            className={`absolute top-3 left-3 z-[2] px-2 py-0.5 font-body text-[10px] tracking-[0.2em] uppercase rounded-sm ${availabilityBadgeClass[availability]}`}
+            className={`absolute bottom-3 left-3 z-[2] px-2 py-0.5 font-body text-[10px] tracking-[0.2em] uppercase rounded-sm ${availabilityBadgeClass[availability]}`}
           >
             {AVAILABILITY_LABEL[availability]}
           </div>
         )}
 
-        {/* Discount badge */}
         {discount > 0 && availability === "available" && (
-          <div className="absolute top-3 left-3 z-[1] px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
+          <div className="absolute bottom-3 left-3 z-[1] px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
             {discount}% OFF
           </div>
         )}

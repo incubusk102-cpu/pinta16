@@ -21,6 +21,9 @@ import AmbientCursorGlow from "@/components/AmbientCursorGlow";
 import ScrollProgress from "@/components/ScrollProgress";
 import PageTransitions from "@/components/PageTransitions";
 import { QuickSpinProvider } from "@/contexts/QuickSpinContext";
+import { CompareProvider } from "@/contexts/CompareContext";
+import { FlyToCartProvider } from "@/contexts/FlyToCartContext";
+import CompareDrawer from "@/components/CompareDrawer";
 import SmoothScrollProvider from "@/lib/SmoothScrollProvider";
 import { useVisitorHeartbeat } from "@/hooks/useVisitorHeartbeat";
 import { useUserHeartbeat } from "@/hooks/useUserHeartbeat";
@@ -169,27 +172,32 @@ function RootComponent() {
                   <HeroSlidesProvider>
                     <ProductProvider>
                       <CartProvider>
-                        <QuickSpinProvider>
-                          <SmoothScrollProvider>
-                            <HeartbeatBridge />
-                            <ReferralCaptureBridge />
-                            <GoogleAuthHashBridge />
-                            <ConditionalAmbientChrome />
-                            <ConditionalAnnouncementBar />
-                            <PageTransitions>
-                              <Outlet />
-                            </PageTransitions>
-                            <ConditionalSiteFooter />
-                            <Suspense fallback={null}>
-                              <ConditionalOrderConfirmation />
-                              <ChatWidget />
-                              <NewUserModal />
-                              <PwaPrompts />
-                            </Suspense>
-                            <ConditionalVisitorDelight />
-                            <Toaster richColors position="top-right" />
-                          </SmoothScrollProvider>
-                        </QuickSpinProvider>
+                        <CompareProvider>
+                          <FlyToCartProvider>
+                            <QuickSpinProvider>
+                              <SmoothScrollProvider>
+                                <HeartbeatBridge />
+                                <ReferralCaptureBridge />
+                                <GoogleAuthHashBridge />
+                                <ConditionalAmbientChrome />
+                                <ConditionalAnnouncementBar />
+                                <PageTransitions>
+                                  <Outlet />
+                                </PageTransitions>
+                                <ConditionalSiteFooter />
+                                <Suspense fallback={null}>
+                                  <ConditionalOrderConfirmation />
+                                  <ChatWidget />
+                                  <NewUserModal />
+                                  <PwaPrompts />
+                                </Suspense>
+                                <ConditionalVisitorDelight />
+                                <CompareDrawer />
+                                <Toaster richColors position="top-right" />
+                              </SmoothScrollProvider>
+                            </QuickSpinProvider>
+                          </FlyToCartProvider>
+                        </CompareProvider>
                       </CartProvider>
                     </ProductProvider>
                   </HeroSlidesProvider>

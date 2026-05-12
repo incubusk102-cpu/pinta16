@@ -18,6 +18,7 @@ import { Route as TrackRouteImport } from "./routes/track";
 import { Route as ProductIdRouteImport } from "./routes/product.$id";
 import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
 import { Route as PreviewIdRouteImport } from "./routes/preview.$id";
+import { Route as WishlistShareRouteImport } from "./routes/wishlist.share";
 
 const AccountRoute = AccountRouteImport.update({
   id: "/account",
@@ -64,6 +65,11 @@ const PreviewIdRoute = PreviewIdRouteImport.update({
   path: "/preview/$id",
   getParentRoute: () => rootRouteImport,
 } as any);
+const WishlistShareRoute = WishlistShareRouteImport.update({
+  id: "/wishlist/share",
+  path: "/wishlist/share",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
+  "/wishlist/share": typeof WishlistShareRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -86,6 +93,7 @@ export interface FileRoutesByTo {
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
+  "/wishlist/share": typeof WishlistShareRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   "/policy/$slug": typeof PolicySlugRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
+  "/wishlist/share": typeof WishlistShareRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -110,7 +119,8 @@ export interface FileRouteTypes {
     | "/track"
     | "/policy/$slug"
     | "/preview/$id"
-    | "/product/$id";
+    | "/product/$id"
+    | "/wishlist/share";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -121,7 +131,8 @@ export interface FileRouteTypes {
     | "/track"
     | "/policy/$slug"
     | "/preview/$id"
-    | "/product/$id";
+    | "/product/$id"
+    | "/wishlist/share";
   id:
     | "__root__"
     | "/"
@@ -132,7 +143,8 @@ export interface FileRouteTypes {
     | "/track"
     | "/policy/$slug"
     | "/preview/$id"
-    | "/product/$id";
+    | "/product/$id"
+    | "/wishlist/share";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -145,6 +157,7 @@ export interface RootRouteChildren {
   PolicySlugRoute: typeof PolicySlugRoute;
   PreviewIdRoute: typeof PreviewIdRoute;
   ProductIdRoute: typeof ProductIdRoute;
+  WishlistShareRoute: typeof WishlistShareRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -212,6 +225,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PreviewIdRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/wishlist/share": {
+      id: "/wishlist/share";
+      path: "/wishlist/share";
+      fullPath: "/wishlist/share";
+      preLoaderRoute: typeof WishlistShareRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -225,6 +245,7 @@ const rootRouteChildren: RootRouteChildren = {
   PolicySlugRoute: PolicySlugRoute,
   PreviewIdRoute: PreviewIdRoute,
   ProductIdRoute: ProductIdRoute,
+  WishlistShareRoute: WishlistShareRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
