@@ -258,6 +258,10 @@ const SITE_COPY_DEFAULTS = {
     eyebrow: "Get in touch",
     title: "Contact us",
   },
+  madeToOrderNotice: {
+    heading: "Made to order",
+    body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
+  },
 };
 
 const SITE_COPY_FIELD_MAX = 280;
@@ -875,6 +879,17 @@ const sanitizeSiteCopy = (raw) => {
       title: sanitizeSiteCopyField(
         data.contact?.title,
         SITE_COPY_DEFAULTS.contact.title,
+      ),
+    },
+    madeToOrderNotice: {
+      heading: sanitizeSiteCopyField(
+        data.madeToOrderNotice?.heading,
+        SITE_COPY_DEFAULTS.madeToOrderNotice.heading,
+      ),
+      body: sanitizeSiteCopyField(
+        data.madeToOrderNotice?.body,
+        SITE_COPY_DEFAULTS.madeToOrderNotice.body,
+        SITE_COPY_BODY_MAX,
       ),
     },
   };
@@ -2049,6 +2064,10 @@ const handle = async ({ request, env }) => {
             contact: {
               ...existing.siteCopy.contact,
               ...(incoming.contact ?? {}),
+            },
+            madeToOrderNotice: {
+              ...(existing.siteCopy.madeToOrderNotice ?? {}),
+              ...(incoming.madeToOrderNotice ?? {}),
             },
           },
         });
