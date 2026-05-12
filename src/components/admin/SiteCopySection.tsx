@@ -19,6 +19,7 @@ const cloneDefaults = (): SiteCopy => ({
   reviews: { ...DEFAULT_SITE_COPY.reviews },
   contact: { ...DEFAULT_SITE_COPY.contact },
   madeToOrderNotice: { ...DEFAULT_SITE_COPY.madeToOrderNotice },
+  productInfo: { ...DEFAULT_SITE_COPY.productInfo },
 });
 
 export const SiteCopySection = () => {
@@ -50,6 +51,7 @@ export const SiteCopySection = () => {
       reviews: { ...config.siteCopy.reviews },
       contact: { ...config.siteCopy.contact },
       madeToOrderNotice: { ...config.siteCopy.madeToOrderNotice },
+      productInfo: { ...config.siteCopy.productInfo },
     });
   }, [config.siteCopy]);
 
@@ -84,6 +86,10 @@ export const SiteCopySection = () => {
             madeToOrderNotice: {
               ...DEFAULT_SITE_COPY.madeToOrderNotice,
               ...data.config.siteCopy.madeToOrderNotice,
+            },
+            productInfo: {
+              ...DEFAULT_SITE_COPY.productInfo,
+              ...data.config.siteCopy.productInfo,
             },
           };
           setCopy(next);
@@ -248,6 +254,57 @@ export const SiteCopySection = () => {
             onChange: (v) =>
               setCopy((c) => ({ ...c, contact: { ...c.contact, title: v } })),
             placeholder: DEFAULT_SITE_COPY.contact.title,
+          },
+        ]}
+      />
+
+      <SectionEditor
+        title="Product page — shipping & care"
+        description="The two small lines at the bottom of every product page."
+        fields={[
+          {
+            label: "Shipping label (small caps)",
+            value: copy.productInfo.shippingLabel,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, shippingLabel: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.shippingLabel,
+          },
+          {
+            label: "Shipping body",
+            value: copy.productInfo.shippingBody,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, shippingBody: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.shippingBody,
+            multiline: true,
+            rows: 3,
+          },
+          {
+            label: "Care label (small caps)",
+            value: copy.productInfo.careLabel,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, careLabel: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.careLabel,
+          },
+          {
+            label: "Care body",
+            value: copy.productInfo.careBody,
+            onChange: (v) =>
+              setCopy((c) => ({
+                ...c,
+                productInfo: { ...c.productInfo, careBody: v },
+              })),
+            placeholder: DEFAULT_SITE_COPY.productInfo.careBody,
+            multiline: true,
+            rows: 3,
           },
         ]}
       />

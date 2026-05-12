@@ -100,12 +100,20 @@ export interface SiteCopyMadeToOrder {
   body: string;
 }
 
+export interface SiteCopyProductInfo {
+  shippingLabel: string;
+  shippingBody: string;
+  careLabel: string;
+  careBody: string;
+}
+
 export interface SiteCopy {
   gallery: SiteCopySectionTwo;
   about: SiteCopyAbout;
   reviews: SiteCopySectionTwo;
   contact: SiteCopySectionTwo;
   madeToOrderNotice: SiteCopyMadeToOrder;
+  productInfo: SiteCopyProductInfo;
 }
 
 export const DEFAULT_SITE_COPY: SiteCopy = {
@@ -129,6 +137,13 @@ export const DEFAULT_SITE_COPY: SiteCopy = {
   madeToOrderNotice: {
     heading: "Made to order",
     body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
+  },
+  productInfo: {
+    shippingLabel: "Shipping",
+    shippingBody:
+      "Lalamove courier within Luzon — live tracking, fare paid to the rider on delivery.",
+    careLabel: "Care",
+    careBody: "Keep out of direct sunlight and humid spaces for longevity.",
   },
 };
 
@@ -516,6 +531,7 @@ const mergeSiteCopy = (raw: unknown): SiteCopy => {
     reviews: Partial<SiteCopySectionTwo>;
     contact: Partial<SiteCopySectionTwo>;
     madeToOrderNotice: Partial<SiteCopyMadeToOrder>;
+    productInfo: Partial<SiteCopyProductInfo>;
   }>;
   return {
     gallery: { ...DEFAULT_SITE_COPY.gallery, ...(data.gallery ?? {}) },
@@ -525,6 +541,10 @@ const mergeSiteCopy = (raw: unknown): SiteCopy => {
     madeToOrderNotice: {
       ...DEFAULT_SITE_COPY.madeToOrderNotice,
       ...(data.madeToOrderNotice ?? {}),
+    },
+    productInfo: {
+      ...DEFAULT_SITE_COPY.productInfo,
+      ...(data.productInfo ?? {}),
     },
   };
 };
