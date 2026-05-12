@@ -348,12 +348,23 @@ const maybePostAiReply = async ({
     // when available, so consecutive handoffs don't read identically.
     // Best-effort: an append failure still leaves `needsHumanAt` set
     // on the index, which is enough for the gallery owner to find it.
+    //
+    // Two ack flavours depending on *why* we're handing off:
+    //   • customer-requested-human — customer explicitly asked for a
+    //     real person. Mia introduces herself warmly and offers to help
+    //     in the meantime (greeting variants).
+    //   • ai-uncertain / ai-empty — Mia tried to answer but couldn't,
+    //     so dropping a "Hi, I'm Mia" intro mid-thread would read as
+    //     out of place. Keep the terse ack.
     const ackRaw =
       typeof chatConfig?.ai?.handoffMessage === "string"
         ? chatConfig.ai.handoffMessage.trim()
         : "";
-    const ackBody =
-      ackRaw || chatAiInternals.pickHandoffAck(threadAfterCustomer?.name);
+    const customerAskedForHuman = outcome.reason === "customer-requested-human";
+    const pickedAck = customerAskedForHuman
+      ? chatAiInternals.pickGreetingHandoffAck(threadAfterCustomer?.name)
+      : chatAiInternals.pickHandoffAck(threadAfterCustomer?.name);
+    const ackBody = ackRaw || pickedAck;
     await typingDelay();
     const at = nowISO();
     const updated = await appendMessage(

@@ -115,6 +115,22 @@ const HANDOFF_ACK_VARIANTS = [
   "Noted{name_suffix}. The team has been pinged \u2014 you'll hear back from a real person shortly. Salamat!",
 ];
 
+// Customer specifically asked to talk to a human (e.g. "are you a real
+// person?", "can I talk to the owner?"). Different vibe from the
+// generic ack above \u2014 here Mia introduces herself by name, confirms a
+// real person is being looped in, and offers to help in the meantime.
+// This is what the customer expected: a warm "hi, I'm Mia" instead of
+// the widget going silent or dropping a bare "got it" line. The
+// output-side handoff (Mia couldn't answer from the data) keeps using
+// HANDOFF_ACK_VARIANTS \u2014 mid-conversation "hi, I'm Mia" would read
+// as out of place.
+const GREETING_HANDOFF_ACK_VARIANTS = [
+  "Hi{name_suffix}! I'm Mia, the AI assistant here at Canvas Hub \u2014 a real person from the team will be with you shortly (usually within a few hours). While you wait, I can answer quick questions about shipping, payment, returns, or our paintings \u2014 just ask!",
+  "Hey{name_suffix} \u2014 Mia here, Canvas Hub's AI assistant. I've already pinged the gallery owner so a real person can take over. In the meantime, happy to help with anything about our artworks, pricing, or shipping \u2014 feel free to ask!",
+  "Hi{name_suffix}, I'm Mia \u2014 the AI greeter for Canvas Hub. A real person from the team is being notified now and should reply within a few hours. Anything I can help with while you wait? Shipping, payment methods, returns, sizes \u2014 ask away!",
+  "Kumusta{name_suffix}! Mia here \u2014 I'm Canvas Hub's AI assistant. Pinapadala ko na ito sa gallery owner; a real person will reply within a few hours. Habang naghihintay, happy to help with any quick questions about the paintings or shipping!",
+];
+
 // Soft preamble variants prepended to a verbatim FAQ answer so the
 // reply doesn't read like an unchanged copy-paste. Returns the
 // preamble string + a trailing newline, or "" if no usable name was
@@ -160,6 +176,22 @@ const pickHandoffAck = (customerName, randomFn = Math.random) => {
   const idx = Math.floor(randomFn() * HANDOFF_ACK_VARIANTS.length);
   const variant = HANDOFF_ACK_VARIANTS[idx] || HANDOFF_ACK_VARIANTS[0];
   const suffix = first ? `, ${first}` : "";
+  return variant.replace("{name_suffix}", suffix);
+};
+
+// Used when the handoff was triggered by the customer explicitly
+// asking for a human (`outcome.reason === "customer-requested-human"`).
+// Reads as a warm "hi, I'm Mia" intro rather than a terse ack \u2014 see
+// GREETING_HANDOFF_ACK_VARIANTS above for rationale. Note the suffix
+// shape is `" Jess"` (leading space, no comma) because every greeting
+// variant ends with `Hi{name_suffix}` / `Hey{name_suffix}` / etc \u2014
+// punctuation already reads naturally before the name.
+const pickGreetingHandoffAck = (customerName, randomFn = Math.random) => {
+  const first = firstName(customerName);
+  const idx = Math.floor(randomFn() * GREETING_HANDOFF_ACK_VARIANTS.length);
+  const variant =
+    GREETING_HANDOFF_ACK_VARIANTS[idx] || GREETING_HANDOFF_ACK_VARIANTS[0];
+  const suffix = first ? ` ${first}` : "";
   return variant.replace("{name_suffix}", suffix);
 };
 
@@ -664,6 +696,7 @@ export const __internals = {
   ADMIN_COOLDOWN_MS,
   DEFAULT_PERSONA,
   HANDOFF_ACK_VARIANTS,
+  GREETING_HANDOFF_ACK_VARIANTS,
   FAQ_PREAMBLE_VARIANTS,
   containsHandoffPhrase,
   findFaqMatch,
@@ -673,6 +706,7 @@ export const __internals = {
   sanitizeCustomerName,
   firstName,
   pickHandoffAck,
+  pickGreetingHandoffAck,
   pickFaqPreamble,
   isAiEnabled,
   lastAdminAt,
