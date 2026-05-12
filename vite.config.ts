@@ -78,6 +78,27 @@ export default defineConfig({
           // with code that's already preloaded anyway.
           if (id.includes("preload-helper")) return "vendor";
           if (!id.includes("node_modules")) return undefined;
+          // React Email render pipeline (@react-email/render + components
+          // + prettier + html-to-text + their transitive deps). Only the
+          // admin Welcome email "preview" pane dynamically imports
+          // `@/emails/render`, so pin this whole subtree into a single
+          // lazy `email-render` chunk. Without an explicit assignment
+          // these heavy modules (prettier alone is ~2 MB unminified) get
+          // bucketed into `vendor` and inflate every storefront page's
+          // initial paint, even though only the admin needs them. See
+          // `src/components/admin/WelcomeEmailSection.tsx` for the
+          // dynamic import.
+          if (
+            id.includes("/@react-email/") ||
+            id.includes("/html-to-text/") ||
+            id.includes("/@selderee/") ||
+            id.includes("/selderee/") ||
+            /[\\/]node_modules[\\/](prettier|htmlparser2|dom-serializer|domhandler|domutils|domelementtype|entities|deepmerge)[\\/]/.test(
+              id,
+            )
+          ) {
+            return "email-render";
+          }
           // Match the package root, not arbitrary substrings — `id.includes("/react/")`
           // accidentally bucketed `@floating-ui/react-dom` into the `react` chunk,
           // creating a circular dep with `vendor` (where the rest of @floating-ui

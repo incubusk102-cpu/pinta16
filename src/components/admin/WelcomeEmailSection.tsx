@@ -258,11 +258,6 @@ export const TEMPLATE_OPTIONS: WelcomeTemplateOption[] = [
   },
 ];
 
-const resolveTemplate = (
-  template: WelcomeTemplate | undefined,
-): WelcomeTemplateOption =>
-  TEMPLATE_OPTIONS.find((o) => o.value === template) ?? TEMPLATE_OPTIONS[0];
-
 export const HEADER_ALIGN_OPTIONS: {
   value: WelcomeHeaderAlign;
   label: string;
@@ -589,14 +584,6 @@ const SUGGESTED_TEMPLATES: SuggestedTemplate[] = [
 const PLACEHOLDER_HINT =
   "Use {{firstName}}, {{name}}, or {{email}} as placeholders.";
 
-const renderTemplateString = (
-  template: string,
-  vars: Record<string, string>,
-): string =>
-  template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) =>
-    vars[key] == null ? "" : vars[key],
-  );
-
 const escapeHtml = (s: string): string =>
   s
     .replace(/&/g, "&amp;")
@@ -674,17 +661,6 @@ const productThumbnailUrl = (p: AdminProductSummary): string => {
   return p.image || "";
 };
 
-const formatExpiryLabel = (iso: string): string => {
-  if (!iso) return "";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  return new Date(t).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
-
 // Unified shape rendered in the live admin preview. Storefront products and
 // custom email-only uploads both flatten into this so the renderer doesn't
 // have to branch.
@@ -695,53 +671,6 @@ interface PreviewItem {
   description: string;
 }
 
-const productsHtmlForPreview = (
-  config: WelcomeEmailConfig,
-  picked: PreviewItem[],
-): string => {
-  const cfg = config.products;
-  if (!cfg.enabled || picked.length === 0) return "";
-  const heading = escapeHtml(cfg.sectionTitle || "A glimpse of the collection");
-  // Mirror functions/api/_lib/email.js. 1 → full-width, 2 / 4+ → 2-up,
-  // 3 → 3-up so we never have a stranded cell on an odd count.
-  const columns = picked.length === 3 ? 3 : picked.length === 1 ? 1 : 2;
-  const cellWidth = `${Math.floor(100 / columns)}%`;
-  const renderCell = (p?: PreviewItem): string => {
-    if (!p) return `<td style="width:${cellWidth};padding:6px;"></td>`;
-    const img = p.imageUrl;
-    const title = escapeHtml(p.title || "Untitled");
-    const priceLine =
-      cfg.showPrice && p.price > 0
-        ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;">${formatPHP(p.price)}</div>`
-        : "";
-    const descLine = p.description
-      ? `<div style="margin-top:4px;font-size:12px;color:#7a7468;line-height:1.4;">${escapeHtml(p.description)}</div>`
-      : "";
-    // Use explicit fixed pixel height for the placeholder div so it
-    // renders in Gmail (which doesn't honor `aspect-ratio`). Add an
-    // explicit `width` attribute to the <img> so Gmail mobile reserves
-    // space even before the image loads.
-    const safeImg = img
-      ? `<img src="${img}" alt="${title}" width="240" style="display:block;width:100%;max-width:100%;height:auto;border-radius:4px;border:1px solid #efece4;" />`
-      : `<div style="width:100%;height:160px;border-radius:4px;border:1px solid #efece4;background:#f5f3ee;"></div>`;
-    return `<td valign="top" style="padding:6px;width:${cellWidth};">${safeImg}<div style="margin-top:8px;font-size:13px;color:#1c1c1c;line-height:1.35;">${title}</div>${priceLine}${descLine}</td>`;
-  };
-  const rows: string[] = [];
-  for (let i = 0; i < picked.length; i += columns) {
-    const cells: string[] = [];
-    for (let c = 0; c < columns; c += 1) {
-      cells.push(renderCell(picked[i + c]));
-    }
-    rows.push(`<tr>${cells.join("")}</tr>`);
-  }
-  return `
-    <h3 style="margin:32px 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#1c1c1c;">${heading}</h3>
-    <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;">
-      ${rows.join("")}
-    </table>
-  `;
-};
-
 const productToPreviewItem = (p: AdminProductSummary): PreviewItem => ({
   imageUrl: productThumbnailUrl(p),
   title: p.title || "Untitled",
@@ -749,226 +678,31 @@ const productToPreviewItem = (p: AdminProductSummary): PreviewItem => ({
   description: "",
 });
 
-const discountHtmlForPreview = (
-  config: WelcomeEmailConfig,
-  discount: ResolvedDiscount | null,
-): string => {
-  if (!discount || !discount.code) return "";
-  const primary = isSafeColor(config.primaryColor)
-    ? config.primaryColor
-    : "#1c1c1c";
-  const accent = isSafeColor(config.accentColor)
-    ? config.accentColor
-    : "#7a7468";
-  const headline = escapeHtml(discount.headline || "Your welcome gift");
-  const description = escapeHtml(discount.description || "");
-  const code = escapeHtml(discount.code);
-  const expiry = formatExpiryLabel(discount.expiresAt || "");
-  const expiryLine = expiry
-    ? `<div style="margin-top:6px;font-size:11px;color:${accent};">Use before ${escapeHtml(expiry)}.</div>`
-    : "";
-  return `
-    <table role="presentation" width="100%" style="border-collapse:separate;border-spacing:0;margin:24px 0;">
-      <tr>
-        <td style="background:${primary};padding:18px 20px;border-radius:6px;color:#ffffff;text-align:center;">
-          <div style="font-family:'Playfair Display',Georgia,serif;font-size:16px;letter-spacing:0.04em;">${headline}</div>
-          ${description ? `<div style="margin-top:4px;font-size:13px;opacity:0.92;">${description}</div>` : ""}
-          <div style="margin-top:12px;display:inline-block;padding:8px 14px;border:1px dashed rgba(255,255,255,0.55);border-radius:4px;font-family:'Courier New',monospace;font-size:18px;letter-spacing:0.18em;">${code}</div>
-          ${expiryLine}
-        </td>
-      </tr>
-    </table>
-  `;
+/**
+ * Inject a small admin-only "Subject:" banner just inside <body> of the
+ * rendered React Email HTML. The body the recipient sees does not carry
+ * the subject (clients show it above the message in their own chrome),
+ * but the admin previewing the template wants to verify it without
+ * peeking at the form fields, so we surface it as a sticky strip.
+ */
+const injectSubjectBanner = (html: string, subject: string): string => {
+  if (!subject) return html;
+  const banner = `<div style="max-width:560px;margin:0 auto 8px;font-size:11px;color:#7a7468;font-family:Inter,Helvetica,Arial,sans-serif;"><strong>Subject:</strong> ${escapeHtml(subject)}</div>`;
+  // Match the opening <body> tag (with or without attributes) and insert
+  // the banner immediately after it. Fall through to a simple prepend if
+  // the renderer ever stops emitting a body element.
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/(<body[^>]*>)/i, `$1${banner}`);
+  }
+  return banner + html;
 };
 
-// Approximates the server-side wrapper so admins see the same thing the
-// recipient will see (sans email-client quirks).
-const renderPreviewHtml = (
-  config: WelcomeEmailConfig,
-  pickedProducts: PreviewItem[],
-  discount: ResolvedDiscount | null,
-): string => {
-  const vars = {
-    name: "Sample collector",
-    firstName: "Sample",
-    email: "sample@canvhub.com",
-  };
-  const subject = renderTemplateString(config.subject, vars);
-  const bodyText = renderTemplateString(config.body, vars);
-  const primary = isSafeColor(config.primaryColor)
-    ? config.primaryColor
-    : "#1c1c1c";
-  const accent = isSafeColor(config.accentColor)
-    ? config.accentColor
-    : "#7a7468";
-  const fromName = escapeHtml(config.fromName || "Canvas Hub");
-  const showLogo = config.showLogo && config.logoUrl;
-  const showBanner = config.showBanner && config.bannerUrl;
-
-  const paragraphsHtml = bodyText
-    .split(/\n{2,}/)
-    .map((para) => para.trim())
-    .filter(Boolean)
-    .map(
-      (para) =>
-        `<p style="margin:0 0 12px;white-space:pre-line;">${escapeHtml(para)}</p>`,
-    )
-    .join("");
-
-  const signature = config.signature.trim();
-  // Mirror the dedupe in functions/api/_lib/email.js: if the body
-  // already ends with the same line(s) as the signature (e.g. body
-  // closes with "The Canvas Hub team" and signature is also "The
-  // Canvas Hub team"), don't render the signature twice.
-  const normalize = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-  const signatureLines = signature.split(/\n+/).map(normalize).filter(Boolean);
-  const bodyLines = bodyText.split(/\n+/).map(normalize).filter(Boolean);
-  const signatureDuplicatesBody =
-    signatureLines.length > 0 &&
-    signatureLines.every((line) => bodyLines.includes(line));
-  const signatureHtml =
-    signature && !signatureDuplicatesBody
-      ? `<p style="margin:24px 0 0;color:${accent};font-size:13px;white-space:pre-line;">${escapeHtml(signature)}</p>`
-      : "";
-
-  const ctaButton = (() => {
-    const label = config.ctaLabel.trim();
-    const url = config.ctaUrl.trim();
-    if (!label || !url) return "";
-    const baseLabelStyle =
-      "font-size:13px;letter-spacing:0.18em;text-transform:uppercase;font-weight:500;";
-    if (config.buttonStyle === "outline") {
-      return `<a href="${escapeHtml(url)}" style="display:inline-block;padding:11px 22px;background:transparent;color:${primary};text-decoration:none;border:1px solid ${primary};border-radius:4px;${baseLabelStyle}">${escapeHtml(label)}</a>`;
-    }
-    if (config.buttonStyle === "underline") {
-      return `<a href="${escapeHtml(url)}" style="display:inline-block;padding:6px 0;color:${primary};text-decoration:underline;text-underline-offset:4px;${baseLabelStyle}">${escapeHtml(label)}</a>`;
-    }
-    return `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;background:${primary};color:#ffffff;text-decoration:none;border-radius:4px;${baseLabelStyle}">${escapeHtml(label)}</a>`;
-  })();
-  const ctaHtml = ctaButton ? `<p style="margin:24px 0;">${ctaButton}</p>` : "";
-
-  const discountHtml = discountHtmlForPreview(config, discount);
-  const productsHtml = productsHtmlForPreview(config, pickedProducts);
-
-  const avatarHtml =
-    config.showAvatar && config.avatarUrl
-      ? `
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:28px;">
-          <tr>
-            <td valign="middle" style="padding:0 12px 0 0;line-height:0;">
-              <img src="${config.avatarUrl}" alt="${escapeHtml(config.avatarName || config.fromName)}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:9999px;object-fit:cover;border:1px solid #efece4;" />
-            </td>
-            <td valign="middle" style="font-size:13px;color:${primary};line-height:1.4;">
-              <div style="font-weight:500;">${escapeHtml(config.avatarName || config.fromName || "Canvas Hub team")}</div>
-              <div style="color:${accent};font-size:12px;">${escapeHtml(config.fromEmail || "")}</div>
-            </td>
-          </tr>
-        </table>`
-      : "";
-
-  const headerAlign = config.headerAlign === "center" ? "center" : "left";
-  // Resolve the template tokens up-front so the default logo can pick
-  // its dark/light variant against the card background. Mirrors
-  // functions/api/_lib/email.js so the admin preview matches the
-  // actual sent email pixel-for-pixel.
-  const tplForLogo = resolveTemplate(config.template);
-  const defaultLogoInner = renderDefaultBrandLogoHtml(
-    config.fromName || "Canvas Hub",
-    tplForLogo,
-    headerAlign,
-  );
-  const logoInner = showLogo
-    ? `<img src="${config.logoUrl}" alt="${fromName}" style="max-height:48px;max-width:200px;display:${headerAlign === "center" ? "inline-block" : "block"};" />`
-    : defaultLogoInner;
-  const logoBlock =
-    headerAlign === "center"
-      ? `<div style="text-align:center;">${logoInner}</div>`
-      : logoInner;
-
-  const bannerBlock = showBanner
-    ? `<tr><td style="padding:0;"><img src="${config.bannerUrl}" alt="${fromName}" style="display:block;width:100%;max-width:560px;height:auto;" /></td></tr>`
-    : "";
-  // When a banner is shown, suppress the small logo block above it —
-  // the banner image typically already includes the wordmark, so
-  // stacking a redundant logo on top looks wrong. Mirrors
-  // wrapWelcomeHtml in functions/api/_lib/email.js.
-  const headerBlock = showBanner ? "" : logoBlock;
-
-  const bodyFontStack = resolveBodyFontStack(config.bodyFont);
-
-  // Footer link row preview — same shape as functions/api/_lib/email.js's
-  // buildFooterLinksHtml output, just inline so the admin sees exactly
-  // what the recipient will see (icons + label + the editable tagline).
-  const footerLinks = (config.footerLinks || []).filter(
-    (l) => l && (l.url || l.label),
-  );
-  const footerLinksBlock = footerLinks.length
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 0 10px;"><tr>${footerLinks
-        .map((l) => {
-          const opt =
-            FOOTER_LINK_OPTIONS.find((o) => o.value === l.kind) ??
-            FOOTER_LINK_OPTIONS[FOOTER_LINK_OPTIONS.length - 1];
-          const labelHtml = l.label
-            ? `<span style="display:inline-block;vertical-align:middle;margin-left:6px;">${escapeHtml(l.label)}</span>`
-            : "";
-          const inner = `<img src="/email-icons/${opt.iconFile}" alt="" width="16" height="16" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border:0;" />${labelHtml}`;
-          const cellStyle = `padding:4px 10px;font-size:12px;color:${accent};line-height:1;`;
-          if (l.url) {
-            return `<td style="${cellStyle}"><a href="${escapeHtml(l.url)}" style="color:${accent};text-decoration:none;">${inner}</a></td>`;
-          }
-          return `<td style="${cellStyle}">${inner}</td>`;
-        })
-        .join("")}</tr></table>`
-    : "";
-
-  const footerTagline = (
-    config.footerTagline || "original Filipino paintings"
-  ).trim();
-  const footerTaglineHtml = footerTagline
-    ? `&mdash; ${escapeHtml(footerTagline)}`
-    : "";
-
-  const tpl = tplForLogo;
-
-  // Brush divider art mirrored from functions/api/_lib/email.js so the
-  // admin preview matches the rendered email exactly. Inline SVG works
-  // in the in-browser preview iframe.
-  const brushDividerSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 12" preserveAspectRatio="none" style="display:block;width:100%;height:12px;"><path d="M2 7 C 40 1, 80 11, 120 4 S 180 9, 198 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="198" cy="5" r="1.4" fill="currentColor" /></svg>`;
-  const sectionDivider = (() => {
-    if (config.dividerStyle === "none") return "";
-    if (config.dividerStyle === "brush") {
-      return `<div style="margin:24px 0;color:${accent};line-height:0;">${brushDividerSvg}</div>`;
-    }
-    return `<hr style="border:none;border-top:1px solid ${accent}33;margin:24px 0;" />`;
-  })();
-  const sectionBlocks = [paragraphsHtml, discountHtml, productsHtml, ctaHtml]
-    .filter((b) => b && b.trim())
-    .join(sectionDivider || "");
-
-  return `
-<!doctype html>
-<html><head>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet" />
-</head><body style="margin:0;padding:24px;background:${tpl.pageBg};font-family:${bodyFontStack};color:${tpl.bodyColor};">
-  <div style="max-width:560px;margin:0 auto;font-size:11px;color:${accent};margin-bottom:8px;font-family:Inter,Helvetica,Arial,sans-serif;">
-    <strong>Subject:</strong> ${escapeHtml(subject)}
-  </div>
-  <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:${tpl.cardBg};border:${tpl.cardBorder};border-radius:${tpl.cardRadius};overflow:hidden;">
-    ${headerBlock ? `<tr><td style="padding:${tpl.headerPad};border-bottom:${tpl.separator};text-align:${headerAlign};">${headerBlock}</td></tr>` : ""}
-    ${bannerBlock}
-    <tr><td style="padding:${tpl.contentPad};font-size:14px;line-height:1.6;font-family:${bodyFontStack};color:${tpl.bodyColor};">
-      ${sectionBlocks}
-      ${avatarHtml}
-      ${signatureHtml}
-    </td></tr>
-    <tr><td style="padding:${tpl.footerPad};border-top:${tpl.separator};font-size:11px;color:${accent};text-align:${headerAlign};">
-      ${footerLinksBlock}
-      <span style="font-family:'EB Garamond',Georgia,'Playfair Display',serif;font-style:italic;font-size:14px;letter-spacing:0.02em;color:#c4a86a;">${fromName}</span> ${footerTaglineHtml}
-    </td></tr>
-  </table>
-</body></html>`;
+// Sample identity used to populate {{firstName}} / {{name}} / {{email}}
+// placeholders in the admin preview only. The send-test path uses the
+// real recipient address typed in the "Send a test" input.
+const PREVIEW_USER = {
+  email: "sample@canvhub.com",
+  name: "Sample collector",
 };
 
 // Sync the custom-items array length with the configured count so admins
@@ -1390,10 +1124,76 @@ export const WelcomeEmailSection = () => {
     };
   }, [config.discount, promoCodes]);
 
-  const previewHtml = useMemo(
-    () => renderPreviewHtml(config, previewProducts, previewDiscount),
-    [config, previewProducts, previewDiscount],
-  );
+  // Render the live preview through the same React Email template that
+  // the send-test path uses (`src/emails/templates/WelcomeEmail.tsx` via
+  // `@react-email/render`). This guarantees the iframe is byte-identical
+  // to what lands in the recipient's inbox, so the admin never has to
+  // cross-check two divergent renderers. The renderer is dynamically
+  // imported so the heavy `@react-email/render` + `prettier` +
+  // `html-to-text` payload only loads when an admin opens this section.
+  const [previewHtml, setPreviewHtml] = useState<string>("");
+  useEffect(() => {
+    if (!showPreview) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ renderWelcomeEmail }, { substituteTemplate }] =
+          await Promise.all([
+            import("@/emails/render"),
+            import("@/emails/lib/template-vars"),
+          ]);
+        const rendered = await renderWelcomeEmail({
+          // The form config is a structural superset of the React Email
+          // template's WelcomeEmailConfig (extra admin-only fields like
+          // `fromEmail`, `replyTo`, and `discount` are ignored by the
+          // template). Cast through `unknown` so TS doesn't insist on
+          // an exact type match.
+          config: config as unknown as Parameters<
+            typeof renderWelcomeEmail
+          >[0]["config"],
+          user: PREVIEW_USER,
+          discount: previewDiscount
+            ? {
+                headline: previewDiscount.headline,
+                code: previewDiscount.code,
+                description: previewDiscount.description,
+                expiresAt: previewDiscount.expiresAt,
+              }
+            : null,
+          products: previewProducts.map((p, i) => ({
+            id: `preview-${i}`,
+            title: p.title,
+            price: p.price,
+            imageUrl: p.imageUrl,
+            __custom: config.products.mode === "custom",
+          })),
+        });
+        if (cancelled) return;
+        const subject = substituteTemplate(
+          config.subject || "Welcome to Canvas Hub",
+          {
+            name: PREVIEW_USER.name,
+            firstName: PREVIEW_USER.name.split(/\s+/)[0] || PREVIEW_USER.name,
+            email: PREVIEW_USER.email,
+          },
+        );
+        setPreviewHtml(injectSubjectBanner(rendered.html, subject));
+      } catch (err) {
+        if (!cancelled) {
+          // Surface the error in the preview pane so admins notice the
+          // pipeline broke instead of silently seeing stale HTML.
+          setPreviewHtml(
+            `<pre style="padding:24px;font-family:monospace;color:#a02525;">Preview failed to render: ${String(
+              (err as Error)?.message || err,
+            )}</pre>`,
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [config, previewProducts, previewDiscount, showPreview]);
 
   if (loading) {
     return (
