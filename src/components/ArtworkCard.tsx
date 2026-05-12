@@ -8,11 +8,12 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
-import { ShoppingCart, Eye, Heart } from "lucide-react";
+import { ShoppingCart, Eye, Heart, Box } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useWishlist } from "@/contexts/WishlistContext";
+import { useQuickSpin } from "@/contexts/QuickSpinContext";
 import {
   getEffectivePrice,
   getDiscountPercent,
@@ -76,6 +77,7 @@ const ArtworkCard = ({
     config: { vacationMode },
   } = useStorefrontConfig();
   const wishlist = useWishlist();
+  const quickSpin = useQuickSpin();
   const [isHovered, setIsHovered] = useState(false);
   const [heartBurst, setHeartBurst] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -243,6 +245,24 @@ const ArtworkCard = ({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Quick-spin 3D peek — tapping the cube icon opens the
+            shared `PaintingViewer3D` modal (the same one the product
+            page uses behind "View in 3D"), pre-loaded with this
+            card's primary image. The icon only appears on hover for
+            fine-pointer visitors; touch users get the persistent
+            button alongside the wishlist heart on the other side. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            quickSpin.open({ imageUrl: image, title });
+          }}
+          aria-label={`Spin ${title} in 3D`}
+          className="absolute top-3 left-3 z-[3] p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          <Box className="w-4 h-4 text-white/85" />
+        </button>
 
         {/* Wishlist heart — when the heart is toggled ON we burst it
             in 3D (springy scale + rotate-X tumble) and emit four

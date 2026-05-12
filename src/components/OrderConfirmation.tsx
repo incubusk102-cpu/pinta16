@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import OrderReviewForm from "./OrderReviewForm";
 import DeliveredReviewPrompt from "./DeliveredReviewPrompt";
 import RefundBanner from "./RefundBanner";
+import ConfettiBurst from "./ConfettiBurst";
 const OrderPushOptInPrompt = lazy(() => import("./OrderPushOptInPrompt"));
 
 const formatNotificationDate = (iso: string) => {
@@ -118,8 +119,13 @@ const OrderConfirmation = () => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 30 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-card border border-border/20 rounded-sm max-w-lg w-full relative max-h-[90vh] flex flex-col"
+            className="bg-card border border-border/20 rounded-sm max-w-lg w-full relative max-h-[90vh] flex flex-col overflow-hidden"
           >
+            {/* Celebratory confetti rains from above the success tick
+                whenever the order finalised cleanly (KV write
+                acknowledged). Skipped on the amber `pendingSync`
+                path so we don't celebrate a half-saved order. */}
+            {!pendingSync && <ConfettiBurst originY={20} />}
             <div className="flex-1 overflow-y-auto p-8">
               <div className="text-center mb-8">
                 <motion.div

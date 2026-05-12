@@ -63,6 +63,7 @@ const en = {
   "theme.dark": "Dark",
   "theme.light": "Light",
   "theme.system": "System",
+  "theme.sunset": "Sunset (Manila)",
   "theme.toggle": "Toggle theme",
   // Locale
   "locale.toggle": "Change language",
@@ -147,6 +148,7 @@ const tl: Partial<Record<TranslationKey, string>> = {
   "theme.dark": "Madilim",
   "theme.light": "Maliwanag",
   "theme.system": "Sistema",
+  "theme.sunset": "Paglubog ng araw (Manila)",
   "theme.toggle": "I-toggle ang tema",
   "locale.toggle": "Baguhin ang wika",
   "recentlyViewed.title": "Kamakailan tiningnan",
