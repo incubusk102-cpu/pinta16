@@ -1,4 +1,4 @@
-import { Globe, Laptop, Moon, Sun } from "lucide-react";
+import { Globe, Laptop, Moon, Sun, Sunset } from "lucide-react";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -7,12 +7,15 @@ const themeIcon: Record<Theme, React.ReactNode> = {
   dark: <Moon className="w-4 h-4" />,
   light: <Sun className="w-4 h-4" />,
   system: <Laptop className="w-4 h-4" />,
+  sunset: <Sunset className="w-4 h-4" />,
 };
 
+// Cycle: dark → light → system → sunset (Manila auto) → dark.
 const nextTheme: Record<Theme, Theme> = {
   dark: "light",
   light: "system",
-  system: "dark",
+  system: "sunset",
+  sunset: "dark",
 };
 
 export default function ThemeLocaleToggle({
@@ -39,7 +42,9 @@ export default function ThemeLocaleToggle({
             ? "theme.dark"
             : theme === "light"
               ? "theme.light"
-              : "theme.system",
+              : theme === "sunset"
+                ? "theme.sunset"
+                : "theme.system",
         )}
       >
         {themeIcon[theme]}
