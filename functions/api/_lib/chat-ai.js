@@ -1,26 +1,39 @@
-// Groq AI auto-reply for the customer chat widget.
+// AI auto-reply for the customer chat widget.
 //
 // When a customer message lands and the admin hasn't replied recently,
-// we try a deterministic FAQ keyword match first, then fall back to a
-// Groq Llama completion grounded in the gallery's FAQs and (optionally)
-// the product catalogue. The reply is appended to the thread as
+// we try a deterministic FAQ keyword match first, then fall back to an
+// LLM completion grounded in the gallery's FAQs and (optionally) the
+// product catalogue. The reply is appended to the thread as
 // `from: "ai"`. If the AI is uncertain or the customer asks for a human,
 // no auto-reply is posted — the thread sits in the admin Chat tab as
 // usual, so the gallery owner can take over.
 //
-// Free tier: Groq's Llama 3.3 70B model is ~14,400 requests/day at zero
-// cost — orders of magnitude more than canvhub will use. Anything beyond
-// the free tier silently degrades to "no AI reply" (admin handles it
-// manually), so we never raise an error path that's visible to buyers.
+// Two providers are supported, in priority order:
 //
-// `GROQ_API_KEY` (or `GROQ_TOKEN` — both names are accepted, since the
-// canvhub Cloudflare Pages env happens to be named `GROQ_TOKEN`) is
-// read from the Pages env. Missing key → AI is off, no errors thrown.
+//   1. Cloudflare Workers AI (`env.AI`) — same-cloud, no external key,
+//      free up to 10k Neurons/day, immune to third-party rate-limit
+//      surprises. This is the recommended default; enable it by adding
+//      the AI binding in `wrangler.toml` (`[ai] binding = "AI"`).
+//
+//   2. Groq Llama (`env.GROQ_API_KEY` or `env.GROQ_TOKEN`) — fallback
+//      for projects that already have a Groq key wired up. Used when
+//      the Workers AI binding is missing. Anything beyond the Groq free
+//      tier silently degrades to "no AI reply".
+//
+// If neither provider is configured, the AI step is skipped silently
+// (the customer's message still lands, the admin handles the thread
+// manually). No error is ever visible to buyers.
 
 import { logError } from "./redact.js";
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+// Default Workers AI model: Llama 3.1 8B is universally available on the
+// free tier and quality is solid for FAQ-style chat. Override per-site
+// via `chatConfig.ai.model` (must start with `@cf/`) or the
+// `WORKERS_AI_MODEL` env var if you want a different model (e.g.
+// `@cf/meta/llama-3.3-70b-instruct-fp8-fast` on a paid tier).
+const DEFAULT_WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 
 // The token the model is instructed to emit when it can't answer the
 // customer's question confidently. Picked to be unique enough that it
@@ -31,10 +44,11 @@ const NEEDS_HUMAN_TOKEN = "<<<NEEDS_HUMAN>>>";
 // over ~120 words and customers stop reading.
 const MAX_REPLY_CHARS = 800;
 
-// Hard upper bound on how long we wait for Groq before giving up and
+// Hard upper bound on how long we wait for the LLM before giving up and
 // leaving the message for the admin to handle. Groq's typical p50 for
-// 70B is ~600ms; 6s covers a very generous p99.
-const GROQ_TIMEOUT_MS = 6000;
+// 70B is ~600ms and Workers AI's 8B is similar; 6s covers a very
+// generous p99 for either path.
+const AI_TIMEOUT_MS = 6000;
 
 // Skip auto-reply if the admin sent something within this window. The
 // human is clearly handling this thread; piling an AI message on top
@@ -281,7 +295,7 @@ const callGroq = async ({
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: model || DEFAULT_MODEL,
+      model: model || DEFAULT_GROQ_MODEL,
       temperature: 0.3,
       max_tokens: 400,
       messages: [{ role: "system", content: systemPrompt }, ...conversation],
@@ -303,6 +317,55 @@ const callGroq = async ({
     throw new Error("Groq response missing message content");
   }
   return content;
+};
+
+// Cloudflare Workers AI does not accept an AbortSignal directly, so we
+// race the inference promise against the signal's abort event to keep
+// the same outer-bound behaviour as `callGroq`. The signal is always
+// the one set up in `generateAutoReply` against `AI_TIMEOUT_MS`, so
+// worst-case latency is identical across both providers.
+const callWorkersAI = async ({
+  env,
+  model,
+  systemPrompt,
+  conversation,
+  signal,
+}) => {
+  const messages = [{ role: "system", content: systemPrompt }, ...conversation];
+  const inference = env.AI.run(model || DEFAULT_WORKERS_AI_MODEL, {
+    messages,
+    temperature: 0.3,
+    max_tokens: 400,
+  });
+  const result = signal
+    ? await Promise.race([
+        inference,
+        new Promise((_, reject) => {
+          const onAbort = () =>
+            reject(
+              new Error(`Workers AI call aborted after ${AI_TIMEOUT_MS}ms`),
+            );
+          if (signal.aborted) {
+            onAbort();
+          } else {
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
+        }),
+      ])
+    : await inference;
+  // Workers AI text-generation models return `{ response: "..." }` for
+  // the legacy text shape and `{ choices: [{ message: { content }}]}`
+  // for the OpenAI-compatible shape. Honour both.
+  const text =
+    typeof result?.response === "string"
+      ? result.response
+      : typeof result?.choices?.[0]?.message?.content === "string"
+        ? result.choices[0].message.content
+        : null;
+  if (typeof text !== "string") {
+    throw new Error("Workers AI response missing content");
+  }
+  return text;
 };
 
 const cleanReply = (raw) => {
@@ -384,24 +447,26 @@ export const generateAutoReply = async ({
     };
   }
 
-  // Groq path: skip silently if no key configured. We don't want to
-  // log noisy errors when the gallery owner just hasn't set up Groq
-  // yet — `chat.ai.enabled=true` plus missing key is a valid "I want
-  // AI but haven't wired the key" state.
-  // We accept either `GROQ_API_KEY` (the original Groq-recommended
-  // name) or `GROQ_TOKEN` (the name canvhub's Cloudflare Pages env is
-  // configured with) so admins can pick whichever convention they
-  // already use without redeploying.
-  const rawKey = env?.GROQ_API_KEY || env?.GROQ_TOKEN;
-  const apiKey = typeof rawKey === "string" ? rawKey.trim() : "";
-  if (!apiKey) {
-    return { kind: "skip", reason: "no-groq-key" };
-  }
+  // Pick a provider, in priority order:
+  //   1. Cloudflare Workers AI (`env.AI` binding present) — preferred,
+  //      same-cloud, no external key, free up to 10k Neurons/day.
+  //   2. Groq (`env.GROQ_API_KEY` or `env.GROQ_TOKEN` set) — fallback for
+  //      projects that already have a Groq key wired up.
+  //   3. Neither — skip silently. `chat.ai.enabled=true` plus no provider
+  //      is a valid "I want AI but haven't finished wiring it" state and
+  //      we don't want to log noisy errors at every customer message.
+  const workersAiAvailable = Boolean(env?.AI);
+  const rawGroqKey = env?.GROQ_API_KEY || env?.GROQ_TOKEN;
+  const groqKey = typeof rawGroqKey === "string" ? rawGroqKey.trim() : "";
 
-  const model =
-    (typeof env?.GROQ_MODEL === "string" && env.GROQ_MODEL) ||
-    (typeof chatConfig?.ai?.model === "string" && chatConfig.ai.model) ||
-    DEFAULT_MODEL;
+  let provider;
+  if (workersAiAvailable) {
+    provider = "workers-ai";
+  } else if (groqKey) {
+    provider = "groq";
+  } else {
+    return { kind: "skip", reason: "no-ai-provider" };
+  }
 
   const systemPrompt = buildSystemPrompt({
     chatConfig,
@@ -410,24 +475,44 @@ export const generateAutoReply = async ({
   });
   const conversation = buildConversation(thread);
 
-  // Defensive timeout — if Groq is slow, abandon the auto-reply and
-  // let the admin pick up. The customer's poll will see no AI reply
+  // Defensive timeout — if the provider is slow, abandon the auto-reply
+  // and let the admin pick up. The customer's poll will see no AI reply
   // arrive, which is the same as if AI were off.
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), GROQ_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
 
   let raw;
   try {
-    raw = await callGroq({
-      apiKey,
-      model,
-      systemPrompt,
-      conversation,
-      signal: ctrl.signal,
-    });
+    if (provider === "workers-ai") {
+      const model =
+        (typeof env?.WORKERS_AI_MODEL === "string" && env.WORKERS_AI_MODEL) ||
+        (typeof chatConfig?.ai?.model === "string" &&
+          chatConfig.ai.model.startsWith("@cf/") &&
+          chatConfig.ai.model) ||
+        DEFAULT_WORKERS_AI_MODEL;
+      raw = await callWorkersAI({
+        env,
+        model,
+        systemPrompt,
+        conversation,
+        signal: ctrl.signal,
+      });
+    } else {
+      const model =
+        (typeof env?.GROQ_MODEL === "string" && env.GROQ_MODEL) ||
+        (typeof chatConfig?.ai?.model === "string" && chatConfig.ai.model) ||
+        DEFAULT_GROQ_MODEL;
+      raw = await callGroq({
+        apiKey: groqKey,
+        model,
+        systemPrompt,
+        conversation,
+        signal: ctrl.signal,
+      });
+    }
   } catch (err) {
-    if (truthy(err)) logError("chat AI groq call failed:", err);
-    return { kind: "skip", reason: "groq-error" };
+    if (truthy(err)) logError(`chat AI ${provider} call failed:`, err);
+    return { kind: "skip", reason: `${provider}-error` };
   } finally {
     clearTimeout(timer);
   }
@@ -440,7 +525,7 @@ export const generateAutoReply = async ({
   const body = cleanReply(raw);
   if (!body) return { kind: "handoff", reason: "ai-empty" };
 
-  return { kind: "reply", body, source: "groq" };
+  return { kind: "reply", body, source: provider };
 };
 
 // Exported for unit tests.

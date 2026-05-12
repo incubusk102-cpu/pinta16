@@ -250,7 +250,7 @@ describe("generateAutoReply", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("skips when AI is enabled but no Groq key is configured", async () => {
+  it("skips when AI is enabled but no provider is configured", async () => {
     const thread = baseThread([{ from: "customer", body: "random question" }]);
     const out = await generateAutoReply({
       env: {},
@@ -260,8 +260,88 @@ describe("generateAutoReply", () => {
       products: [],
     });
     expect(out.kind).toBe("skip");
-    expect(out.reason).toBe("no-groq-key");
+    expect(out.reason).toBe("no-ai-provider");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("prefers Workers AI when env.AI binding is present", async () => {
+    const aiRun = vi.fn().mockResolvedValue({
+      response: "Yes, every painting is hand-signed.",
+    });
+    const thread = baseThread([
+      { from: "customer", body: "are your paintings hand-signed?" },
+    ]);
+    const out = await generateAutoReply({
+      env: { AI: { run: aiRun }, GROQ_API_KEY: "should-be-ignored" },
+      thread,
+      customerMessage: "are your paintings hand-signed?",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    expect(out.kind).toBe("reply");
+    expect(out.source).toBe("workers-ai");
+    expect(out.body).toContain("hand-signed");
+    expect(aiRun).toHaveBeenCalledTimes(1);
+    // Groq HTTP path must not be touched when Workers AI handles the call.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("honours the OpenAI-compatible shape from Workers AI", async () => {
+    // Some Workers AI models return the OAI-style choices envelope rather
+    // than the legacy `{ response }` shape. Both should be parsed.
+    const aiRun = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: "Hi there!" } }],
+    });
+    const thread = baseThread([{ from: "customer", body: "hello there" }]);
+    const out = await generateAutoReply({
+      env: { AI: { run: aiRun } },
+      thread,
+      customerMessage: "hello there",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    expect(out.kind).toBe("reply");
+    expect(out.source).toBe("workers-ai");
+    expect(out.body).toBe("Hi there!");
+  });
+
+  it("falls back to Groq when env.AI is missing but a Groq key is set", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      async json() {
+        return { choices: [{ message: { content: "Falling back to Groq." } }] };
+      },
+    });
+    const thread = baseThread([
+      { from: "customer", body: "are your paintings hand-signed?" },
+    ]);
+    const out = await generateAutoReply({
+      env: { GROQ_API_KEY: "test-key" },
+      thread,
+      customerMessage: "are your paintings hand-signed?",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    expect(out.kind).toBe("reply");
+    expect(out.source).toBe("groq");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("silently skips when the Workers AI call throws", async () => {
+    const aiRun = vi.fn().mockRejectedValue(new Error("binding offline"));
+    const thread = baseThread([
+      { from: "customer", body: "random non-FAQ question" },
+    ]);
+    const out = await generateAutoReply({
+      env: { AI: { run: aiRun } },
+      thread,
+      customerMessage: "random non-FAQ question",
+      chatConfig: baseConfig,
+      products: [],
+    });
+    expect(out.kind).toBe("skip");
+    expect(out.reason).toBe("workers-ai-error");
   });
 
   it("accepts GROQ_TOKEN as a fallback for GROQ_API_KEY", async () => {
@@ -405,6 +485,8 @@ describe("generateAutoReply", () => {
       products: [],
     });
     expect(out.kind).toBe("skip");
+    // Groq path — the skip reason carries the provider that failed so
+    // operators can read the diagnostic log without ambiguity.
     expect(out.reason).toBe("groq-error");
   });
 });
