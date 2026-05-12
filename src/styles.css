@@ -275,6 +275,75 @@
     }
   }
 
+  /* Animated gradient mesh for the homepage static hero. Three slow
+     drifting radial blooms in brand-gold + warm bronze, layered with
+     `background-blend-mode: screen` so the hues mix instead of
+     stacking opaquely. Paused under `prefers-reduced-motion`. */
+  .home-hero-mesh {
+    background:
+      radial-gradient(
+        40% 50% at 18% 22%,
+        color-mix(in oklab, var(--logo-color) 28%, transparent) 0%,
+        transparent 70%
+      ),
+      radial-gradient(
+        45% 55% at 82% 78%,
+        color-mix(in oklab, var(--logo-color) 22%, transparent) 0%,
+        transparent 75%
+      ),
+      radial-gradient(
+        38% 50% at 50% 50%,
+        color-mix(in oklab, var(--foreground) 10%, transparent) 0%,
+        transparent 70%
+      );
+    background-size:
+      180% 180%,
+      180% 180%,
+      180% 180%;
+    background-blend-mode: screen;
+    animation: hero-mesh-drift 22s ease-in-out infinite alternate;
+    opacity: 0.85;
+  }
+  @keyframes hero-mesh-drift {
+    0% {
+      background-position:
+        0% 0%,
+        100% 100%,
+        50% 50%;
+    }
+    50% {
+      background-position:
+        20% 30%,
+        70% 60%,
+        65% 40%;
+    }
+    100% {
+      background-position:
+        40% 60%,
+        50% 30%,
+        50% 60%;
+    }
+  }
+
+  /* Futuristic CTA: brand-gold ring + soft halo that lights up on
+     hover/focus. Stacks cleanly on top of any existing button
+     styles — we only set ring + box-shadow, so the underlying
+     bg / text colour is untouched. */
+  .hover-glow-cta {
+    position: relative;
+    transition:
+      box-shadow 280ms var(--transition-smooth),
+      transform 280ms var(--transition-spring);
+  }
+  .hover-glow-cta:hover,
+  .hover-glow-cta:focus-visible {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--logo-color) 80%, transparent),
+      0 12px 32px -8px color-mix(in oklab, var(--logo-color) 55%, transparent),
+      0 0 24px color-mix(in oklab, var(--logo-color) 30%, transparent);
+  }
+
   /* Focus ring: replaces the default browser outline with a soft halo that
      respects the theme. Applied via :focus-visible so mouse clicks don't
      show it but keyboard nav does. */
@@ -307,8 +376,16 @@
   /* Reduced motion: kill the gradient drift + tilt, since framer-motion's
      `motion-reduce` selector already handles its in-component animations. */
   @media (prefers-reduced-motion: reduce) {
-    .text-gradient-elegant {
+    .text-gradient-elegant,
+    .home-hero-mesh {
       animation: none;
+    }
+    .hover-glow-cta {
+      transition: none;
+    }
+    .hover-glow-cta:hover,
+    .hover-glow-cta:focus-visible {
+      transform: none;
     }
   }
 
