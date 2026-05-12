@@ -120,6 +120,21 @@
   Service-Worker-Allowed: /
   Content-Type: application/javascript; charset=utf-8
 
+# Static boot diagnostics shipped from /public. Loaded by index.html
+# before the SPA module so it can catch boot errors / silent stalls
+# and paint a visible "couldn't load" panel instead of a blank dark
+# page. Must never serve a stale copy: Cloudflare's default
+# `Cache-Control: public, max-age=14400, must-revalidate` will lock
+# an outdated build of this file on visitors' phones for up to 4 h,
+# which means a diagnostics fix we ship today doesn't actually help
+# anyone hitting the issue today. `max-age=0, must-revalidate` keeps
+# the file on the browser's HTTP cache but forces a conditional
+# fetch on every navigation — the file is tiny (a few KB) so the
+# revalidation cost is negligible.
+/boot-diagnostics.js
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Type: application/javascript; charset=utf-8
+
 /manifest.webmanifest
   Cache-Control: public, max-age=3600
   Content-Type: application/manifest+json; charset=utf-8
