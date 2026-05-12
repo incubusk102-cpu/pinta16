@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   Bell,
@@ -19,6 +20,22 @@ import { useRouterState } from "@tanstack/react-router";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import type { ChatFaqItem } from "@/lib/chat-faqs";
 import { formatRelativeTime, linkifyMessage } from "@/lib/chat-format";
+
+// Match the easing + duration used elsewhere on the storefront
+// (IdleNudgeToast, HeroSlider, SectionReveal) so the chat panel
+// feels like part of the same design system, not a bolted-on widget.
+// The cubic-bezier below is a standard "ease-out-quint"-ish curve:
+// fast start, slow settle. 0.32s is long enough to read as an
+// intentional slide-in but short enough not to feel sluggish.
+const CHAT_TRANSITION = { duration: 0.32, ease: [0.16, 1, 0.3, 1] } as const;
+// Tighter curve for in-conversation micro-animations (message
+// arrival, typing dot enter/exit, view crossfade). These fire much
+// more frequently than the panel open/close, so a shorter duration
+// keeps the UI feeling responsive rather than draggy.
+const CHAT_MICRO_TRANSITION = {
+  duration: 0.18,
+  ease: [0.16, 1, 0.3, 1],
+} as const;
 
 interface ChatMessage {
   at: string;
@@ -137,6 +154,11 @@ export default function ChatWidget() {
   const isAdminRoute = pathname.startsWith("/admin");
   const { config } = useStorefrontConfig();
   const chatConfig = config.chat;
+  // Honour the OS / browser "reduce motion" setting. When set, we
+  // skip the slide / scale entrance animations and only fade —
+  // identical pattern to IdleNudgeToast and the rest of the
+  // storefront's motion code.
+  const reduceMotion = useReducedMotion();
 
   const [open, setOpen] = useState(false);
   const [handle, setHandle] = useState<PersistedHandle | null>(() =>
@@ -642,283 +664,432 @@ export default function ChatWidget() {
     </div>
   );
 
+  // Motion variants for the panel ↔ launcher swap. The panel slides
+  // up from below (24px on desktop, 32px on mobile so the bottom-sheet
+  // gesture reads correctly) with a small scale-in; the launcher
+  // mirrors the same axis with a tighter pop. AnimatePresence with
+  // mode="wait" ensures the launcher fully exits before the panel
+  // enters (and vice versa) since they occupy the same corner.
+  const panelMotion = reduceMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 24, scale: 0.96 },
+        animate: { opacity: 1, y: 0, scale: 1 },
+        exit: { opacity: 0, y: 16, scale: 0.98 },
+      };
+  const launcherMotion = reduceMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 12, scale: 0.9 },
+        animate: { opacity: 1, y: 0, scale: 1 },
+        exit: { opacity: 0, y: 4, scale: 0.9 },
+      };
+
   return (
     <div className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:inset-x-auto sm:bottom-4 sm:right-4 z-50 print:hidden flex sm:block justify-end">
-      {open ? (
-        // Mobile: pin to the bottom and fill the viewport width minus a
-        // small gutter so the chat panel never overflows narrow phones
-        // (was hard-coded 340px which clipped on 320px viewports). Tab
-        // and up gets the original fixed-width card.
-        // Height caps at 75svh on mobile so it never covers more than ~3/4
-        // of the screen — leaves room for the URL bar / nav. svh respects
-        // dynamic viewport on iOS Safari.
-        <div className="w-full sm:w-[380px] max-w-[420px] h-[min(520px,75svh)] bg-card border border-border/60 rounded-xl shadow-2xl flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/60">
-            <div>
-              <p className="text-sm font-medium">Chat with us</p>
-              <p className="text-[10px] text-muted-foreground">
-                {handle
-                  ? "We usually reply within a few hours."
-                  : showAgentHandoff
-                    ? "Pick a topic or talk to a live agent."
-                    : "Pick a topic below."}
-              </p>
-            </div>
-            <div className="flex items-center gap-1">
-              {handle && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleSound}
-                  aria-label={
-                    soundOn ? "Mute reply sound" : "Unmute reply sound"
-                  }
-                  title={
-                    soundOn
-                      ? "Reply sound is on — click to mute"
-                      : "Reply sound is off — click to enable"
-                  }
-                  className={soundOn ? "" : "text-muted-foreground"}
-                >
-                  {soundOn ? (
-                    <Bell className="h-4 w-4" />
-                  ) : (
-                    <BellOff className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-              {handle && faqs.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setFaqPanelOpen((v) => !v)}
-                  aria-label="Show quick topics"
-                  title="Quick topics"
-                  className={faqPanelOpen ? "bg-accent" : ""}
-                >
-                  <HelpCircle className="h-4 w-4" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setOpen(false)}
-                aria-label="Close chat"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {!handle ? (
-            <>
-              {view === "faq-list" && renderFaqList()}
-              {view === "faq-answer" && renderFaqAnswer()}
-              {view === "agent-form" && renderAgentForm()}
-            </>
-          ) : (
-            <>
-              {faqPanelOpen && faqs.length > 0 && (
-                <div className="border-b border-border/60 bg-muted/20 px-3 py-2 max-h-[180px] overflow-y-auto">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">
-                    Quick topics
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {faqs.map((faq) => (
-                      <button
-                        key={faq.id}
-                        type="button"
-                        onClick={() => {
-                          setDraft(faq.answer);
-                          setFaqPanelOpen(false);
-                        }}
-                        className="text-[11px] px-2 py-1 rounded-full border border-border/60 hover:bg-accent transition"
-                        title="Insert this answer into your reply"
-                      >
-                        {faq.question}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div
-                ref={scrollRef}
-                className="flex-1 overflow-y-auto px-3 py-3 space-y-2"
-              >
-                {messages.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center mt-6">
-                    Loading…
-                  </p>
-                ) : (
-                  messages.map((m, idx) => {
-                    if (m.from === "system") {
-                      return (
-                        <div
-                          key={`${m.at}-${idx}`}
-                          className="flex flex-col items-center my-1"
-                          role="status"
-                        >
-                          <p
-                            className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1"
-                            title={new Date(m.at).toLocaleString()}
-                          >
-                            {m.body}
-                          </p>
-                        </div>
-                      );
-                    }
-                    const isAi = m.from === "ai";
-                    return (
-                      <div
-                        key={`${m.at}-${idx}`}
-                        className={`flex flex-col ${
-                          m.from === "customer" ? "items-end" : "items-start"
-                        }`}
-                      >
-                        <div
-                          className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
-                            m.from === "customer"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-foreground"
-                          }`}
-                        >
-                          {linkifyMessage(m.body)}
-                        </div>
-                        <p
-                          className="text-[10px] text-muted-foreground mt-0.5 px-1"
-                          title={new Date(m.at).toLocaleString()}
-                        >
-                          {isAi ? (
-                            <span className="inline-flex items-center gap-1">
-                              <span className="inline-block rounded-sm bg-foreground/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide">
-                                AI assistant
-                              </span>
-                              <span aria-hidden>·</span>
-                              <span>{formatRelativeTime(m.at, nowTick)}</span>
-                            </span>
-                          ) : (
-                            formatRelativeTime(m.at, nowTick)
-                          )}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-                {showAdminTyping && (
-                  <div
-                    className="flex items-start"
-                    aria-live="polite"
-                    aria-label="Support is typing"
-                  >
-                    <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
-                      <span className="sr-only">Support is typing</span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />
-                    </div>
-                  </div>
-                )}
-                {/* Only show the AI typing indicator when the human admin
-                    isn't already typing — if the admin took over, we want
-                    the customer to see *that* instead. */}
-                {aiTyping && !showAdminTyping && (
-                  <div
-                    className="flex items-start gap-2"
-                    aria-live="polite"
-                    aria-label="Mia is typing"
-                  >
-                    <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
-                      <span className="sr-only">Mia is typing</span>
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mr-1">
-                        Mia
-                      </span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />
-                    </div>
-                  </div>
-                )}
+      <AnimatePresence mode="wait" initial={false}>
+        {open ? (
+          // Mobile: pin to the bottom and fill the viewport width minus a
+          // small gutter so the chat panel never overflows narrow phones
+          // (was hard-coded 340px which clipped on 320px viewports). Tab
+          // and up gets the original fixed-width card.
+          // Height caps at 75svh on mobile so it never covers more than ~3/4
+          // of the screen — leaves room for the URL bar / nav. svh respects
+          // dynamic viewport on iOS Safari.
+          <motion.div
+            key="chat-panel"
+            {...panelMotion}
+            transition={CHAT_TRANSITION}
+            style={{ originX: 1, originY: 1 }}
+            className="w-full sm:w-[380px] max-w-[420px] h-[min(520px,75svh)] bg-card border border-border/60 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+            role="dialog"
+            aria-label="Chat with us"
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/60">
+              <div>
+                <p className="text-sm font-medium">Chat with us</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {handle
+                    ? "We usually reply within a few hours."
+                    : showAgentHandoff
+                      ? "Pick a topic or talk to a live agent."
+                      : "Pick a topic below."}
+                </p>
               </div>
-              {isClosed ? (
-                <div className="border-t border-border/60 px-4 py-3 space-y-2 bg-muted/20">
-                  <p className="text-xs text-muted-foreground text-center">
-                    This conversation has been closed by support.
-                  </p>
+              <div className="flex items-center gap-1">
+                {handle && (
                   <Button
-                    onClick={endConversation}
-                    className="w-full"
-                    variant="default"
-                    size="sm"
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleSound}
+                    aria-label={
+                      soundOn ? "Mute reply sound" : "Unmute reply sound"
+                    }
+                    title={
+                      soundOn
+                        ? "Reply sound is on — click to mute"
+                        : "Reply sound is off — click to enable"
+                    }
+                    className={soundOn ? "" : "text-muted-foreground"}
                   >
-                    Start a new conversation
+                    {soundOn ? (
+                      <Bell className="h-4 w-4" />
+                    ) : (
+                      <BellOff className="h-4 w-4" />
+                    )}
                   </Button>
-                </div>
-              ) : (
-                <div className="border-t border-border/60 px-3 py-2 space-y-1.5">
-                  <div className="flex items-end gap-2">
-                    <Textarea
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (canSend) void sendMessage();
+                )}
+                {handle && faqs.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setFaqPanelOpen((v) => !v)}
+                    aria-label="Show quick topics"
+                    title="Quick topics"
+                    className={faqPanelOpen ? "bg-accent" : ""}
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close chat"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {!handle ? (
+              // View transitions inside the unstarted panel (FAQ list →
+              // FAQ answer → agent handoff form) used to snap instantly.
+              // A short opacity crossfade reads as "navigated" rather
+              // than "flickered", which matters because the user is
+              // already mid-task (picking a topic / requesting an
+              // agent). mode="wait" + a stable key per view guarantees
+              // the outgoing pane finishes before the next mounts, so
+              // we never render two stacked flex children fighting for
+              // the same space.
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={view}
+                  initial={reduceMotion ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                  transition={CHAT_MICRO_TRANSITION}
+                  className="flex-1 flex flex-col min-h-0"
+                >
+                  {view === "faq-list" && renderFaqList()}
+                  {view === "faq-answer" && renderFaqAnswer()}
+                  {view === "agent-form" && renderAgentForm()}
+                </motion.div>
+              </AnimatePresence>
+            ) : (
+              <>
+                {faqPanelOpen && faqs.length > 0 && (
+                  <div className="border-b border-border/60 bg-muted/20 px-3 py-2 max-h-[180px] overflow-y-auto">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Quick topics
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {faqs.map((faq) => (
+                        <button
+                          key={faq.id}
+                          type="button"
+                          onClick={() => {
+                            setDraft(faq.answer);
+                            setFaqPanelOpen(false);
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-full border border-border/60 hover:bg-accent transition"
+                          title="Insert this answer into your reply"
+                        >
+                          {faq.question}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div
+                  ref={scrollRef}
+                  className="flex-1 overflow-y-auto px-3 py-3 space-y-2"
+                >
+                  {messages.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center mt-6">
+                      Loading…
+                    </p>
+                  ) : (
+                    // Each message animates in with a small fade + lift
+                    // on the side it belongs to (customer messages
+                    // slide in from the right edge of the panel, admin/AI
+                    // from the left). AnimatePresence with initial={false}
+                    // prevents replaying the entrance for the entire
+                    // backlog every time the panel opens — only newly
+                    // arrived messages animate. `layout` lets earlier
+                    // bubbles slide up gracefully as the typing
+                    // indicator appears below them.
+                    <AnimatePresence initial={false}>
+                      {messages.map((m, idx) => {
+                        if (m.from === "system") {
+                          return (
+                            <motion.div
+                              key={`${m.at}-${idx}`}
+                              layout={!reduceMotion}
+                              initial={
+                                reduceMotion ? false : { opacity: 0, y: 4 }
+                              }
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={reduceMotion ? undefined : { opacity: 0 }}
+                              transition={CHAT_MICRO_TRANSITION}
+                              className="flex flex-col items-center my-1"
+                              role="status"
+                            >
+                              <p
+                                className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1"
+                                title={new Date(m.at).toLocaleString()}
+                              >
+                                {m.body}
+                              </p>
+                            </motion.div>
+                          );
                         }
-                      }}
-                      placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
-                      className="resize-none min-h-[40px] max-h-[120px] text-sm"
-                      maxLength={MSG_MAX}
-                    />
+                        const isAi = m.from === "ai";
+                        const isCustomer = m.from === "customer";
+                        // Direction: customer bubbles enter from the
+                        // right (their side of the conversation), admin
+                        // / AI bubbles enter from the left. This
+                        // mirrors the side they're already aligned to
+                        // so the motion reinforces authorship.
+                        const enterX = reduceMotion ? 0 : isCustomer ? 8 : -8;
+                        return (
+                          <motion.div
+                            key={`${m.at}-${idx}`}
+                            layout={!reduceMotion}
+                            initial={
+                              reduceMotion
+                                ? false
+                                : { opacity: 0, y: 6, x: enterX, scale: 0.98 }
+                            }
+                            animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+                            exit={reduceMotion ? undefined : { opacity: 0 }}
+                            transition={CHAT_MICRO_TRANSITION}
+                            className={`flex flex-col ${
+                              isCustomer ? "items-end" : "items-start"
+                            }`}
+                          >
+                            <div
+                              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                                isCustomer
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-foreground"
+                              }`}
+                            >
+                              {linkifyMessage(m.body)}
+                            </div>
+                            <p
+                              className="text-[10px] text-muted-foreground mt-0.5 px-1"
+                              title={new Date(m.at).toLocaleString()}
+                            >
+                              {isAi ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="inline-block rounded-sm bg-foreground/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide">
+                                    AI assistant
+                                  </span>
+                                  <span aria-hidden>·</span>
+                                  <span>
+                                    {formatRelativeTime(m.at, nowTick)}
+                                  </span>
+                                </span>
+                              ) : (
+                                formatRelativeTime(m.at, nowTick)
+                              )}
+                            </p>
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                  )}
+                  <AnimatePresence initial={false}>
+                    {showAdminTyping && (
+                      <motion.div
+                        key="admin-typing"
+                        layout={!reduceMotion}
+                        initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduceMotion ? undefined : { opacity: 0 }}
+                        transition={CHAT_MICRO_TRANSITION}
+                        className="flex items-start"
+                        aria-live="polite"
+                        aria-label="Support is typing"
+                      >
+                        <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
+                          <span className="sr-only">Support is typing</span>
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />
+                        </div>
+                      </motion.div>
+                    )}
+                    {/* Only show the AI typing indicator when the human admin
+                      isn't already typing — if the admin took over, we want
+                      the customer to see *that* instead. */}
+                    {aiTyping && !showAdminTyping && (
+                      <motion.div
+                        key="ai-typing"
+                        layout={!reduceMotion}
+                        initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduceMotion ? undefined : { opacity: 0 }}
+                        transition={CHAT_MICRO_TRANSITION}
+                        className="flex items-start gap-2"
+                        aria-live="polite"
+                        aria-label="Mia is typing"
+                      >
+                        <div className="bg-muted text-foreground rounded-2xl px-3 py-2 flex items-center gap-1">
+                          <span className="sr-only">Mia is typing</span>
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mr-1">
+                            Mia
+                          </span>
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.2s]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.1s]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 animate-bounce" />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                {isClosed ? (
+                  <div className="border-t border-border/60 px-4 py-3 space-y-2 bg-muted/20">
+                    <p className="text-xs text-muted-foreground text-center">
+                      This conversation has been closed by support.
+                    </p>
                     <Button
-                      size="icon"
-                      onClick={() => void sendMessage()}
-                      disabled={!canSend}
-                      aria-label="Send"
+                      onClick={endConversation}
+                      className="w-full"
+                      variant="default"
+                      size="sm"
                     >
-                      <Send className="h-4 w-4" />
+                      Start a new conversation
                     </Button>
                   </div>
-                  <div className="flex items-center justify-between px-1">
-                    <button
-                      type="button"
-                      onClick={endConversation}
-                      className="text-[10px] text-muted-foreground hover:text-destructive hover:underline"
-                      title="End this conversation and start a fresh one"
-                    >
-                      End conversation
-                    </button>
-                    {draft.length > MSG_MAX - 200 && (
-                      <span
-                        className={`text-[10px] tabular-nums ${
-                          draft.length >= MSG_MAX
-                            ? "text-destructive"
-                            : "text-muted-foreground"
-                        }`}
+                ) : (
+                  <div className="border-t border-border/60 px-3 py-2 space-y-1.5">
+                    <div className="flex items-end gap-2">
+                      <Textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            if (canSend) void sendMessage();
+                          }
+                        }}
+                        placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+                        className="resize-none min-h-[40px] max-h-[120px] text-sm"
+                        maxLength={MSG_MAX}
+                      />
+                      <Button
+                        size="icon"
+                        onClick={() => void sendMessage()}
+                        disabled={!canSend}
+                        aria-label="Send"
                       >
-                        {draft.length} / {MSG_MAX}
-                      </span>
-                    )}
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between px-1">
+                      <button
+                        type="button"
+                        onClick={endConversation}
+                        className="text-[10px] text-muted-foreground hover:text-destructive hover:underline"
+                        title="End this conversation and start a fresh one"
+                      >
+                        End conversation
+                      </button>
+                      {draft.length > MSG_MAX - 200 && (
+                        <span
+                          className={`text-[10px] tabular-nums ${
+                            draft.length >= MSG_MAX
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {draft.length} / {MSG_MAX}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
+              </>
+            )}
+          </motion.div>
+        ) : (
+          // Launcher button. whileHover / whileTap give the visitor
+          // tactile feedback on hover and press; the absence of
+          // either on touch devices is fine because tap collapses
+          // straight into the open transition. When there's an
+          // unread reply, the button gains a soft attention pulse
+          // (an absolute-positioned ring that scales up + fades out
+          // on loop) so it actually catches the eye — the old
+          // `transition` class only animated background color which
+          // was easy to miss on a small launcher.
+          <motion.button
+            key="chat-launcher"
+            type="button"
+            onClick={() => setOpen(true)}
+            {...launcherMotion}
+            transition={CHAT_TRANSITION}
+            whileHover={reduceMotion ? undefined : { scale: 1.05 }}
+            whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+            className="relative h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label={
+              unreadCount > 0
+                ? `Open chat (${unreadCount} new ${
+                    unreadCount === 1 ? "message" : "messages"
+                  })`
+                : "Open chat"
+            }
+          >
+            <MessageSquare className="h-5 w-5" aria-hidden="true" />
+            {unreadCount > 0 && !reduceMotion && (
+              <motion.span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 rounded-full bg-primary/50"
+                initial={{ opacity: 0.6, scale: 1 }}
+                animate={{ opacity: 0, scale: 1.6 }}
+                transition={{
+                  duration: 1.6,
+                  repeat: Infinity,
+                  ease: "easeOut",
+                }}
+              />
+            )}
+            <AnimatePresence>
+              {unreadCount > 0 && (
+                <motion.span
+                  key="unread-badge"
+                  initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={reduceMotion ? undefined : { scale: 0.6, opacity: 0 }}
+                  transition={CHAT_MICRO_TRANSITION}
+                  className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center"
+                >
+                  {unreadCount}
+                </motion.span>
               )}
-            </>
-          )}
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="relative h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition"
-          aria-label="Open chat"
-        >
-          <MessageSquare className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
-              {unreadCount}
-            </span>
-          )}
-        </button>
-      )}
+            </AnimatePresence>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
