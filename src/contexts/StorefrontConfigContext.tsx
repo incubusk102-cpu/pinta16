@@ -95,11 +95,17 @@ export interface SiteCopyAbout {
   body: string;
 }
 
+export interface SiteCopyMadeToOrder {
+  heading: string;
+  body: string;
+}
+
 export interface SiteCopy {
   gallery: SiteCopySectionTwo;
   about: SiteCopyAbout;
   reviews: SiteCopySectionTwo;
   contact: SiteCopySectionTwo;
+  madeToOrderNotice: SiteCopyMadeToOrder;
 }
 
 export const DEFAULT_SITE_COPY: SiteCopy = {
@@ -119,6 +125,10 @@ export const DEFAULT_SITE_COPY: SiteCopy = {
   contact: {
     eyebrow: "Get in touch",
     title: "Contact us",
+  },
+  madeToOrderNotice: {
+    heading: "Made to order",
+    body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
   },
 };
 
@@ -505,12 +515,17 @@ const mergeSiteCopy = (raw: unknown): SiteCopy => {
     about: Partial<SiteCopyAbout>;
     reviews: Partial<SiteCopySectionTwo>;
     contact: Partial<SiteCopySectionTwo>;
+    madeToOrderNotice: Partial<SiteCopyMadeToOrder>;
   }>;
   return {
     gallery: { ...DEFAULT_SITE_COPY.gallery, ...(data.gallery ?? {}) },
     about: { ...DEFAULT_SITE_COPY.about, ...(data.about ?? {}) },
     reviews: { ...DEFAULT_SITE_COPY.reviews, ...(data.reviews ?? {}) },
     contact: { ...DEFAULT_SITE_COPY.contact, ...(data.contact ?? {}) },
+    madeToOrderNotice: {
+      ...DEFAULT_SITE_COPY.madeToOrderNotice,
+      ...(data.madeToOrderNotice ?? {}),
+    },
   };
 };
 

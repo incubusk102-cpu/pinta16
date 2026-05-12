@@ -39,6 +39,7 @@ import {
   useProducts,
 } from "@/contexts/ProductContext";
 import { useCart } from "@/contexts/CartContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import {
   AVAILABILITY_LABEL,
@@ -114,6 +115,8 @@ function ProductPage() {
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const { addToCart } = useCart();
+  const { config } = useStorefrontConfig();
+  const madeToOrderNotice = config.siteCopy.madeToOrderNotice;
   const wishlist = useWishlist();
   const inWishlist = wishlist.has(id);
 
@@ -720,12 +723,10 @@ function ProductPage() {
             {artwork.availability === "made-to-order" && (
               <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
                 <p className="font-body text-[10px] tracking-[0.3em] uppercase text-blue-700 dark:text-blue-300 mb-1">
-                  Made to order
+                  {madeToOrderNotice.heading}
                 </p>
-                <p className="font-body text-xs md:text-sm text-muted-foreground">
-                  This piece is painted to order. Place your order today and the
-                  artist will start once payment is confirmed — typical
-                  turnaround is 2–4 weeks before it ships.
+                <p className="font-body text-xs md:text-sm text-muted-foreground whitespace-pre-line">
+                  {madeToOrderNotice.body}
                 </p>
               </div>
             )}
