@@ -262,6 +262,13 @@ const SITE_COPY_DEFAULTS = {
     heading: "Made to order",
     body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
   },
+  productInfo: {
+    shippingLabel: "Shipping",
+    shippingBody:
+      "Lalamove courier within Luzon — live tracking, fare paid to the rider on delivery.",
+    careLabel: "Care",
+    careBody: "Keep out of direct sunlight and humid spaces for longevity.",
+  },
 };
 
 const SITE_COPY_FIELD_MAX = 280;
@@ -889,6 +896,26 @@ const sanitizeSiteCopy = (raw) => {
       body: sanitizeSiteCopyField(
         data.madeToOrderNotice?.body,
         SITE_COPY_DEFAULTS.madeToOrderNotice.body,
+        SITE_COPY_BODY_MAX,
+      ),
+    },
+    productInfo: {
+      shippingLabel: sanitizeSiteCopyField(
+        data.productInfo?.shippingLabel,
+        SITE_COPY_DEFAULTS.productInfo.shippingLabel,
+      ),
+      shippingBody: sanitizeSiteCopyField(
+        data.productInfo?.shippingBody,
+        SITE_COPY_DEFAULTS.productInfo.shippingBody,
+        SITE_COPY_BODY_MAX,
+      ),
+      careLabel: sanitizeSiteCopyField(
+        data.productInfo?.careLabel,
+        SITE_COPY_DEFAULTS.productInfo.careLabel,
+      ),
+      careBody: sanitizeSiteCopyField(
+        data.productInfo?.careBody,
+        SITE_COPY_DEFAULTS.productInfo.careBody,
         SITE_COPY_BODY_MAX,
       ),
     },
@@ -2068,6 +2095,10 @@ const handle = async ({ request, env }) => {
             madeToOrderNotice: {
               ...(existing.siteCopy.madeToOrderNotice ?? {}),
               ...(incoming.madeToOrderNotice ?? {}),
+            },
+            productInfo: {
+              ...(existing.siteCopy.productInfo ?? {}),
+              ...(incoming.productInfo ?? {}),
             },
           },
         });

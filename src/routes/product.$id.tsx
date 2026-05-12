@@ -117,6 +117,7 @@ function ProductPage() {
   const { addToCart } = useCart();
   const { config } = useStorefrontConfig();
   const madeToOrderNotice = config.siteCopy.madeToOrderNotice;
+  const productInfoCopy = config.siteCopy.productInfo;
   const wishlist = useWishlist();
   const inWishlist = wishlist.has(id);
 
@@ -825,18 +826,17 @@ function ProductPage() {
             </div>
 
             <div className="border-t border-border/40 pt-6 space-y-2 font-body text-xs text-muted-foreground tracking-[0.05em]">
-              <p>
+              <p className="whitespace-pre-line">
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  Shipping
+                  {productInfoCopy.shippingLabel}
                 </span>
-                Lalamove courier within Luzon — live tracking, fare paid to the
-                rider on delivery.
+                {productInfoCopy.shippingBody}
               </p>
-              <p>
+              <p className="whitespace-pre-line">
                 <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  Care
+                  {productInfoCopy.careLabel}
                 </span>
-                Keep out of direct sunlight and humid spaces for longevity.
+                {productInfoCopy.careBody}
               </p>
             </div>
           </section>
