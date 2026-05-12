@@ -355,7 +355,7 @@ export const onRequest = async ({ request, env, next }) => {
   const response = await next();
   if (!isHtmlResponse(response)) return response;
 
-  const origin = `${url.protocol === "http:" ? "http" : "https"}//${url.host}`;
+  const origin = url.origin;
   const canonical = `${origin}${url.pathname}`;
 
   // Per-product enrichment is the only path that needs a KV read.
