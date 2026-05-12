@@ -41,6 +41,7 @@ import {
 import { useCart } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useWishlist } from "@/contexts/WishlistContext";
+import { useFlyToCart } from "@/contexts/FlyToCartContext";
 import {
   AVAILABILITY_LABEL,
   findArtworkById,
@@ -115,6 +116,7 @@ function ProductPage() {
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const { addToCart } = useCart();
+  const flyToCart = useFlyToCart();
   const { config } = useStorefrontConfig();
   const madeToOrderNotice = config.siteCopy.madeToOrderNotice;
   const productInfoCopy = config.siteCopy.productInfo;
@@ -431,6 +433,14 @@ function ProductPage() {
 
   const handleAdd = () => {
     if (!purchasable) return;
+    // Project a thumbnail of the artwork from the add-to-cart button
+    // (the surface the visitor just engaged with) into the nav cart
+    // icon. The flight is purely chrome — the cart state update
+    // below always lands.
+    const sourceRect = addToCartButtonRef.current?.getBoundingClientRect();
+    if (sourceRect) {
+      flyToCart.trigger({ imageUrl: artwork.image, fromRect: sourceRect });
+    }
     addToCart({
       id: artwork.id,
       image: artwork.image,

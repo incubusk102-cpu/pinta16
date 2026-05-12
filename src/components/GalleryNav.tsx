@@ -15,12 +15,15 @@ import {
   ChevronRight,
   ChevronDown,
   Truck,
+  GitCompare,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCart, type CompletedOrder } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useWishlist } from "@/contexts/WishlistContext";
+import { useCompare } from "@/contexts/CompareContext";
+import { useFlyToCart } from "@/contexts/FlyToCartContext";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
 import ProfileEditor from "@/components/account/ProfileEditor";
@@ -55,10 +58,23 @@ const GalleryNav = () => {
     [],
   );
   const { itemCount, openCart, orders, viewOrder } = useCart();
+  const { user, logout } = useUserAuth();
+  const { items: wishlistItems } = useWishlist();
+  const compare = useCompare();
+  const flyToCart = useFlyToCart();
+  const { t } = useLocale();
   // Pulse the cart badge briefly when an item lands in the cart so the
   // visitor gets a small visual confirmation in the corner of the nav.
   const [cartPulse, setCartPulse] = useState(false);
   const lastItemCountRef = useRef(itemCount);
+  const cartButtonRef = useRef<HTMLButtonElement | null>(null);
+  // Register the cart icon as the destination for the fly-to-cart
+  // animation as soon as the nav mounts. The provider holds the ref
+  // and reads `.getBoundingClientRect()` on each flight, so we don't
+  // need to re-register on scroll / route changes.
+  useEffect(() => {
+    flyToCart.registerCartTarget(cartButtonRef);
+  }, [flyToCart]);
   useEffect(() => {
     if (itemCount > lastItemCountRef.current) {
       setCartPulse(true);
@@ -68,9 +84,6 @@ const GalleryNav = () => {
     }
     lastItemCountRef.current = itemCount;
   }, [itemCount]);
-  const { user, logout } = useUserAuth();
-  const { items: wishlistItems } = useWishlist();
-  const { t } = useLocale();
   const navigate = useNavigate();
   const pathname = useRouterState({
     select: (s) => s.location.pathname,
@@ -234,7 +247,24 @@ const GalleryNav = () => {
           {!onIndex && (
             <>
               <ThemeLocaleToggle />
+              {compare.count > 0 && (
+                <button
+                  type="button"
+                  onClick={() => compare.open()}
+                  className="relative p-2"
+                  aria-label={`Open compare (${compare.count})`}
+                >
+                  <GitCompare className="w-5 h-5 text-foreground" />
+                  <span
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center"
+                    aria-live="polite"
+                  >
+                    {compare.count}
+                  </span>
+                </button>
+              )}
               <button
+                ref={cartButtonRef}
                 onClick={openCart}
                 className="relative p-2"
                 aria-label={t("nav.cart")}
