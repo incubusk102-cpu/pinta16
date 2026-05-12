@@ -16,6 +16,7 @@ import { useSEO } from "@/hooks/useSEO";
 // here and check out without bouncing back to /.
 const CartDrawer = lazy(() => import("@/components/CartDrawer"));
 const CheckoutForm = lazy(() => import("@/components/CheckoutForm"));
+const InspiredByYouRail = lazy(() => import("@/components/InspiredByYouRail"));
 
 export const Route = createFileRoute("/collection")({
   component: CollectionPage,
@@ -52,6 +53,11 @@ function CollectionPage() {
       <GalleryNav />
       <main className="pt-24 md:pt-28">
         <GallerySection />
+        <Suspense fallback={null}>
+          <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
+            <InspiredByYouRail />
+          </section>
+        </Suspense>
       </main>
       <Suspense fallback={null}>
         <CartDrawer />
