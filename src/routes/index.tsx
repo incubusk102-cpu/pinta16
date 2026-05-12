@@ -12,7 +12,32 @@ import CinematicCollectionCTA from "@/components/CinematicCollectionCTA";
 import HomepageVideoMontage from "@/components/HomepageVideoMontage";
 import Ornament from "@/components/decor/Ornament";
 import SectionDivider from "@/components/SectionDivider";
+import SectionDock from "@/components/SectionDock";
+import IdleNudgeToast from "@/components/IdleNudgeToast";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+
+// Anchor ids consumed by the floating SectionDock. Centralised so the
+// wrapper <section> ids on this page and the dock's `items` list can't
+// drift apart.
+const HOME_SECTION_IDS = {
+  hero: "home-hero",
+  marquee: "home-marquee",
+  daily: "home-daily",
+  cta: "gallery",
+  forYou: "home-for-you",
+  about: "about",
+  reviews: "reviews",
+} as const;
+
+const SECTION_DOCK_ITEMS = [
+  { id: HOME_SECTION_IDS.hero, label: "Hero" },
+  { id: HOME_SECTION_IDS.marquee, label: "Marquee" },
+  { id: HOME_SECTION_IDS.daily, label: "Daily" },
+  { id: HOME_SECTION_IDS.cta, label: "CTA" },
+  { id: HOME_SECTION_IDS.forYou, label: "For you" },
+  { id: HOME_SECTION_IDS.about, label: "About" },
+  { id: HOME_SECTION_IDS.reviews, label: "Reviews" },
+];
 
 // Below-the-fold sections — split out of the main entry chunk via
 // React.lazy so the homepage's first paint downloads less JS. Each
@@ -112,11 +137,19 @@ function Index() {
   return (
     <div className="smooth-scroll">
       {user && <GalleryNav />}
-      {!user && <HeroOrFallback />}
-      <PaintingMarquee />
+      {!user && (
+        <section id={HOME_SECTION_IDS.hero}>
+          <HeroOrFallback />
+        </section>
+      )}
+      <section id={HOME_SECTION_IDS.marquee}>
+        <PaintingMarquee />
+      </section>
       <SectionDivider />
       <VisitorTicker />
-      <DailyFeature />
+      <section id={HOME_SECTION_IDS.daily}>
+        <DailyFeature />
+      </section>
       <SectionDivider />
       {/* Optional studio reel — renders only when admin has set a
           videoUrl in /admin → Storefront → Studio reel; otherwise the
@@ -125,7 +158,10 @@ function Index() {
       <HomepageVideoMontage />
       <CinematicCollectionCTA />
       <Suspense fallback={null}>
-        <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
+        <section
+          id={HOME_SECTION_IDS.forYou}
+          className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto"
+        >
           <RecommendedRow />
           <RecentlyViewed />
           <InspiredByYouRail />
@@ -160,6 +196,8 @@ function Index() {
         <CheckoutForm />
         <MobileBackToCollection />
       </Suspense>
+      <SectionDock items={SECTION_DOCK_ITEMS} />
+      <IdleNudgeToast />
     </div>
   );
 }
