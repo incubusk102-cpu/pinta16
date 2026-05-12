@@ -171,13 +171,20 @@
          otherwise paint a totally blank page on devices where the SPA
          can't mount:
            1. an uncaught error / unhandled rejection during boot, OR
-           2. the SPA never replacing #root within 12 s (a silent stall,
+           2. the SPA never replacing #root within 25 s (a silent stall,
               e.g. a syntax-error parse fail on an older Android Chrome).
          Logic lives in /public/boot-diagnostics.js so it can be served
          from the same origin (our CSP forbids inline `<script>`). Loaded
          before the SPA's module script so it can catch errors from the
-         very first failed import. -->
-    <script src="/boot-diagnostics.js"></script>
+         very first failed import.
+         The `?v=` query string is a manual cache-buster. We also send
+         `Cache-Control: max-age=0, must-revalidate` for this URL (see
+         `public/_headers`), but if a visitor already cached an older
+         version under the default 4 h CDN policy bumping `v` is the
+         only way to force their phone to fetch the new one. Bump it
+         whenever the diagnostic script materially changes (new
+         checkpoints, new failure modes, etc.). -->
+    <script src="/boot-diagnostics.js?v=2"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
