@@ -234,7 +234,9 @@ export default function WelcomeEmail({
               color: accent,
             }}
           >
-            {productsCfg?.heading || "A small glimpse"}
+            {productsCfg?.sectionTitle ||
+              productsCfg?.heading ||
+              "A small glimpse"}
           </Text>
           {(() => {
             // Chunk products into pairs so each Row holds 2 columns at
@@ -303,18 +305,20 @@ export default function WelcomeEmail({
                             >
                               {p.title || "Untitled"}
                             </Text>
-                            {typeof p.price === "number" && p.price > 0 && (
-                              <Text
-                                className="email-muted"
-                                style={{
-                                  margin: 0,
-                                  fontSize: "12px",
-                                  color: accent,
-                                }}
-                              >
-                                {formatPHP(p.price)}
-                              </Text>
-                            )}
+                            {productsCfg?.showPrice !== false &&
+                              typeof p.price === "number" &&
+                              p.price > 0 && (
+                                <Text
+                                  className="email-muted"
+                                  style={{
+                                    margin: 0,
+                                    fontSize: "12px",
+                                    color: accent,
+                                  }}
+                                >
+                                  {formatPHP(p.price)}
+                                </Text>
+                              )}
                           </Link>
                         </Column>
                       );
@@ -426,13 +430,16 @@ export const buildWelcomeEmailMeta = (
     if (discount.description) text += `\n${discount.description}`;
   }
   if (config?.products?.enabled !== false && products && products.length > 0) {
-    text += `\n\n${config?.products?.heading || "A small glimpse"}:\n`;
-    products
-      .slice(0, config?.products?.count || 4)
-      .forEach(
-        (p) =>
-          (text += `- ${p.title || "Untitled"}${p.price ? ` (${formatPHP(p.price)})` : ""}\n`),
-      );
+    const productsCfg = config?.products;
+    const sectionTitle =
+      productsCfg?.sectionTitle || productsCfg?.heading || "A small glimpse";
+    text += `\n\n${sectionTitle}:\n`;
+    products.slice(0, productsCfg?.count || 4).forEach((p) => {
+      const showPrice = productsCfg?.showPrice !== false && Boolean(p.price);
+      text += `- ${p.title || "Untitled"}${
+        showPrice ? ` (${formatPHP(p.price as number)})` : ""
+      }\n`;
+    });
   }
   if (signature) {
     text += `\n\n${signature}`;

@@ -132,7 +132,17 @@ export interface WelcomeProductsConfig {
   count?: number;
   manualIds?: string[];
   customItems?: WelcomeProductRow[];
+  /**
+   * Section title shown above the products grid in the welcome email. The
+   * admin form writes this field; older configs that only set `heading`
+   * remain readable through the fallback chain in the React Email
+   * template.
+   */
+  sectionTitle?: string;
+  /** Legacy alias for `sectionTitle`. Preserved for back-compat. */
   heading?: string;
+  /** When false, prices are hidden under each product thumbnail. */
+  showPrice?: boolean;
 }
 
 export interface WelcomeDiscountResolved {
