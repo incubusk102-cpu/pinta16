@@ -197,6 +197,66 @@ describe("chat-ai internals", () => {
     });
   });
 
+  describe("pickGreetingHandoffAck", () => {
+    it("introduces Mia by name", () => {
+      // Whichever variant we land on, Mia must introduce herself —
+      // that's the whole point of the greeting flavour.
+      const rngs = [() => 0, () => 0.25, () => 0.5, () => 0.75];
+      for (const rng of rngs) {
+        const ack = __internals.pickGreetingHandoffAck("Jess", rng);
+        expect(ack).toContain("Mia");
+      }
+    });
+
+    it("includes the customer's first name with a leading space (no comma)", () => {
+      // Greeting variants end with `Hi{name_suffix}` / `Hey{name_suffix}`
+      // / `Kumusta{name_suffix}` — the suffix shape is ` Jess` (leading
+      // space, no comma) so the punctuation reads naturally.
+      const ack = __internals.pickGreetingHandoffAck("Jess", () => 0);
+      expect(ack).toContain(" Jess");
+      expect(ack).not.toContain("{name_suffix}");
+    });
+
+    it("omits the name suffix entirely when no usable name is given", () => {
+      const ack = __internals.pickGreetingHandoffAck("", () => 0);
+      expect(ack).not.toContain("{name_suffix}");
+      // First variant is "Hi{name_suffix}! I'm Mia, …" — with empty
+      // suffix it must read "Hi! I'm Mia, …", NOT "Hi , I'm Mia" or
+      // similar punctuation glitch.
+      expect(ack.startsWith("Hi! I'm Mia,")).toBe(true);
+    });
+
+    it("rotates through all variants", () => {
+      const acks = new Set<string>();
+      const rngs = [() => 0, () => 0.25, () => 0.5, () => 0.75];
+      for (const rng of rngs) {
+        acks.add(__internals.pickGreetingHandoffAck("Maria", rng));
+      }
+      expect(acks.size).toBe(__internals.GREETING_HANDOFF_ACK_VARIANTS.length);
+    });
+
+    it("offers to help in the meantime (key phrase about questions)", () => {
+      // The whole reason this exists is to soften the handoff so the
+      // customer doesn't bounce — every variant should hint at "I can
+      // still help / ask away / questions". Asserted loosely so future
+      // copy tweaks don't break the test, but at least one of these
+      // phrases must appear in every variant.
+      for (
+        let idx = 0;
+        idx < __internals.GREETING_HANDOFF_ACK_VARIANTS.length;
+        idx++
+      ) {
+        const variant = __internals.GREETING_HANDOFF_ACK_VARIANTS[idx];
+        const lowered = variant.toLowerCase();
+        const hasOffer =
+          lowered.includes("help") ||
+          lowered.includes("ask") ||
+          lowered.includes("questions");
+        expect(hasOffer).toBe(true);
+      }
+    });
+  });
+
   describe("buildSystemPrompt humanise", () => {
     const baseConfigNoPrompt = { ai: { enabled: true }, faqs: [] };
 
