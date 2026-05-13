@@ -291,7 +291,16 @@ const CheckoutForm = () => {
     (t: string) => setTurnstileToken(t),
     [],
   );
-  const handleTurnstileExpire = useCallback(() => setTurnstileToken(null), []);
+  // Turnstile tokens expire after 5 minutes and the widget in
+  // `interaction-only` mode is invisible by default, so on expiry /
+  // error we both clear the stored token *and* bump the reset signal.
+  // That asks Cloudflare for a fresh token in the background — without
+  // it the customer is silently stuck on a dead widget (no UI to retry,
+  // server hard-fails the next click with "Verification failed").
+  const handleTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null);
+    setTurnstileResetSignal((n) => n + 1);
+  }, []);
   // Track which fields the visitor has actually interacted with so we
   // only surface validation errors after blur — not on initial focus,
   // and not for fields they haven't reached yet.
@@ -668,6 +677,13 @@ const CheckoutForm = () => {
       setTurnstileResetSignal((n) => n + 1);
     } catch (error) {
       console.error("Payment creation failed:", error);
+      // The just-sent Turnstile token is either consumed (siteverify
+      // returned success then PayMongo errored) or dead (token expired
+      // / already used by a prior retry). Either way, the same token
+      // will fail the next click, so drop it and ask the widget for a
+      // fresh one so a customer retry has a chance to succeed.
+      setTurnstileToken(null);
+      setTurnstileResetSignal((n) => n + 1);
       alert(
         error instanceof Error
           ? error.message
