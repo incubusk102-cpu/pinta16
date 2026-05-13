@@ -27,6 +27,10 @@ import {
 } from "../_lib/email.js";
 import { isAuthenticated } from "../_lib/admin-auth.js";
 import { connectLambda, getStore } from "../_lib/kv-stores.js";
+import {
+  buildUnsubToken as buildUnsubTokenHmac,
+  constantTimeEqual as constantTimeEqualHmac,
+} from "../_lib/unsub-token.js";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -67,26 +71,15 @@ const parseBody = (body) => {
   }
 };
 
-const constantTimeEqual = (a, b) => {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  const la = a.length;
-  const lb = b.length;
-  const len = Math.max(la, lb);
-  let mismatch = la ^ lb;
-  for (let i = 0; i < len; i++) {
-    mismatch |= (a.charCodeAt(i % la) || 0) ^ (b.charCodeAt(i % lb) || 0);
-  }
-  return mismatch === 0;
-};
+const constantTimeEqual = constantTimeEqualHmac;
 
-const buildUnsubToken = async (email) => {
-  const data = new TextEncoder().encode(`mktg:${email}`);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, 32);
-};
+// HMAC-SHA-256 over `mktg:<email>` keyed by a server-side secret that
+// auto-bootstraps into the CUSTOMER_META KV namespace on first use.
+// The previous implementation hashed `mktg:<email>` with plain SHA-256
+// without any secret, which meant anyone who knew a customer's email
+// could compute the token and silently opt them out. See
+// `_lib/unsub-token.js` for the secret-bootstrap details.
+const buildUnsubToken = (email) => buildUnsubTokenHmac("mktg", email);
 
 const PUBLIC_SITE = "https://canvhub.com";
 
