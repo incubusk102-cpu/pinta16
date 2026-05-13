@@ -26,10 +26,10 @@ export interface HeroTemplate {
   label: string;
   /** One-line hint shown below the dropdown when this template is active. */
   hint: string;
-  /** Field values applied when the template is selected. `image` and
-   *  `enabled` are intentionally not in this set — admins keep full
-   *  control of those. Any field set to `""` clears the corresponding
-   *  slide field; omitted fields are left untouched. */
+  /** Optional built-in background image shown/applied by the admin editor. */
+  image?: string;
+  /** Field values applied when the template is selected. Any field set to
+   *  `""` clears the corresponding slide field. */
   fields: {
     eyebrow: string;
     headline: string;
@@ -57,13 +57,13 @@ export const HERO_TEMPLATES: HeroTemplate[] = [
   {
     id: "new-collection",
     label: "New collection",
-    hint: "Announces a fresh drop — best with a wide studio / collection photo.",
+    hint: "Applies a built-in campaign image plus launch copy for a fresh drop.",
+    image: "/hero-templates/new-collection.webp",
     fields: {
       eyebrow: "Just dropped",
-      headline: "New paintings, fresh from the studio",
-      subtext:
-        "Original Filipino works on canvas — only a handful made of each.",
-      ctaLabel: "Browse the collection",
+      headline: "Fresh works, newly released",
+      subtext: "Explore the latest originals before they’re gone.",
+      ctaLabel: "See new arrivals",
       ctaHref: "/collection",
       align: "left",
     },
@@ -71,38 +71,41 @@ export const HERO_TEMPLATES: HeroTemplate[] = [
   {
     id: "featured",
     label: "Featured artwork",
-    hint: "Spotlights one painting — replace {{title}} and the CTA link with /product/<id>.",
+    hint: "Applies a built-in spotlight image, price-led copy, and right-aligned overlay.",
+    image: "/hero-templates/featured-artwork.webp",
     fields: {
-      eyebrow: "Featured this week",
-      headline: "{{title}}",
-      subtext: "One-of-a-kind original. Once it's gone, it's gone.",
-      ctaLabel: "View the painting",
+      eyebrow: "Featured artwork",
+      headline: "Golden Harvest Kin",
+      subtext: "A one-of-a-kind original, available now.",
+      ctaLabel: "View artwork",
       ctaHref: "/collection",
-      align: "left",
+      align: "right",
     },
   },
   {
     id: "sale",
     label: "Sale / promo",
-    hint: "Time-limited discount — edit the code + end date in the subtext.",
+    hint: "Applies a built-in promo image, code-led copy, and left-aligned text.",
+    image: "/hero-templates/sale-promo.webp",
     fields: {
       eyebrow: "Limited offer",
       headline: "10% off your first painting",
-      subtext: "Use code WELCOME10 at checkout. Ends Sunday.",
-      ctaLabel: "Shop the sale",
+      subtext: "Use code WELCOME10 on your first order.",
+      ctaLabel: "Shop now",
       ctaHref: "/collection",
-      align: "center",
+      align: "left",
     },
   },
   {
     id: "free-shipping",
     label: "Free shipping",
-    hint: "Trust signal that pairs well with a packaging / studio photo.",
+    hint: "Applies a built-in delivery-focused image and centered trust-banner copy.",
+    image: "/hero-templates/free-shipping.webp",
     fields: {
       eyebrow: "Free shipping",
-      headline: "We ship every painting free across PH",
-      subtext: "Carefully crated, fully insured, tracked end-to-end.",
-      ctaLabel: "Start shopping",
+      headline: "Every painting ships free across PH",
+      subtext: "Packed, insured, and delivered with care.",
+      ctaLabel: "Explore paintings",
       ctaHref: "/collection",
       align: "center",
     },

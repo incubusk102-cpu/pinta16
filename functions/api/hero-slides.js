@@ -19,6 +19,7 @@ const MAX_TEXT = 200;
 const MAX_LABEL = 60;
 const MAX_HREF = 500;
 const MAX_IMAGE_BYTES = 3_500_000;
+const BUILTIN_IMAGE_PREFIX = "/hero-templates/";
 
 const ALIGNS = ["left", "center", "right"];
 const TRANSITIONS = ["fade", "slide", "kenburns"];
@@ -76,6 +77,11 @@ const sanitizeHref = (raw) => {
 const isValidImage = (v) => {
   if (typeof v !== "string") return false;
   if (!v) return true;
+  if (v.startsWith(BUILTIN_IMAGE_PREFIX)) {
+    return /^\/hero-templates\/[A-Za-z0-9_-]+\.(png|jpe?g|webp|gif|avif)$/i.test(
+      v,
+    );
+  }
   if (v.length > MAX_IMAGE_BYTES) return false;
   return /^data:image\/(png|jpe?g|webp|gif|avif);base64,/i.test(v);
 };
