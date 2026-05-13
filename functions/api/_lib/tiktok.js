@@ -68,16 +68,30 @@ const isObject = (value) => value !== null && typeof value === "object";
 
 // ─── env reading + null-safe gate ──────────────────────────────────────────────
 
-export const getTikTokEnv = () => {
+// Default redirect URI path. The full URL is derived from the request
+// origin so the integration works on canvhub.com without needing the
+// `TIKTOK_REDIRECT_URI` env var to be set. The env var still takes
+// precedence if present (for custom domains / staging).
+const TIKTOK_CALLBACK_PATH = "/api/admin/tiktok-callback";
+
+export const resolveTikTokRedirectUri = (origin) => {
+  const env = getCloudflareEnv();
+  const fromEnv = env?.TIKTOK_REDIRECT_URI
+    ? String(env.TIKTOK_REDIRECT_URI)
+    : "";
+  if (fromEnv) return fromEnv;
+  if (origin) return `${origin}${TIKTOK_CALLBACK_PATH}`;
+  return "";
+};
+
+export const getTikTokEnv = ({ origin } = {}) => {
   const env = getCloudflareEnv();
   return {
     clientKey: env?.TIKTOK_CLIENT_KEY ? String(env.TIKTOK_CLIENT_KEY) : "",
     clientSecret: env?.TIKTOK_CLIENT_SECRET
       ? String(env.TIKTOK_CLIENT_SECRET)
       : "",
-    redirectUri: env?.TIKTOK_REDIRECT_URI
-      ? String(env.TIKTOK_REDIRECT_URI)
-      : "",
+    redirectUri: resolveTikTokRedirectUri(origin),
   };
 };
 
@@ -139,9 +153,11 @@ export const clearStoredAuth = async () => {
 // ─── OAuth flow ────────────────────────────────────────────────────────────────
 
 // Build the URL the admin sends the user to start the OAuth flow.
-// The `state` param is a CSRF token the callback verifies.
-export const buildAuthorizeUrl = ({ state }) => {
-  const { clientKey, redirectUri } = getTikTokEnv();
+// The `state` param is a CSRF token the callback verifies. `origin`
+// (optional) is used to derive the redirect URI when TIKTOK_REDIRECT_URI
+// env var is not set.
+export const buildAuthorizeUrl = ({ state, origin } = {}) => {
+  const { clientKey, redirectUri } = getTikTokEnv({ origin });
   if (!clientKey) return null;
   if (!redirectUri) return null;
   const params = new URLSearchParams({
@@ -155,14 +171,15 @@ export const buildAuthorizeUrl = ({ state }) => {
 };
 
 // Exchange an authorisation code for an access token + refresh token
-// bundle. Called by the OAuth callback endpoint.
-export const exchangeAuthCode = async ({ code }) => {
-  const { clientKey, clientSecret, redirectUri } = getTikTokEnv();
+// bundle. Called by the OAuth callback endpoint. `origin` is used to
+// derive the redirect URI (must match the value used during authorize).
+export const exchangeAuthCode = async ({ code, origin } = {}) => {
+  const { clientKey, clientSecret, redirectUri } = getTikTokEnv({ origin });
   if (!clientKey || !clientSecret) {
     return { ok: false, error: "TikTok not configured" };
   }
   if (!redirectUri) {
-    return { ok: false, error: "TIKTOK_REDIRECT_URI not configured" };
+    return { ok: false, error: "redirect URI not resolved" };
   }
   const body = new URLSearchParams({
     client_key: clientKey,
@@ -312,12 +329,12 @@ export const getUserInfo = async () => {
 // Compose an admin-facing status report covering: env config, KV
 // binding, stored token, token validity, account display name, and
 // the audit-mode flag (controls whether DIRECT_POST is unlocked).
-export const getTikTokAccountStatus = async () => {
+export const getTikTokAccountStatus = async ({ origin } = {}) => {
   const configured = isTikTokConfigured();
   const env = getCloudflareEnv();
   const out = {
     configured,
-    redirectUri: getTikTokEnv().redirectUri || null,
+    redirectUri: getTikTokEnv({ origin }).redirectUri || null,
     kvBindingMissing: !env?.STOREFRONT_CONFIG,
     connected: false,
     account: null,
@@ -327,7 +344,7 @@ export const getTikTokAccountStatus = async () => {
   };
   if (!configured) {
     out.errors.push(
-      "Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REDIRECT_URI in Cloudflare Pages → Settings → Environment variables.",
+      "Set TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET in Cloudflare Pages → Settings → Environment variables. TIKTOK_REDIRECT_URI is auto-derived from the request origin unless overridden.",
     );
     return out;
   }

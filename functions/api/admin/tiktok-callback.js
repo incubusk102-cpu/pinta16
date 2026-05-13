@@ -100,7 +100,7 @@ export const onRequestGet = async ({ request, env }) => {
 
   // Exchange the code for tokens. exchangeAuthCode persists to KV
   // on success.
-  const result = await exchangeAuthCode({ code });
+  const result = await exchangeAuthCode({ code, origin });
   if (!result.ok) {
     return redirect(origin, {
       tiktok: "failed",
