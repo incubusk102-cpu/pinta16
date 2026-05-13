@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Copy,
   Eye,
   EyeOff,
   Loader2,
@@ -214,6 +215,27 @@ export function HeroSlidesSection() {
 
   const removeSlide = (id: string) => {
     setDraftSlides((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  // Insert a deep-cloned copy of the source slide immediately after
+  // it in the list, with a fresh ID. Useful for A/B-testing two
+  // variants of a promo (different headlines, swap the image) without
+  // retyping every field. Respects MAX_SLIDES so the editor still
+  // refuses to grow past the per-namespace cap.
+  const duplicateSlide = (id: string) => {
+    setDraftSlides((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      if (idx === -1) return prev;
+      if (prev.length >= MAX_SLIDES) {
+        toast.warning(`Max ${MAX_SLIDES} slides`);
+        return prev;
+      }
+      const source = prev[idx];
+      const copy: AdminSlide = { ...source, id: newId() };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
   };
 
   const moveSlide = (idx: number, dir: -1 | 1) => {
@@ -583,6 +605,16 @@ export function HeroSlidesSection() {
                       ) : (
                         <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
                       )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => duplicateSlide(slide.id)}
+                      disabled={draftSlides.length >= MAX_SLIDES}
+                      title="Duplicate slide"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
                     </Button>
                     <Button
                       type="button"
