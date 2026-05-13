@@ -10,6 +10,7 @@ import { makeStore } from "./_lib/kv-store.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
 import { recordStockEvent, STOCK_STATES } from "./_lib/d1.js";
+import { publishProductPhoto, shouldAutoPostProduct } from "./_lib/tiktok.js";
 
 const normaliseAvailability = (value) => {
   if (typeof value !== "string") return "available";
@@ -110,7 +111,7 @@ const sanitizeVideo = (raw) => {
   return cleaned;
 };
 
-const handle = async ({ request, env }) => {
+const handle = async ({ request, env, waitUntil }) => {
   const blocked = await initRequestContext({ request, env });
   if (blocked) return blocked;
   if (!env.PRODUCTS) {
@@ -163,6 +164,32 @@ const handle = async ({ request, env }) => {
           toState,
           source: prior ? "admin-edit" : "admin-create",
         });
+      }
+      // Fire-and-forget TikTok auto-post for brand-new products.
+      // Uses waitUntil so the background job survives after the
+      // response is returned — never blocks the product save.
+      if (!prior) {
+        const autoPost = async () => {
+          try {
+            const check = await shouldAutoPostProduct(product);
+            if (!check.ok) return;
+            const url = new URL(request.url);
+            const origin = `${url.protocol}//${url.host}`;
+            await publishProductPhoto({
+              product,
+              origin,
+              source: "auto-create",
+            });
+          } catch {
+            // Swallow — never let a TikTok hiccup surface as a
+            // product-save error.
+          }
+        };
+        if (typeof waitUntil === "function") {
+          waitUntil(autoPost());
+        } else {
+          autoPost();
+        }
       }
       return json(200, { product });
     }

@@ -1,6 +1,7 @@
 // /api/admin/tiktok — admin endpoint for TikTok auto-posting.
 //
 // GET  ?action=status                    → connection + token + creator info
+//                                          (also reports `autoPostEnabled`)
 // GET  ?action=posts&limit=50            → recent rows from `tiktok_posts`
 // GET  ?action=caption&productId=...     → server-rendered caption + image URL
 // GET  ?action=connect-url               → mints a state token + returns the
@@ -8,6 +9,8 @@
 // POST ?action=apply-schema              → bootstrap the `tiktok_posts` table
 // POST ?action=publish                   → init + poll a publish job, write
 //                                          the result row to D1
+// POST ?action=set-auto-post             → flip the auto-post-on-create flag
+//                                          (body: { enabled: bool })
 // POST ?action=refresh-token             → manually refresh the access token
 // POST ?action=disconnect                → wipe the stored OAuth bundle
 //
@@ -20,12 +23,13 @@ import {
   buildAuthorizeUrl,
   clearStoredAuth,
   generateTikTokCaption,
+  getAutoPostEnabled,
   getTikTokAccountStatus,
-  initPhotoPost,
   isTikTokConfigured,
-  pollPublishStatus,
+  publishProductPhoto,
   refreshAccessToken,
   resolveProductImageUrl,
+  setAutoPostEnabled,
   MAX_CAPTION_LENGTH,
 } from "../_lib/tiktok.js";
 import { getStore } from "../_lib/kv-stores.js";
@@ -57,13 +61,6 @@ const findProductById = async (productId) => {
   const raw = await store.get(PRODUCTS_KEY, { type: "json" });
   const list = Array.isArray(raw) ? raw : [];
   return list.find((p) => p && p.id === productId) || null;
-};
-
-const nowIso = () => new Date().toISOString();
-const newId = () => {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  // Fallback for environments without randomUUID (shouldn't happen on Workers).
-  return `tk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 };
 
 const isSchemaApplied = async () => {
@@ -130,10 +127,12 @@ export const onRequestGet = async ({ request, env }) => {
         counts = null;
       }
     }
+    const autoPostEnabled = await getAutoPostEnabled();
     return json(200, {
       ...status,
       d1Available: isD1Available(),
       schemaApplied,
+      autoPostEnabled,
       counts,
     });
   }
@@ -277,132 +276,53 @@ export const onRequestPost = async ({ request, env }) => {
     if (!product) {
       return json(404, { error: `Product not found: ${productId}` });
     }
-    const captionOverride =
-      typeof body?.caption === "string" ? body.caption : null;
-    const caption = (captionOverride ?? generateTikTokCaption(product)).slice(
-      0,
-      MAX_CAPTION_LENGTH,
-    );
-    const imageUrlOverride =
-      typeof body?.imageUrl === "string" && /^https:\/\//i.test(body.imageUrl)
-        ? body.imageUrl
-        : null;
-    const imageUrl =
-      imageUrlOverride ||
-      resolveProductImageUrl(product, { origin: url.origin });
-    if (!imageUrl) {
-      return json(400, {
-        error:
-          "Product has no public HTTPS image URL. Upload via the product editor first so the image lands on R2.",
-      });
-    }
-    const postMode =
-      body?.postMode === "DIRECT_POST" ? "DIRECT_POST" : "MEDIA_UPLOAD";
-    const privacyLevel =
-      typeof body?.privacyLevel === "string"
-        ? body.privacyLevel
-        : postMode === "DIRECT_POST"
-          ? "PUBLIC_TO_EVERYONE"
-          : "SELF_ONLY";
-
-    // Pre-write an audit row so failed attempts are still recorded.
-    const rowId = newId();
-    const now = nowIso();
-    try {
-      await d1Run(
-        `INSERT INTO tiktok_posts
-          (id, product_id, caption, image_url, image_urls, post_mode, media_type, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'PHOTO', 'pending', ?, ?)`,
-        [
-          rowId,
-          productId,
-          caption,
-          imageUrl,
-          JSON.stringify([imageUrl]),
-          postMode,
-          now,
-          now,
-        ],
-      );
-    } catch (err) {
-      return json(500, {
-        error: `Failed to write audit row: ${err?.message || String(err)}`,
-      });
-    }
-
-    const initResult = await initPhotoPost({
-      imageUrls: [imageUrl],
-      caption,
-      postMode,
-      privacyLevel,
+    const result = await publishProductPhoto({
+      product,
+      origin: url.origin,
+      postMode:
+        body?.postMode === "DIRECT_POST" ? "DIRECT_POST" : "MEDIA_UPLOAD",
+      privacyLevel:
+        typeof body?.privacyLevel === "string" ? body.privacyLevel : null,
+      captionOverride: typeof body?.caption === "string" ? body.caption : null,
+      imageUrlOverride:
+        typeof body?.imageUrl === "string" && /^https:\/\//i.test(body.imageUrl)
+          ? body.imageUrl
+          : null,
+      source: "manual",
     });
-    if (!initResult.ok) {
-      await d1Run(
-        `UPDATE tiktok_posts
-           SET status='failed', error_code=?, error_message=?, updated_at=?
-         WHERE id=?`,
-        [
-          initResult.errorCode || null,
-          initResult.error || "init failed",
-          nowIso(),
-          rowId,
-        ],
-      );
+    if (!result.ok) {
       return json(400, {
-        error: initResult.error || "TikTok rejected the init request",
-        errorCode: initResult.errorCode || null,
+        error: result.error || "TikTok publishing failed",
+        errorCode: result.errorCode || null,
+        publishId: result.publishId || null,
+        status: result.status || null,
+        id: result.id || null,
       });
     }
-    const publishId = initResult.publishId;
-    await d1Run(
-      `UPDATE tiktok_posts
-         SET publish_id=?, status='processing', updated_at=?
-       WHERE id=?`,
-      [publishId, nowIso(), rowId],
-    );
-
-    const pollResult = await pollPublishStatus(publishId, {
-      timeoutMs: 60000,
-    });
-    if (!pollResult.ok) {
-      await d1Run(
-        `UPDATE tiktok_posts
-           SET status='failed', error_code=?, error_message=?, updated_at=?
-         WHERE id=?`,
-        [
-          pollResult.errorCode || pollResult.status || null,
-          pollResult.error || "polling failed",
-          nowIso(),
-          rowId,
-        ],
-      );
-      return json(400, {
-        error: pollResult.error || "TikTok publishing failed",
-        publishId,
-        status: pollResult.status || null,
-      });
-    }
-    const finishedAt = nowIso();
-    await d1Run(
-      `UPDATE tiktok_posts
-         SET status='published', tiktok_post_id=?, share_url=?, posted_at=?, updated_at=?
-       WHERE id=?`,
-      [
-        pollResult.postId || null,
-        pollResult.shareUrl || null,
-        finishedAt,
-        finishedAt,
-        rowId,
-      ],
-    );
     return json(200, {
       ok: true,
-      id: rowId,
-      publishId,
-      postId: pollResult.postId || null,
-      shareUrl: pollResult.shareUrl || null,
-      status: pollResult.status,
+      id: result.id,
+      publishId: result.publishId,
+      postId: result.postId || null,
+      shareUrl: result.shareUrl || null,
+      status: result.status,
     });
+  }
+
+  if (action === "set-auto-post") {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json(400, { error: "Invalid JSON body" });
+    }
+    const enabled = Boolean(body?.enabled);
+    try {
+      await setAutoPostEnabled(enabled);
+      return json(200, { ok: true, enabled });
+    } catch (err) {
+      return json(500, { error: err?.message || String(err) });
+    }
   }
 
   return json(400, { error: `Unknown action: ${action}` });
