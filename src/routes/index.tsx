@@ -87,13 +87,26 @@ export const Route = createFileRoute("/")({
   }),
 });
 
-function HeroOrFallback() {
+interface HeroOrFallbackProps {
+  /** When true, the brand-welcome fallback (`<HomeHero />`) is suppressed
+   *  but admin-configured slides still render. Used for signed-in
+   *  customers, who get the dense GalleryNav instead of the welcome but
+   *  should still see promotional slides the admin set up. */
+  suppressFallback?: boolean;
+}
+
+function HeroOrFallback({ suppressFallback = false }: HeroOrFallbackProps) {
   const { slides, loading } = useHeroSlides();
   // When admin has uploaded hero slides via /admin → Hero slider,
   // those take precedence (the operator's promotional copy / CTAs
-  // matter more than ambient brand atmosphere). Otherwise the
-  // homepage drops into the cinematic 3D hero — a floating framed
-  // painting with bloom on desktop, a static fallback on mobile.
+  // matter more than ambient brand atmosphere) and render for both
+  // signed-out and signed-in visitors — promotional banners are
+  // explicitly set up by the admin and meant for every shopper.
+  // Otherwise the homepage drops into the cinematic 3D hero — a
+  // floating framed painting with bloom on desktop, a static
+  // fallback on mobile — but only for signed-out visitors. Signed-in
+  // customers already onboarded, so the brand-welcome is suppressed
+  // and the page jumps straight into the curated carousels.
   // We keep an `sr-only` <h1> path while data is loading so the
   // smoke suite (`tests/e2e/smoke.spec.ts` asserts
   // `page.locator("h1").first()` visible on `/`), document outline,
@@ -102,6 +115,7 @@ function HeroOrFallback() {
     return <h1 className="sr-only">Canvas Hub</h1>;
   }
   if (slides.length === 0) {
+    if (suppressFallback) return null;
     return <HomeHero />;
   }
   return <HeroSlider />;
@@ -137,11 +151,15 @@ function Index() {
   return (
     <div className="smooth-scroll">
       {user && <GalleryNav />}
-      {!user && (
-        <section id={HOME_SECTION_IDS.hero}>
-          <HeroOrFallback />
-        </section>
-      )}
+      {/* Signed-out visitors see the full welcome (`HomeHero` 3D scene
+          when no slides are configured, or the admin slider when they
+          are). Signed-in customers skip the brand-welcome — they're
+          already onboarded — but still see admin-configured promotional
+          slides via `suppressFallback`, so a "Sale" / "New collection"
+          banner reaches every shopper, not just first-time visitors. */}
+      <section id={HOME_SECTION_IDS.hero}>
+        <HeroOrFallback suppressFallback={Boolean(user)} />
+      </section>
       <section id={HOME_SECTION_IDS.marquee}>
         <PaintingMarquee />
       </section>
