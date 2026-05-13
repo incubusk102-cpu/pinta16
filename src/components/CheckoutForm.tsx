@@ -291,12 +291,12 @@ const CheckoutForm = () => {
     (t: string) => setTurnstileToken(t),
     [],
   );
-  // Turnstile tokens expire after 5 minutes and the widget in
-  // `interaction-only` mode is invisible by default, so on expiry /
-  // error we both clear the stored token *and* bump the reset signal.
-  // That asks Cloudflare for a fresh token in the background — without
-  // it the customer is silently stuck on a dead widget (no UI to retry,
-  // server hard-fails the next click with "Verification failed").
+  // Turnstile tokens expire after 5 minutes. On expiry / error we both
+  // clear the stored token *and* bump the reset signal so Cloudflare
+  // re-renders the "Verify you are human" checkbox for the customer to
+  // tick again — without this the customer is silently stuck on a dead
+  // widget (server hard-fails the next click with "Verification
+  // failed").
   const handleTurnstileExpire = useCallback(() => {
     setTurnstileToken(null);
     setTurnstileResetSignal((n) => n + 1);
@@ -1822,7 +1822,7 @@ const CheckoutForm = () => {
                           <div className="flex justify-center">
                             <Turnstile
                               action="checkout-place"
-                              appearance="interaction-only"
+                              appearance="always"
                               onToken={handleTurnstileToken}
                               onExpire={handleTurnstileExpire}
                               resetSignal={turnstileResetSignal}
