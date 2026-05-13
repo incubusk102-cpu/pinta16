@@ -279,6 +279,11 @@ const CheckoutForm = () => {
   // renders nothing and `turnstileToken` stays null — server falls
   // open in that mode.
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Bumped after /api/create-payment succeeds so the widget issues a
+  // fresh token for the subsequent /api/orders call. Turnstile tokens
+  // are single-use — reusing one across two siteverify calls makes
+  // the second one fail.
+  const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
   // Honeypot — invisible to humans, visible to dumb form-spamming bots.
   // A non-empty value at submit time is silently rejected server-side.
   const [honeypot, setHoneypot] = useState("");
@@ -628,6 +633,16 @@ const CheckoutForm = () => {
 
   const handlePayWithQR = async () => {
     if (!validate()) return;
+    // Turnstile gate: when the widget is mounted (i.e. a site key is
+    // configured) we don't let the user trigger PayMongo until the
+    // challenge has completed. Avoids a guaranteed-fail round-trip
+    // and keeps the rate-limit budget for real shoppers.
+    if (isTurnstileEnabled() && !turnstileToken) {
+      alert(
+        "Please complete the verification challenge below the form, then try again.",
+      );
+      return;
+    }
     setIsCreatingPayment(true);
 
     try {
@@ -641,11 +656,16 @@ const CheckoutForm = () => {
             address: form.address.trim(),
             city: form.city.trim(),
           },
+          turnstileToken,
         },
       });
       setPaymentIntentId(data.id);
       setQrCodeUrl(data.qrCodeImageUrl || null);
       setShowPayment(true);
+      // Burn the captcha token we just used — placeOrder will need a
+      // fresh one when the user finishes paying.
+      setTurnstileToken(null);
+      setTurnstileResetSignal((n) => n + 1);
     } catch (error) {
       console.error("Payment creation failed:", error);
       alert(
@@ -1789,6 +1809,7 @@ const CheckoutForm = () => {
                               appearance="interaction-only"
                               onToken={handleTurnstileToken}
                               onExpire={handleTurnstileExpire}
+                              resetSignal={turnstileResetSignal}
                             />
                           </div>
                         )}
