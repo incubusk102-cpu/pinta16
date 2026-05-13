@@ -292,7 +292,26 @@ const HeroSlider = () => {
           >
             {slide.image && (
               <motion.img
+                // <picture> is the right primitive for "swap the
+                // source on small viewports", but motion.img insists
+                // on owning its own element. Instead we let the
+                // browser pick the source via the imageSrcSet
+                // attribute set on the img itself: when a mobileImage
+                // is present, srcset uses it for the < 640px range
+                // and falls back to the landscape image for wider
+                // viewports. Browsers without srcset support (very
+                // few in 2026) get the landscape image via `src`.
                 src={slide.image}
+                srcSet={
+                  slide.mobileImage
+                    ? `${slide.mobileImage} 640w, ${slide.image} 1280w`
+                    : undefined
+                }
+                sizes={
+                  slide.mobileImage
+                    ? "(max-width: 639px) 100vw, 100vw"
+                    : undefined
+                }
                 alt={
                   slide.headline || slide.eyebrow || `Slide ${safeIndex + 1}`
                 }

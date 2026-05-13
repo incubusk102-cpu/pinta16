@@ -14,6 +14,11 @@ export type HeroTransition = "fade" | "slide" | "kenburns";
 export interface HeroSlide {
   id: string;
   image: string;
+  /** Optional portrait-friendly crop served to viewports < 640px.
+   *  When blank, the regular `image` is used at every breakpoint
+   *  (the existing behaviour). Useful for landscape paintings that
+   *  crop awkwardly on phones. */
+  mobileImage: string;
   eyebrow: string;
   headline: string;
   subtext: string;

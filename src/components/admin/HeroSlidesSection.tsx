@@ -57,6 +57,7 @@ const newId = () =>
 const blankSlide = (): AdminSlide => ({
   id: newId(),
   image: "",
+  mobileImage: "",
   eyebrow: "",
   headline: "",
   subtext: "",
@@ -87,6 +88,7 @@ export function HeroSlidesSection() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const mobileFileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Load admin view (includes disabled slides)
   useEffect(() => {
@@ -187,7 +189,14 @@ export function HeroSlidesSection() {
     });
   };
 
-  const onFile = async (id: string, file: File | undefined) => {
+  // Shared compression / validation for both the main image slot
+  // and the optional mobile-only crop. The caller decides which
+  // slide field receives the resulting data URL.
+  const compressAndAssign = async (
+    id: string,
+    file: File | undefined,
+    field: "image" | "mobileImage",
+  ) => {
     if (!file) return;
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       toast.error("Use JPG, PNG, WEBP, AVIF, or GIF");
@@ -211,11 +220,16 @@ export function HeroSlidesSection() {
         );
         return;
       }
-      updateSlide(id, { image: compressed.url });
+      updateSlide(id, { [field]: compressed.url });
     } catch {
       toast.error("Could not read image");
     }
   };
+
+  const onFile = (id: string, file: File | undefined) =>
+    compressAndAssign(id, file, "image");
+  const onMobileFile = (id: string, file: File | undefined) =>
+    compressAndAssign(id, file, "mobileImage");
 
   const save = async () => {
     const token = getAdminToken();
@@ -417,6 +431,78 @@ export function HeroSlidesSection() {
                     {formatBytes(slide.image.length)} · base64
                   </p>
                 )}
+
+                {/* Optional mobile-only crop. Leaving this blank serves
+                    the landscape image to every viewport (today's
+                    behaviour). Filling it in swaps to this image when
+                    the viewport is < 640px so portrait paintings don't
+                    crop awkwardly on phones. */}
+                <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Mobile crop (optional)
+                    </span>
+                    {slide.mobileImage && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatBytes(slide.mobileImage.length)}
+                      </span>
+                    )}
+                  </div>
+                  {slide.mobileImage && (
+                    <div className="relative aspect-[3/4] max-h-32 mx-auto rounded overflow-hidden border border-border/40 bg-muted/40">
+                      <img
+                        src={slide.mobileImage}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <input
+                    ref={(el) => {
+                      mobileFileInputs.current[slide.id] = el;
+                    }}
+                    type="file"
+                    accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                    className="hidden"
+                    onChange={(e) =>
+                      void onMobileFile(
+                        slide.id,
+                        e.target.files?.[0] || undefined,
+                      )
+                    }
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        mobileFileInputs.current[slide.id]?.click()
+                      }
+                      className="flex-1"
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-2" />
+                      {slide.mobileImage ? "Replace" : "Upload mobile"}
+                    </Button>
+                    {slide.mobileImage && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          updateSlide(slide.id, { mobileImage: "" })
+                        }
+                        title="Clear mobile image"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Shown on phones (under 640px wide). Leave blank to use the
+                    landscape image at every breakpoint.
+                  </p>
+                </div>
               </div>
 
               {/* Fields cell */}
