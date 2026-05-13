@@ -13,6 +13,12 @@ export type HeroTransition = "fade" | "slide" | "kenburns";
 export interface HeroSlide {
   id: string;
   image: string;
+  /** Descriptive alt text for the slide image. Used by screen readers
+   *  and crawlers; falls back to headline / eyebrow when blank. Kept
+   *  separate from headline because some slides have decorative or
+   *  text-on-image art whose accessible description differs from the
+   *  visible promo copy. */
+  alt: string;
   eyebrow: string;
   headline: string;
   subtext: string;

@@ -57,6 +57,7 @@ const newId = () =>
 const blankSlide = (): AdminSlide => ({
   id: newId(),
   image: "",
+  alt: "",
   eyebrow: "",
   headline: "",
   subtext: "",
@@ -411,6 +412,26 @@ export function HeroSlidesSection() {
                     {formatBytes(slide.image.length)} · base64
                   </p>
                 )}
+                <div className="pt-1">
+                  <Label htmlFor={`alt-${slide.id}`} className="text-xs">
+                    Image alt text
+                  </Label>
+                  <textarea
+                    id={`alt-${slide.id}`}
+                    value={slide.alt}
+                    maxLength={200}
+                    onChange={(e) =>
+                      updateSlide(slide.id, { alt: e.target.value })
+                    }
+                    rows={2}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Describe the painting for screen readers and image search…"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                    Leave blank to fall back to the headline. Filling this in
+                    helps screen-reader users and image-search SEO.
+                  </p>
+                </div>
               </div>
 
               {/* Fields cell */}

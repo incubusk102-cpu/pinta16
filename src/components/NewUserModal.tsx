@@ -36,6 +36,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-1",
     image: "/images/1.png",
+    alt: "Featured Canvas Hub painting",
     eyebrow: "Canvas Hub",
     headline: "Affordable Art, Authentic Stories",
     subtext: "",
@@ -46,6 +47,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-2",
     image: "/images/2.png",
+    alt: "Hand-curated original painting",
     eyebrow: "Hand-curated",
     headline: "Limited prints, ready to ship",
     subtext: "",
@@ -56,6 +58,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-3",
     image: "/images/4.png",
+    alt: "Welcome painting for first-time visitors",
     eyebrow: "New here?",
     headline: "Welcome — your discount is waiting",
     subtext: "",
@@ -514,7 +517,7 @@ const ModalHeroCarousel = ({
         >
           <img
             src={s.image}
-            alt={s.headline || "Canvas Hub"}
+            alt={s.alt || s.headline || "Canvas Hub"}
             className="w-full h-full object-cover"
             loading={i === 0 ? "eager" : "lazy"}
           />
