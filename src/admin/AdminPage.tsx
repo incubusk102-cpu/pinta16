@@ -74,6 +74,7 @@ import { OrderEmailSection } from "@/components/admin/OrderEmailSection";
 import { OrderPushSection } from "@/components/admin/OrderPushSection";
 import { NewUserModalSection } from "@/components/admin/NewUserModalSection";
 import { AppreciationSection } from "@/components/admin/AppreciationSection";
+import { TikTokSection } from "@/components/admin/TikTokSection";
 import { SecuritySection } from "@/components/admin/SecuritySection";
 import { MigrateR2Card } from "@/components/admin/MigrateR2Card";
 import { MigrateVariantsCard } from "@/components/admin/MigrateVariantsCard";
@@ -130,6 +131,7 @@ import {
   MapPin,
   Wallet,
   Zap,
+  Music2,
 } from "lucide-react";
 import {
   ORDER_STEPS,
@@ -176,6 +178,7 @@ type AdminSection =
   | "orderPush"
   | "newUserModal"
   | "appreciation"
+  | "tiktok"
   | "policies"
   | "exports"
   | "security"
@@ -206,6 +209,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   orderPush: "Order push",
   newUserModal: "New-user modal",
   appreciation: "Appreciation",
+  tiktok: "TikTok",
   policies: "Policies",
   exports: "Exports",
   security: "Security",
@@ -630,6 +634,11 @@ const NAV_GROUPS: {
         key: "appreciation",
         icon: <Star className="w-4 h-4" />,
         hint: "Daily piece + thank-you",
+      },
+      {
+        key: "tiktok",
+        icon: <Music2 className="w-4 h-4" />,
+        hint: "Auto-post paintings to TikTok",
       },
       { key: "policies", icon: <FileText className="w-4 h-4" /> },
     ],
@@ -1206,6 +1215,7 @@ function AdminDashboard() {
           {section === "orderPush" && <OrderPushSection />}
           {section === "newUserModal" && <NewUserModalSection />}
           {section === "appreciation" && <AppreciationSection />}
+          {section === "tiktok" && <TikTokSection />}
           {section === "policies" && <PoliciesSection />}
           {section === "exports" && <ExportsSection />}
           {section === "security" && <SecuritySection />}
