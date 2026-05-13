@@ -105,10 +105,11 @@ export const onRequestGet = async ({ request, env }) => {
   if (unauth) return unauth;
 
   const url = new URL(request.url);
+  const origin = `${url.protocol}//${url.host}`;
   const action = url.searchParams.get("action") || "status";
 
   if (action === "status") {
-    const status = await getTikTokAccountStatus();
+    const status = await getTikTokAccountStatus({ origin });
     const schemaApplied = await isSchemaApplied();
     let counts = null;
     if (schemaApplied) {
@@ -186,7 +187,7 @@ export const onRequestGet = async ({ request, env }) => {
     if (!isTikTokConfigured()) {
       return json(503, {
         error:
-          "TikTok not configured. Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REDIRECT_URI first.",
+          "TikTok not configured. Set TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET first.",
       });
     }
     if (!env?.STOREFRONT_CONFIG) {
@@ -203,7 +204,7 @@ export const onRequestGet = async ({ request, env }) => {
       state,
       issuedAt: Math.floor(Date.now() / 1000),
     });
-    const authorizeUrl = buildAuthorizeUrl({ state });
+    const authorizeUrl = buildAuthorizeUrl({ state, origin });
     if (!authorizeUrl) {
       return json(500, { error: "Failed to build authorize URL" });
     }
