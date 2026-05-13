@@ -127,19 +127,25 @@ export function HeroSlidesSection() {
     );
   };
 
-  // Apply a curated template to a slide. Image / enabled are preserved
-  // so admins can experiment with copy without losing the upload they
-  // just dropped in. The custom template clears the text fields back
-  // to blank so it's a true "start over" affordance.
+  // Apply a curated template to a slide. Built-in campaign templates also
+  // set the background image so choosing one can fully seed the slide in a
+  // single click. The custom template still only clears the text fields so
+  // admins can keep a manual upload while resetting copy.
   const applyTemplate = (id: string, templateId: HeroTemplateId) => {
     const tpl = HERO_TEMPLATE_BY_ID[templateId];
     if (!tpl) return;
-    updateSlide(id, { ...tpl.fields });
+    updateSlide(
+      id,
+      tpl.id === "custom"
+        ? { ...tpl.fields }
+        : { image: tpl.image ?? "", ...tpl.fields },
+    );
   };
 
-  // Best-effort match: a slide is "on" template T iff every text field
-  // is exactly equal to T's preset values. Falls through to "custom"
-  // when nothing matches so the dropdown stays meaningful.
+  // Best-effort match: a slide is "on" template T iff every text field is
+  // exactly equal to T's preset values and, when present, the built-in image
+  // path also matches. Falls through to "custom" when nothing matches so the
+  // dropdown stays meaningful after manual edits.
   const detectTemplate = (slide: AdminSlide): HeroTemplateId => {
     for (const tpl of HERO_TEMPLATES) {
       const f = tpl.fields;
@@ -149,7 +155,8 @@ export function HeroSlidesSection() {
         slide.subtext === f.subtext &&
         slide.ctaLabel === f.ctaLabel &&
         slide.ctaHref === f.ctaHref &&
-        slide.align === f.align
+        slide.align === f.align &&
+        (!tpl.image || slide.image === tpl.image)
       ) {
         return tpl.id;
       }
@@ -459,11 +466,10 @@ export function HeroSlidesSection() {
                     </Button>
                   </div>
                 </div>
-                {/* Curated content presets — fill eyebrow/headline/
-                    subtext/CTA/align in one click. Leaves image and
-                    enabled state untouched so admins keep their
-                    upload. Selecting "Custom" clears the text fields
-                    back to blank. */}
+                {/* Curated presets — built-in campaign templates fill image,
+                    eyebrow, headline, subtext, CTA, and align in one click.
+                    Selecting "Custom" clears the text fields back to blank
+                    while leaving a manual upload untouched. */}
                 <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-3 space-y-2">
                   <Label
                     htmlFor={`template-${slide.id}`}
@@ -489,6 +495,12 @@ export function HeroSlidesSection() {
                   <p className="text-[11px] text-muted-foreground leading-snug">
                     {HERO_TEMPLATE_BY_ID[detectTemplate(slide)].hint}
                   </p>
+                  {HERO_TEMPLATE_BY_ID[detectTemplate(slide)].image && (
+                    <p className="text-[10px] text-muted-foreground leading-snug">
+                      Built-in image fills automatically when you choose this
+                      template.
+                    </p>
+                  )}
                 </div>
                 <div className="grid sm:grid-cols-2 gap-2">
                   <div>
