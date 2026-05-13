@@ -20,6 +20,13 @@ export interface HeroSlide {
   ctaLabel: string;
   ctaHref: string;
   align: HeroAlign;
+  /** Optional schedule window — ISO 8601 UTC strings. An empty
+   *  string means "no boundary". A slide is publicly visible only
+   *  when the current UTC time is within [startsAt, endsAt]
+   *  (both inclusive). The server filters before the slide ever
+   *  reaches the public view, so unbounded slides always render. */
+  startsAt: string;
+  endsAt: string;
 }
 
 export interface HeroSettings {

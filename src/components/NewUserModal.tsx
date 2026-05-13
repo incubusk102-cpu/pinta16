@@ -42,6 +42,8 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
     ctaLabel: "",
     ctaHref: "",
     align: "center",
+    startsAt: "",
+    endsAt: "",
   },
   {
     id: "_default-2",
@@ -52,6 +54,8 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
     ctaLabel: "",
     ctaHref: "",
     align: "center",
+    startsAt: "",
+    endsAt: "",
   },
   {
     id: "_default-3",
@@ -62,6 +66,8 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
     ctaLabel: "",
     ctaHref: "",
     align: "center",
+    startsAt: "",
+    endsAt: "",
   },
 ];
 
