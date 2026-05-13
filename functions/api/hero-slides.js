@@ -97,6 +97,20 @@ const generateSlideId = () => {
     .replace(/=+$/g, "");
 };
 
+// Accept either an empty string ("no boundary") or a parseable ISO
+// 8601 string and normalise to a canonical ISO timestamp. Anything
+// else (truthy but unparseable, wrong type) is silently dropped to
+// "" so the slide stays visible by default. This is intentionally
+// permissive on the server side because the admin UI does its own
+// PHT-aware formatting; the server's job is just to make sure we
+// never persist garbage that would break the public filter below.
+const sanitizeIsoTimestamp = (raw) => {
+  if (typeof raw !== "string" || !raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+};
+
 const sanitizeSlide = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   if (!isValidImage(raw.image)) return null;
@@ -123,6 +137,11 @@ const sanitizeSlide = (raw) => {
     ctaHref: sanitizeHref(raw.ctaHref),
     align: ALIGNS.includes(raw.align) ? raw.align : "center",
     enabled: raw.enabled !== false,
+    // Optional schedule window. Both fields are ISO 8601 UTC strings;
+    // "" means "unbounded". A slide is publicly visible when the
+    // current UTC time is within [startsAt, endsAt] inclusive.
+    startsAt: sanitizeIsoTimestamp(raw.startsAt),
+    endsAt: sanitizeIsoTimestamp(raw.endsAt),
     sortOrder: Number.isFinite(Number(raw.sortOrder))
       ? Number(raw.sortOrder)
       : 0,
@@ -191,16 +210,36 @@ const writeWithCAS = async (store, next) => {
   return null;
 };
 
-const publicView = (data) => ({
-  settings: data.settings,
-  slides: data.slides
-    .filter((s) => s.enabled && s.image)
-    .map(({ enabled, sortOrder, ...rest }) => {
-      void enabled;
-      void sortOrder;
-      return rest;
-    }),
-});
+// Returns true when the slide is inside its scheduled window (or has
+// no window at all). Both bounds are inclusive; an admin who sets
+// endsAt="Sunday 23:59 PHT" expects the slide to disappear on Monday
+// 00:00 PHT, which falls out naturally because endsAt itself is
+// stored as a UTC instant.
+const isWithinSchedule = (slide, now) => {
+  if (slide.startsAt) {
+    const t = Date.parse(slide.startsAt);
+    if (Number.isFinite(t) && t > now) return false;
+  }
+  if (slide.endsAt) {
+    const t = Date.parse(slide.endsAt);
+    if (Number.isFinite(t) && t < now) return false;
+  }
+  return true;
+};
+
+const publicView = (data) => {
+  const now = Date.now();
+  return {
+    settings: data.settings,
+    slides: data.slides
+      .filter((s) => s.enabled && s.image && isWithinSchedule(s, now))
+      .map(({ enabled, sortOrder, ...rest }) => {
+        void enabled;
+        void sortOrder;
+        return rest;
+      }),
+  };
+};
 
 const handle = async ({ request, env }) => {
   const blocked = await initRequestContext({ request, env });

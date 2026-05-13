@@ -66,7 +66,43 @@ const blankSlide = (): AdminSlide => ({
   ctaHref: "",
   align: "center",
   enabled: true,
+  startsAt: "",
+  endsAt: "",
 });
+
+// Convert an ISO 8601 UTC timestamp into the value <input
+// type="datetime-local"> wants (`YYYY-MM-DDTHH:mm`) expressed in
+// Asia/Manila wall-clock time. Empty string roundtrips to empty.
+const isoToPhtInput = (iso: string): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  // Some engines emit hour="24" for midnight; normalise to "00".
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
+};
+
+// Inverse of isoToPhtInput. The datetime-local value is interpreted
+// as Asia/Manila wall-clock time (UTC+8) and converted to an ISO 8601
+// UTC string for storage. Returns "" for empty / unparseable input.
+const phtInputToIso = (local: string): string => {
+  if (!local) return "";
+  const [date, time] = local.split("T");
+  if (!date || !time) return "";
+  const d = new Date(`${date}T${time}:00+08:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+};
 
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -692,6 +728,62 @@ export function HeroSlidesSection() {
                       placeholder="/collection or /policy/shipping"
                     />
                   </div>
+                </div>
+                {/* Optional schedule window. Leaving both blank keeps the
+                    slide always-on (the existing behaviour). Filling in
+                    "Goes live" makes the slide appear automatically at
+                    that PHT moment; "Ends" makes it disappear. The server
+                    filters at request time so the homepage starts /
+                    stops showing the slide without any cron job. */}
+                <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-3 space-y-2">
+                  <Label className="text-xs flex items-center gap-1.5">
+                    <span className="uppercase tracking-[0.2em] text-muted-foreground">
+                      Schedule (PHT)
+                    </span>
+                  </Label>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <div>
+                      <Label
+                        htmlFor={`starts-${slide.id}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Goes live
+                      </Label>
+                      <Input
+                        id={`starts-${slide.id}`}
+                        type="datetime-local"
+                        value={isoToPhtInput(slide.startsAt)}
+                        onChange={(e) =>
+                          updateSlide(slide.id, {
+                            startsAt: phtInputToIso(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label
+                        htmlFor={`ends-${slide.id}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Ends
+                      </Label>
+                      <Input
+                        id={`ends-${slide.id}`}
+                        type="datetime-local"
+                        value={isoToPhtInput(slide.endsAt)}
+                        onChange={(e) =>
+                          updateSlide(slide.id, {
+                            endsAt: phtInputToIso(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Leave both blank for an always-on slide. Times are Manila
+                    time (UTC+8); the homepage starts and stops showing this
+                    slide automatically.
+                  </p>
                 </div>
               </div>
             </div>
