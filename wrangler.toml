@@ -273,3 +273,40 @@ binding = "AI"
 #
 # Until the env vars are set, every Turso helper is a no-op — the site
 # keeps working unchanged on KV+D1 alone.
+
+# ---------------------------------------------------------------------------
+# TikTok Content Posting API — admin auto-posting (optional)
+#
+# Lets the admin publish paintings to a connected TikTok account as
+# photo posts. Implemented in `_lib/tiktok.js` + `/api/admin/tiktok*`
+# + `src/components/admin/TikTokSection.tsx`.
+#
+# TikTok is bound via plain environment variables (no wrangler.toml
+# binding) because the API is plain HTTPS.
+#
+# To enable in production:
+#   1. Register a TikTok Developer app at https://developers.tiktok.com/
+#      → New App → add the "Login Kit" and "Content Posting API"
+#      products.
+#   2. In the app settings, add this redirect URI:
+#        https://canvhub.com/api/admin/tiktok-callback
+#   3. Add these to Cloudflare Pages → Settings → Variables and Secrets:
+#        TIKTOK_CLIENT_KEY     (Encrypt) — Client Key from your TikTok app
+#        TIKTOK_CLIENT_SECRET  (Encrypt) — Client Secret from your TikTok app
+#        TIKTOK_REDIRECT_URI   (plaintext) — the exact URI from step 2
+#   4. `git push` (CI redeploys with the env vars active).
+#   5. In `/admin → Customize → TikTok` click "Connect TikTok" to start
+#      the OAuth flow, then publish a test painting.
+#
+# Until all three env vars are set, the helper returns a not-configured
+# status and the admin section renders the setup wizard. The rest of
+# the site is unaffected.
+#
+# Token storage: the OAuth access/refresh token pair lives in the
+# STOREFRONT_CONFIG KV namespace under the `tiktok_auth` key. The
+# helper auto-refreshes the 24-hour access token using the 365-day
+# refresh token on every API call.
+#
+# Audit log: every publish attempt (success or fail) writes a row to
+# the D1 `tiktok_posts` table — bootstrapped on demand via the "Apply
+# schema" button in the admin panel.
