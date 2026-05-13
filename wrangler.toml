@@ -227,6 +227,28 @@ bucket_name = "canvhub-images"
 preview_bucket_name = "canvhub-images"
 
 # ---------------------------------------------------------------------------
+# Instagram Graph API (organic auto-posting)
+#
+# When configured, the admin panel (Customize → Instagram) can publish
+# products to a connected Instagram Business account via Meta's Graph
+# API. Reads only `env.IG_*`; never exposed to the SPA.
+#
+# Secrets (set in Cloudflare Pages → Settings → Variables and Secrets
+# as Encrypt values — these are NOT VITE_* vars; they're server-side):
+#   - IG_ACCESS_TOKEN — long-lived (~60 day) Meta access token.
+#   - IG_USER_ID      — Instagram Business Account ID (17841…).
+#   - IG_APP_ID       — Meta Developer App ID (optional, enables token refresh).
+#   - IG_APP_SECRET   — Meta Developer App Secret (optional, enables token refresh).
+#
+# When the secrets are missing, the Instagram admin section renders a
+# setup wizard and all Graph API helpers return null/no-op — the rest
+# of the site keeps working unchanged.
+#
+# Posting audit lives in D1 (`ig_posts` table, see
+# migrations/0009_ig_posts.sql) so the admin can see exactly what was
+# posted and dedupe future runs.
+#
+# ---------------------------------------------------------------------------
 # Workers AI binding (used by the Turso vector-search "More like this" rail)
 #
 # Powers `_lib/embeddings.js` — generates 768-dim text embeddings via

@@ -65,6 +65,7 @@ import ReturnsSection from "@/components/admin/ReturnsSection";
 import { AbandonedCartSection } from "@/components/admin/AbandonedCartSection";
 import { MarketingSection } from "@/components/admin/MarketingSection";
 import { MarketingTriggersSection } from "@/components/admin/MarketingTriggersSection";
+import { InstagramSection } from "@/components/admin/InstagramSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
@@ -110,6 +111,7 @@ import {
   Eye,
   EyeOff,
   Image as ImageIcon,
+  Instagram,
   ImagePlus,
   Images,
   Star,
@@ -168,6 +170,7 @@ type AdminSection =
   | "marketing"
   | "abandonedCart"
   | "marketingTriggers"
+  | "instagram"
   | "storefront"
   | "hero"
   | "siteCopy"
@@ -198,6 +201,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   marketing: "Marketing",
   abandonedCart: "Cart recovery",
   marketingTriggers: "Triggers",
+  instagram: "Instagram",
   storefront: "Storefront",
   hero: "Hero slider",
   siteCopy: "Site copy",
@@ -602,6 +606,11 @@ const NAV_GROUPS: {
         key: "marketingTriggers",
         icon: <Zap className="w-4 h-4" />,
         hint: "Review, winback, restock, price-drop",
+      },
+      {
+        key: "instagram",
+        icon: <Instagram className="w-4 h-4" />,
+        hint: "Auto-post paintings to IG",
       },
       {
         key: "storefront",
@@ -1198,6 +1207,7 @@ function AdminDashboard() {
           {section === "marketing" && <MarketingSection />}
           {section === "abandonedCart" && <AbandonedCartSection />}
           {section === "marketingTriggers" && <MarketingTriggersSection />}
+          {section === "instagram" && <InstagramSection />}
           {section === "storefront" && <StorefrontSection />}
           {section === "hero" && <HeroSlidesSection />}
           {section === "siteCopy" && <SiteCopySection />}

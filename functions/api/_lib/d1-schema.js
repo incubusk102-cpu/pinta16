@@ -215,4 +215,24 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_stock_events_to_state ON stock_events(to_state)`,
   `CREATE INDEX IF NOT EXISTS idx_stock_events_category ON stock_events(category)`,
   `CREATE INDEX IF NOT EXISTS idx_stock_events_source ON stock_events(source)`,
+
+  `CREATE TABLE IF NOT EXISTS ig_posts (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    ig_media_id TEXT,
+    container_id TEXT,
+    permalink TEXT,
+    caption TEXT,
+    image_url TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error_message TEXT,
+    posted_by TEXT,
+    posted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_ig_posts_product_id ON ig_posts(product_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_ig_posts_status ON ig_posts(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_ig_posts_posted_at ON ig_posts(posted_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_ig_posts_created_at ON ig_posts(created_at)`,
 ];
