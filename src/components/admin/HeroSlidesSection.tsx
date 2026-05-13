@@ -77,6 +77,7 @@ export function HeroSlidesSection() {
     slides: liveSlides,
     settings: liveSettings,
     refresh,
+    broadcastChange,
   } = useHeroSlides();
 
   const [loading, setLoading] = useState(true);
@@ -260,6 +261,11 @@ export function HeroSlidesSection() {
         setDraftSlides(slidesWithImage);
       }
       await refresh();
+      // Tell every other tab in this browser (the public homepage,
+      // a preview window, another admin view) that hero slides
+      // changed so they refetch immediately without waiting for a
+      // visibilitychange refocus.
+      broadcastChange();
       setSavedAt(new Date().toLocaleTimeString());
       toast.success("Hero slider saved");
     } catch (err) {
