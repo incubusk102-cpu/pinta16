@@ -30,6 +30,7 @@ import {
   HERO_TEMPLATE_BY_ID,
   type HeroTemplateId,
 } from "./heroSlideTemplates";
+import { HeroSlidePreview } from "./HeroSlidePreview";
 
 const MAX_SLIDES = 8;
 // Original file ceiling before compression. Server still caps the encoded
@@ -363,21 +364,21 @@ export function HeroSlidesSection() {
             className="border border-border/60 rounded-xl overflow-hidden bg-background/40"
           >
             <div className="grid md:grid-cols-[280px_1fr] gap-4 p-4">
-              {/* Image cell */}
+              {/* Image + live preview cell. The thumbnail mirrors the
+                  homepage hero (image + overlay copy + alignment + CTA
+                  chip) so the admin can preview the slide before save
+                  without leaving the editor. */}
               <div className="space-y-2">
-                <div className="relative aspect-[16/10] rounded-md overflow-hidden border border-border/60 bg-muted/40">
-                  {slide.image ? (
-                    <img
-                      src={slide.image}
-                      alt=""
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
-                      No image
-                    </div>
-                  )}
-                </div>
+                <HeroSlidePreview
+                  slide={{
+                    image: slide.image,
+                    eyebrow: slide.eyebrow,
+                    headline: slide.headline,
+                    subtext: slide.subtext,
+                    ctaLabel: slide.ctaLabel,
+                    align: slide.align,
+                  }}
+                />
                 <input
                   ref={(el) => {
                     fileInputs.current[slide.id] = el;
