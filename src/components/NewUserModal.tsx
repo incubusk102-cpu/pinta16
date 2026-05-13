@@ -36,6 +36,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-1",
     image: "/images/1.png",
+    mobileImage: "",
     eyebrow: "Canvas Hub",
     headline: "Affordable Art, Authentic Stories",
     subtext: "",
@@ -46,6 +47,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-2",
     image: "/images/2.png",
+    mobileImage: "",
     eyebrow: "Hand-curated",
     headline: "Limited prints, ready to ship",
     subtext: "",
@@ -56,6 +58,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-3",
     image: "/images/4.png",
+    mobileImage: "",
     eyebrow: "New here?",
     headline: "Welcome — your discount is waiting",
     subtext: "",

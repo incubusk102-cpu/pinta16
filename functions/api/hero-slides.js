@@ -104,9 +104,18 @@ const sanitizeSlide = (raw) => {
     typeof raw.id === "string" && /^[A-Za-z0-9_-]{6,32}$/.test(raw.id)
       ? raw.id
       : generateSlideId();
+  // The mobile crop is optional; an invalid / missing value silently
+  // drops to "" so the slide falls back to the regular image on
+  // every breakpoint (the existing behaviour).
+  const mobileImage = isValidImage(raw.mobileImage)
+    ? typeof raw.mobileImage === "string"
+      ? raw.mobileImage
+      : ""
+    : "";
   return {
     id,
     image: typeof raw.image === "string" ? raw.image : "",
+    mobileImage,
     eyebrow: trimText(raw.eyebrow, MAX_LABEL),
     headline: trimText(raw.headline, MAX_TEXT),
     subtext: trimText(raw.subtext, MAX_TEXT),
