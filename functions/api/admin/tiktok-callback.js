@@ -9,7 +9,6 @@
 // admin UI can render an inline error toast.
 
 import { initRequestContext } from "../_lib/handler-wrapper.js";
-import { isAuthenticated } from "../_lib/admin-auth.js";
 import { exchangeAuthCode } from "../_lib/tiktok.js";
 import { makeStore } from "../_lib/kv-store.js";
 
@@ -33,17 +32,16 @@ export const onRequestGet = async ({ request, env }) => {
   const url = new URL(request.url);
   const origin = `${url.protocol}//${url.host}`;
 
-  // The admin must still be logged in when TikTok bounces back —
-  // otherwise an attacker could trigger the flow with a victim's
-  // session-less browser.
-  const headers = Object.fromEntries(request.headers.entries());
-  const authed = await isAuthenticated({ headers });
-  if (!authed) {
-    return redirect(origin, {
-      tiktok: "failed",
-      reason: "not-authenticated",
-    });
-  }
+  // NOTE: We deliberately don't re-check `isAuthenticated` here. The
+  // admin's session cookie uses `SameSite=Strict` (see _lib/cookies.js)
+  // which browsers strip from cross-site top-level navigations — and a
+  // redirect from www.tiktok.com → canvhub.com is exactly that. The
+  // CSRF guarantee comes instead from the `state` token we minted (and
+  // stashed in KV) at /api/admin/tiktok?action=connect-url — that
+  // endpoint already required admin auth, the state is 192 bits of
+  // crypto-random, single-use, and expires in 10 minutes. Validating
+  // it below is sufficient proof the OAuth flow was started by an
+  // authed admin from this exact site.
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
