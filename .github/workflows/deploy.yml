@@ -39,6 +39,22 @@ name: Deploy to Cloudflare Pages
 #       Sentry DSN — it has to be available at build time, not just
 #       at runtime, because Vite inlines it. When unset, the beacon
 #       script is never injected.
+#   - VITE_TURNSTILE_SITE_KEY
+#       Public Cloudflare Turnstile site key (the value Cloudflare
+#       shows next to your widget at
+#       https://dash.cloudflare.com/?to=/:account/turnstile, starting
+#       `0x4AAAAA...`). Inlined into the SPA bundle so the checkout,
+#       newsletter, and admin-login Turnstile widgets can call
+#       `window.turnstile.render({ sitekey, ... })`. Same reasoning as
+#       the Sentry DSN — must live here, not in Pages env vars,
+#       because Vite needs it at build time. When unset,
+#       `isTurnstileEnabled()` in `src/components/Turnstile.tsx`
+#       returns `false`, the widget renders nothing, and the
+#       client-side gate is bypassed (the server still requires a
+#       valid token, so every payment-intent call fails with
+#       "Verification failed"). The site key is public-safe — it ships
+#       in every visitor's HTML — pair it with the `TURNSTILE_SECRET_KEY`
+#       runtime secret in Cloudflare Pages for the server-side check.
 #   - VITE_SENTRY_ENVIRONMENT
 #       Optional environment label. Defaults to the Vite build mode
 #       (`production`). Set to differentiate e.g. preview deploys.
@@ -101,6 +117,14 @@ jobs:
           # Cloudflare Web Analytics token — also inlined at build time,
           # so it must live here rather than in Pages env vars.
           VITE_CF_ANALYTICS_TOKEN: ${{ secrets.VITE_CF_ANALYTICS_TOKEN }}
+          # Cloudflare Turnstile site key — public-safe and inlined into
+          # the SPA bundle so the checkout, newsletter, and admin-login
+          # widgets can render. Must live here (not in Pages env vars)
+          # because Vite needs it at `npm run build` time, not at
+          # runtime. When the secret is unset, the build still succeeds
+          # — `isTurnstileEnabled()` just returns `false` and the
+          # widgets render nothing.
+          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
         run: npm run build
 
       - name: Deploy to Cloudflare Pages
