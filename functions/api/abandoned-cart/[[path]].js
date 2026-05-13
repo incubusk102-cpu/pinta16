@@ -37,6 +37,10 @@ import { isAuthenticated } from "../_lib/admin-auth.js";
 import { makeStore } from "../_lib/kv-store.js";
 import { getStore } from "../_lib/kv-stores.js";
 import { recordPiiAccess } from "../_lib/audit-log.js";
+import {
+  buildUnsubToken as buildUnsubTokenHmac,
+  constantTimeEqual as constantTimeEqualHmac,
+} from "../_lib/unsub-token.js";
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
 const MS_PER_MINUTE = 60_000;
@@ -56,26 +60,17 @@ const isValidEmail = (s) =>
 const normalizeEmail = (e) =>
   typeof e === "string" ? e.trim().toLowerCase() : "";
 
-const constantTimeEqual = (a, b) => {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  const la = a.length;
-  const lb = b.length;
-  const len = Math.max(la, lb);
-  let mismatch = la ^ lb;
-  for (let i = 0; i < len; i++) {
-    mismatch |= (a.charCodeAt(i % la) || 0) ^ (b.charCodeAt(i % lb) || 0);
-  }
-  return mismatch === 0;
-};
+const constantTimeEqual = constantTimeEqualHmac;
 
-const buildUnsubToken = async (email, createdAt) => {
-  const data = new TextEncoder().encode(`${email}:${createdAt}`);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, 32);
-};
+// HMAC-SHA-256 over `cart:<email>:<createdAt>` keyed by a server-side
+// secret that auto-bootstraps into the CUSTOMER_META KV namespace on
+// first use. The previous implementation hashed `<email>:<createdAt>`
+// with plain SHA-256 without any secret, so anyone who learnt both
+// the email and the entry's `createdAt` timestamp could compute the
+// token offline. See `_lib/unsub-token.js` for the secret-bootstrap
+// details.
+const buildUnsubToken = (email, createdAt) =>
+  buildUnsubTokenHmac("cart", email, createdAt);
 
 const parseBody = (body) => {
   if (!body) return {};
