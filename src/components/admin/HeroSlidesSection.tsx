@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Copy,
   Eye,
   EyeOff,
   Loader2,
@@ -30,6 +31,7 @@ import {
   HERO_TEMPLATE_BY_ID,
   type HeroTemplateId,
 } from "./heroSlideTemplates";
+import { HeroSlidePreview } from "./HeroSlidePreview";
 
 const MAX_SLIDES = 8;
 // Original file ceiling before compression. Server still caps the encoded
@@ -57,6 +59,7 @@ const newId = () =>
 const blankSlide = (): AdminSlide => ({
   id: newId(),
   image: "",
+  mobileImage: "",
   alt: "",
   eyebrow: "",
   headline: "",
@@ -65,7 +68,43 @@ const blankSlide = (): AdminSlide => ({
   ctaHref: "",
   align: "center",
   enabled: true,
+  startsAt: "",
+  endsAt: "",
 });
+
+// Convert an ISO 8601 UTC timestamp into the value <input
+// type="datetime-local"> wants (`YYYY-MM-DDTHH:mm`) expressed in
+// Asia/Manila wall-clock time. Empty string roundtrips to empty.
+const isoToPhtInput = (iso: string): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  // Some engines emit hour="24" for midnight; normalise to "00".
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
+};
+
+// Inverse of isoToPhtInput. The datetime-local value is interpreted
+// as Asia/Manila wall-clock time (UTC+8) and converted to an ISO 8601
+// UTC string for storage. Returns "" for empty / unparseable input.
+const phtInputToIso = (local: string): string => {
+  if (!local) return "";
+  const [date, time] = local.split("T");
+  if (!date || !time) return "";
+  const d = new Date(`${date}T${time}:00+08:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+};
 
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -78,6 +117,7 @@ export function HeroSlidesSection() {
     slides: liveSlides,
     settings: liveSettings,
     refresh,
+    broadcastChange,
   } = useHeroSlides();
 
   const [loading, setLoading] = useState(true);
@@ -87,6 +127,7 @@ export function HeroSlidesSection() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const mobileFileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Load admin view (includes disabled slides)
   useEffect(() => {
@@ -177,6 +218,27 @@ export function HeroSlidesSection() {
     setDraftSlides((prev) => prev.filter((s) => s.id !== id));
   };
 
+  // Insert a deep-cloned copy of the source slide immediately after
+  // it in the list, with a fresh ID. Useful for A/B-testing two
+  // variants of a promo (different headlines, swap the image) without
+  // retyping every field. Respects MAX_SLIDES so the editor still
+  // refuses to grow past the per-namespace cap.
+  const duplicateSlide = (id: string) => {
+    setDraftSlides((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      if (idx === -1) return prev;
+      if (prev.length >= MAX_SLIDES) {
+        toast.warning(`Max ${MAX_SLIDES} slides`);
+        return prev;
+      }
+      const source = prev[idx];
+      const copy: AdminSlide = { ...source, id: newId() };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  };
+
   const moveSlide = (idx: number, dir: -1 | 1) => {
     const target = idx + dir;
     if (target < 0 || target >= draftSlides.length) return;
@@ -187,7 +249,14 @@ export function HeroSlidesSection() {
     });
   };
 
-  const onFile = async (id: string, file: File | undefined) => {
+  // Shared compression / validation for both the main image slot
+  // and the optional mobile-only crop. The caller decides which
+  // slide field receives the resulting data URL.
+  const compressAndAssign = async (
+    id: string,
+    file: File | undefined,
+    field: "image" | "mobileImage",
+  ) => {
     if (!file) return;
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       toast.error("Use JPG, PNG, WEBP, AVIF, or GIF");
@@ -211,11 +280,16 @@ export function HeroSlidesSection() {
         );
         return;
       }
-      updateSlide(id, { image: compressed.url });
+      updateSlide(id, { [field]: compressed.url });
     } catch {
       toast.error("Could not read image");
     }
   };
+
+  const onFile = (id: string, file: File | undefined) =>
+    compressAndAssign(id, file, "image");
+  const onMobileFile = (id: string, file: File | undefined) =>
+    compressAndAssign(id, file, "mobileImage");
 
   const save = async () => {
     const token = getAdminToken();
@@ -261,6 +335,11 @@ export function HeroSlidesSection() {
         setDraftSlides(slidesWithImage);
       }
       await refresh();
+      // Tell every other tab in this browser (the public homepage,
+      // a preview window, another admin view) that hero slides
+      // changed so they refetch immediately without waiting for a
+      // visibilitychange refocus.
+      broadcastChange();
       setSavedAt(new Date().toLocaleTimeString());
       toast.success("Hero slider saved");
     } catch (err) {
@@ -358,21 +437,21 @@ export function HeroSlidesSection() {
             className="border border-border/60 rounded-xl overflow-hidden bg-background/40"
           >
             <div className="grid md:grid-cols-[280px_1fr] gap-4 p-4">
-              {/* Image cell */}
+              {/* Image + live preview cell. The thumbnail mirrors the
+                  homepage hero (image + overlay copy + alignment + CTA
+                  chip) so the admin can preview the slide before save
+                  without leaving the editor. */}
               <div className="space-y-2">
-                <div className="relative aspect-[16/10] rounded-md overflow-hidden border border-border/60 bg-muted/40">
-                  {slide.image ? (
-                    <img
-                      src={slide.image}
-                      alt=""
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
-                      No image
-                    </div>
-                  )}
-                </div>
+                <HeroSlidePreview
+                  slide={{
+                    image: slide.image,
+                    eyebrow: slide.eyebrow,
+                    headline: slide.headline,
+                    subtext: slide.subtext,
+                    ctaLabel: slide.ctaLabel,
+                    align: slide.align,
+                  }}
+                />
                 <input
                   ref={(el) => {
                     fileInputs.current[slide.id] = el;
@@ -412,6 +491,79 @@ export function HeroSlidesSection() {
                     {formatBytes(slide.image.length)} · base64
                   </p>
                 )}
+
+                {/* Optional mobile-only crop. Leaving this blank serves
+                    the landscape image to every viewport (today's
+                    behaviour). Filling it in swaps to this image when
+                    the viewport is < 640px so portrait paintings don't
+                    crop awkwardly on phones. */}
+                <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Mobile crop (optional)
+                    </span>
+                    {slide.mobileImage && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatBytes(slide.mobileImage.length)}
+                      </span>
+                    )}
+                  </div>
+                  {slide.mobileImage && (
+                    <div className="relative aspect-[3/4] max-h-32 mx-auto rounded overflow-hidden border border-border/40 bg-muted/40">
+                      <img
+                        src={slide.mobileImage}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <input
+                    ref={(el) => {
+                      mobileFileInputs.current[slide.id] = el;
+                    }}
+                    type="file"
+                    accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                    className="hidden"
+                    onChange={(e) =>
+                      void onMobileFile(
+                        slide.id,
+                        e.target.files?.[0] || undefined,
+                      )
+                    }
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        mobileFileInputs.current[slide.id]?.click()
+                      }
+                      className="flex-1"
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-2" />
+                      {slide.mobileImage ? "Replace" : "Upload mobile"}
+                    </Button>
+                    {slide.mobileImage && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          updateSlide(slide.id, { mobileImage: "" })
+                        }
+                        title="Clear mobile image"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Shown on phones (under 640px wide). Leave blank to use the
+                    landscape image at every breakpoint.
+                  </p>
+                </div>
+
                 <div className="pt-1">
                   <Label htmlFor={`alt-${slide.id}`} className="text-xs">
                     Image alt text
@@ -475,6 +627,16 @@ export function HeroSlidesSection() {
                       ) : (
                         <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
                       )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => duplicateSlide(slide.id)}
+                      disabled={draftSlides.length >= MAX_SLIDES}
+                      title="Duplicate slide"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
                     </Button>
                     <Button
                       type="button"
@@ -620,6 +782,62 @@ export function HeroSlidesSection() {
                       placeholder="/collection or /policy/shipping"
                     />
                   </div>
+                </div>
+                {/* Optional schedule window. Leaving both blank keeps the
+                    slide always-on (the existing behaviour). Filling in
+                    "Goes live" makes the slide appear automatically at
+                    that PHT moment; "Ends" makes it disappear. The server
+                    filters at request time so the homepage starts /
+                    stops showing the slide without any cron job. */}
+                <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-3 space-y-2">
+                  <Label className="text-xs flex items-center gap-1.5">
+                    <span className="uppercase tracking-[0.2em] text-muted-foreground">
+                      Schedule (PHT)
+                    </span>
+                  </Label>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <div>
+                      <Label
+                        htmlFor={`starts-${slide.id}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Goes live
+                      </Label>
+                      <Input
+                        id={`starts-${slide.id}`}
+                        type="datetime-local"
+                        value={isoToPhtInput(slide.startsAt)}
+                        onChange={(e) =>
+                          updateSlide(slide.id, {
+                            startsAt: phtInputToIso(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label
+                        htmlFor={`ends-${slide.id}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Ends
+                      </Label>
+                      <Input
+                        id={`ends-${slide.id}`}
+                        type="datetime-local"
+                        value={isoToPhtInput(slide.endsAt)}
+                        onChange={(e) =>
+                          updateSlide(slide.id, {
+                            endsAt: phtInputToIso(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Leave both blank for an always-on slide. Times are Manila
+                    time (UTC+8); the homepage starts and stops showing this
+                    slide automatically.
+                  </p>
                 </div>
               </div>
             </div>

@@ -36,6 +36,7 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
   {
     id: "_default-1",
     image: "/images/1.png",
+    mobileImage: "",
     alt: "Featured Canvas Hub painting",
     eyebrow: "Canvas Hub",
     headline: "Affordable Art, Authentic Stories",
@@ -43,10 +44,13 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
     ctaLabel: "",
     ctaHref: "",
     align: "center",
+    startsAt: "",
+    endsAt: "",
   },
   {
     id: "_default-2",
     image: "/images/2.png",
+    mobileImage: "",
     alt: "Hand-curated original painting",
     eyebrow: "Hand-curated",
     headline: "Limited prints, ready to ship",
@@ -54,10 +58,13 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
     ctaLabel: "",
     ctaHref: "",
     align: "center",
+    startsAt: "",
+    endsAt: "",
   },
   {
     id: "_default-3",
     image: "/images/4.png",
+    mobileImage: "",
     alt: "Welcome painting for first-time visitors",
     eyebrow: "New here?",
     headline: "Welcome — your discount is waiting",
@@ -65,6 +72,8 @@ const DEFAULT_FALLBACK_SLIDES: HeroSlide[] = [
     ctaLabel: "",
     ctaHref: "",
     align: "center",
+    startsAt: "",
+    endsAt: "",
   },
 ];
 
