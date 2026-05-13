@@ -28,6 +28,12 @@
     />
     <meta name="twitter:image" content="https://canvhub.com/icon-512.png" />
 
+    <!-- Pinterest domain verification. Required so Pinterest's Catalog
+         Manager will accept a feed URL data source for canvhub.com.
+         The content value is issued per-app by Pinterest; rotating it
+         is harmless (worst case the existing claim has to be redone). -->
+    <meta name="p:domain_verify" content="49bded49707165b541b6e020b68eb386" />
+
     <!-- Default canonical for the homepage. Per-route canonicals are
          emitted by the `useSEO` hook in src/hooks/useSEO.ts and replace
          this href as soon as the SPA mounts; the static href below is
