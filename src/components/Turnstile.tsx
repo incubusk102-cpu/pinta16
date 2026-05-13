@@ -89,6 +89,13 @@ interface TurnstileProps {
   appearance?: "always" | "execute" | "interaction-only";
   theme?: "light" | "dark" | "auto";
   className?: string;
+  // Bump this number from the parent to force the widget to drop its
+  // current token and ask Cloudflare for a fresh one. Turnstile tokens
+  // are single-use; call sites that verify the same token at two
+  // different server endpoints (e.g. /api/create-payment then
+  // /api/orders) should bump this between the two so the second
+  // siteverify call doesn't see a burnt token.
+  resetSignal?: number;
 }
 
 const Turnstile = ({
@@ -98,11 +105,26 @@ const Turnstile = ({
   appearance = "interaction-only",
   theme = "auto",
   className,
+  resetSignal = 0,
 }: TurnstileProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | undefined>(undefined);
   const [, setReady] = useState(false);
   const id = useId();
+
+  // When the parent bumps `resetSignal`, ask Turnstile to issue a
+  // fresh token via its registered callback. No-op until the widget
+  // has rendered (resetSignal = 0 on first mount is also skipped).
+  useEffect(() => {
+    if (!resetSignal) return;
+    const wid = widgetIdRef.current;
+    if (!wid || !window.turnstile?.reset) return;
+    try {
+      window.turnstile.reset(wid);
+    } catch {
+      /* widget gone / not yet ready — next mount will issue a fresh token */
+    }
+  }, [resetSignal]);
 
   useEffect(() => {
     // No site key configured → render nothing. The form should treat the

@@ -1,5 +1,9 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import {
+  verifyTurnstileToken,
+  turnstileFailureResponse,
+} from "./_lib/turnstile.js";
 import { logError } from "./_lib/redact.js";
 
 const jsonHeaders = {
@@ -70,7 +74,23 @@ const handler = async (event) => {
   if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
 
   try {
-    const { amount, description, customer } = parseBody(event.body);
+    const { amount, description, customer, turnstileToken } = parseBody(
+      event.body,
+    );
+
+    // Cloudflare Turnstile gate before the PayMongo call. PayMongo
+    // bills per payment-intent request and each request also writes a
+    // QR code to disk on their side, so we want bots filtered out
+    // before we spend the budget — not just before we record the
+    // order. Falls open (skipped + allowed) when
+    // `TURNSTILE_SECRET_KEY` is not configured or the admin has set
+    // the mode to "off" / "soft" (see `_lib/turnstile.js` and Admin
+    // → Security).
+    const tsToken = typeof turnstileToken === "string" ? turnstileToken : "";
+    const ts = await verifyTurnstileToken(event, { token: tsToken });
+    if (!ts.allowed) {
+      return turnstileFailureResponse(ts.reason);
+    }
 
     if (
       !amount ||

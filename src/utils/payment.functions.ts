@@ -10,6 +10,12 @@ interface CreatePaymentData {
     address: string;
     city: string;
   };
+  // Cloudflare Turnstile token captured by the widget in CheckoutForm.
+  // Forwarded to /api/create-payment so the server can reject bot
+  // submissions before the PayMongo payment-intent is created.
+  // Optional: when Turnstile is not configured (`VITE_TURNSTILE_SITE_KEY`
+  // unset) the widget never renders and the server falls open.
+  turnstileToken?: string | null;
 }
 
 export async function createPayment({ data }: { data: CreatePaymentData }) {
