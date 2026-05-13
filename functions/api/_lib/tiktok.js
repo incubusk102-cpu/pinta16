@@ -36,6 +36,7 @@
 
 import { getCloudflareEnv } from "./context.js";
 import { makeStore } from "./kv-store.js";
+import { d1Run, isD1Available } from "./d1.js";
 
 const TIKTOK_API_HOST = "https://open.tiktokapis.com";
 const TIKTOK_OAUTH_HOST = "https://www.tiktok.com";
@@ -44,6 +45,12 @@ const TIKTOK_OAUTH_HOST = "https://www.tiktok.com";
 // OAuth token bundle. Single tenancy — canvhub only ever connects
 // one TikTok account at a time (the @canvashub account).
 const TIKTOK_AUTH_KEY = "tiktok_auth";
+
+// KV key (same namespace) for the auto-post toggle. When `enabled`
+// is true, every successful product create fires a fire-and-forget
+// MEDIA_UPLOAD job. Default off — operator opts in once from the
+// admin TikTok section.
+const TIKTOK_AUTO_POST_KEY = "tiktok_auto_post";
 
 // Scopes we request during the OAuth authorize step. `video.publish`
 // is required for the Content Posting API; `user.info.basic` lets
@@ -676,6 +683,242 @@ export const generateTikTokCaption = (product) => {
   return out.length > MAX_CAPTION_LENGTH
     ? out.slice(0, MAX_CAPTION_LENGTH - 1) + "…"
     : out;
+};
+
+// ─── auto-post toggle ──────────────────────────────────────────────────────────
+
+// Read the auto-post-on-product-create toggle. Returns `false` when
+// the flag has never been set, when STOREFRONT_CONFIG is unbound, or
+// on any read error — safe defaults so an env hiccup never opens the
+// floodgates.
+export const getAutoPostEnabled = async () => {
+  const env = getCloudflareEnv();
+  if (!env?.STOREFRONT_CONFIG) return false;
+  const store = makeStore(env.STOREFRONT_CONFIG);
+  try {
+    const value = await store.get(TIKTOK_AUTO_POST_KEY, { type: "json" });
+    return Boolean(value?.enabled);
+  } catch {
+    return false;
+  }
+};
+
+// Write the auto-post toggle. Throws when STOREFRONT_CONFIG is
+// unbound — admin handler upgrades that to a 500.
+export const setAutoPostEnabled = async (enabled) => {
+  const env = getCloudflareEnv();
+  if (!env?.STOREFRONT_CONFIG) {
+    throw new Error("STOREFRONT_CONFIG KV binding missing");
+  }
+  const store = makeStore(env.STOREFRONT_CONFIG);
+  await store.setJSON(TIKTOK_AUTO_POST_KEY, {
+    enabled: Boolean(enabled),
+    updatedAt: new Date().toISOString(),
+  });
+};
+
+// ─── unified publish flow ──────────────────────────────────────────────────────
+
+const nowIso = () => new Date().toISOString();
+
+const newAuditId = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `tk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+// publishProductPhoto — the single source of truth for the
+// init → poll → D1-audit-log flow. Both the admin "publish now"
+// endpoint and the auto-post-on-create hook call this so we can't
+// drift between the two paths.
+//
+// `product` is the canvhub KV product row.
+// `origin` is the canvhub URL (e.g. https://canvhub.com), used to
+//   resolve relative image paths into public HTTPS URLs.
+// `postMode` defaults to MEDIA_UPLOAD (works in Sandbox).
+//   DIRECT_POST requires TikTok Production audit.
+// `source` is recorded in the audit table so the admin can
+//   distinguish manual posts from auto-on-create posts.
+//
+// Returns `{ ok, id, publishId, postId, shareUrl, status, error,
+// errorCode }`. Never throws — wraps everything in try/catch so it's
+// safe to call from a fire-and-forget background task.
+export const publishProductPhoto = async ({
+  product,
+  origin = "",
+  postMode = "MEDIA_UPLOAD",
+  privacyLevel = null,
+  captionOverride = null,
+  imageUrlOverride = null,
+  source = "manual",
+} = {}) => {
+  try {
+    if (!product?.id) {
+      return { ok: false, error: "product is required" };
+    }
+    if (!isD1Available()) {
+      return { ok: false, error: "D1 not configured" };
+    }
+    const caption = (captionOverride ?? generateTikTokCaption(product)).slice(
+      0,
+      MAX_CAPTION_LENGTH,
+    );
+    const imageUrl =
+      (typeof imageUrlOverride === "string" &&
+      /^https:\/\//i.test(imageUrlOverride)
+        ? imageUrlOverride
+        : null) || resolveProductImageUrl(product, { origin });
+    if (!imageUrl || !/^https:\/\//i.test(imageUrl)) {
+      return {
+        ok: false,
+        error: "Product has no public HTTPS image URL",
+      };
+    }
+    const resolvedMode =
+      postMode === "DIRECT_POST" ? "DIRECT_POST" : "MEDIA_UPLOAD";
+    const resolvedPrivacy =
+      typeof privacyLevel === "string" && privacyLevel.trim()
+        ? privacyLevel
+        : resolvedMode === "DIRECT_POST"
+          ? "PUBLIC_TO_EVERYONE"
+          : "SELF_ONLY";
+
+    // Pre-write the audit row so even init failures are recorded.
+    // `posted_by` doubles as our source tag ("manual" / "auto-create")
+    // so we don't need a schema change to track origin.
+    const rowId = newAuditId();
+    const now = nowIso();
+    await d1Run(
+      `INSERT INTO tiktok_posts
+        (id, product_id, caption, image_url, image_urls, post_mode, media_type, status, posted_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'PHOTO', 'pending', ?, ?, ?)`,
+      [
+        rowId,
+        product.id,
+        caption,
+        imageUrl,
+        JSON.stringify([imageUrl]),
+        resolvedMode,
+        source,
+        now,
+        now,
+      ],
+    );
+
+    const initResult = await initPhotoPost({
+      imageUrls: [imageUrl],
+      caption,
+      postMode: resolvedMode,
+      privacyLevel: resolvedPrivacy,
+    });
+    if (!initResult.ok) {
+      await d1Run(
+        `UPDATE tiktok_posts
+           SET status='failed', error_code=?, error_message=?, updated_at=?
+         WHERE id=?`,
+        [
+          initResult.errorCode || null,
+          initResult.error || "init failed",
+          nowIso(),
+          rowId,
+        ],
+      );
+      return {
+        ok: false,
+        id: rowId,
+        error: initResult.error || "TikTok rejected the init request",
+        errorCode: initResult.errorCode || null,
+      };
+    }
+
+    const publishId = initResult.publishId;
+    await d1Run(
+      `UPDATE tiktok_posts
+         SET publish_id=?, status='processing', updated_at=?
+       WHERE id=?`,
+      [publishId, nowIso(), rowId],
+    );
+
+    const pollResult = await pollPublishStatus(publishId, {
+      timeoutMs: 60000,
+    });
+    if (!pollResult.ok) {
+      await d1Run(
+        `UPDATE tiktok_posts
+           SET status='failed', error_code=?, error_message=?, updated_at=?
+         WHERE id=?`,
+        [
+          pollResult.errorCode || pollResult.status || null,
+          pollResult.error || "polling failed",
+          nowIso(),
+          rowId,
+        ],
+      );
+      return {
+        ok: false,
+        id: rowId,
+        publishId,
+        error: pollResult.error || "TikTok publishing failed",
+        status: pollResult.status || null,
+      };
+    }
+
+    const finishedAt = nowIso();
+    await d1Run(
+      `UPDATE tiktok_posts
+         SET status='published', tiktok_post_id=?, share_url=?, posted_at=?, updated_at=?
+       WHERE id=?`,
+      [
+        pollResult.postId || null,
+        pollResult.shareUrl || null,
+        finishedAt,
+        finishedAt,
+        rowId,
+      ],
+    );
+
+    return {
+      ok: true,
+      id: rowId,
+      publishId,
+      postId: pollResult.postId || null,
+      shareUrl: pollResult.shareUrl || null,
+      status: pollResult.status,
+    };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+};
+
+// shouldAutoPostProduct — decide whether the create-product hook
+// should fire the auto-post. Centralised here so the rules are
+// auditable in one place.
+//
+// Skips when:
+//   * auto-post toggle is off
+//   * TikTok is not configured (env vars missing)
+//   * not OAuth-connected (no stored token)
+//   * product has no image
+//   * product availability is sold / draft / reserved
+//   * product has no id (defensive)
+export const shouldAutoPostProduct = async (product) => {
+  if (!product || !product.id) return { ok: false, reason: "no-product" };
+  if (!product.image && !product.images?.length) {
+    return { ok: false, reason: "no-image" };
+  }
+  const av = String(product.availability || "available").toLowerCase();
+  if (av === "sold" || av === "draft" || av === "reserved") {
+    return { ok: false, reason: `availability-${av}` };
+  }
+  if (!isTikTokConfigured()) {
+    return { ok: false, reason: "not-configured" };
+  }
+  const enabled = await getAutoPostEnabled();
+  if (!enabled) return { ok: false, reason: "toggle-off" };
+  const auth = await getStoredAuth();
+  if (!auth?.access_token) {
+    return { ok: false, reason: "not-connected" };
+  }
+  return { ok: true };
 };
 
 export { MAX_CAPTION_LENGTH };

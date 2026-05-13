@@ -8,6 +8,8 @@ import {
   RefreshCw,
   Send,
   Settings as SettingsIcon,
+  ToggleLeft,
+  ToggleRight,
   Trash2,
 } from "lucide-react";
 import { Button } from "../ui/button";
@@ -76,6 +78,7 @@ interface TikTokAccountStatus {
   errors: string[];
   d1Available: boolean;
   schemaApplied: boolean;
+  autoPostEnabled?: boolean;
   counts: { total: number; published: number; failed: number } | null;
 }
 
@@ -169,6 +172,7 @@ export function TikTokSection() {
   const [refreshingToken, setRefreshingToken] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [togglingAutoPost, setTogglingAutoPost] = useState(false);
   const [oauthToast, setOauthToast] = useState<{
     kind: "success" | "error";
     text: string;
@@ -377,6 +381,42 @@ export function TikTokSection() {
       await fetchStatus();
     } finally {
       setRefreshingToken(false);
+    }
+  };
+
+  const toggleAutoPost = async () => {
+    if (!status) return;
+    const next = !status.autoPostEnabled;
+    setTogglingAutoPost(true);
+    try {
+      const res = await fetch("/api/admin/tiktok?action=set-auto-post", {
+        method: "POST",
+        credentials: "include",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({ enabled: next }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setOauthToast({
+          kind: "error",
+          text: data.error || "Failed to update auto-post setting",
+        });
+        return;
+      }
+      setStatus((prev) => (prev ? { ...prev, autoPostEnabled: next } : prev));
+      setOauthToast({
+        kind: "success",
+        text: next
+          ? "Auto-posting enabled. New products will be sent to TikTok automatically."
+          : "Auto-posting disabled.",
+      });
+    } catch (err) {
+      setOauthToast({
+        kind: "error",
+        text: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setTogglingAutoPost(false);
     }
   };
 
@@ -628,6 +668,41 @@ export function TikTokSection() {
           )}
         </CardContent>
       </Card>
+
+      {/* ─── auto-post toggle ──────────────────────────────── */}
+      {!statusLoading && status?.connected && status?.schemaApplied && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">
+                  Auto-post new products to TikTok
+                </p>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  When enabled, every new product you create is automatically
+                  posted to your TikTok inbox (MEDIA_UPLOAD mode). You finish
+                  publishing inside the TikTok app. Turn off to pause.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void toggleAutoPost()}
+                disabled={togglingAutoPost}
+                className="shrink-0 ml-4"
+              >
+                {togglingAutoPost ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : status.autoPostEnabled ? (
+                  <ToggleRight className="w-8 h-8 text-green-600" />
+                ) : (
+                  <ToggleLeft className="w-8 h-8 text-stone-400" />
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── setup wizard if not configured ───────────────────────── */}
       {!statusLoading && status && !status.configured && (
