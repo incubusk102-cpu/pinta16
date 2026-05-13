@@ -126,7 +126,13 @@ const STATE_CHANGING_METHOD_RE = /^(POST|PUT|PATCH|DELETE)$/;
 // `wrapHandler` — finer-grained exemptions live in the per-endpoint
 // handlers (see `CSRF_INLINE_PATHS`). Authorization-header auth is
 // exempt because the browser doesn't auto-attach that header.
-const isCsrfRejected = (request, pathname) => {
+//
+// Exported so per-endpoint handlers that DON'T go through
+// `wrapHandler` (e.g. the `/api/admin/d1` and `/api/admin/turso`
+// surfaces, which export `onRequestPost` directly) can apply the
+// same gate themselves. Returns `true` when the request should be
+// rejected with a 403.
+export const isCsrfRejected = (request, pathname) => {
   if (!STATE_CHANGING_METHOD_RE.test(request.method)) return false;
   if (CSRF_INLINE_PATHS.has(pathname)) return false;
   const headersShim = buildHeadersShim(request);
