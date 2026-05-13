@@ -10,7 +10,7 @@
 //
 // All actions require admin auth (same session cookie as the rest of /admin).
 
-import { initRequestContext } from "../_lib/handler-wrapper.js";
+import { initRequestContext, isCsrfRejected } from "../_lib/handler-wrapper.js";
 import { isAuthenticated } from "../_lib/admin-auth.js";
 import {
   getD1,
@@ -159,6 +159,14 @@ export const onRequestGet = async ({ request, env }) => {
 export const onRequestPost = async ({ request, env }) => {
   const blocked = await initRequestContext({ request, env });
   if (blocked) return blocked;
+  const url = new URL(request.url);
+  // Defense-in-depth: the admin session cookie is already `SameSite=Strict`,
+  // but layering the double-submit CSRF check closes the gap if a subdomain
+  // or future XSS ever sidesteps SameSite. `isCsrfRejected` is a no-op for
+  // bearer-auth callers (curl / CI / the SPA's authed fetches).
+  if (isCsrfRejected(request, url.pathname)) {
+    return json(403, { error: "Invalid CSRF token" });
+  }
   if (
     !(await isAuthenticated({
       headers: Object.fromEntries(request.headers.entries()),
@@ -167,7 +175,6 @@ export const onRequestPost = async ({ request, env }) => {
     return json(401, { error: "Not authenticated" });
   }
 
-  const url = new URL(request.url);
   const action = url.searchParams.get("action") || "";
 
   if (!isD1Available()) {
