@@ -130,6 +130,11 @@ const sanitizeSlide = (raw) => {
     id,
     image: typeof raw.image === "string" ? raw.image : "",
     mobileImage,
+    // Alt text shares the long-form (MAX_TEXT) limit so admins can
+    // write a sentence describing the painting for screen readers /
+    // image search crawlers. Falls back to headline at render time
+    // when left blank, so existing slides stay accessible.
+    alt: trimText(raw.alt, MAX_TEXT),
     eyebrow: trimText(raw.eyebrow, MAX_LABEL),
     headline: trimText(raw.headline, MAX_TEXT),
     subtext: trimText(raw.subtext, MAX_TEXT),

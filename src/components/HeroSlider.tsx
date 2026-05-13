@@ -313,7 +313,10 @@ const HeroSlider = () => {
                     : undefined
                 }
                 alt={
-                  slide.headline || slide.eyebrow || `Slide ${safeIndex + 1}`
+                  slide.alt ||
+                  slide.headline ||
+                  slide.eyebrow ||
+                  `Slide ${safeIndex + 1}`
                 }
                 className="absolute inset-0 w-full h-full object-cover"
                 initial={showKenBurns ? { scale: 1.05 } : false}
