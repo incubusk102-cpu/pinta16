@@ -242,3 +242,97 @@ describe("toTikTokImageUrl — Cloudflare Image Resizing wrapper", () => {
     );
   });
 });
+
+describe("pollPublishStatus — fail-fast mode", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    vi.resetModules();
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.doUnmock("../../../functions/api/_lib/context.js");
+  });
+
+  const respondWith = (status: string) =>
+    new Response(
+      JSON.stringify({
+        data: { status, uploaded_bytes: 0 },
+        error: { code: "ok", message: "" },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+  it("returns ok:true with pending:true when status stays PROCESSING_UPLOAD", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock = vi.fn(async () => respondWith("PROCESSING_UPLOAD"));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const result = await mod.pollPublishStatus("p_id_test", {
+      timeoutMs: 100,
+      failFast: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.pending).toBe(true);
+    expect(result.status).toBe("PROCESSING_UPLOAD");
+  });
+
+  it("still returns a hard timeout error when failFast is false", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock = vi.fn(async () => respondWith("PROCESSING_UPLOAD"));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const result = await mod.pollPublishStatus("p_id_test", {
+      timeoutMs: 100,
+    });
+    expect(result.ok).toBe(false);
+    expect(String(result.error)).toContain("timed out");
+  });
+
+  it("returns the FAILED terminal state immediately even in failFast mode", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              status: "FAILED",
+              fail_reason: "picture_size_check_failed",
+            },
+            error: { code: "ok", message: "" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const result = await mod.pollPublishStatus("p_id_test", {
+      timeoutMs: 5000,
+      failFast: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("FAILED");
+    expect(String(result.error)).toContain("picture_size_check_failed");
+  });
+
+  it("returns SEND_TO_USER_INBOX as a terminal success", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock = vi.fn(async () => respondWith("SEND_TO_USER_INBOX"));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const result = await mod.pollPublishStatus("p_id_test", {
+      timeoutMs: 5000,
+      failFast: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.pending).toBeUndefined();
+    expect(result.status).toBe("SEND_TO_USER_INBOX");
+  });
+});
