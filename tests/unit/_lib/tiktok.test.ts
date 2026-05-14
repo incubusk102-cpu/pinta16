@@ -174,3 +174,71 @@ describe("initPhotoPost — TikTok content posting body shape", () => {
     expect(result.publishId).toBe("p_pub_url~v2.test");
   });
 });
+
+describe("toTikTokImageUrl — Cloudflare Image Resizing wrapper", () => {
+  const TRANSFORM =
+    "format=jpeg,fit=pad,width=1080,height=1920,background=%23f5f3ee,quality=90";
+
+  it("wraps a same-origin canvhub URL with the cdn-cgi/image transform", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const out = mod.toTikTokImageUrl(
+      "https://canvhub.com/api/r/products/aa/bb.webp",
+      { origin: "https://canvhub.com" },
+    );
+    expect(out).toBe(
+      `https://canvhub.com/cdn-cgi/image/${TRANSFORM}/api/r/products/aa/bb.webp`,
+    );
+  });
+
+  it("wraps the URL even when no origin is supplied", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const out = mod.toTikTokImageUrl(
+      "https://canvhub.com/api/r/products/aa/bb.webp",
+    );
+    expect(out).toBe(
+      `https://canvhub.com/cdn-cgi/image/${TRANSFORM}/api/r/products/aa/bb.webp`,
+    );
+  });
+
+  it("does not double-wrap a URL that already has the cdn-cgi/image prefix", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const already = `https://canvhub.com/cdn-cgi/image/${TRANSFORM}/api/r/x.webp`;
+    expect(
+      mod.toTikTokImageUrl(already, { origin: "https://canvhub.com" }),
+    ).toBe(already);
+  });
+
+  it("leaves cross-origin URLs untouched (we can't rewrite hosts we don't control)", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const external = "https://cdn.example.com/foo.jpg";
+    expect(
+      mod.toTikTokImageUrl(external, { origin: "https://canvhub.com" }),
+    ).toBe(external);
+  });
+
+  it("leaves non-HTTPS and invalid inputs untouched", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    expect(mod.toTikTokImageUrl("http://canvhub.com/img.webp")).toBe(
+      "http://canvhub.com/img.webp",
+    );
+    expect(mod.toTikTokImageUrl("")).toBe("");
+    expect(mod.toTikTokImageUrl(null)).toBe(null);
+    expect(mod.toTikTokImageUrl(undefined)).toBe(undefined);
+  });
+
+  it("preserves the query string when rewriting", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const out = mod.toTikTokImageUrl("https://canvhub.com/api/r/x.webp?v=2", {
+      origin: "https://canvhub.com",
+    });
+    expect(out).toBe(
+      `https://canvhub.com/cdn-cgi/image/${TRANSFORM}/api/r/x.webp?v=2`,
+    );
+  });
+});

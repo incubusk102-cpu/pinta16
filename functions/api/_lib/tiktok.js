@@ -669,6 +669,45 @@ export const resolveProductImageUrl = (product, { origin = "" } = {}) => {
   return null;
 };
 
+// Cloudflare Image Resizing options applied to any same-origin product
+// image before it's handed to TikTok's PULL_FROM_URL fetcher.
+//
+// Forces:
+//   - JPEG output (TikTok rejects extended-WebP / VP8X variants with
+//     `picture_size_check_failed`, even though plain WebP is documented
+//     as supported).
+//   - 1080x1920 canvas, padded with the canvhub cream brand colour, so
+//     non-9:16 paintings (the common case) still satisfy TikTok's
+//     aspect-ratio expectation without cropping the artwork.
+const TIKTOK_IMAGE_TRANSFORM =
+  "format=jpeg,fit=pad,width=1080,height=1920,background=%23f5f3ee,quality=90";
+
+// Wrap a same-origin canvhub image URL with the Cloudflare Image
+// Resizing transform path. External URLs and non-HTTPS inputs pass
+// through unchanged — we can only safely rewrite hosts that route
+// through Cloudflare's `/cdn-cgi/image/...` resolver.
+export const toTikTokImageUrl = (url, { origin = "" } = {}) => {
+  if (typeof url !== "string" || !url) return url;
+  if (!/^https:\/\//i.test(url)) return url;
+  let target;
+  try {
+    target = new URL(url);
+  } catch {
+    return url;
+  }
+  if (target.pathname.startsWith("/cdn-cgi/image/")) return url;
+  if (origin) {
+    let base;
+    try {
+      base = new URL(origin);
+    } catch {
+      base = null;
+    }
+    if (base && target.host !== base.host) return url;
+  }
+  return `${target.origin}/cdn-cgi/image/${TIKTOK_IMAGE_TRANSFORM}${target.pathname}${target.search}`;
+};
+
 const DEFAULT_HASHTAGS = [
   "#philippineart",
   "#originalpainting",
@@ -858,7 +897,7 @@ export const publishProductPhoto = async ({
     );
 
     const initResult = await initPhotoPost({
-      imageUrls: [imageUrl],
+      imageUrls: [toTikTokImageUrl(imageUrl, { origin })],
       caption,
       postMode: resolvedMode,
       privacyLevel: resolvedPrivacy,
