@@ -314,6 +314,14 @@ export const onRequestPost = async ({ request, env }) => {
       postId: result.postId || null,
       shareUrl: result.shareUrl || null,
       status: result.status,
+      // Forward the async-processing flags so the admin toast can render
+      // the "Submitted to TikTok — usually 1–5 minutes…" copy instead of
+      // a bare "Status: PROCESSING_DOWNLOAD" that reads like a finished
+      // publish. TikTok's MEDIA_UPLOAD inbox notification is asynchronous,
+      // so a fail-fast poll typically lands here with pending=true.
+      pending: result.pending === true,
+      uploadedBytes:
+        typeof result.uploadedBytes === "number" ? result.uploadedBytes : null,
     });
   }
 
