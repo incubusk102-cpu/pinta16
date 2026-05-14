@@ -7,6 +7,7 @@ import {
   useId,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   X,
@@ -227,6 +228,11 @@ const CheckoutForm = () => {
   // Body scroll lock + ESC-to-close so the page underneath doesn't
   // drift on mobile and keyboard users can dismiss the drawer.
   useBodyScrollLock(showCheckout);
+  // Wrapper around the form body. When the side panel slides in, we
+  // run a GSAP stagger across each `data-checkout-field` row so the
+  // form reads as a brief cascade rather than an instant wall of
+  // inputs. Cleaned up on close / unmount via gsap.context().revert().
+  const formBodyRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!showCheckout) return;
     const onKey = (e: KeyboardEvent) => {
@@ -235,6 +241,45 @@ const CheckoutForm = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showCheckout, setShowCheckout]);
+
+  // Field-cascade reveal: triggered once per open-cycle. Skipped
+  // under prefers-reduced-motion. We delay slightly to let the
+  // framer-motion drawer's spring slide finish before the fields
+  // start, so the inputs don't fight with the drawer entrance.
+  useEffect(() => {
+    if (!showCheckout) return;
+    const host = formBodyRef.current;
+    if (!host) return;
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    const rows = host.querySelectorAll<HTMLElement>("[data-checkout-field]");
+    if (rows.length === 0) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        Array.from(rows),
+        { autoAlpha: 0, y: 10 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.42,
+          ease: "power3.out",
+          stagger: 0.06,
+          delay: 0.18,
+        },
+      );
+    }, host);
+
+    return () => {
+      ctx.revert();
+    };
+  }, [showCheckout]);
   const { config: storefrontConfig } = useStorefrontConfig();
   const { user, token, addAddress, updateAddress } = useUserAuth();
   const isSignedIn = Boolean(token && user);
@@ -1308,8 +1353,11 @@ const CheckoutForm = () => {
                       </div>
 
                       {/* Form */}
-                      <div className="space-y-4">
-                        <p className="font-body text-xs tracking-wider uppercase text-muted-foreground">
+                      <div ref={formBodyRef} className="space-y-4">
+                        <p
+                          className="font-body text-xs tracking-wider uppercase text-muted-foreground"
+                          data-checkout-field
+                        >
                           Your Information
                         </p>
                         {fields.map(
@@ -1324,7 +1372,7 @@ const CheckoutForm = () => {
                             },
                             idx,
                           ) => (
-                            <div key={String(key)}>
+                            <div key={String(key)} data-checkout-field>
                               {/* Inject the cascading PH address picker
                                 + courier selector right before the
                                 notes field so they sit with the rest

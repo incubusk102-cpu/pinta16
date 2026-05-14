@@ -108,6 +108,38 @@ export const onRequestGet = async ({ request, env }) => {
        FROM orders WHERE status NOT IN ('cancelled','refunded')`,
     );
 
+    // Pull a 6-month revenue history so the analytics card can render
+    // a path-draw sparkline beside the headline figure. Months with
+    // zero orders still emit a row (LEFT-joined against a generated
+    // calendar in JS) so the trendline doesn't visually skip gaps.
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const sixMonthsAgoIso = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, "0")}-01T00:00:00`;
+    const monthlyRows = await d1All(
+      `SELECT
+         substr(created_at, 1, 7) as ym,
+         COALESCE(SUM(total),0) as revenue,
+         COUNT(*) as order_count
+       FROM orders
+       WHERE created_at >= ? AND status NOT IN ('cancelled','refunded')
+       GROUP BY ym
+       ORDER BY ym ASC`,
+      [sixMonthsAgoIso],
+    );
+    const monthlyByYm = new Map();
+    for (const row of monthlyRows?.results || []) {
+      monthlyByYm.set(row.ym, {
+        revenue: row.revenue || 0,
+        orders: row.order_count || 0,
+      });
+    }
+    const monthlyHistory = [];
+    for (let i = 0; i < 6; i += 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const cell = monthlyByYm.get(ym) || { revenue: 0, orders: 0 };
+      monthlyHistory.push({ ym, ...cell });
+    }
+
     return json(200, {
       available: true,
       thisMonth: {
@@ -122,6 +154,7 @@ export const onRequestGet = async ({ request, env }) => {
         revenue: allTime?.revenue || 0,
         orders: allTime?.order_count || 0,
       },
+      monthlyHistory,
     });
   }
 

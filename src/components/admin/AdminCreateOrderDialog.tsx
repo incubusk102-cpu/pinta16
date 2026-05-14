@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import gsap from "gsap";
 import {
   Check,
   ChevronsUpDown,
@@ -281,6 +282,54 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
   const [items, setItems] = useState<ItemDraft[]>([newItem()]);
   const [submitting, setSubmitting] = useState(false);
 
+  // GSAP cascade on open: header → form body → footer. Layered on
+  // top of Radix's zoom/fade. Reduced-motion clients keep the
+  // default Radix transition only.
+  const dialogContentRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const host = dialogContentRef.current;
+    if (!host) return;
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    // Flatten the body so each form section participates in the
+    // cascade rather than the whole body sliding as one block.
+    // Header / body container / footer all live as direct children
+    // of host; the body's own children are the individual rows.
+    const rows: HTMLElement[] = [];
+    const children = Array.from(host.children) as HTMLElement[];
+    for (const child of children) {
+      if (child.classList.contains("space-y-4")) {
+        rows.push(...(Array.from(child.children) as HTMLElement[]));
+      } else {
+        rows.push(child);
+      }
+    }
+    if (rows.length === 0) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        rows,
+        { autoAlpha: 0, y: 12 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.4,
+          ease: "power3.out",
+          stagger: 0.05,
+          delay: 0.08,
+        },
+      );
+    }, host);
+    return () => {
+      ctx.revert();
+    };
+  }, [open]);
+
   const reset = () => {
     setOrderId("");
     setCreatedAt("");
@@ -387,7 +436,10 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        ref={dialogContentRef}
+        className="max-w-xl max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>Create order manually</DialogTitle>
           <DialogDescription>

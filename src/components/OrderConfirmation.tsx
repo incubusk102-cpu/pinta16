@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
+import { animate, stagger } from "animejs";
 import {
   CheckCircle,
   Package,
@@ -24,6 +26,11 @@ import RefundBanner from "./RefundBanner";
 import ConfettiBurst from "./ConfettiBurst";
 const OrderPushOptInPrompt = lazy(() => import("./OrderPushOptInPrompt"));
 
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 const formatNotificationDate = (iso: string) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -42,6 +49,17 @@ const OrderConfirmation = () => {
   const seenNotificationsRef = useRef<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  // Summary container ref — GSAP staggers each direct child up + fade
+  // once the success modal lands, layered on top of the framer-motion
+  // tick scale + the existing ConfettiBurst. The order journey map,
+  // line items, and totals card all live as direct children so the
+  // reveal flows top-to-bottom in the order the buyer reads them.
+  const summaryRef = useRef<HTMLDivElement | null>(null);
+  // Container for the anime.js star-burst particles. We attach
+  // sparkles to this node (relative to the success tick) so the
+  // burst is anchored to the celebration moment rather than the
+  // whole modal corner.
+  const starHostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!lastOrder?.notifications?.length) return;
@@ -65,6 +83,101 @@ const OrderConfirmation = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showConfirmation, setShowConfirmation]);
+
+  // Summary fade-up: once the modal has mounted and the success tick
+  // settled (~480 ms framer-motion spring), stagger the order
+  // journey map / items / totals / next-steps blocks up. Only runs
+  // on the cheery confirmation path (not the amber pendingSync
+  // panel). Cleanup reverts the GSAP context on unmount so a fast
+  // close mid-animation never leaks ScrollTrigger / quickSetters.
+  useEffect(() => {
+    if (!showConfirmation || !lastOrder) return;
+    const order = lastOrder;
+    if (orderNeedsSync(order)) return;
+    const host = summaryRef.current;
+    if (!host) return;
+    if (prefersReducedMotion()) return;
+
+    // Stagger every direct child of the summary container. The
+    // section structure is highly conditional (shipment, refund,
+    // notifications, review form, etc. all toggle on order state)
+    // so tagging individual rows is fragile; iterating `children`
+    // keeps the reveal complete on every variant.
+    const rows = Array.from(host.children) as HTMLElement[];
+    if (rows.length === 0) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        rows,
+        { autoAlpha: 0, y: 18 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.6,
+          ease: "power3.out",
+          stagger: 0.07,
+          delay: 0.45,
+        },
+      );
+    }, host);
+
+    return () => {
+      ctx.revert();
+    };
+  }, [showConfirmation, lastOrder, orderNeedsSync]);
+
+  // Anime.js star-burst layered on top of the existing ConfettiBurst.
+  // Pops ~14 small dots radially out of the success tick on first
+  // mount, then fades. Skipped on pendingSync (we don't celebrate a
+  // half-saved order) and under reduced-motion.
+  useEffect(() => {
+    if (!showConfirmation || !lastOrder) return;
+    const order = lastOrder;
+    if (orderNeedsSync(order)) return;
+    const host = starHostRef.current;
+    if (!host) return;
+    if (prefersReducedMotion()) return;
+
+    const created: HTMLSpanElement[] = [];
+    const colors = [
+      "rgba(253,224,71,0.95)", // yellow-300
+      "rgba(251,191,36,0.95)", // amber-400
+      "rgba(244,114,182,0.95)", // pink-400
+      "rgba(56,189,248,0.95)", // sky-400
+      "rgba(167,243,208,0.95)", // emerald-200
+    ];
+    for (let i = 0; i < 14; i += 1) {
+      const star = document.createElement("span");
+      const size = 4 + Math.random() * 3;
+      const color = colors[i % colors.length];
+      star.setAttribute("aria-hidden", "true");
+      star.style.cssText = `position:absolute;left:50%;top:50%;width:${size}px;height:${size}px;margin-left:${-size / 2}px;margin-top:${-size / 2}px;border-radius:9999px;background:${color};box-shadow:0 0 8px ${color};pointer-events:none;will-change:transform,opacity;`;
+      host.appendChild(star);
+      created.push(star);
+    }
+    const controls = animate(created, {
+      translateX: () => (Math.random() - 0.5) * 140,
+      translateY: () => (Math.random() - 0.5) * 140 - 12,
+      scale: [
+        { value: 1.3, duration: 250 },
+        { value: 0.4, duration: 700 },
+      ],
+      opacity: [
+        { value: 1, duration: 100 },
+        { value: 0, duration: 800 },
+      ],
+      delay: stagger(28, { start: 220 }),
+      ease: "outQuad",
+      duration: 900,
+      onComplete: () => {
+        created.forEach((star) => star.remove());
+      },
+    });
+    return () => {
+      controls.pause();
+      created.forEach((star) => star.remove());
+    };
+  }, [showConfirmation, lastOrder, orderNeedsSync]);
 
   if (!lastOrder) return null;
 
@@ -137,12 +250,21 @@ const OrderConfirmation = () => {
                     damping: 15,
                     delay: 0.2,
                   }}
+                  className="relative inline-block"
                 >
                   {pendingSync ? (
                     <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-amber-500" />
                   ) : (
                     <CheckCircle className="w-16 h-16 mx-auto mb-4 text-success" />
                   )}
+                  {/* Anchor for the anime.js star-burst. The dots are
+                      appended absolutely-positioned relative to this
+                      host so they radiate from the success tick. */}
+                  <span
+                    ref={starHostRef}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 block"
+                  />
                 </motion.div>
                 <h2 className="font-display text-2xl text-foreground mb-2">
                   {pendingSync
@@ -224,7 +346,7 @@ const OrderConfirmation = () => {
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div ref={summaryRef} className="space-y-4">
                 {/* Order Journey Map */}
                 <div className="p-4 bg-muted/30 border border-border/10 rounded-sm">
                   <div className="flex items-center gap-2 mb-3">

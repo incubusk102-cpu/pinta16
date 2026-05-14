@@ -8,12 +8,21 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import GsapSparkline from "../motion/GsapSparkline";
+
+interface MonthlyRevenuePoint {
+  ym: string;
+  revenue: number;
+  orders: number;
+}
 
 interface RevenueData {
   available: boolean;
   thisMonth?: { revenue: number; orders: number };
   lastMonth?: { revenue: number; orders: number };
   allTime?: { revenue: number; orders: number };
+  /** Last 6 months of revenue + orders, oldest first. */
+  monthlyHistory?: MonthlyRevenuePoint[];
 }
 
 interface CustomersSummary {
@@ -305,6 +314,15 @@ export function D1AnalyticsPanel() {
             <p className="text-[11px] text-muted-foreground">
               {revenue.thisMonth?.orders || 0} orders
             </p>
+            {revenue.monthlyHistory && revenue.monthlyHistory.length >= 2 && (
+              <div className="mt-2 text-foreground/80">
+                <GsapSparkline
+                  values={revenue.monthlyHistory.map((m) => m.revenue)}
+                  height={28}
+                  ariaLabel="Revenue trend over the last 6 months"
+                />
+              </div>
+            )}
           </div>
           <div className="border border-border/30 rounded-md p-3 bg-background/50">
             <div className="flex items-center gap-1.5 text-muted-foreground mb-1">

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { animate } from "animejs";
+import gsap from "gsap";
 import { useCart, type CompletedOrder } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -44,8 +45,21 @@ const ORDER_STATUS_LABEL: Record<CompletedOrder["status"], string> = {
   received: "Received",
 };
 
+const reduceMotionGlobal = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 const GalleryNav = () => {
   const [scrolled, setScrolled] = useState(false);
+  // Refs for the GSAP-driven scroll-condense effect. We tween the
+  // inner row's vertical padding + the logo wrapper's size to a
+  // slightly tighter set of values once the visitor leaves the very
+  // top of the page, on top of the existing background / blur swap.
+  // Refs (rather than CSS class swaps) so the morph is interpolated
+  // smoothly instead of jumping in one frame.
+  const navInnerRef = useRef<HTMLDivElement | null>(null);
+  const navLogoRef = useRef<HTMLSpanElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [myOrdersOpen, setMyOrdersOpen] = useState(false);
   const [accountDropdowns, setAccountDropdowns] = useState<
@@ -147,6 +161,50 @@ const GalleryNav = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Scroll-condense: tween the inner-row padding + logo tile size
+  // toward a tighter set of values once `scrolled` flips true. The
+  // existing background / blur class swap on the outer <nav> still
+  // happens in parallel; this layer adds a physical "shrink" so the
+  // bar feels like it hugged closer to the content rather than just
+  // changing colour. Reduced-motion clients skip the tween and just
+  // see the static values.
+  useEffect(() => {
+    const inner = navInnerRef.current;
+    const logo = navLogoRef.current;
+    if (!inner || !logo) return;
+    if (reduceMotionGlobal()) {
+      if (scrolled) {
+        inner.style.paddingTop = "0.65rem";
+        inner.style.paddingBottom = "0.65rem";
+        logo.style.width = "2.25rem";
+        logo.style.height = "2.25rem";
+      } else {
+        inner.style.paddingTop = "";
+        inner.style.paddingBottom = "";
+        logo.style.width = "";
+        logo.style.height = "";
+      }
+      return;
+    }
+    const ctx = gsap.context(() => {
+      const targetPadY = scrolled ? "0.65rem" : "1.25rem";
+      const targetLogo = scrolled ? "2.25rem" : "2.75rem";
+      gsap.to(inner, {
+        paddingTop: targetPadY,
+        paddingBottom: targetPadY,
+        duration: 0.45,
+        ease: "power3.out",
+      });
+      gsap.to(logo, {
+        width: targetLogo,
+        height: targetLogo,
+        duration: 0.45,
+        ease: "power3.out",
+      });
+    });
+    return () => ctx.revert();
+  }, [scrolled]);
+
   // Close drawer and reset every transient drawer dropdown on route
   // change. Components rendered inside the dropdowns can trigger
   // navigation — WishlistSection has product links and ProfileEditor
@@ -247,7 +305,10 @@ const GalleryNav = () => {
       animate={{ y: 0 }}
       transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3">
+      <div
+        ref={navInnerRef}
+        className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3"
+      >
         {/* Logo (mark + wordmark) — always on the left */}
         <button
           onClick={() => scrollTo("hero")}
@@ -255,6 +316,7 @@ const GalleryNav = () => {
           aria-label="Canvas Hub — home"
         >
           <span
+            ref={navLogoRef}
             aria-hidden
             className="font-logo relative inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 transition-opacity duration-500 group-hover:opacity-90"
           >
