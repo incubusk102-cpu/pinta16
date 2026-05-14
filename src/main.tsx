@@ -30,6 +30,13 @@ const boot = (name: string) => {
   }
 };
 
+// Build marker — forces the entry-bundle content hash to change on
+// every release so Cloudflare Pages re-uploads the asset instead of
+// rebinding to a stale cached blob. (See PR #456 — an empty-commit
+// redeploy left CF serving HTTP 500 for the same `index-*.js` hash
+// because `wrangler pages deploy` short-circuits when the dist/
+// output is byte-identical.)
+boot("build:2026-05-14T09:42Z");
 boot("main:start");
 
 const router = getRouter();
