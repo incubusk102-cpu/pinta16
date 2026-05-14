@@ -614,6 +614,8 @@ export const pollPublishStatus = async (
         ok: false,
         status,
         error: data?.data?.fail_reason || "TikTok reported FAILED",
+        failReason: data?.data?.fail_reason || null,
+        uploadedBytes: data?.data?.uploaded_bytes || null,
       };
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -628,6 +630,7 @@ export const pollPublishStatus = async (
       ok: true,
       pending: true,
       status: lastStatus,
+      uploadedBytes: lastRaw?.data?.uploaded_bytes ?? null,
       raw: lastRaw,
     };
   }
@@ -635,6 +638,7 @@ export const pollPublishStatus = async (
     ok: false,
     status: lastStatus,
     error: "Polling timed out before TikTok finished processing",
+    uploadedBytes: lastRaw?.data?.uploaded_bytes ?? null,
     raw: lastRaw,
   };
 };
