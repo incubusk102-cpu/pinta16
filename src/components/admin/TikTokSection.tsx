@@ -80,6 +80,12 @@ interface TikTokAccountStatus {
   schemaApplied: boolean;
   autoPostEnabled?: boolean;
   counts: { total: number; published: number; failed: number } | null;
+  // True when the stored OAuth token was issued under an older scope
+  // set than what TIKTOK_SCOPES asks for now. The admin must click
+  // Disconnect + Connect once to mint a fresh token.
+  needsReconnect?: boolean;
+  missingScopes?: string[];
+  requiredScopes?: string[];
 }
 
 interface CaptionPreview {
@@ -669,19 +675,50 @@ export function TikTokSection() {
         </CardContent>
       </Card>
 
+      {/* ─── reconnect-required banner ─────────────────────────────── */}
+      {!statusLoading && status?.needsReconnect && (
+        <Card className="border-amber-400 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-900">
+                  Reconnect TikTok to grant new permission
+                </p>
+                <p className="text-xs text-amber-800 mt-1">
+                  Your stored TikTok token is missing scope(s):{" "}
+                  <code>
+                    {(status.missingScopes ?? []).join(", ") || "unknown"}
+                  </code>
+                  . That&apos;s why the panel can&apos;t load your @ username
+                  and shows a &ldquo;scope required&rdquo; error. Click{" "}
+                  <strong>Disconnect</strong> and then{" "}
+                  <strong>Connect TikTok</strong> on the status card &mdash; the
+                  OAuth screen will now ask for the missing permission. Posting
+                  itself still works (it only needs video.publish +
+                  video.upload, which you already granted), so this is only
+                  blocking the account-info display.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ─── auto-post toggle ──────────────────────────────── */}
       {!statusLoading && status?.connected && status?.schemaApplied && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">
                   Auto-post new products to TikTok
                 </p>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  When enabled, every new product you create is automatically
-                  posted to your TikTok inbox (MEDIA_UPLOAD mode). You finish
-                  publishing inside the TikTok app. Turn off to pause.
+                  Fires only when you{" "}
+                  <strong>create a brand-new product</strong>. Edits to existing
+                  products do not trigger it, and it does not run retroactively
+                  on products created before the toggle was on.
                 </p>
               </div>
               <Button
@@ -700,6 +737,23 @@ export function TikTokSection() {
                 )}
               </Button>
             </div>
+            {status.autoPostEnabled && (
+              <div className="rounded-md bg-amber-50 ring-1 ring-amber-200 p-3 text-xs text-amber-900">
+                <p className="font-medium mb-1">
+                  Posts land in your TikTok inbox, not your feed.
+                </p>
+                <p>
+                  Auto-post uses TikTok&apos;s <code>MEDIA_UPLOAD</code> mode,
+                  which drops the photo into the connected account&apos;s
+                  drafts/inbox inside the TikTok app. Your followers won&apos;t
+                  see it on their feed until you open TikTok, tap the inbox
+                  notification, and finish publishing. To unlock true zero-touch
+                  posting to the feed (<code>DIRECT_POST</code>) you must pass
+                  TikTok&apos;s Production audit &mdash; see this PR&apos;s
+                  description for the walkthrough.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
