@@ -74,10 +74,36 @@
   var firstError = null;
   var preloadErrorDeps = [];
   var moduleErrors = [];
+  var thirdPartyAssetErrors = [];
   var shown = false;
   var recovering = false;
   var assetErrorRecoveryScheduled = false;
   var marks = [];
+
+  // Cross-origin asset failures (e.g. ad-blocked third-party scripts) are
+  // routine and do NOT indicate a stuck SPA, so they must not trigger
+  // the cache-wipe + reload auto-recovery. Same-origin failures (our
+  // own /assets/* bundles, /boot-diagnostics.js itself, etc.) are the
+  // only ones that warrant nuking the SW + caches.
+  //
+  // Specifically, Brave Shields and most ad-blockers block Cloudflare's
+  // automatically-injected `static.cloudflareinsights.com/beacon.min.js`
+  // analytics beacon. Before this guard the boot watchdog interpreted
+  // that block as a SPA failure, fired silent auto-recovery, and the
+  // recovery's `location.replace` aborted the in-flight main bundle
+  // mid-execution -- so on the next attempt the same beacon block
+  // happened again, recovery exhausted its 2-attempt budget, and the
+  // visitor ended up on the visible "We could not load the page"
+  // overlay even though nothing was actually wrong with the bundle.
+  function isFirstPartyAssetUrl(url) {
+    if (!url || url === "<unknown asset>") return false;
+    try {
+      var parsed = new URL(url, window.location.href);
+      return parsed.origin === window.location.origin;
+    } catch (e) {
+      return false;
+    }
+  }
 
   function escapeHtml(s) {
     return String(s)
@@ -197,6 +223,10 @@
     var moduleLine = moduleErrors.length
       ? "Module load failures: " + moduleErrors.join("; ")
       : "";
+    var thirdPartyLine = thirdPartyAssetErrors.length
+      ? "Blocked third-party scripts (ignored): " +
+        thirdPartyAssetErrors.join("; ")
+      : "";
     var recoveryLine = recoveryAttempts
       ? "Auto-recovery attempts: " +
         recoveryAttempts +
@@ -229,6 +259,7 @@
       escapeHtml(marksLine) +
       (moduleLine ? "\n" + escapeHtml(moduleLine) : "") +
       (preloadLine ? "\n" + escapeHtml(preloadLine) : "") +
+      (thirdPartyLine ? "\n" + escapeHtml(thirdPartyLine) : "") +
       (recoveryLine ? "\n" + escapeHtml(recoveryLine) : "") +
       "\n\n<strong>UA:</strong> " +
       escapeHtml(navigator.userAgent) +
@@ -433,8 +464,21 @@
     if (!t) return;
     if (t.tagName !== "SCRIPT" && t.tagName !== "LINK") return;
     var src = (t.tagName === "SCRIPT" ? t.src : t.href) || "<unknown asset>";
-    moduleErrors.push(src);
-    scheduleAssetErrorRecovery("module-error");
+    // Only same-origin asset failures should trigger the boot-recovery
+    // path. See `isFirstPartyAssetUrl` above for the rationale -- in
+    // short, ad-blockers and Brave Shields routinely kill third-party
+    // scripts (Cloudflare Insights beacon, Google Sign-In GIS,
+    // Turnstile, Sentry CDN, ...) and treating those as SPA boot
+    // failures caused a spurious cache-wipe + reload loop that itself
+    // prevented the bundle from mounting. Record them separately so
+    // the diagnostic overlay can still surface what was blocked if a
+    // genuine first-party stall ever does fire.
+    if (isFirstPartyAssetUrl(src)) {
+      moduleErrors.push(src);
+      scheduleAssetErrorRecovery("module-error");
+    } else {
+      thirdPartyAssetErrors.push(src);
+    }
   };
   // Bubbling skips `error` events on individual elements; capture
   // is required to see them at the window level.
