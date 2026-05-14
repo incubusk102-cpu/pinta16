@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { animate, stagger } from "animejs";
 import {
   ArrowLeft,
   Box,
@@ -53,6 +56,13 @@ import {
 } from "@/lib/artworks";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
 import { useSEO } from "@/hooks/useSEO";
+
+gsap.registerPlugin(ScrollTrigger);
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // 3D viewer ships ~120 KB gz of three.js + r3f + drei runtime, so
 // load it on-demand only when a customer taps "View in 3D". The
@@ -116,6 +126,11 @@ function ProductPage() {
   const [view3d, setView3d] = useState(false);
   const [viewOnWall, setViewOnWall] = useState(false);
   const addToCartButtonRef = useRef<HTMLButtonElement>(null);
+  // Hero gallery + thumbnail strip — both animated in via
+  // GSAP/anime.js once the artwork loads. Refs let the effect
+  // target only this page's slot without scanning the whole DOM.
+  const heroFrameRef = useRef<HTMLDivElement | null>(null);
+  const thumbStripRef = useRef<HTMLDivElement | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const { addToCart } = useCart();
@@ -140,6 +155,64 @@ function ProductPage() {
       pushRecentlyViewed(artwork.id);
       addStamp(artwork.id);
     }
+  }, [artwork]);
+
+  // Hero entrance: a short GSAP timeline that scales the hero frame in
+  // from 0.94 + fade and then, once the frame has settled, hands off
+  // to an anime.js stagger that reveals the thumbnail tiles left to
+  // right. Re-runs whenever the route's artwork id changes so
+  // navigating between product pages plays the entrance every time.
+  useEffect(() => {
+    if (!artwork) return;
+    if (prefersReducedMotion()) return;
+
+    const hero = heroFrameRef.current;
+    const strip = thumbStripRef.current;
+
+    const ctx = gsap.context(() => {
+      if (hero) {
+        gsap.fromTo(
+          hero,
+          { autoAlpha: 0, scale: 0.94, y: 18 },
+          {
+            autoAlpha: 1,
+            scale: 1,
+            y: 0,
+            duration: 0.95,
+            ease: "power3.out",
+          },
+        );
+      }
+    });
+
+    let thumbControls: ReturnType<typeof animate> | null = null;
+    if (strip) {
+      const tiles = strip.querySelectorAll<HTMLElement>("[data-thumb-tile]");
+      if (tiles.length > 0) {
+        tiles.forEach((tile) => {
+          tile.style.opacity = "0";
+          tile.style.transform = "translateY(8px)";
+        });
+        thumbControls = animate(Array.from(tiles), {
+          opacity: [0, 1],
+          translateY: [8, 0],
+          duration: 600,
+          delay: stagger(50, { start: 650 }),
+          ease: "outQuad",
+          onComplete: () => {
+            tiles.forEach((tile) => {
+              tile.style.opacity = "";
+              tile.style.transform = "";
+            });
+          },
+        });
+      }
+    }
+
+    return () => {
+      ctx.revert();
+      thumbControls?.pause();
+    };
   }, [artwork]);
 
   useEffect(() => {
@@ -479,7 +552,10 @@ function ProductPage() {
           className="grid lg:grid-cols-[1.2fr_1fr] gap-8 md:gap-10 lg:gap-16"
         >
           <section className="space-y-4">
-            <div className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame holo-frame">
+            <div
+              ref={heroFrameRef}
+              className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame holo-frame"
+            >
               {isVideoActive && productVideo ? (
                 <div className="w-full bg-black flex items-center justify-center">
                   <video
@@ -616,13 +692,17 @@ function ProductPage() {
               )}
             </div>
             {totalGalleryItems > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div
+                ref={thumbStripRef}
+                className="flex gap-2 overflow-x-auto pb-1"
+              >
                 {Array.from({ length: totalGalleryItems }, (_, tileIdx) => {
                   if (hasVideo && productVideo && tileIdx === videoTileIndex) {
                     return (
                       <button
                         key="__video-tile"
                         type="button"
+                        data-thumb-tile
                         onClick={() => setActiveImage(videoTileIndex)}
                         aria-label="Play studio video"
                         aria-current={isVideoActive}
@@ -664,6 +744,7 @@ function ProductPage() {
                     <button
                       key={`${img.url}-${imgIdx}`}
                       type="button"
+                      data-thumb-tile
                       onClick={() => setActiveImage(tileIdx)}
                       aria-label={`Show photo ${imgIdx + 1}`}
                       aria-current={tileIdx === activeImage}

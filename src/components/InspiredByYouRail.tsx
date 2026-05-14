@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import GsapStaggerRail from "@/components/motion/GsapStaggerRail";
 import SectionReveal from "@/components/motion/SectionReveal";
 import { useProducts, getEffectivePrice } from "@/contexts/ProductContext";
 import { useWishlist } from "@/contexts/WishlistContext";
@@ -145,16 +146,17 @@ const InspiredByYouRail = () => {
           Hand-picked
         </span>
       </motion.div>
-      <motion.div
-        variants={{
-          hidden: { opacity: 0, y: 22 },
-          visible: {
-            opacity: 1,
-            y: 0,
-            transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-          },
-        }}
+      {/* Rail card stagger driven by GSAP ScrollTrigger — matches
+          RecommendedRow / RecentlyViewed on the homepage so all three
+          "for you" rails share one entry motion. */}
+      <GsapStaggerRail
         className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory"
+        stagger={0.07}
+        duration={0.7}
+        xFrom={-28}
+        yFrom={12}
+        scaleFrom={0.94}
+        start="top 88%"
       >
         {picks.map((art) => {
           const attrs = imgAttrsFromProduct(art, "180px", "sm");
@@ -165,6 +167,7 @@ const InspiredByYouRail = () => {
               key={art.id}
               to="/product/$id"
               params={{ id: art.id }}
+              data-rail-item
               className="group flex-none w-[160px] md:w-[180px] snap-start"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm shadow-[0_2px_18px_rgba(0,0,0,0.08)] transition-shadow duration-500 group-hover:shadow-[0_18px_44px_rgba(0,0,0,0.28)]">
@@ -201,7 +204,7 @@ const InspiredByYouRail = () => {
             </Link>
           );
         })}
-      </motion.div>
+      </GsapStaggerRail>
     </SectionReveal>
   );
 };
