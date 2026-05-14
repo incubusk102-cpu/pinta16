@@ -292,53 +292,54 @@ const GalleryNav = () => {
   }, [closeMenu, navigate]);
 
   return (
-    <motion.nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,backdrop-filter,border-color,box-shadow] duration-500 ease-out ${
-        scrolled
-          ? "bg-background/70 supports-[backdrop-filter]:bg-background/55 backdrop-blur-xl backdrop-saturate-150 border-b border-border/15 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]"
-          : "bg-transparent border-b border-transparent"
-      }`}
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
-    >
-      <div
-        ref={navInnerRef}
-        className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3"
+    <>
+      <motion.nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,backdrop-filter,border-color,box-shadow] duration-500 ease-out ${
+          scrolled
+            ? "bg-background/70 supports-[backdrop-filter]:bg-background/55 backdrop-blur-xl backdrop-saturate-150 border-b border-border/15 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]"
+            : "bg-transparent border-b border-transparent"
+        }`}
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
       >
-        {/* Logo (mark + wordmark) — always on the left */}
-        <button
-          onClick={() => scrollTo("hero")}
-          className="flex items-center gap-2 sm:gap-3 group shrink-0"
-          aria-label="Canvas Hub — home"
+        <div
+          ref={navInnerRef}
+          className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3"
         >
-          <span
-            ref={navLogoRef}
-            aria-hidden
-            className="font-logo relative inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 transition-opacity duration-500 group-hover:opacity-90"
+          {/* Logo (mark + wordmark) — always on the left */}
+          <button
+            onClick={() => scrollTo("hero")}
+            className="flex items-center gap-2 sm:gap-3 group shrink-0"
+            aria-label="Canvas Hub — home"
           >
-            <svg
-              viewBox="0 0 40 40"
-              className="w-9 h-9 sm:w-10 sm:h-10"
-              xmlns="http://www.w3.org/2000/svg"
+            <span
+              ref={navLogoRef}
+              aria-hidden
+              className="font-logo relative inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 transition-opacity duration-500 group-hover:opacity-90"
             >
-              <text
-                x="20"
-                y="30"
-                textAnchor="middle"
-                fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
-                fontSize="34"
-                fontStyle="italic"
-                fontWeight={500}
-                fill="currentColor"
+              <svg
+                viewBox="0 0 40 40"
+                className="w-9 h-9 sm:w-10 sm:h-10"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                C
-              </text>
-            </svg>
-          </span>
-        </button>
+                <text
+                  x="20"
+                  y="30"
+                  textAnchor="middle"
+                  fontFamily="'EB Garamond', Georgia, 'Playfair Display', serif"
+                  fontSize="34"
+                  fontStyle="italic"
+                  fontWeight={500}
+                  fill="currentColor"
+                >
+                  C
+                </text>
+              </svg>
+            </span>
+          </button>
 
-        {/* Right cluster: cart + hamburger. The hamburger opens the
+          {/* Right cluster: cart + hamburger. The hamburger opens the
             full drawer — transparent, non-modal, page underneath stays
             scrollable. The button only opens; closing is explicit via
             the drawer's X, ESC, or a route change so the menu doesn't
@@ -360,107 +361,118 @@ const GalleryNav = () => {
             read against arbitrary underlying content. Once scrolled
             the parent <nav> already provides a frosted bg, so the chip
             is dropped and the hover state takes over. */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {!onIndex && (
-            <>
-              <ThemeLocaleToggle />
-              {compare.count > 0 && (
-                <button
-                  type="button"
-                  onClick={() => compare.open()}
-                  className={`relative p-2 inline-flex items-center justify-center rounded-md transition-colors ${
-                    scrolled
-                      ? "hover:bg-foreground/10"
-                      : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
-                  }`}
-                  aria-label={`Open compare (${compare.count})`}
-                >
-                  <GitCompare className="w-5 h-5 text-foreground" />
-                  <span
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center"
-                    aria-live="polite"
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {!onIndex && (
+              <>
+                <ThemeLocaleToggle />
+                {compare.count > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => compare.open()}
+                    className={`relative p-2 inline-flex items-center justify-center rounded-md transition-colors ${
+                      scrolled
+                        ? "hover:bg-foreground/10"
+                        : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+                    }`}
+                    aria-label={`Open compare (${compare.count})`}
                   >
-                    {compare.count}
-                  </span>
-                </button>
-              )}
-              <MiniCartHover>
-                <button
-                  ref={cartButtonRef}
-                  onClick={openCart}
-                  className={`relative p-2 inline-flex items-center justify-center rounded-md transition-colors ${
-                    scrolled
-                      ? "hover:bg-foreground/10"
-                      : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
-                  }`}
-                  aria-label={t("nav.cart")}
-                >
-                  <ShoppingCart className="w-5 h-5 text-foreground" />
-                  {itemCount > 0 && (
-                    <motion.span
-                      key={itemCount}
-                      initial={false}
-                      animate={
-                        cartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }
-                      }
-                      transition={{ duration: 0.45, ease: "easeOut" }}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center motion-reduce:animate-none"
+                    <GitCompare className="w-5 h-5 text-foreground" />
+                    <span
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center"
                       aria-live="polite"
                     >
-                      {itemCount}
-                    </motion.span>
-                  )}
-                </button>
-              </MiniCartHover>
-            </>
-          )}
-          <button
-            // The hamburger button only opens the drawer; it never
-            // closes it. This avoids a touch-device bug where tapping
-            // the button would fire `mouseenter` (opening the drawer)
-            // and then `click` (toggling it shut again), making the
-            // menu flash open and disappear. Closing is intentionally
-            // explicit: the X button in the drawer header, ESC, or a
-            // route change. Calling `openMenu` again while already
-            // open is a no-op.
-            onClick={openMenu}
-            // Hover-to-open is disabled on the homepage so the drawer
-            // doesn't pop open accidentally while customers are scrolling
-            // the hero / collection. Other routes still get hover-open.
-            onMouseEnter={onIndex ? undefined : openMenu}
-            onFocus={onIndex ? undefined : openMenu}
-            // Always render with explicit `text-foreground` so the icon
-            // never inherits a faded colour from the parent. When the
-            // nav is transparent (top of homepage), wrap it in a frosted
-            // chip with a soft ring so it stays legible against the
-            // hero image; once the nav itself frosts, drop the chip
-            // and rely on the bumped hover background for affordance.
-            className={`p-2 inline-flex items-center justify-center rounded-md text-foreground transition-colors ${
-              scrolled
-                ? "hover:bg-foreground/10"
-                : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
-            }`}
-            aria-label="Open menu"
-            aria-expanded={menuOpen}
-            aria-controls="mobile-nav-drawer"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
+                      {compare.count}
+                    </span>
+                  </button>
+                )}
+                <MiniCartHover>
+                  <button
+                    ref={cartButtonRef}
+                    onClick={openCart}
+                    className={`relative p-2 inline-flex items-center justify-center rounded-md transition-colors ${
+                      scrolled
+                        ? "hover:bg-foreground/10"
+                        : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+                    }`}
+                    aria-label={t("nav.cart")}
+                  >
+                    <ShoppingCart className="w-5 h-5 text-foreground" />
+                    {itemCount > 0 && (
+                      <motion.span
+                        key={itemCount}
+                        initial={false}
+                        animate={
+                          cartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }
+                        }
+                        transition={{ duration: 0.45, ease: "easeOut" }}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center motion-reduce:animate-none"
+                        aria-live="polite"
+                      >
+                        {itemCount}
+                      </motion.span>
+                    )}
+                  </button>
+                </MiniCartHover>
+              </>
+            )}
+            <button
+              // The hamburger button only opens the drawer; it never
+              // closes it. This avoids a touch-device bug where tapping
+              // the button would fire `mouseenter` (opening the drawer)
+              // and then `click` (toggling it shut again), making the
+              // menu flash open and disappear. Closing is intentionally
+              // explicit: the X button in the drawer header, ESC, or a
+              // route change. Calling `openMenu` again while already
+              // open is a no-op.
+              onClick={openMenu}
+              // Hover-to-open is disabled on the homepage so the drawer
+              // doesn't pop open accidentally while customers are scrolling
+              // the hero / collection. Other routes still get hover-open.
+              onMouseEnter={onIndex ? undefined : openMenu}
+              onFocus={onIndex ? undefined : openMenu}
+              // Always render with explicit `text-foreground` so the icon
+              // never inherits a faded colour from the parent. When the
+              // nav is transparent (top of homepage), wrap it in a frosted
+              // chip with a soft ring so it stays legible against the
+              // hero image; once the nav itself frosts, drop the chip
+              // and rely on the bumped hover background for affordance.
+              className={`p-2 inline-flex items-center justify-center rounded-md text-foreground transition-colors ${
+                scrolled
+                  ? "hover:bg-foreground/10"
+                  : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+              }`}
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav-drawer"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Holographic hairline pinned to the bottom of the nav once
-          the visitor scrolls past the top. Drops the existing 1px
-          slate border for an animated brand-gold → teal → violet
-          gradient. Pure CSS keyframes (see `.nav-holo-edge` in
-          `src/styles.css`), so this layer never re-renders. */}
-      {scrolled && <span aria-hidden="true" className="nav-holo-edge" />}
+        {/* Holographic hairline pinned to the bottom of the nav once
+            the visitor scrolls past the top. Drops the existing 1px
+            slate border for an animated brand-gold → teal → violet
+            gradient. Pure CSS keyframes (see `.nav-holo-edge` in
+            `src/styles.css`), so this layer never re-renders. */}
+        {scrolled && <span aria-hidden="true" className="nav-holo-edge" />}
+      </motion.nav>
 
       {/* Drawer is always mounted so the first hamburger tap on any page
           (including the homepage with its heavy hero) shows every option
           instantly — no AnimatePresence enter cost, no blank frame.
           Open/close is a pure CSS transform toggle. The page underneath
-          stays fully visible and scrollable; the drawer is non-modal. */}
+          stays fully visible and scrollable; the drawer is non-modal.
+
+          NOTE: the drawer is rendered as a sibling of <motion.nav>, NOT
+          a child of it. <motion.nav> sets a `transform` (framer-motion's
+          y animation), and a `position: fixed` element inside a
+          transformed ancestor is positioned relative to the ancestor
+          instead of the viewport. If the drawer lived inside the nav,
+          it would be clipped to the nav's height (~70px) and customers
+          would see products through where the drawer should be once
+          they scrolled past the header. Keeping it at the top of the
+          fragment ensures the drawer covers the full viewport height. */}
       <aside
         id="mobile-nav-drawer"
         role="dialog"
@@ -711,7 +723,7 @@ const GalleryNav = () => {
           © {new Date().getFullYear()}
         </div>
       </aside>
-    </motion.nav>
+    </>
   );
 };
 
