@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import gsap from "gsap";
 import { ChevronDown, NotebookPen } from "lucide-react";
 
 interface PaintingNotesProps {
@@ -70,6 +71,12 @@ export default function PaintingNotes({
   const [open, setOpen] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const saveTimer = useRef<number | null>(null);
+  // Gold accent underline that draws in beneath the textarea while it
+  // is focused. Layered on top of the existing focus ring (a 1px ring
+  // on the border) so the editor reads as "actively writing" rather
+  // than just "focused". GSAP scaleX animation; reduced-motion clients
+  // just see the bar pop on at full width.
+  const accentRef = useRef<HTMLSpanElement | null>(null);
 
   // Hydrate on mount / when the product changes.
   useEffect(() => {
@@ -98,6 +105,46 @@ export default function PaintingNotes({
 
   const hasNote = value.trim().length > 0;
   const charsLeft = MAX_LENGTH - value.length;
+
+  const handleFocus = () => {
+    const accent = accentRef.current;
+    if (!accent) return;
+    if (reduceMotion) {
+      accent.style.transform = "scaleX(1)";
+      accent.style.opacity = "1";
+      return;
+    }
+    // Draw the underline in from the left.
+    gsap.fromTo(
+      accent,
+      { scaleX: 0, transformOrigin: "0% 50%", opacity: 0.85 },
+      {
+        scaleX: 1,
+        opacity: 1,
+        duration: 0.32,
+        ease: "power3.out",
+      },
+    );
+  };
+
+  const handleBlur = () => {
+    const accent = accentRef.current;
+    if (!accent) return;
+    if (reduceMotion) {
+      accent.style.transform = "scaleX(0)";
+      accent.style.opacity = "0";
+      return;
+    }
+    // Retract toward the right edge so the accent reads as "leaving"
+    // rather than disappearing centrally.
+    gsap.to(accent, {
+      scaleX: 0,
+      transformOrigin: "100% 50%",
+      opacity: 0,
+      duration: 0.26,
+      ease: "power3.inOut",
+    });
+  };
 
   const motionProps = reduceMotion
     ? { initial: false, animate: { height: "auto", opacity: 1 } }
@@ -140,13 +187,28 @@ export default function PaintingNotes({
             className="overflow-hidden"
           >
             <div className="px-3 pb-3 pt-1 space-y-2">
-              <textarea
-                value={value}
-                onChange={(e) => setValue(e.target.value.slice(0, MAX_LENGTH))}
-                placeholder={`Jot a private note about "${title}" — palette, room, budget…`}
-                rows={4}
-                className="w-full bg-transparent border border-border/50 rounded-sm px-2.5 py-2 font-body text-sm text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  value={value}
+                  onChange={(e) =>
+                    setValue(e.target.value.slice(0, MAX_LENGTH))
+                  }
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                  placeholder={`Jot a private note about "${title}" — palette, room, budget…`}
+                  rows={4}
+                  className="w-full bg-transparent border border-border/50 rounded-sm px-2.5 py-2 font-body text-sm text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30 resize-none"
+                />
+                {/* Gold accent underline animated via GSAP on focus.
+                    Sits a hair below the textarea border so it reads
+                    as a separate "editing" highlight, not a focus
+                    ring replacement. */}
+                <span
+                  ref={accentRef}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-0 right-0 -bottom-px h-[2px] bg-gradient-to-r from-amber-400/70 via-amber-300 to-amber-500/70 rounded-full origin-left scale-x-0 opacity-0"
+                />
+              </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-body text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
                   Stored locally · {charsLeft} left

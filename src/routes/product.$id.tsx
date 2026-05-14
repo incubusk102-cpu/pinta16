@@ -126,6 +126,11 @@ function ProductPage() {
   const [zoomed, setZoomed] = useState(false);
   const [view3d, setView3d] = useState(false);
   const [viewOnWall, setViewOnWall] = useState(false);
+  // Captured viewport rect of the hero frame when the customer taps
+  // "View in 3D" / "Zoom". Fed to the launcher animation so the
+  // overlay reads as if it grew out of the frame the customer was
+  // looking at, instead of fading in from nowhere.
+  const [launchRect, setLaunchRect] = useState<DOMRect | null>(null);
   const addToCartButtonRef = useRef<HTMLButtonElement>(null);
   // Hero gallery + thumbnail strip — both animated in via
   // GSAP/anime.js once the artwork loads. Refs let the effect
@@ -147,7 +152,27 @@ function ProductPage() {
     setZoomed(false);
     setView3d(false);
     setViewOnWall(false);
+    setLaunchRect(null);
   }, [id]);
+
+  const captureLaunchRect = () => {
+    const frame = heroFrameRef.current;
+    if (!frame) {
+      setLaunchRect(null);
+      return;
+    }
+    setLaunchRect(frame.getBoundingClientRect());
+  };
+
+  const openZoom = () => {
+    captureLaunchRect();
+    setZoomed(true);
+  };
+
+  const open3D = () => {
+    captureLaunchRect();
+    setView3d(true);
+  };
 
   // Track view in localStorage so the "recently viewed" strip can show this
   // product on the home page and other product pages later.
@@ -581,7 +606,7 @@ function ProductPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setZoomed(true)}
+                  onClick={openZoom}
                   className="block w-full"
                   aria-label="Zoom image"
                 >
@@ -653,7 +678,7 @@ function ProductPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setView3d(true)}
+                    onClick={open3D}
                     aria-label="View painting in 3D"
                     title="View in 3D"
                     className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
@@ -663,7 +688,7 @@ function ProductPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setZoomed(true)}
+                    onClick={openZoom}
                     aria-label="Zoom image"
                     className="p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
                   >
@@ -948,30 +973,12 @@ function ProductPage() {
       </main>
 
       {zoomed && (
-        <div
-          role="dialog"
-          aria-label={`${artwork.title} – zoomed`}
-          className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 md:p-6"
-        >
-          <button
-            type="button"
-            onClick={() => setZoomed(false)}
-            className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-full bg-foreground text-background text-[11px] tracking-[0.2em] uppercase hover:opacity-90"
-            aria-label="Close zoomed view"
-          >
-            Close
-          </button>
-          <ZoomableImage
-            // Pinch-zoom needs the highest-resolution variant we have
-            // so detail stays crisp at full scale.
-            src={variantSrc(currentImage, "lg")}
-            alt={artwork.title}
-            className="w-full h-full"
-          />
-          <p className="mt-3 text-[10px] tracking-[0.25em] uppercase text-white/60">
-            Pinch · scroll · double-tap to zoom · drag to pan
-          </p>
-        </div>
+        <ZoomOverlay
+          originRect={launchRect}
+          title={artwork.title}
+          src={variantSrc(currentImage, "lg")}
+          onClose={() => setZoomed(false)}
+        />
       )}
 
       {view3d && (
@@ -990,6 +997,7 @@ function ProductPage() {
             imageUrl={variantSrc(currentImage, "lg")}
             title={artwork.title}
             onClose={() => setView3d(false)}
+            originRect={launchRect}
           />
         </Suspense>
       )}
@@ -1220,5 +1228,94 @@ function ProductReviews({
       </GsapStaggerRail>
       <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </section>
+  );
+}
+
+interface ZoomOverlayProps {
+  originRect: DOMRect | null;
+  title: string;
+  src: string;
+  onClose: () => void;
+}
+
+// Pinch-zoom overlay that grows out of the hero frame rectangle and
+// settles into a fullscreen viewer. The GSAP timeline mirrors the
+// PaintingViewer3D launcher so opening either modal reads as the
+// same "the artwork you were just looking at expanded into a
+// dedicated viewer" gesture.
+//
+// Esc closes the overlay (handled by the existing useEffect in the
+// parent route). Reduced-motion clients get an instant fade-in.
+function ZoomOverlay({ originRect, title, src, onClose }: ZoomOverlayProps) {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    if (!originRect || prefersReducedMotion()) {
+      // Reduced-motion path: simply fade in without any spatial
+      // morph. GSAP still owns the property so it is reverted on
+      // unmount alongside the spatial path.
+      const ctx = gsap.context(() => {
+        gsap.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 });
+      }, overlay);
+      return () => ctx.revert();
+    }
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const cx = originRect.left + originRect.width / 2 - vw / 2;
+    const cy = originRect.top + originRect.height / 2 - vh / 2;
+    const sx = Math.max(originRect.width / vw, 0.05);
+    const sy = Math.max(originRect.height / vh, 0.05);
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        overlay,
+        {
+          autoAlpha: 0,
+          x: cx,
+          y: cy,
+          scaleX: sx,
+          scaleY: sy,
+          transformOrigin: "50% 50%",
+        },
+        {
+          autoAlpha: 1,
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 0.7,
+          ease: "power3.out",
+        },
+      );
+    }, overlay);
+
+    return () => {
+      ctx.revert();
+    };
+  }, [originRect]);
+
+  return (
+    <div
+      ref={overlayRef}
+      role="dialog"
+      aria-label={`${title} – zoomed`}
+      className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 md:p-6"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-full bg-foreground text-background text-[11px] tracking-[0.2em] uppercase hover:opacity-90"
+        aria-label="Close zoomed view"
+      >
+        Close
+      </button>
+      <ZoomableImage src={src} alt={title} className="w-full h-full" />
+      <p className="mt-3 text-[10px] tracking-[0.25em] uppercase text-white/60">
+        Pinch · scroll · double-tap to zoom · drag to pan
+      </p>
+    </div>
   );
 }

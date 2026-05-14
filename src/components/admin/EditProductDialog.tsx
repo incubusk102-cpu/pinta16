@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import gsap from "gsap";
 import {
   Dialog,
   DialogContent,
@@ -174,10 +175,60 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     }
   };
 
+  const dialogContentRef = useRef<HTMLDivElement | null>(null);
+  // Short GSAP timeline that staggers the dialog header → form
+  // sections → footer once the dialog opens. Layered on top of the
+  // existing Radix dialog fade so the admin lands in a busy edit
+  // form with a brief readable cascade rather than a wall. Reduced
+  // motion clients keep the static layout.
+  useEffect(() => {
+    if (!open) return;
+    const host = dialogContentRef.current;
+    if (!host) return;
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    // Stagger header + every form section + footer (which all live
+    // as direct children of the form). Picking up `form > *` keeps
+    // the cascade automatic — no need to tag every <div> in a long
+    // edit form by hand.
+    const header = host.querySelector<HTMLElement>("[data-admin-dialog-row]");
+    const form = host.querySelector<HTMLElement>("form");
+    const formRows = form ? (Array.from(form.children) as HTMLElement[]) : [];
+    const rows: HTMLElement[] = [];
+    if (header) rows.push(header);
+    rows.push(...formRows);
+    if (rows.length === 0) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        rows,
+        { autoAlpha: 0, y: 12 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.4,
+          ease: "power3.out",
+          stagger: 0.04,
+          delay: 0.08,
+        },
+      );
+    }, host);
+    return () => {
+      ctx.revert();
+    };
+  }, [open]);
+
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : null)}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent
+        ref={dialogContentRef}
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
+        <DialogHeader data-admin-dialog-row>
           <DialogTitle>Edit product</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
