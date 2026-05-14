@@ -52,10 +52,22 @@ const TIKTOK_AUTH_KEY = "tiktok_auth";
 // admin TikTok section.
 const TIKTOK_AUTO_POST_KEY = "tiktok_auto_post";
 
-// Scopes we request during the OAuth authorize step. `video.publish`
-// is required for the Content Posting API; `user.info.basic` lets
-// us display the connected username in the admin panel.
-const TIKTOK_SCOPES = ["user.info.basic", "video.publish", "video.upload"];
+// Scopes we request during the OAuth authorize step.
+//   * `user.info.basic`   — open_id, union_id, avatar_url, display_name
+//   * `user.info.profile` — `username` (the @ handle the admin sees).
+//                           Without this scope TikTok rejects /v2/user/info/
+//                           with "the user did not authorize the scope
+//                           required for completing this request" because
+//                           we ask for the `username` field below.
+//   * `video.publish`     — required for /v2/post/publish/content/init/
+//                           (DIRECT_POST and MEDIA_UPLOAD both need it).
+//   * `video.upload`      — required to push images via PULL_FROM_URL.
+const TIKTOK_SCOPES = [
+  "user.info.basic",
+  "user.info.profile",
+  "video.publish",
+  "video.upload",
+];
 
 // Refresh the access token if it expires within this many seconds.
 const REFRESH_WINDOW_SECONDS = 60;
@@ -347,6 +359,13 @@ export const getTikTokAccountStatus = async ({ origin } = {}) => {
     account: null,
     token: null,
     creator: null,
+    requiredScopes: TIKTOK_SCOPES,
+    // True when the stored token was issued under an older scope set
+    // than what we now request — the admin must click Disconnect +
+    // Connect once to mint a fresh token. Set further down once we
+    // know what scopes were actually granted.
+    needsReconnect: false,
+    missingScopes: [],
     errors: [],
   };
   if (!configured) {
@@ -389,6 +408,21 @@ export const getTikTokAccountStatus = async ({ origin } = {}) => {
     );
     return out;
   }
+  // Detect a scope drift: the stored token was issued under a smaller
+  // scope set than what TIKTOK_SCOPES asks for now (e.g. after we added
+  // user.info.profile). One Disconnect + Connect fixes it. Without this
+  // signal the admin sees a cryptic TikTok error from /v2/user/info/.
+  const grantedScopes = String(auth.scope || "")
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  const missingScopes = TIKTOK_SCOPES.filter((s) => !grantedScopes.includes(s));
+  out.missingScopes = missingScopes;
+  out.needsReconnect = missingScopes.length > 0;
+  if (out.needsReconnect) {
+    out.errors.push(
+      `Stored TikTok token is missing scope(s): ${missingScopes.join(", ")}. Click Disconnect and then Connect TikTok again to grant them.`,
+    );
+  }
   // Get user info + creator info in parallel. Either failing
   // shouldn't block the status response.
   const [user, creator] = await Promise.all([
@@ -403,7 +437,10 @@ export const getTikTokAccountStatus = async ({ origin } = {}) => {
       username: user.user?.username || null,
       avatarUrl: user.user?.avatar_url || null,
     };
-  } else if (user?.error) {
+  } else if (user?.error && !out.needsReconnect) {
+    // When the stored token is missing scopes, /v2/user/info/ will
+    // always fail with the same root cause we already surfaced — don't
+    // double-report it.
     out.errors.push(`User info: ${user.error}`);
   }
   if (creator?.ok) {
