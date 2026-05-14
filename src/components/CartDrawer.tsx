@@ -9,11 +9,23 @@ import {
   ShoppingBag,
   ArrowRight,
 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { animate, stagger } from "animejs";
 import { useCart, cartLineKey } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { LALAMOVE_PAID_TO_RIDER } from "@/lib/shipment";
+import AnimeCounter from "./motion/AnimeCounter";
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const pesoFormatter = (n: number): string =>
+  `\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+const pesoDiscountFormatter = (n: number): string =>
+  `-\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
 
 const CartDrawer = () => {
   const {
@@ -48,9 +60,29 @@ const CartDrawer = () => {
   } = useStorefrontConfig();
   const [voucherInput, setVoucherInput] = useState("");
   const titleId = useId();
+  const lineListRef = useRef<HTMLDivElement | null>(null);
   // Lock <body> scroll while the drawer is open so the page underneath
   // doesn't drift when the visitor scrolls inside the cart on mobile.
   useBodyScrollLock(isOpen);
+  // Anime.js cascade reveal for the cart line items every time the
+  // drawer opens or the items list grows. Framer-motion already
+  // owns the drawer's slide-in spring — this layer is purely the
+  // line-item ladder. Silent under prefers-reduced-motion.
+  useEffect(() => {
+    if (!isOpen || items.length === 0) return;
+    if (prefersReducedMotion()) return;
+    const host = lineListRef.current;
+    if (!host) return;
+    const lines = host.querySelectorAll<HTMLElement>("[data-cart-line]");
+    if (lines.length === 0) return;
+    animate(Array.from(lines), {
+      opacity: [0, 1],
+      translateX: [16, 0],
+      duration: 380,
+      delay: stagger(45),
+      ease: "outQuad",
+    });
+  }, [isOpen, items.length]);
   // Close on ESC for keyboard users. The overlay click + close button
   // already cover pointer users.
   useEffect(() => {
@@ -85,8 +117,17 @@ const CartDrawer = () => {
             aria-labelledby={titleId}
           >
             <div className="p-6 border-b border-border/10 flex items-center justify-between">
-              <h2 id={titleId} className="font-display text-lg text-foreground">
-                Your Cart ({items.length})
+              <h2
+                id={titleId}
+                className="font-display text-lg text-foreground flex items-baseline gap-1"
+              >
+                <span>Your Cart (</span>
+                <AnimeCounter
+                  value={items.length}
+                  durationMs={420}
+                  className="tabular-nums"
+                />
+                <span>)</span>
               </h2>
               <button
                 onClick={closeCart}
@@ -124,7 +165,10 @@ const CartDrawer = () => {
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div
+                  ref={lineListRef}
+                  className="flex-1 overflow-y-auto p-6 space-y-4"
+                >
                   {/* Free shipping progress */}
                   {freeShippingEnabled &&
                     freeShippingThreshold > 0 &&
@@ -152,6 +196,7 @@ const CartDrawer = () => {
                   {items.map((item) => (
                     <div
                       key={item.id}
+                      data-cart-line
                       className="flex gap-4 p-3 bg-muted/20 border border-border/10 rounded-sm"
                     >
                       <img
@@ -285,7 +330,11 @@ const CartDrawer = () => {
                 <div className="p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t border-border/10 space-y-2 bg-card">
                   <div className="flex justify-between font-body text-xs text-muted-foreground">
                     <span>Subtotal</span>
-                    <span>₱{subtotal.toLocaleString()}</span>
+                    <AnimeCounter
+                      value={subtotal}
+                      format={pesoFormatter}
+                      durationMs={520}
+                    />
                   </div>
                   <div className="flex justify-between font-body text-xs text-muted-foreground">
                     <span>Shipping</span>
@@ -310,19 +359,31 @@ const CartDrawer = () => {
                         <span className="text-foreground">FREE</span>
                       </span>
                     ) : (
-                      <span>₱{shippingFee.toLocaleString()}</span>
+                      <AnimeCounter
+                        value={shippingFee}
+                        format={pesoFormatter}
+                        durationMs={520}
+                      />
                     )}
                   </div>
                   {discount > 0 && (
                     <div className="flex justify-between font-body text-xs text-foreground">
                       <span>Discount</span>
-                      <span>-₱{discount.toLocaleString()}</span>
+                      <AnimeCounter
+                        value={discount}
+                        format={pesoDiscountFormatter}
+                        durationMs={520}
+                      />
                     </div>
                   )}
                   <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
                     <span>Total</span>
                     <span className="font-semibold">
-                      ₱{total.toLocaleString()}
+                      <AnimeCounter
+                        value={total}
+                        format={pesoFormatter}
+                        durationMs={620}
+                      />
                       {shippingFeePending && !LALAMOVE_PAID_TO_RIDER && (
                         <span className="font-body text-[10px] text-muted-foreground ml-1">
                           + shipping

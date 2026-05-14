@@ -8,6 +8,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
+import { animate } from "animejs";
 import { ShoppingCart, Eye, Heart, Box, GitCompare } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/contexts/CartContext";
@@ -86,6 +87,7 @@ const ArtworkCard = ({
   const [heartBurst, setHeartBurst] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const wishlistButtonRef = useRef<HTMLButtonElement>(null);
   const reduceMotion = useReducedMotion();
   const tiltX = useMotionValue(0);
   const tiltY = useMotionValue(0);
@@ -121,6 +123,45 @@ const ArtworkCard = ({
   const purchasable = isPurchasable(availability) && !vacationMode.enabled;
   const inWishlist = wishlist.has(id);
 
+  // Spawns the dense anime.js confetti burst (8 spans, randomised
+  // angle + speed) on top of framer-motion's 4-spark base. Anchored
+  // to the wishlist button's centre via getBoundingClientRect()
+  // because the burst layer is a viewport-positioned overlay.
+  const fireWishlistConfetti = () => {
+    if (reduceMotion) return;
+    const btn = wishlistButtonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const originX = rect.left + rect.width / 2;
+    const originY = rect.top + rect.height / 2;
+    const colors = [
+      "rgba(248,113,113,0.95)", // red-400
+      "rgba(252,165,165,0.9)", // red-300
+      "rgba(253,224,71,0.95)", // yellow-300
+      "rgba(251,191,36,0.95)", // amber-400
+    ];
+    for (let i = 0; i < 8; i += 1) {
+      const span = document.createElement("span");
+      const angle = (Math.PI * 2 * i) / 8 + (Math.random() - 0.5) * 0.45;
+      const distance = 26 + Math.random() * 18;
+      const size = 5 + Math.random() * 3;
+      span.setAttribute("aria-hidden", "true");
+      span.style.cssText = `position:fixed;top:${originY - size / 2}px;left:${originX - size / 2}px;width:${size}px;height:${size}px;border-radius:9999px;background:${colors[i % colors.length]};box-shadow:0 0 10px ${colors[i % colors.length]};pointer-events:none;z-index:9999;will-change:transform,opacity;`;
+      document.body.appendChild(span);
+      animate(span, {
+        translateX: Math.cos(angle) * distance,
+        translateY: Math.sin(angle) * distance,
+        scale: [0.6, 1.05, 0.4],
+        opacity: [1, 1, 0],
+        duration: 620 + Math.random() * 160,
+        ease: "outQuad",
+        onComplete: () => {
+          span.remove();
+        },
+      });
+    }
+  };
+
   const handleToggleWishlist = (e: React.MouseEvent) => {
     e.stopPropagation();
     const added = wishlist.toggle({
@@ -135,6 +176,11 @@ const ArtworkCard = ({
     if (added && !reduceMotion) {
       setHeartBurst(true);
       window.setTimeout(() => setHeartBurst(false), 720);
+      // Layer anime.js confetti on top of the framer-motion 4-spark
+      // base so the heart "pops" with extra density without
+      // replacing the existing motion. Skipped on the removal path
+      // and under reduced-motion.
+      fireWishlistConfetti();
     }
     toast.success(
       added
@@ -330,6 +376,7 @@ const ArtworkCard = ({
             short-lived sparks that fly outward. Pure framer-motion,
             silent under `prefers-reduced-motion`. */}
         <button
+          ref={wishlistButtonRef}
           type="button"
           onClick={handleToggleWishlist}
           aria-pressed={inWishlist}

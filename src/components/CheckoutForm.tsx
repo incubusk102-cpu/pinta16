@@ -71,9 +71,19 @@ import {
   renderGoogleButton,
 } from "@/lib/google-signin";
 import PaymentModal from "./PaymentModal";
+import AnimeCounter from "./motion/AnimeCounter";
 import Turnstile, { isTurnstileEnabled } from "./Turnstile";
 import { createPayment } from "@/utils/payment.functions";
 import { jsonAuthHeaders } from "@/lib/api";
+
+// Peso formatters reused by AnimeCounter so the rolling odometer
+// renders "₱1,200" rather than the bare integer the counter would
+// otherwise output. Centralised here so subtotal / shipping / total
+// share the exact same digit grouping + currency glyph.
+const pesoFormatter = (n: number): string =>
+  `\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+const pesoDiscountFormatter = (n: number): string =>
+  `-\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
 // Per-tab draft of the guest checkout form. We persist on every change
@@ -1173,9 +1183,12 @@ const CheckoutForm = () => {
                             Order Summary
                           </p>
                           <span className="flex items-center gap-2 md:hidden">
-                            <span className="font-body text-xs font-semibold text-foreground">
-                              ₱{total.toLocaleString()}
-                            </span>
+                            <AnimeCounter
+                              value={total}
+                              format={pesoFormatter}
+                              durationMs={520}
+                              className="font-body text-xs font-semibold text-foreground"
+                            />
                             <ChevronDown
                               className={`w-4 h-4 text-muted-foreground transition-transform ${
                                 summaryExpanded ? "rotate-180" : ""
@@ -1210,7 +1223,11 @@ const CheckoutForm = () => {
                           <div className="border-t border-border/10 mt-3 pt-3 space-y-1">
                             <div className="flex justify-between font-body text-xs text-muted-foreground">
                               <span>Subtotal</span>
-                              <span>₱{subtotal.toLocaleString()}</span>
+                              <AnimeCounter
+                                value={subtotal}
+                                format={pesoFormatter}
+                                durationMs={520}
+                              />
                             </div>
                             <div className="flex justify-between font-body text-xs text-muted-foreground">
                               <span>Shipping</span>
@@ -1235,7 +1252,11 @@ const CheckoutForm = () => {
                                   <span className="text-foreground">FREE</span>
                                 </span>
                               ) : (
-                                <span>₱{shippingFee.toLocaleString()}</span>
+                                <AnimeCounter
+                                  value={shippingFee}
+                                  format={pesoFormatter}
+                                  durationMs={520}
+                                />
                               )}
                             </div>
                             {discount > 0 && (
@@ -1249,13 +1270,21 @@ const CheckoutForm = () => {
                                       : `\u20b1${voucher.value.toLocaleString()} off`}
                                   )
                                 </span>
-                                <span>-₱{discount.toLocaleString()}</span>
+                                <AnimeCounter
+                                  value={discount}
+                                  format={pesoDiscountFormatter}
+                                  durationMs={520}
+                                />
                               </div>
                             )}
                             <div className="flex justify-between font-body text-sm text-foreground pt-2 border-t border-border/10">
                               <span>Total</span>
                               <span className="font-semibold">
-                                ₱{total.toLocaleString()}
+                                <AnimeCounter
+                                  value={total}
+                                  format={pesoFormatter}
+                                  durationMs={620}
+                                />
                                 {shippingFeePending &&
                                   !LALAMOVE_PAID_TO_RIDER && (
                                     <span className="font-body text-[10px] text-muted-foreground ml-1">

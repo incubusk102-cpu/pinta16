@@ -153,6 +153,18 @@ import { linkifyMessage } from "@/lib/chat-format";
 import { GoldenCMark } from "@/components/GoldenCMark";
 import { compressImage } from "@/lib/imageCompress";
 import { uploadImageToR2 } from "@/lib/uploadImage";
+import { animate, stagger } from "animejs";
+import AnimeCounter from "@/components/motion/AnimeCounter";
+import GsapStaggerRail from "@/components/motion/GsapStaggerRail";
+
+// Centralised reduced-motion check for every admin motion layer.
+// Cheap to call per-effect; avoids each NavLink / DashCard /
+// OrdersSection re-implementing the same guard.
+const adminPrefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 type AdminSection =
   | "dashboard"
   | "products"
@@ -687,8 +699,45 @@ function SidebarNav({
   collapsed?: boolean;
   badgeCounts?: SidebarBadgeCounts | null;
 }) {
+  const navRef = useRef<HTMLElement | null>(null);
+  // Stagger reveal for the sidebar items on first mount. Anime.js
+  // owns the cascade; framer-motion and tw-animate-css aren't used
+  // inside admin yet, so this is a net-new layer. Silent under
+  // prefers-reduced-motion.
+  useEffect(() => {
+    if (adminPrefersReducedMotion()) return;
+    const host = navRef.current;
+    if (!host) return;
+    const items = host.querySelectorAll<HTMLElement>("[data-admin-nav-item]");
+    if (items.length === 0) return;
+    animate(Array.from(items), {
+      opacity: [0, 1],
+      translateX: [-10, 0],
+      duration: 360,
+      delay: stagger(35),
+      ease: "outQuad",
+    });
+  }, []);
+  // Sparkle pulse on the active section's icon whenever the
+  // section changes. The pulse is anchored to the icon span via
+  // `data-active-icon` so we don't bake the effect into every
+  // NavLink instance.
+  useEffect(() => {
+    if (adminPrefersReducedMotion()) return;
+    const host = navRef.current;
+    if (!host) return;
+    const activeIcon = host.querySelector<HTMLElement>(
+      "[data-active-icon='true']",
+    );
+    if (!activeIcon) return;
+    animate(activeIcon, {
+      scale: [1, 1.18, 1],
+      duration: 420,
+      ease: "outElastic(1, 0.6)",
+    });
+  }, [section]);
   return (
-    <nav className="flex flex-col gap-4">
+    <nav ref={navRef} className="flex flex-col gap-4">
       {NAV_GROUPS.map((group) => (
         <div key={group.label}>
           {!collapsed && (
@@ -1263,6 +1312,7 @@ function NavLink({
   return (
     <button
       type="button"
+      data-admin-nav-item
       onClick={onClick}
       title={tooltip}
       className={`relative flex items-center gap-3 rounded-lg text-left transition-all duration-150 ${
@@ -1274,6 +1324,7 @@ function NavLink({
       }`}
     >
       <span
+        data-active-icon={active ? "true" : undefined}
         className={`relative flex-shrink-0 transition-colors ${active ? "text-primary" : "text-muted-foreground"}`}
       >
         {icon}
@@ -2658,6 +2709,25 @@ function AnalyticsPanel({
   );
 }
 
+// Splits a DashCard `value` like "₱12,345" or "1,200" into a numeric
+// portion + surrounding chrome so we can route the integer through
+// AnimeCounter while preserving the prefix/suffix (currency symbol,
+// trailing units, etc). Returns null when the value doesn't contain
+// a recognisable number (e.g. "—") so the caller can fall back to a
+// plain string render.
+const splitDashCardValue = (
+  value: string,
+): { prefix: string; num: number; suffix: string; isInt: boolean } | null => {
+  const match = value.match(/^([^\d-]*)(-?\d[\d,]*(?:\.\d+)?)(.*)$/);
+  if (!match) return null;
+  const prefix = match[1];
+  const numStr = match[2].replace(/,/g, "");
+  const suffix = match[3];
+  const num = Number(numStr);
+  if (!Number.isFinite(num)) return null;
+  return { prefix, num, suffix, isInt: !numStr.includes(".") };
+};
+
 function DashCard({
   icon,
   label,
@@ -2672,6 +2742,10 @@ function DashCard({
   onClick?: () => void;
 }) {
   const interactive = !!onClick;
+  // Route every numeric DashCard value through AnimeCounter so the
+  // dashboard reads like a live odometer roll-up. Non-numeric
+  // values ("—", "N/A") render statically.
+  const parsed = splitDashCardValue(value);
   return (
     <button
       type="button"
@@ -2685,7 +2759,25 @@ function DashCard({
         {icon}
         {label}
       </div>
-      <p className="font-display text-2xl mt-2">{value}</p>
+      <p className="font-display text-2xl mt-2">
+        {parsed ? (
+          <AnimeCounter
+            value={parsed.num}
+            durationMs={900}
+            format={(n) => {
+              const display = parsed.isInt
+                ? Math.round(n).toLocaleString()
+                : n.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+              return `${parsed.prefix}${display}${parsed.suffix}`;
+            }}
+          />
+        ) : (
+          value
+        )}
+      </p>
       {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
     </button>
   );
@@ -3824,864 +3916,886 @@ function OrdersSection() {
         </div>
       )}
 
-      {paginatedOrders.map((order) => {
-        const currentStepIdx = ORDER_STEPS.findIndex(
-          (s) => s.key === order.status,
-        );
-        const statusColors: Record<string, string> = {
-          confirmed:
-            "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-          in_progress:
-            "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-          out_for_delivery:
-            "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
-          received:
-            "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-        };
-        const statusLabels: Record<string, string> = {
-          confirmed: "Confirmed",
-          in_progress: "In progress",
-          out_for_delivery: "Shipping",
-          received: "Received",
-        };
-        return (
-          <div
-            key={order.id}
-            className="border border-border/40 rounded-lg p-5 space-y-4 transition-all hover:border-border/70 hover:shadow-sm"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleSelect(order.id)}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                    title={selectedIds.has(order.id) ? "Deselect" : "Select"}
-                  >
-                    {selectedIds.has(order.id) ? (
-                      <CheckSquare className="w-4 h-4 text-primary" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </button>
-                  <p className="font-body text-sm font-semibold">{order.id}</p>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                      statusColors[order.status] ||
-                      "bg-muted text-muted-foreground border-border"
-                    }`}
-                  >
-                    {statusLabels[order.status] || order.status}
-                  </span>
-                </div>
-                <p className="font-body text-xs text-muted-foreground">
-                  {formatDate(order.createdAt)} ·{" "}
-                  {order.orderInfo?.fullName ?? "—"} ·{" "}
-                  {order.orderInfo?.email ?? "—"}
-                </p>
-              </div>
-              <p className="font-body text-sm font-semibold">
-                ₱{(order.total ?? 0).toLocaleString()}
-              </p>
-            </div>
-
-            {/* Items */}
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              {order.items.map((item) => (
-                <p key={item.id}>
-                  {item.title} × {item.quantity}
-                  {item.dimensions ? (
-                    <span className="ml-1 text-foreground/80">
-                      · {item.dimensions}
+      <GsapStaggerRail
+        stagger={0.04}
+        duration={0.5}
+        xFrom={0}
+        yFrom={14}
+        scaleFrom={0.97}
+        className="space-y-4"
+      >
+        {paginatedOrders.map((order) => {
+          const currentStepIdx = ORDER_STEPS.findIndex(
+            (s) => s.key === order.status,
+          );
+          const statusColors: Record<string, string> = {
+            confirmed:
+              "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+            in_progress:
+              "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+            out_for_delivery:
+              "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
+            received:
+              "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+          };
+          const statusLabels: Record<string, string> = {
+            confirmed: "Confirmed",
+            in_progress: "In progress",
+            out_for_delivery: "Shipping",
+            received: "Received",
+          };
+          return (
+            <div
+              key={order.id}
+              data-rail-item
+              className="border border-border/40 rounded-lg p-5 space-y-4 transition-all hover:border-border/70 hover:shadow-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelect(order.id)}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      title={selectedIds.has(order.id) ? "Deselect" : "Select"}
+                    >
+                      {selectedIds.has(order.id) ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                    <p className="font-body text-sm font-semibold">
+                      {order.id}
+                    </p>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                        statusColors[order.status] ||
+                        "bg-muted text-muted-foreground border-border"
+                      }`}
+                    >
+                      {statusLabels[order.status] || order.status}
                     </span>
-                  ) : item.sizeCm ? (
-                    <span className="ml-1 text-foreground/80">
-                      · {formatSize(item.sizeCm)}
-                    </span>
-                  ) : null}{" "}
-                  — ₱{(item.price * item.quantity).toLocaleString()}
-                </p>
-              ))}
-            </div>
-
-            {/* Shipping details */}
-            <div className="text-xs space-y-1.5 p-3 bg-muted/30 border border-border/40 rounded-md">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <MapPin className="w-3.5 h-3.5" />
-                Shipping details
-              </div>
-              <div className="space-y-0.5 text-foreground/80">
-                <p className="font-medium text-foreground">
-                  {order.orderInfo?.fullName ?? "—"}
-                </p>
-                <p>{order.orderInfo?.phone ?? "—"}</p>
-                {order.orderInfo?.addressLine1 && (
-                  <p>{order.orderInfo.addressLine1}</p>
-                )}
-                {order.orderInfo?.addressLine2 && (
-                  <p>{order.orderInfo.addressLine2}</p>
-                )}
-                {order.orderInfo?.barangay && (
-                  <p>Brgy. {order.orderInfo.barangay}</p>
-                )}
-                <p>
-                  {order.orderInfo?.city ?? "—"}
-                  {order.orderInfo?.province
-                    ? `, ${order.orderInfo.province}`
-                    : ""}
-                  {order.orderInfo?.postalCode
-                    ? ` ${order.orderInfo.postalCode}`
-                    : ""}
-                </p>
-                {order.orderInfo?.region && (
-                  <p className="text-muted-foreground">
-                    {order.orderInfo.region}
-                  </p>
-                )}
-                {order.orderInfo?.landmark && (
-                  <p className="text-muted-foreground italic">
-                    Landmark: {order.orderInfo.landmark}
-                  </p>
-                )}
-                {!order.orderInfo?.addressLine1 && order.orderInfo?.address && (
-                  <p>{order.orderInfo.address}</p>
-                )}
-              </div>
-              {(order.orderInfo?.courier || order.shippingFee != null) && (
-                <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-border/30 text-muted-foreground">
-                  {order.orderInfo?.courier && (
-                    <span>
-                      Courier:{" "}
-                      <span className="text-foreground">
-                        {COURIERS.find((c) => c.id === order.orderInfo?.courier)
-                          ?.label || order.orderInfo.courier}
-                      </span>
-                    </span>
-                  )}
-                  {order.shippingFee != null && (
-                    <span>
-                      Shipping:{" "}
-                      <span className="text-foreground">
-                        {order.freeShipping
-                          ? "Free (we cover rider fee)"
-                          : order.orderInfo?.courier === "lalamove" &&
-                              order.shippingFee === 0
-                            ? "Paid to rider"
-                            : `₱${order.shippingFee.toLocaleString()}`}
-                      </span>
-                    </span>
-                  )}
-                  {order.orderInfo?.shippingZone && (
-                    <span>
-                      Zone:{" "}
-                      <span className="text-foreground">
-                        {order.orderInfo.shippingZone}
-                      </span>
-                    </span>
-                  )}
-                </div>
-              )}
-              {LALAMOVE_PAID_TO_RIDER &&
-                order.orderInfo?.courier === "lalamove" &&
-                order.orderInfo?.province && (
-                  <div className="text-muted-foreground pt-0.5">
-                    {(() => {
-                      const range = getLalamoveRange(
-                        order.orderInfo.province || "",
-                      );
-                      return range ? (
-                        <span>
-                          Est. rider fare:{" "}
-                          <span className="text-foreground">
-                            {formatLalamoveRange(range)}
-                          </span>
-                        </span>
-                      ) : null;
-                    })()}
                   </div>
-                )}
-              {order.orderInfo?.notes && (
-                <div className="pt-1 border-t border-border/30">
-                  <span className="text-muted-foreground">Notes: </span>
-                  <span className="text-foreground/80">
-                    {order.orderInfo.notes}
-                  </span>
+                  <p className="font-body text-xs text-muted-foreground">
+                    {formatDate(order.createdAt)} ·{" "}
+                    {order.orderInfo?.fullName ?? "—"} ·{" "}
+                    {order.orderInfo?.email ?? "—"}
+                  </p>
                 </div>
-              )}
-            </div>
+                <p className="font-body text-sm font-semibold">
+                  ₱{(order.total ?? 0).toLocaleString()}
+                </p>
+              </div>
 
-            {/* Payment QR */}
-            {(order.paymentIntentId || order.qrCodeImageUrl) && (
-              <div className="flex items-start gap-3 p-3 bg-muted/30 border border-border/40 rounded-md">
-                {order.qrCodeImageUrl ? (
-                  <a
-                    href={order.qrCodeImageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0"
-                  >
-                    <img
-                      src={order.qrCodeImageUrl}
-                      alt="Payment QR"
-                      className="w-20 h-20 object-contain bg-white p-1 rounded-sm border border-border/30"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
-                ) : (
-                  <QrCode className="w-5 h-5 text-muted-foreground mt-0.5" />
-                )}
-                <div className="min-w-0 flex-1 text-xs space-y-0.5">
-                  <p className="text-foreground font-medium">QR Ph payment</p>
-                  {order.paymentIntentId && (
-                    <p className="text-muted-foreground break-all">
-                      Intent: {order.paymentIntentId}
+              {/* Items */}
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {order.items.map((item) => (
+                  <p key={item.id}>
+                    {item.title} × {item.quantity}
+                    {item.dimensions ? (
+                      <span className="ml-1 text-foreground/80">
+                        · {item.dimensions}
+                      </span>
+                    ) : item.sizeCm ? (
+                      <span className="ml-1 text-foreground/80">
+                        · {formatSize(item.sizeCm)}
+                      </span>
+                    ) : null}{" "}
+                    — ₱{(item.price * item.quantity).toLocaleString()}
+                  </p>
+                ))}
+              </div>
+
+              {/* Shipping details */}
+              <div className="text-xs space-y-1.5 p-3 bg-muted/30 border border-border/40 rounded-md">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <MapPin className="w-3.5 h-3.5" />
+                  Shipping details
+                </div>
+                <div className="space-y-0.5 text-foreground/80">
+                  <p className="font-medium text-foreground">
+                    {order.orderInfo?.fullName ?? "—"}
+                  </p>
+                  <p>{order.orderInfo?.phone ?? "—"}</p>
+                  {order.orderInfo?.addressLine1 && (
+                    <p>{order.orderInfo.addressLine1}</p>
+                  )}
+                  {order.orderInfo?.addressLine2 && (
+                    <p>{order.orderInfo.addressLine2}</p>
+                  )}
+                  {order.orderInfo?.barangay && (
+                    <p>Brgy. {order.orderInfo.barangay}</p>
+                  )}
+                  <p>
+                    {order.orderInfo?.city ?? "—"}
+                    {order.orderInfo?.province
+                      ? `, ${order.orderInfo.province}`
+                      : ""}
+                    {order.orderInfo?.postalCode
+                      ? ` ${order.orderInfo.postalCode}`
+                      : ""}
+                  </p>
+                  {order.orderInfo?.region && (
+                    <p className="text-muted-foreground">
+                      {order.orderInfo.region}
                     </p>
                   )}
-                  {order.qrCodeImageUrl && (
+                  {order.orderInfo?.landmark && (
+                    <p className="text-muted-foreground italic">
+                      Landmark: {order.orderInfo.landmark}
+                    </p>
+                  )}
+                  {!order.orderInfo?.addressLine1 &&
+                    order.orderInfo?.address && (
+                      <p>{order.orderInfo.address}</p>
+                    )}
+                </div>
+                {(order.orderInfo?.courier || order.shippingFee != null) && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-border/30 text-muted-foreground">
+                    {order.orderInfo?.courier && (
+                      <span>
+                        Courier:{" "}
+                        <span className="text-foreground">
+                          {COURIERS.find(
+                            (c) => c.id === order.orderInfo?.courier,
+                          )?.label || order.orderInfo.courier}
+                        </span>
+                      </span>
+                    )}
+                    {order.shippingFee != null && (
+                      <span>
+                        Shipping:{" "}
+                        <span className="text-foreground">
+                          {order.freeShipping
+                            ? "Free (we cover rider fee)"
+                            : order.orderInfo?.courier === "lalamove" &&
+                                order.shippingFee === 0
+                              ? "Paid to rider"
+                              : `₱${order.shippingFee.toLocaleString()}`}
+                        </span>
+                      </span>
+                    )}
+                    {order.orderInfo?.shippingZone && (
+                      <span>
+                        Zone:{" "}
+                        <span className="text-foreground">
+                          {order.orderInfo.shippingZone}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )}
+                {LALAMOVE_PAID_TO_RIDER &&
+                  order.orderInfo?.courier === "lalamove" &&
+                  order.orderInfo?.province && (
+                    <div className="text-muted-foreground pt-0.5">
+                      {(() => {
+                        const range = getLalamoveRange(
+                          order.orderInfo.province || "",
+                        );
+                        return range ? (
+                          <span>
+                            Est. rider fare:{" "}
+                            <span className="text-foreground">
+                              {formatLalamoveRange(range)}
+                            </span>
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                {order.orderInfo?.notes && (
+                  <div className="pt-1 border-t border-border/30">
+                    <span className="text-muted-foreground">Notes: </span>
+                    <span className="text-foreground/80">
+                      {order.orderInfo.notes}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment QR */}
+              {(order.paymentIntentId || order.qrCodeImageUrl) && (
+                <div className="flex items-start gap-3 p-3 bg-muted/30 border border-border/40 rounded-md">
+                  {order.qrCodeImageUrl ? (
                     <a
                       href={order.qrCodeImageUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-foreground underline"
+                      className="shrink-0"
                     >
-                      Open QR image
+                      <img
+                        src={order.qrCodeImageUrl}
+                        alt="Payment QR"
+                        className="w-20 h-20 object-contain bg-white p-1 rounded-sm border border-border/30"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     </a>
+                  ) : (
+                    <QrCode className="w-5 h-5 text-muted-foreground mt-0.5" />
                   )}
-                </div>
-              </div>
-            )}
-
-            {/* Visitor / device info */}
-            {order.requestMeta &&
-              (order.requestMeta.ip || order.requestMeta.userAgent) && (
-                <div className="text-xs space-y-1 p-3 bg-muted/30 border border-border/40 rounded-md">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    Customer device
+                  <div className="min-w-0 flex-1 text-xs space-y-0.5">
+                    <p className="text-foreground font-medium">QR Ph payment</p>
+                    {order.paymentIntentId && (
+                      <p className="text-muted-foreground break-all">
+                        Intent: {order.paymentIntentId}
+                      </p>
+                    )}
+                    {order.qrCodeImageUrl && (
+                      <a
+                        href={order.qrCodeImageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-foreground underline"
+                      >
+                        Open QR image
+                      </a>
+                    )}
                   </div>
-                  <p className="text-foreground/80">
-                    {order.requestMeta.browser || "Unknown browser"} ·{" "}
-                    {order.requestMeta.os || "Unknown OS"} ·{" "}
-                    {order.requestMeta.device || "device"}
-                  </p>
-                  {order.requestMeta.ip && (
-                    <p className="text-muted-foreground font-mono">
-                      IP: {order.requestMeta.ip}
-                    </p>
-                  )}
                 </div>
               )}
 
-            {/* Activity log (admin / customer touchpoints) */}
-            {order.activityLog && order.activityLog.length > 0 && (
-              <div className="text-xs space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Activity log
-                </div>
-                <ul className="space-y-1 pl-5 list-disc text-muted-foreground">
-                  {order.activityLog.map((entry, idx) => (
-                    <li key={`${entry.at}-${idx}`}>
-                      <span className="text-foreground">{entry.type}</span> (
-                      {entry.actor}) — {new Date(entry.at).toLocaleString()}
-                      {entry.ip && (
-                        <span className="font-mono"> · {entry.ip}</span>
-                      )}
-                      {entry.browser && (
-                        <span>
-                          {" "}
-                          · {entry.browser} on {entry.os}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              {/* Visitor / device info */}
+              {order.requestMeta &&
+                (order.requestMeta.ip || order.requestMeta.userAgent) && (
+                  <div className="text-xs space-y-1 p-3 bg-muted/30 border border-border/40 rounded-md">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Customer device
+                    </div>
+                    <p className="text-foreground/80">
+                      {order.requestMeta.browser || "Unknown browser"} ·{" "}
+                      {order.requestMeta.os || "Unknown OS"} ·{" "}
+                      {order.requestMeta.device || "device"}
+                    </p>
+                    {order.requestMeta.ip && (
+                      <p className="text-muted-foreground font-mono">
+                        IP: {order.requestMeta.ip}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-            {/* Notifications log */}
-            {order.notifications && order.notifications.length > 0 && (
-              <div className="text-xs space-y-1.5">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Bell className="w-3.5 h-3.5" />
-                  <span className="text-[10px] uppercase tracking-wider">
-                    Notifications sent
-                  </span>
-                </div>
-                <ul className="space-y-2 text-muted-foreground">
-                  {order.notifications.map((n, idx) => {
-                    let badge: {
-                      text: string;
-                      className: string;
-                    } | null = null;
-                    if (n.delivered) {
-                      badge = {
-                        text: `Email delivered${n.provider ? ` · ${n.provider}` : ""}`,
-                        className:
-                          "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
-                      };
-                    } else if (n.skipped) {
-                      badge = {
-                        text: `Email skipped${
-                          n.skipReason ? ` · ${n.skipReason}` : ""
-                        }`,
-                        className:
-                          "bg-muted text-muted-foreground border-border/40",
-                      };
-                    } else if (n.error) {
-                      badge = {
-                        text: `Email failed`,
-                        className:
-                          "bg-red-500/15 text-red-700 border-red-500/30",
-                      };
-                    }
-                    return (
-                      <li
-                        key={`${n.sentAt}-${idx}`}
-                        className="border border-border/30 rounded-md p-2 bg-muted/20"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-foreground">{n.message}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {n.recipient} ·{" "}
-                              {new Date(n.sentAt).toLocaleString()}
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 px-2 text-[10px]"
-                            disabled={resendingKey === `${order.id}:${idx}`}
-                            onClick={() => handleResendEmail(order.id, idx)}
-                          >
-                            {resendingKey === `${order.id}:${idx}`
-                              ? "Resending…"
-                              : "Resend email"}
-                          </Button>
-                        </div>
-                        {badge && (
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            <span
-                              className={`inline-block text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${badge.className}`}
-                            >
-                              {badge.text}
-                            </span>
-                            {n.providerId && (
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {n.providerId}
-                              </span>
-                            )}
-                          </div>
+              {/* Activity log (admin / customer touchpoints) */}
+              {order.activityLog && order.activityLog.length > 0 && (
+                <div className="text-xs space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Activity log
+                  </div>
+                  <ul className="space-y-1 pl-5 list-disc text-muted-foreground">
+                    {order.activityLog.map((entry, idx) => (
+                      <li key={`${entry.at}-${idx}`}>
+                        <span className="text-foreground">{entry.type}</span> (
+                        {entry.actor}) — {new Date(entry.at).toLocaleString()}
+                        {entry.ip && (
+                          <span className="font-mono"> · {entry.ip}</span>
                         )}
-                        {n.error && (
-                          <p className="mt-1 text-[10px] text-red-700">
-                            {n.error}
-                          </p>
+                        {entry.browser && (
+                          <span>
+                            {" "}
+                            · {entry.browser} on {entry.os}
+                          </span>
                         )}
                       </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-
-            {/* Shipment / tracking */}
-            <ShipmentEditor
-              order={order}
-              busy={updatingId === order.id}
-              onSave={(s) => handleSaveShipment(order.id, s)}
-              onClear={() => handleClearShipment(order.id)}
-            />
-
-            {/* Reviews (per painting) */}
-            {(() => {
-              const reviewsList: OrderReview[] =
-                order.reviews && order.reviews.length > 0
-                  ? order.reviews
-                  : order.review
-                    ? [order.review]
-                    : [];
-              if (reviewsList.length === 0) return null;
-              return reviewsList.map((rev, idx) => (
-                <div
-                  key={`${rev.productId ?? "legacy"}-${idx}`}
-                  className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md"
-                >
-                  <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
-                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                    <span className="text-[10px] uppercase tracking-wider">
-                      Customer review
-                      {rev.productTitle ? ` · ${rev.productTitle}` : ""}
-                    </span>
-                    {rev.publishedToHomepage && (
-                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded">
-                        On homepage
-                      </span>
-                    )}
-                    <span className="ml-auto text-[10px]">
-                      {new Date(rev.submittedAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <Star
-                        key={n}
-                        className={`w-3.5 h-3.5 ${
-                          n <= rev.rating
-                            ? "fill-yellow-400 text-yellow-400"
-                            : "text-muted-foreground"
-                        }`}
-                      />
                     ))}
-                    <span className="ml-1 text-muted-foreground">
-                      {rev.rating}/5
+                  </ul>
+                </div>
+              )}
+
+              {/* Notifications log */}
+              {order.notifications && order.notifications.length > 0 && (
+                <div className="text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Bell className="w-3.5 h-3.5" />
+                    <span className="text-[10px] uppercase tracking-wider">
+                      Notifications sent
                     </span>
                   </div>
-                  <p className="text-foreground whitespace-pre-wrap">
-                    {rev.text}
-                  </p>
-                  {rev.images.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2">
-                      {rev.images.map((src, i) => (
-                        <a
-                          key={i}
-                          href={src}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <img
-                            src={src}
-                            alt={`Review image ${i + 1}`}
-                            className="aspect-square w-full object-cover rounded-sm border border-border/20"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex justify-end pt-1">
-                    <Button
-                      type="button"
-                      variant={rev.publishedToHomepage ? "outline" : "default"}
-                      size="sm"
-                      disabled={updatingId === order.id}
-                      onClick={() =>
-                        void handleSetReviewPublished(
-                          order.id,
-                          !rev.publishedToHomepage,
-                          rev.productId,
-                        )
+                  <ul className="space-y-2 text-muted-foreground">
+                    {order.notifications.map((n, idx) => {
+                      let badge: {
+                        text: string;
+                        className: string;
+                      } | null = null;
+                      if (n.delivered) {
+                        badge = {
+                          text: `Email delivered${n.provider ? ` · ${n.provider}` : ""}`,
+                          className:
+                            "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+                        };
+                      } else if (n.skipped) {
+                        badge = {
+                          text: `Email skipped${
+                            n.skipReason ? ` · ${n.skipReason}` : ""
+                          }`,
+                          className:
+                            "bg-muted text-muted-foreground border-border/40",
+                        };
+                      } else if (n.error) {
+                        badge = {
+                          text: `Email failed`,
+                          className:
+                            "bg-red-500/15 text-red-700 border-red-500/30",
+                        };
                       }
-                      className="text-xs h-7"
-                    >
-                      {rev.publishedToHomepage ? (
-                        <>
-                          <EyeOff className="w-3.5 h-3.5 mr-1" />
-                          Unpublish
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-3.5 h-3.5 mr-1" />
-                          Publish to homepage
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                      return (
+                        <li
+                          key={`${n.sentAt}-${idx}`}
+                          className="border border-border/30 rounded-md p-2 bg-muted/20"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-foreground">{n.message}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {n.recipient} ·{" "}
+                                {new Date(n.sentAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[10px]"
+                              disabled={resendingKey === `${order.id}:${idx}`}
+                              onClick={() => handleResendEmail(order.id, idx)}
+                            >
+                              {resendingKey === `${order.id}:${idx}`
+                                ? "Resending…"
+                                : "Resend email"}
+                            </Button>
+                          </div>
+                          {badge && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              <span
+                                className={`inline-block text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${badge.className}`}
+                              >
+                                {badge.text}
+                              </span>
+                              {n.providerId && (
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {n.providerId}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {n.error && (
+                            <p className="mt-1 text-[10px] text-red-700">
+                              {n.error}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-              ));
-            })()}
+              )}
 
-            {/* Journey Map */}
-            <div className="flex items-center gap-1">
-              {ORDER_STEPS.map((step, idx) => {
-                const done = idx <= currentStepIdx;
-                const isActive = idx === currentStepIdx;
-                return (
-                  <button
-                    key={step.key}
-                    disabled={updatingId === order.id}
-                    onClick={() => handleStatusUpdate(order.id, step.key)}
-                    className={`flex-1 py-2 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
-                      done
-                        ? isActive
-                          ? "bg-foreground text-background"
-                          : "bg-foreground/20 text-foreground"
-                        : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
-                    } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                    title={step.description}
+              {/* Shipment / tracking */}
+              <ShipmentEditor
+                order={order}
+                busy={updatingId === order.id}
+                onSave={(s) => handleSaveShipment(order.id, s)}
+                onClear={() => handleClearShipment(order.id)}
+              />
+
+              {/* Reviews (per painting) */}
+              {(() => {
+                const reviewsList: OrderReview[] =
+                  order.reviews && order.reviews.length > 0
+                    ? order.reviews
+                    : order.review
+                      ? [order.review]
+                      : [];
+                if (reviewsList.length === 0) return null;
+                return reviewsList.map((rev, idx) => (
+                  <div
+                    key={`${rev.productId ?? "legacy"}-${idx}`}
+                    className="text-xs space-y-2 p-3 bg-muted/30 border border-border/40 rounded-md"
                   >
-                    {step.label}
-                  </button>
-                );
-              })}
-            </div>
+                    <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
+                      <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                      <span className="text-[10px] uppercase tracking-wider">
+                        Customer review
+                        {rev.productTitle ? ` · ${rev.productTitle}` : ""}
+                      </span>
+                      {rev.publishedToHomepage && (
+                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded">
+                          On homepage
+                        </span>
+                      )}
+                      <span className="ml-auto text-[10px]">
+                        {new Date(rev.submittedAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Star
+                          key={n}
+                          className={`w-3.5 h-3.5 ${
+                            n <= rev.rating
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      ))}
+                      <span className="ml-1 text-muted-foreground">
+                        {rev.rating}/5
+                      </span>
+                    </div>
+                    <p className="text-foreground whitespace-pre-wrap">
+                      {rev.text}
+                    </p>
+                    {rev.images.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {rev.images.map((src, i) => (
+                          <a
+                            key={i}
+                            href={src}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <img
+                              src={src}
+                              alt={`Review image ${i + 1}`}
+                              className="aspect-square w-full object-cover rounded-sm border border-border/20"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="button"
+                        variant={
+                          rev.publishedToHomepage ? "outline" : "default"
+                        }
+                        size="sm"
+                        disabled={updatingId === order.id}
+                        onClick={() =>
+                          void handleSetReviewPublished(
+                            order.id,
+                            !rev.publishedToHomepage,
+                            rev.productId,
+                          )
+                        }
+                        className="text-xs h-7"
+                      >
+                        {rev.publishedToHomepage ? (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5 mr-1" />
+                            Unpublish
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3.5 h-3.5 mr-1" />
+                            Publish to homepage
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ));
+              })()}
 
-            {/* Production stage stepper — only meaningful while the
+              {/* Journey Map */}
+              <div className="flex items-center gap-1">
+                {ORDER_STEPS.map((step, idx) => {
+                  const done = idx <= currentStepIdx;
+                  const isActive = idx === currentStepIdx;
+                  return (
+                    <button
+                      key={step.key}
+                      disabled={updatingId === order.id}
+                      onClick={() => handleStatusUpdate(order.id, step.key)}
+                      className={`flex-1 py-2 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
+                        done
+                          ? isActive
+                            ? "bg-foreground text-background"
+                            : "bg-foreground/20 text-foreground"
+                          : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                      } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                      title={step.description}
+                    >
+                      {step.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Production stage stepper — only meaningful while the
                 artist is actively working on the painting, so we hide
                 it for confirmed / shipping / received rows to keep the
                 row compact. */}
-            {order.status === "in_progress" && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <Brush className="w-3 h-3" />
-                    Production stage
-                  </div>
-                  {order.productionStage && (
-                    <button
-                      type="button"
-                      disabled={updatingId === order.id}
-                      onClick={() =>
-                        void handleProductionStageUpdate(order.id, null)
-                      }
-                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {PRODUCTION_STAGES.map((s) => {
-                    const isCurrent = order.productionStage === s.key;
-                    return (
+              {order.status === "in_progress" && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <Brush className="w-3 h-3" />
+                      Production stage
+                    </div>
+                    {order.productionStage && (
                       <button
-                        key={s.key}
                         type="button"
                         disabled={updatingId === order.id}
                         onClick={() =>
-                          void handleProductionStageUpdate(order.id, s.key)
+                          void handleProductionStageUpdate(order.id, null)
                         }
-                        title={s.description}
-                        className={`flex-1 py-1.5 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
-                          isCurrent
-                            ? "bg-foreground text-background"
-                            : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
-                        } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                       >
-                        {s.label}
+                        Clear
                       </button>
-                    );
-                  })}
-                </div>
-                {/* Behind-the-scenes photo strip per stage. Shows
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {PRODUCTION_STAGES.map((s) => {
+                      const isCurrent = order.productionStage === s.key;
+                      return (
+                        <button
+                          key={s.key}
+                          type="button"
+                          disabled={updatingId === order.id}
+                          onClick={() =>
+                            void handleProductionStageUpdate(order.id, s.key)
+                          }
+                          title={s.description}
+                          className={`flex-1 py-1.5 px-1 text-center rounded-sm text-[10px] font-medium transition-colors ${
+                            isCurrent
+                              ? "bg-foreground text-background"
+                              : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                          } ${updatingId === order.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                        >
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Behind-the-scenes photo strip per stage. Shows
                     existing photos (with hover-to-remove), plus an
                     upload button that's only enabled when a stage is
                     actually selected — uploading without a stage tag
                     would leave the photo orphaned in the customer UI. */}
-                <div className="space-y-1.5 pt-1">
-                  {PRODUCTION_STAGES.map((s) => {
-                    const photos = (order.productionPhotos || []).filter(
-                      (p) => p.stage === s.key,
-                    );
-                    const canUpload =
-                      order.productionStage === s.key &&
-                      updatingId !== order.id;
-                    if (photos.length === 0 && order.productionStage !== s.key)
-                      return null;
-                    return (
-                      <div
-                        key={s.key}
-                        className="flex items-start gap-2 text-[10px]"
-                      >
-                        <span className="w-14 shrink-0 pt-1 uppercase tracking-wider text-muted-foreground">
-                          {s.label}
-                        </span>
-                        <div className="flex flex-wrap items-center gap-1.5 flex-1">
-                          {photos.map((p) => (
-                            <div
-                              key={p.id}
-                              className="relative group w-12 h-12 rounded-sm overflow-hidden border border-border/40 bg-muted/40"
+                  <div className="space-y-1.5 pt-1">
+                    {PRODUCTION_STAGES.map((s) => {
+                      const photos = (order.productionPhotos || []).filter(
+                        (p) => p.stage === s.key,
+                      );
+                      const canUpload =
+                        order.productionStage === s.key &&
+                        updatingId !== order.id;
+                      if (
+                        photos.length === 0 &&
+                        order.productionStage !== s.key
+                      )
+                        return null;
+                      return (
+                        <div
+                          key={s.key}
+                          className="flex items-start gap-2 text-[10px]"
+                        >
+                          <span className="w-14 shrink-0 pt-1 uppercase tracking-wider text-muted-foreground">
+                            {s.label}
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                            {photos.map((p) => (
+                              <div
+                                key={p.id}
+                                className="relative group w-12 h-12 rounded-sm overflow-hidden border border-border/40 bg-muted/40"
+                              >
+                                <a
+                                  href={p.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="block w-full h-full"
+                                  title={`Uploaded ${formatDate(p.uploadedAt)}`}
+                                >
+                                  <img
+                                    src={p.url}
+                                    alt={`${s.label} photo`}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleRemoveProductionPhoto(
+                                      order.id,
+                                      p.id,
+                                    )
+                                  }
+                                  className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-background/90 text-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center"
+                                  aria-label={`Remove ${s.label} photo`}
+                                  title="Remove photo"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            ))}
+                            <label
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm border border-dashed text-[10px] uppercase tracking-wider transition-colors ${
+                                canUpload
+                                  ? "border-border text-muted-foreground hover:bg-muted/40 cursor-pointer"
+                                  : "border-border/50 text-muted-foreground/50 cursor-not-allowed"
+                              }`}
+                              title={
+                                canUpload
+                                  ? "Upload a behind-the-scenes photo"
+                                  : "Mark this stage as current to upload"
+                              }
                             >
-                              <a
-                                href={p.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block w-full h-full"
-                                title={`Uploaded ${formatDate(p.uploadedAt)}`}
-                              >
-                                <img
-                                  src={p.url}
-                                  alt={`${s.label} photo`}
-                                  loading="lazy"
-                                  className="w-full h-full object-cover"
-                                />
-                              </a>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleRemoveProductionPhoto(
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="sr-only"
+                                disabled={!canUpload}
+                                onChange={(e) => {
+                                  const file = e.currentTarget.files?.[0];
+                                  e.currentTarget.value = "";
+                                  if (!file) return;
+                                  void handleUploadProductionPhoto(
                                     order.id,
-                                    p.id,
-                                  )
-                                }
-                                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-background/90 text-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center"
-                                aria-label={`Remove ${s.label} photo`}
-                                title="Remove photo"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            </div>
-                          ))}
-                          <label
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm border border-dashed text-[10px] uppercase tracking-wider transition-colors ${
-                              canUpload
-                                ? "border-border text-muted-foreground hover:bg-muted/40 cursor-pointer"
-                                : "border-border/50 text-muted-foreground/50 cursor-not-allowed"
-                            }`}
-                            title={
-                              canUpload
-                                ? "Upload a behind-the-scenes photo"
-                                : "Mark this stage as current to upload"
-                            }
-                          >
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="sr-only"
-                              disabled={!canUpload}
-                              onChange={(e) => {
-                                const file = e.currentTarget.files?.[0];
-                                e.currentTarget.value = "";
-                                if (!file) return;
-                                void handleUploadProductionPhoto(
-                                  order.id,
-                                  s.key,
-                                  file,
-                                );
-                              }}
-                            />
-                            <ImagePlus className="w-3 h-3" />
-                            {photos.length === 0 ? "Add photo" : "Add"}
-                          </label>
+                                    s.key,
+                                    file,
+                                  );
+                                }}
+                              />
+                              <ImagePlus className="w-3 h-3" />
+                              {photos.length === 0 ? "Add photo" : "Add"}
+                            </label>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Refund block */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
-              {order.refund ? (
-                <div className="flex flex-wrap items-center gap-2 w-full">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] uppercase tracking-wider ${
-                      order.refund.status === "succeeded"
-                        ? "bg-emerald-500/15 text-emerald-600"
-                        : order.refund.status === "failed"
-                          ? "bg-destructive/15 text-destructive"
-                          : "bg-amber-500/15 text-amber-600"
-                    }`}
-                  >
-                    <Wallet className="w-3 h-3" />
-                    Refund {order.refund.status}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    ₱{order.refund.amount.toLocaleString()} · requested{" "}
-                    {new Date(order.refund.requestedAt).toLocaleString()}
-                  </span>
-                  {order.refund.id && (
-                    <span className="text-[10px] text-muted-foreground break-all">
-                      Ref: {order.refund.id}
+              {/* Refund block */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
+                {order.refund ? (
+                  <div className="flex flex-wrap items-center gap-2 w-full">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] uppercase tracking-wider ${
+                        order.refund.status === "succeeded"
+                          ? "bg-emerald-500/15 text-emerald-600"
+                          : order.refund.status === "failed"
+                            ? "bg-destructive/15 text-destructive"
+                            : "bg-amber-500/15 text-amber-600"
+                      }`}
+                    >
+                      <Wallet className="w-3 h-3" />
+                      Refund {order.refund.status}
                     </span>
-                  )}
-                  {order.refund.status === "pending" && (
+                    <span className="text-xs text-muted-foreground">
+                      ₱{order.refund.amount.toLocaleString()} · requested{" "}
+                      {new Date(order.refund.requestedAt).toLocaleString()}
+                    </span>
+                    {order.refund.id && (
+                      <span className="text-[10px] text-muted-foreground break-all">
+                        Ref: {order.refund.id}
+                      </span>
+                    )}
+                    {order.refund.status === "pending" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={refundingId === order.id}
+                        onClick={() => void handleCheckRefund(order.id)}
+                        className="ml-auto"
+                      >
+                        <RefreshCw
+                          className={`w-3 h-3 mr-1 ${refundingId === order.id ? "animate-spin" : ""}`}
+                        />
+                        Check QR Ph status
+                      </Button>
+                    )}
+                    {order.refund.status === "failed" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={refundingId === order.id}
+                        onClick={() => setConfirmRefundFor(order)}
+                        className="ml-auto"
+                      >
+                        <Undo2 className="w-3 h-3 mr-1" /> Retry refund
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      !order.paymentIntentId || refundingId === order.id
+                    }
+                    onClick={() => setConfirmRefundFor(order)}
+                    title={
+                      order.paymentIntentId
+                        ? "Manually refund this order via PayMongo back to the customer's QR Ph wallet"
+                        : "No PayMongo payment recorded — cannot auto-refund"
+                    }
+                  >
+                    <Undo2 className="w-3 h-3 mr-1" /> Manual refund
+                  </Button>
+                )}
+              </div>
+
+              {/* Admin notes */}
+              <div className="pt-2 border-t border-border/30">
+                {editingNoteId === order.id ? (
+                  <div className="flex gap-2">
+                    <Input
+                      value={noteInput}
+                      onChange={(e) => setNoteInput(e.target.value)}
+                      placeholder="Add internal note…"
+                      className="h-8 text-xs flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          void saveAdminNote(order.id, noteInput);
+                        if (e.key === "Escape") setEditingNoteId(null);
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => void saveAdminNote(order.id, noteInput)}
+                    >
+                      Save
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={refundingId === order.id}
-                      onClick={() => void handleCheckRefund(order.id)}
-                      className="ml-auto"
+                      className="h-8 text-xs"
+                      onClick={() => setEditingNoteId(null)}
                     >
-                      <RefreshCw
-                        className={`w-3 h-3 mr-1 ${refundingId === order.id ? "animate-spin" : ""}`}
-                      />
-                      Check QR Ph status
+                      Cancel
                     </Button>
-                  )}
-                  {order.refund.status === "failed" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={refundingId === order.id}
-                      onClick={() => setConfirmRefundFor(order)}
-                      className="ml-auto"
-                    >
-                      <Undo2 className="w-3 h-3 mr-1" /> Retry refund
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!order.paymentIntentId || refundingId === order.id}
-                  onClick={() => setConfirmRefundFor(order)}
-                  title={
-                    order.paymentIntentId
-                      ? "Manually refund this order via PayMongo back to the customer's QR Ph wallet"
-                      : "No PayMongo payment recorded — cannot auto-refund"
-                  }
-                >
-                  <Undo2 className="w-3 h-3 mr-1" /> Manual refund
-                </Button>
-              )}
-            </div>
-
-            {/* Admin notes */}
-            <div className="pt-2 border-t border-border/30">
-              {editingNoteId === order.id ? (
-                <div className="flex gap-2">
-                  <Input
-                    value={noteInput}
-                    onChange={(e) => setNoteInput(e.target.value)}
-                    placeholder="Add internal note…"
-                    className="h-8 text-xs flex-1"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter")
-                        void saveAdminNote(order.id, noteInput);
-                      if (e.key === "Escape") setEditingNoteId(null);
-                    }}
-                    autoFocus
-                  />
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => void saveAdminNote(order.id, noteInput)}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => setEditingNoteId(null)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <StickyNote className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
-                  {adminNotes[order.id] ||
-                  (order as unknown as Record<string, unknown>).adminNote ? (
-                    <p className="text-xs text-muted-foreground flex-1">
-                      {adminNotes[order.id] ||
-                        String(
-                          (order as unknown as Record<string, unknown>)
-                            .adminNote ?? "",
-                        )}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground/50 italic flex-1">
-                      No admin notes
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNoteInput(
-                        adminNotes[order.id] ||
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <StickyNote className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
+                    {adminNotes[order.id] ||
+                    (order as unknown as Record<string, unknown>).adminNote ? (
+                      <p className="text-xs text-muted-foreground flex-1">
+                        {adminNotes[order.id] ||
                           String(
                             (order as unknown as Record<string, unknown>)
                               .adminNote ?? "",
-                          ),
-                      );
-                      setEditingNoteId(order.id);
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
+                          )}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/50 italic flex-1">
+                        No admin notes
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNoteInput(
+                          adminNotes[order.id] ||
+                            String(
+                              (order as unknown as Record<string, unknown>)
+                                .adminNote ?? "",
+                            ),
+                        );
+                        setEditingNoteId(order.id);
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
 
-            {/* Order timeline */}
-            <div className="pt-2 border-t border-border/30">
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedTimeline(
-                    expandedTimeline === order.id ? null : order.id,
-                  )
-                }
-                className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Clock className="w-3 h-3" />
-                {expandedTimeline === order.id
-                  ? "Hide timeline"
-                  : "View timeline"}
-              </button>
-              {expandedTimeline === order.id && (
-                <div className="mt-2 ml-1 space-y-0 border-l-2 border-border/30 pl-4">
-                  {(() => {
-                    const log = Array.isArray(
-                      (order as unknown as Record<string, unknown>).activityLog,
+              {/* Order timeline */}
+              <div className="pt-2 border-t border-border/30">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedTimeline(
+                      expandedTimeline === order.id ? null : order.id,
                     )
-                      ? ((order as unknown as Record<string, unknown>)
-                          .activityLog as {
-                          at: string;
-                          type: string;
-                          actor?: string;
-                        }[])
-                      : [];
-                    const events =
-                      log.length > 0
-                        ? [...log].sort((a, b) =>
-                            (b.at || "").localeCompare(a.at || ""),
-                          )
-                        : [
-                            {
-                              at: order.createdAt,
-                              type: "placed",
-                              actor: "customer",
-                            },
-                          ];
-                    const labels: Record<string, string> = {
-                      placed: "Order placed",
-                      "status:confirmed": "Status → Confirmed",
-                      "status:in_progress": "Status → In progress",
-                      "status:out_for_delivery": "Status → Shipped",
-                      "status:received": "Status → Delivered",
-                      "shipment:cleared": "Shipment cleared",
-                      "email:resent": "Email resent",
-                      "refund:initiated": "Refund initiated",
-                      "refund:succeeded": "Refund completed",
-                    };
-                    return events.map((evt, i) => (
-                      <div
-                        key={i}
-                        className="relative flex items-start gap-2 py-1.5"
-                      >
-                        <div className="absolute -left-[21px] top-2.5 w-2 h-2 rounded-full bg-border" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium">
-                            {labels[evt.type] || evt.type}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {new Date(evt.at).toLocaleString("en-PH", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                            {evt.actor ? ` · ${evt.actor}` : ""}
-                          </p>
+                  }
+                  className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Clock className="w-3 h-3" />
+                  {expandedTimeline === order.id
+                    ? "Hide timeline"
+                    : "View timeline"}
+                </button>
+                {expandedTimeline === order.id && (
+                  <div className="mt-2 ml-1 space-y-0 border-l-2 border-border/30 pl-4">
+                    {(() => {
+                      const log = Array.isArray(
+                        (order as unknown as Record<string, unknown>)
+                          .activityLog,
+                      )
+                        ? ((order as unknown as Record<string, unknown>)
+                            .activityLog as {
+                            at: string;
+                            type: string;
+                            actor?: string;
+                          }[])
+                        : [];
+                      const events =
+                        log.length > 0
+                          ? [...log].sort((a, b) =>
+                              (b.at || "").localeCompare(a.at || ""),
+                            )
+                          : [
+                              {
+                                at: order.createdAt,
+                                type: "placed",
+                                actor: "customer",
+                              },
+                            ];
+                      const labels: Record<string, string> = {
+                        placed: "Order placed",
+                        "status:confirmed": "Status → Confirmed",
+                        "status:in_progress": "Status → In progress",
+                        "status:out_for_delivery": "Status → Shipped",
+                        "status:received": "Status → Delivered",
+                        "shipment:cleared": "Shipment cleared",
+                        "email:resent": "Email resent",
+                        "refund:initiated": "Refund initiated",
+                        "refund:succeeded": "Refund completed",
+                      };
+                      return events.map((evt, i) => (
+                        <div
+                          key={i}
+                          className="relative flex items-start gap-2 py-1.5"
+                        >
+                          <div className="absolute -left-[21px] top-2.5 w-2 h-2 rounded-full bg-border" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium">
+                              {labels[evt.type] || evt.type}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {new Date(evt.at).toLocaleString("en-PH", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                              {evt.actor ? ` · ${evt.actor}` : ""}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </GsapStaggerRail>
 
       {/* Pagination */}
       {totalPages > 1 && (

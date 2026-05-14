@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { animate, stagger } from "animejs";
 import { toast } from "sonner";
 
 interface DominantColorChipsProps {
@@ -37,12 +38,18 @@ const STEP = 16; // 16 = 4-bit quantisation; 4096 buckets total.
  * No new dependency; the entire palette is generated in one pass on
  * the main thread (≈4096 image-data reads, well under 1ms in practice).
  */
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 export default function DominantColorChips({
   imageUrl,
   count = 5,
 }: DominantColorChipsProps) {
   const [swatches, setSwatches] = useState<Swatch[] | null>(null);
   const cancelRef = useRef(false);
+  const stripRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     cancelRef.current = false;
@@ -129,7 +136,36 @@ export default function DominantColorChips({
     };
   }, [imageUrl, count]);
 
+  // anime.js stagger reveal once the palette resolves. Each chip
+  // fades + lifts in sequence (60ms stagger) so the strip composes
+  // itself in front of the visitor rather than appearing all at
+  // once. Silent under `prefers-reduced-motion` (chips render in
+  // their final state via the inline opacity:1 fallback we'd set
+  // — see the early bail below).
+  useEffect(() => {
+    if (!swatches || swatches.length < 2) return;
+    if (prefersReducedMotion()) return;
+    const strip = stripRef.current;
+    if (!strip) return;
+    const chips = strip.querySelectorAll<HTMLElement>("[data-swatch]");
+    if (chips.length === 0) return;
+    animate(Array.from(chips), {
+      opacity: [0, 1],
+      translateY: [6, 0],
+      duration: 520,
+      delay: stagger(60),
+      ease: "outQuad",
+    });
+  }, [swatches]);
+
   if (!swatches || swatches.length < 2) return null;
+
+  const reduce = prefersReducedMotion();
+  // Chips start hidden so the anime.js reveal has somewhere to
+  // animate from. Reduced-motion visitors get them visible
+  // immediately — the effect above bails out and leaves the inline
+  // style in place.
+  const initialChipStyle = reduce ? undefined : { opacity: 0 };
 
   const copyHex = async (hex: string) => {
     try {
@@ -149,16 +185,17 @@ export default function DominantColorChips({
       <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
         Palette
       </p>
-      <div className="flex items-center gap-2">
+      <div ref={stripRef} className="flex items-center gap-2">
         {swatches.map((sw) => (
           <button
             key={sw.hex}
             type="button"
+            data-swatch
             onClick={() => copyHex(sw.hex)}
             aria-label={`Copy color ${sw.hex}`}
             title={sw.hex}
             className="group relative w-7 h-7 rounded-sm border border-border/60 shadow-sm transition-transform duration-200 hover:scale-110 focus-visible:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
-            style={{ backgroundColor: sw.hex }}
+            style={{ backgroundColor: sw.hex, ...initialChipStyle }}
           >
             <span className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 font-body text-[9px] tracking-[0.15em] uppercase text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-200 whitespace-nowrap">
               {sw.hex}
