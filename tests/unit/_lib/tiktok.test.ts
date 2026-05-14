@@ -448,3 +448,55 @@ describe("publishProductPhoto — admin publish flow", () => {
     expect(result.postId).toBeNull();
   }, 20_000);
 });
+
+describe("generateTikTokCaption — hashtag cap", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  const extractHashtags = (caption: string): string[] =>
+    caption.split(/\s+/).filter((token) => token.startsWith("#"));
+
+  it("emits exactly 5 hashtags for a product with no recognised category", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const caption = mod.generateTikTokCaption({
+      id: "p1",
+      title: "Sunset Over Manila Bay",
+      medium: "Oil on canvas",
+      dimensions: "30x40 in",
+      price: 12000,
+      category: "no-such-category",
+    });
+    const tags = extractHashtags(caption);
+    expect(tags.length).toBe(5);
+    expect(mod.MAX_TIKTOK_HASHTAGS).toBe(5);
+  });
+
+  it("prioritises category-specific hashtags over the canvhub defaults", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const caption = mod.generateTikTokCaption({
+      id: "p2",
+      title: "Misty Highlands",
+      category: "landscape",
+    });
+    const tags = extractHashtags(caption);
+    expect(tags.length).toBe(5);
+    // Category tags should appear first.
+    expect(tags.slice(0, 2)).toEqual(["#landscapepainting", "#nature"]);
+    // And the rest are filled in from the default list.
+    expect(tags.slice(2)).toEqual([
+      "#philippineart",
+      "#originalpainting",
+      "#handmade",
+    ]);
+  });
+
+  it("returns the empty string for a missing product (no crash)", async () => {
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    expect(mod.generateTikTokCaption(null)).toBe("");
+    expect(mod.generateTikTokCaption(undefined)).toBe("");
+  });
+});
