@@ -743,6 +743,14 @@ const CATEGORY_HASHTAGS = {
   seascape: ["#seascape", "#oceanart"],
 };
 
+// TikTok captions can technically hold many hashtags, but in practice
+// the algorithm rewards a small, on-topic set far more than a long
+// keyword wall — trailing tag-spam reads as low-effort and gets
+// deprioritised. Cap the auto-generated tag list at 5 so the painting
+// title + CTA stay readable above the fold and the hashtags actually
+// look intentional.
+export const MAX_TIKTOK_HASHTAGS = 5;
+
 const formatPrice = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
@@ -783,9 +791,14 @@ export const generateTikTokCaption = (product) => {
     .toLowerCase()
     .replace(/[^a-z]/g, "");
   const categoryTags = CATEGORY_HASHTAGS[categoryKey] || [];
-  const allTags = [...new Set([...DEFAULT_HASHTAGS, ...categoryTags])].slice(
+  // Category tags first — they're the most specific and TikTok's
+  // discovery rewards specificity — then top up to MAX_TIKTOK_HASHTAGS
+  // with the canvhub defaults. `new Set` de-dupes the merged list so
+  // a category tag that happens to overlap with a default doesn't
+  // burn a slot.
+  const allTags = [...new Set([...categoryTags, ...DEFAULT_HASHTAGS])].slice(
     0,
-    15,
+    MAX_TIKTOK_HASHTAGS,
   );
   lines.push(allTags.join(" "));
   const out = lines.join("\n").trim();
