@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ExternalLink,
   Image as ImageIcon,
@@ -108,9 +109,11 @@ interface TikTokPostRow {
   post_mode: string;
   media_type: string;
   status: string;
+  error_code: string | null;
   error_message: string | null;
   posted_at: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface PublishResult {
@@ -134,6 +137,24 @@ const formatBytes = (n: number | null | undefined) => {
 
 const MAX_CAPTION_LENGTH = 2200;
 const FEED_PREVIEW_CAP = 150;
+
+// TikTok's MEDIA_UPLOAD inbox notification normally arrives in 1–5
+// minutes (their docs). If a row stays in `processing` past this
+// many minutes, it almost always means the @creator account isn't
+// on the dev app's Sandbox `Target Users` allowlist (or the app
+// isn't audited), so TikTok silently swallows the upload. Surface
+// a warning that points the admin at the dev portal instead of
+// leaving them guessing.
+const STUCK_PROCESSING_MINUTES = 10;
+const TIKTOK_SANDBOX_DOCS_URL =
+  "https://developers.tiktok.com/doc/getting-started-create-an-app#user_target_user";
+
+const minutesSince = (iso: string | null): number | null => {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, (Date.now() - t) / 60_000);
+};
 
 const statusBadgeClass = (status: string) => {
   switch (status) {
@@ -169,6 +190,12 @@ export function TikTokSection() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [posts, setPosts] = useState<TikTokPostRow[]>([]);
   const [refreshingRowId, setRefreshingRowId] = useState<string | null>(null);
+  // Row id whose full error / diagnostics drawer is expanded inline.
+  // We keep a single row open at a time so the table stays scannable on
+  // mobile (the only reason this drawer exists is that the Error column
+  // truncates long TikTok messages like "Please review our integration
+  // guidelines at https://developers.tiktok.com/...").
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
     null,
@@ -1114,66 +1141,204 @@ export function TikTokSection() {
                     </tr>
                   </thead>
                   <tbody>
-                    {posts.map((row) => (
-                      <tr key={row.id} className="border-b last:border-b-0">
-                        <td className="py-2 pr-2 whitespace-nowrap">
-                          {formatDate(row.posted_at || row.created_at)}
-                        </td>
-                        <td className="py-2 pr-2 font-mono text-[10px]">
-                          {row.product_id}
-                        </td>
-                        <td className="py-2 pr-2">{row.post_mode}</td>
-                        <td className="py-2 pr-2">
-                          <span
-                            className={
-                              "inline-block rounded-full px-2 py-0.5 text-[10px] font-medium " +
-                              statusBadgeClass(row.status)
-                            }
-                          >
-                            {row.status}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-2">
-                          {row.share_url ? (
-                            <a
-                              className="underline inline-flex items-center gap-0.5"
-                              href={row.share_url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              View <ExternalLink className="w-3 h-3" />
-                            </a>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="py-2 pr-2 text-red-700 max-w-xs truncate">
-                          {row.error_message || "—"}
-                        </td>
-                        <td className="py-2 pr-2">
-                          {(row.status === "processing" ||
-                            row.status === "pending") &&
-                          row.publish_id ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-[11px]"
-                              disabled={refreshingRowId === row.id}
-                              onClick={() => void refreshRowStatus(row.id)}
-                            >
-                              {refreshingRowId === row.id ? (
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                              ) : (
-                                <RefreshCw className="w-3 h-3 mr-1" />
+                    {posts.map((row) => {
+                      const isExpanded = expandedRowId === row.id;
+                      const hasDetails =
+                        !!row.error_message ||
+                        !!row.error_code ||
+                        !!row.publish_id;
+                      const stuckMinutes =
+                        row.status === "processing"
+                          ? minutesSince(row.updated_at || row.created_at)
+                          : null;
+                      const isStuck =
+                        stuckMinutes !== null &&
+                        stuckMinutes >= STUCK_PROCESSING_MINUTES;
+                      return (
+                        <Fragment key={row.id}>
+                          <tr className="border-b last:border-b-0">
+                            <td className="py-2 pr-2 whitespace-nowrap">
+                              {formatDate(row.posted_at || row.created_at)}
+                            </td>
+                            <td className="py-2 pr-2 font-mono text-[10px]">
+                              {row.product_id}
+                            </td>
+                            <td className="py-2 pr-2">{row.post_mode}</td>
+                            <td className="py-2 pr-2">
+                              <span
+                                className={
+                                  "inline-block rounded-full px-2 py-0.5 text-[10px] font-medium " +
+                                  statusBadgeClass(row.status)
+                                }
+                              >
+                                {row.status}
+                              </span>
+                              {isStuck && (
+                                <span
+                                  className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900 ring-1 ring-amber-200"
+                                  title={`Stuck in processing for ${Math.round(
+                                    stuckMinutes ?? 0,
+                                  )} min. TikTok usually delivers MEDIA_UPLOAD drafts within 1–5 min. If this row never flips to "published" or "Sent", the @creator account likely isn't on your TikTok dev app's Sandbox Target Users allowlist.`}
+                                >
+                                  <AlertTriangle className="w-3 h-3" />
+                                  stuck {Math.round(stuckMinutes ?? 0)}m
+                                </span>
                               )}
-                              Refresh
-                            </Button>
-                          ) : (
-                            "—"
+                            </td>
+                            <td className="py-2 pr-2">
+                              {row.share_url ? (
+                                <a
+                                  className="underline inline-flex items-center gap-0.5"
+                                  href={row.share_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  View <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="py-2 pr-2 text-red-700 max-w-xs">
+                              {row.error_message ? (
+                                <button
+                                  type="button"
+                                  className="text-left truncate underline decoration-dotted underline-offset-2 hover:text-red-900 max-w-[16rem] block"
+                                  title={row.error_message}
+                                  onClick={() =>
+                                    setExpandedRowId(isExpanded ? null : row.id)
+                                  }
+                                >
+                                  {row.error_message}
+                                </button>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="py-2 pr-2">
+                              <div className="flex items-center gap-1">
+                                {(row.status === "processing" ||
+                                  row.status === "pending") &&
+                                row.publish_id ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px]"
+                                    disabled={refreshingRowId === row.id}
+                                    onClick={() =>
+                                      void refreshRowStatus(row.id)
+                                    }
+                                  >
+                                    {refreshingRowId === row.id ? (
+                                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-3 h-3 mr-1" />
+                                    )}
+                                    Refresh
+                                  </Button>
+                                ) : null}
+                                {hasDetails && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() =>
+                                      setExpandedRowId(
+                                        isExpanded ? null : row.id,
+                                      )
+                                    }
+                                  >
+                                    {isExpanded ? "Hide" : "Details"}
+                                  </Button>
+                                )}
+                                {!(
+                                  (row.status === "processing" ||
+                                    row.status === "pending") &&
+                                  row.publish_id
+                                ) &&
+                                  !hasDetails &&
+                                  "—"}
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="border-b last:border-b-0 bg-stone-50">
+                              <td colSpan={7} className="py-3 px-3">
+                                <dl className="grid grid-cols-1 sm:grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[11px]">
+                                  {row.error_code && (
+                                    <>
+                                      <dt className="font-medium text-stone-600">
+                                        Error code
+                                      </dt>
+                                      <dd className="font-mono text-red-800 break-all">
+                                        {row.error_code}
+                                      </dd>
+                                    </>
+                                  )}
+                                  {row.error_message && (
+                                    <>
+                                      <dt className="font-medium text-stone-600">
+                                        Error message
+                                      </dt>
+                                      <dd className="text-red-800 whitespace-pre-wrap break-words">
+                                        {row.error_message}
+                                      </dd>
+                                    </>
+                                  )}
+                                  {row.publish_id && (
+                                    <>
+                                      <dt className="font-medium text-stone-600">
+                                        publish_id
+                                      </dt>
+                                      <dd className="font-mono text-stone-800 break-all">
+                                        {row.publish_id}
+                                      </dd>
+                                    </>
+                                  )}
+                                  {row.updated_at && (
+                                    <>
+                                      <dt className="font-medium text-stone-600">
+                                        Last updated
+                                      </dt>
+                                      <dd className="text-stone-800">
+                                        {formatDate(row.updated_at)}
+                                      </dd>
+                                    </>
+                                  )}
+                                </dl>
+                                {isStuck && (
+                                  <div className="mt-3 rounded-md bg-amber-50 ring-1 ring-amber-200 p-2 text-[11px] text-amber-900">
+                                    <div className="font-medium">
+                                      Stuck in “processing” for{" "}
+                                      {Math.round(stuckMinutes ?? 0)} min.
+                                    </div>
+                                    <div className="mt-0.5">
+                                      TikTok usually delivers MEDIA_UPLOAD
+                                      drafts within 1–5 min. When a row stays
+                                      here indefinitely it almost always means
+                                      the connected TikTok account isn’t on your
+                                      dev app’s{" "}
+                                      <strong>Sandbox → Target Users</strong>{" "}
+                                      allowlist (or the app isn’t audited for
+                                      production), so TikTok silently swallows
+                                      the upload.{" "}
+                                      <a
+                                        className="underline"
+                                        href={TIKTOK_SANDBOX_DOCS_URL}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        TikTok docs: Target Users
+                                      </a>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                      </tr>
-                    ))}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
