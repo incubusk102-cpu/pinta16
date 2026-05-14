@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { animate, stagger } from "animejs";
 import SplitText from "@/components/motion/SplitText";
 import { Link } from "@tanstack/react-router";
 import { Search, SlidersHorizontal, X } from "lucide-react";
@@ -271,6 +272,45 @@ const GallerySection = () => {
     filterPriceBuckets,
   ]);
 
+  // anime.js fade-up on the gallery control bar (search + sort row +
+  // filter pills). Cards themselves keep their existing
+  // framer-motion entrance via ArtworkCard, so this only animates
+  // the chrome above the grid.
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    if (!isLoggedIn) return;
+    const host = document.querySelector<HTMLElement>("[data-gallery-controls]");
+    if (!host) return;
+    const rows = Array.from(host.children) as HTMLElement[];
+    if (rows.length === 0) return;
+    rows.forEach((row) => {
+      row.style.opacity = "0";
+      row.style.transform = "translateY(10px)";
+    });
+    const controls = animate(rows, {
+      opacity: [0, 1],
+      translateY: [10, 0],
+      duration: 600,
+      delay: stagger(70, { start: 250 }),
+      ease: "outQuad",
+      onComplete: () => {
+        rows.forEach((row) => {
+          row.style.opacity = "";
+          row.style.transform = "";
+        });
+      },
+    });
+    return () => {
+      controls.pause();
+    };
+  }, [isLoggedIn]);
+
   const activeFilterCount =
     filterCategories.length +
     filterAvailabilities.length +
@@ -348,7 +388,7 @@ const GallerySection = () => {
       </motion.div>
 
       {isLoggedIn && (
-        <div className="space-y-6 mb-12 sm:mb-16">
+        <div data-gallery-controls className="space-y-6 mb-12 sm:mb-16">
           <div className="relative max-w-md mx-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input

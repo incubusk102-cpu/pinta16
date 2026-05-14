@@ -1,7 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Button } from "@/components/ui/button";
+
+gsap.registerPlugin(ScrollTrigger);
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Vector-search-powered "More like this" rail. Calls
@@ -79,6 +88,7 @@ export default function SimilarPaintingsRail({ currentId, limit = 6 }: Props) {
   const [items, setItems] = useState<SimilarPainting[]>([]);
   const [loaded, setLoaded] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,13 +122,52 @@ export default function SimilarPaintingsRail({ currentId, limit = 6 }: Props) {
     el.scrollBy({ left: delta, behavior: "smooth" });
   };
 
+  // GSAP ScrollTrigger stagger reveal once tiles have rendered. Items
+  // opt-in via `data-rail-item` so the arrow-button row above the
+  // scroller isn't picked up. Cleaned up on unmount via
+  // gsap.context().revert().
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    if (!loaded || items.length < 2) return;
+    const host = sectionRef.current;
+    if (!host) return;
+
+    const tiles = host.querySelectorAll<HTMLElement>("[data-rail-item]");
+    if (tiles.length === 0) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        Array.from(tiles),
+        { autoAlpha: 0, x: -24, y: 10, scale: 0.95 },
+        {
+          autoAlpha: 1,
+          x: 0,
+          y: 0,
+          scale: 1,
+          duration: 0.7,
+          ease: "power3.out",
+          stagger: 0.07,
+          scrollTrigger: {
+            trigger: host,
+            start: "top 88%",
+            toggleActions: "play none none none",
+          },
+        },
+      );
+    }, host);
+
+    return () => {
+      ctx.revert();
+    };
+  }, [loaded, items.length]);
+
   // Hide entirely until we have enough results to show a useful rail —
   // a single-card row looks like a bug, and we have a perfectly good
   // rule-based fallback below.
   if (!loaded || items.length < 2) return null;
 
   return (
-    <section className="mt-12 pt-8 border-t border-border/40">
+    <section ref={sectionRef} className="mt-12 pt-8 border-t border-border/40">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-foreground/70" />
@@ -165,6 +214,7 @@ export default function SimilarPaintingsRail({ currentId, limit = 6 }: Props) {
               key={p.id}
               to="/product/$id"
               params={{ id: `product-${p.id}` }}
+              data-rail-item
               className="snap-start shrink-0 w-[44vw] sm:w-[30vw] md:w-[18vw] lg:w-[15vw] group"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">

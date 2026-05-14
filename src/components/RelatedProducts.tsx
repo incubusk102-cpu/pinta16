@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
+import GsapStaggerRail from "@/components/motion/GsapStaggerRail";
 import {
   getDiscountPercent,
   getEffectivePrice,
@@ -75,7 +76,19 @@ export default function RelatedProducts({
   return (
     <section className="mt-16 border-t border-border/40 pt-10">
       <h2 className="font-display text-2xl text-foreground mb-6">{title}</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+      {/* GSAP ScrollTrigger fades + rises each tile as the grid
+          enters the viewport. Pure y-rise (xFrom=0) reads cleaner
+          on a 2x2 / 4x grid than the left-to-right slide we use on
+          horizontal rails. */}
+      <GsapStaggerRail
+        className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6"
+        stagger={0.08}
+        duration={0.7}
+        xFrom={0}
+        yFrom={24}
+        scaleFrom={0.96}
+        start="top 88%"
+      >
         {related.map((p) => {
           const discount = getDiscountPercent(p);
           // Grid is 2-up phone / 4-up desktop. Phone slots are ~50 vw,
@@ -90,6 +103,7 @@ export default function RelatedProducts({
               key={p.id}
               to="/product/$id"
               params={{ id: `product-${p.id}` }}
+              data-rail-item
               className="group block"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm">
@@ -132,7 +146,7 @@ export default function RelatedProducts({
             </Link>
           );
         })}
-      </div>
+      </GsapStaggerRail>
     </section>
   );
 }
