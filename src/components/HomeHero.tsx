@@ -7,6 +7,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
+import AnimeHeading from "@/components/motion/AnimeHeading";
 import { useProducts } from "@/contexts/ProductContext";
 import { getStorefrontArtworks, type DisplayArtwork } from "@/lib/artworks";
 import { variantSrc } from "@/lib/productImage";
@@ -121,12 +122,35 @@ function StaticHero({ featured }: { featured: DisplayArtwork }) {
         </motion.div>
       </div>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-10 px-6 text-center">
-        <h1 className="font-display text-4xl tracking-[0.04em] text-foreground drop-shadow-[0_2px_24px_rgba(0,0,0,0.18)]">
+        {/* Wordmark — anime.js letter-stagger reveal on first paint.
+            See `src/components/motion/AnimeHeading.tsx` for the
+            mechanics; this site uses framer-motion everywhere else
+            but the wordmark gets the punchier `outExpo` attack from
+            anime.js. */}
+        <AnimeHeading
+          as="h1"
+          by="letter"
+          staggerMs={55}
+          durationMs={950}
+          yFrom={32}
+          delayMs={150}
+          ease="outExpo"
+          className="font-display text-4xl tracking-[0.04em] text-foreground drop-shadow-[0_2px_24px_rgba(0,0,0,0.18)]"
+        >
           Canvas Hub
-        </h1>
-        <p className="mt-3 max-w-xl font-body text-[11px] tracking-[0.3em] uppercase text-muted-foreground">
+        </AnimeHeading>
+        <AnimeHeading
+          as="p"
+          by="word"
+          staggerMs={70}
+          durationMs={780}
+          yFrom={14}
+          delayMs={750}
+          ease="outQuad"
+          className="mt-3 max-w-xl font-body text-[11px] tracking-[0.3em] uppercase text-muted-foreground"
+        >
           Hand-crafted paintings, framed and ready to hang
-        </p>
+        </AnimeHeading>
         <Link
           to="/collection"
           className="pointer-events-auto mt-6 inline-flex items-center justify-center font-body text-[11px] tracking-[0.3em] uppercase px-6 py-3 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 hover-glow-cta"
