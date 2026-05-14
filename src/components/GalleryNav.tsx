@@ -349,7 +349,16 @@ const GalleryNav = () => {
             On the homepage we intentionally collapse the right cluster
             down to just the hamburger (no theme toggle, no cart icon)
             so the landing view stays minimal. Full cluster is restored
-            on every other route. */}
+            on every other route.
+
+            Icon chip styling: when the nav is transparent (top-of-page)
+            the parent <nav> has no background of its own, so a dark
+            icon over a dark hero image (homepage) silently disappears.
+            We give every icon button in this cluster a frosted chip
+            backdrop while `scrolled` is false so the buttons always
+            read against arbitrary underlying content. Once scrolled
+            the parent <nav> already provides a frosted bg, so the chip
+            is dropped and the hover state takes over. */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {!onIndex && (
             <>
@@ -375,7 +384,11 @@ const GalleryNav = () => {
               <button
                 type="button"
                 onClick={() => commandPalette.open()}
-                className="sm:hidden p-2"
+                className={`sm:hidden p-2 inline-flex items-center justify-center rounded-md transition-colors ${
+                  scrolled
+                    ? "hover:bg-foreground/10"
+                    : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+                }`}
                 aria-label="Search the storefront"
               >
                 <Search className="w-5 h-5 text-foreground" />
@@ -384,7 +397,11 @@ const GalleryNav = () => {
                 <button
                   type="button"
                   onClick={() => compare.open()}
-                  className="relative p-2"
+                  className={`relative p-2 inline-flex items-center justify-center rounded-md transition-colors ${
+                    scrolled
+                      ? "hover:bg-foreground/10"
+                      : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+                  }`}
                   aria-label={`Open compare (${compare.count})`}
                 >
                   <GitCompare className="w-5 h-5 text-foreground" />
@@ -400,7 +417,11 @@ const GalleryNav = () => {
                 <button
                   ref={cartButtonRef}
                   onClick={openCart}
-                  className="relative p-2"
+                  className={`relative p-2 inline-flex items-center justify-center rounded-md transition-colors ${
+                    scrolled
+                      ? "hover:bg-foreground/10"
+                      : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+                  }`}
                   aria-label={t("nav.cart")}
                 >
                   <ShoppingCart className="w-5 h-5 text-foreground" />
@@ -429,7 +450,17 @@ const GalleryNav = () => {
             // the hero / collection. Other routes still get hover-open.
             onMouseEnter={onIndex ? undefined : openMenu}
             onFocus={onIndex ? undefined : openMenu}
-            className="p-2 inline-flex items-center justify-center rounded-md hover:bg-foreground/5 transition-colors"
+            // Always render with explicit `text-foreground` so the icon
+            // never inherits a faded colour from the parent. When the
+            // nav is transparent (top of homepage), wrap it in a frosted
+            // chip with a soft ring so it stays legible against the
+            // hero image; once the nav itself frosts, drop the chip
+            // and rely on the bumped hover background for affordance.
+            className={`p-2 inline-flex items-center justify-center rounded-md text-foreground transition-colors ${
+              scrolled
+                ? "hover:bg-foreground/10"
+                : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
+            }`}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             aria-controls="mobile-nav-drawer"
