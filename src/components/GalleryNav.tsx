@@ -16,7 +16,6 @@ import {
   ChevronDown,
   Truck,
   GitCompare,
-  Search,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { animate } from "animejs";
@@ -27,7 +26,6 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useCompare } from "@/contexts/CompareContext";
 import { useFlyToCart } from "@/contexts/FlyToCartContext";
-import { useCommandPalette } from "@/contexts/CommandPaletteContext";
 import MiniCartHover from "@/components/MiniCartHover";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
@@ -80,7 +78,6 @@ const GalleryNav = () => {
   const { items: wishlistItems } = useWishlist();
   const compare = useCompare();
   const flyToCart = useFlyToCart();
-  const commandPalette = useCommandPalette();
   const { t } = useLocale();
   // Pulse the cart badge briefly when an item lands in the cart so the
   // visitor gets a small visual confirmation in the corner of the nav.
@@ -341,11 +338,15 @@ const GalleryNav = () => {
           </span>
         </button>
 
-        {/* Right cluster: cart + hamburger. The hamburger toggles open
-            the full drawer — transparent, non-modal, page underneath
-            stays scrollable. The drawer itself surfaces every primary
-            destination (Gallery, Contact, About, Reviews, Cart) at the
-            top, so no separate hover popover is needed on desktop.
+        {/* Right cluster: cart + hamburger. The hamburger opens the
+            full drawer — transparent, non-modal, page underneath stays
+            scrollable. The button only opens; closing is explicit via
+            the drawer's X, ESC, or a route change so the menu doesn't
+            flash shut after a tap on touch devices (where mouseenter +
+            click would otherwise toggle it back closed). The drawer
+            itself surfaces every primary destination (Gallery, Contact,
+            About, Reviews, Cart) at the top, so no separate hover
+            popover is needed on desktop.
             On the homepage we intentionally collapse the right cluster
             down to just the hamburger (no theme toggle, no cart icon)
             so the landing view stays minimal. Full cluster is restored
@@ -363,36 +364,6 @@ const GalleryNav = () => {
           {!onIndex && (
             <>
               <ThemeLocaleToggle />
-              {/* Storefront search trigger — opens the global command
-                  palette. Same shortcut (Cmd/Ctrl+K, /) works without
-                  this button; visible affordance keeps it discoverable
-                  for visitors who don't know the shortcut. */}
-              <button
-                type="button"
-                onClick={() => commandPalette.open()}
-                className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground border border-border/50 rounded hover:text-foreground hover:border-border transition-colors"
-                aria-label="Search the storefront"
-              >
-                <Search className="w-3.5 h-3.5" />
-                <span className="hidden md:inline tracking-[0.18em] uppercase text-[10px]">
-                  Search
-                </span>
-                <kbd className="hidden md:inline-flex items-center text-[9px] tracking-[0.18em] uppercase border border-border/40 rounded px-1 py-px ml-1 text-muted-foreground">
-                  ⌘K
-                </kbd>
-              </button>
-              <button
-                type="button"
-                onClick={() => commandPalette.open()}
-                className={`sm:hidden p-2 inline-flex items-center justify-center rounded-md transition-colors ${
-                  scrolled
-                    ? "hover:bg-foreground/10"
-                    : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
-                }`}
-                aria-label="Search the storefront"
-              >
-                <Search className="w-5 h-5 text-foreground" />
-              </button>
               {compare.count > 0 && (
                 <button
                   type="button"
@@ -444,7 +415,15 @@ const GalleryNav = () => {
             </>
           )}
           <button
-            onClick={() => (menuOpen ? closeMenu() : openMenu())}
+            // The hamburger button only opens the drawer; it never
+            // closes it. This avoids a touch-device bug where tapping
+            // the button would fire `mouseenter` (opening the drawer)
+            // and then `click` (toggling it shut again), making the
+            // menu flash open and disappear. Closing is intentionally
+            // explicit: the X button in the drawer header, ESC, or a
+            // route change. Calling `openMenu` again while already
+            // open is a no-op.
+            onClick={openMenu}
             // Hover-to-open is disabled on the homepage so the drawer
             // doesn't pop open accidentally while customers are scrolling
             // the hero / collection. Other routes still get hover-open.
@@ -461,15 +440,11 @@ const GalleryNav = () => {
                 ? "hover:bg-foreground/10"
                 : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
             }`}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-label="Open menu"
             aria-expanded={menuOpen}
             aria-controls="mobile-nav-drawer"
           >
-            {menuOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
+            <Menu className="w-6 h-6" />
           </button>
         </div>
       </div>
