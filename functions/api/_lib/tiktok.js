@@ -992,6 +992,10 @@ export const publishProductPhoto = async ({
         shareUrl: null,
         status: pollResult.status || "PROCESSING_UPLOAD",
         pending: true,
+        uploadedBytes:
+          typeof pollResult.uploadedBytes === "number"
+            ? pollResult.uploadedBytes
+            : null,
       };
     }
 

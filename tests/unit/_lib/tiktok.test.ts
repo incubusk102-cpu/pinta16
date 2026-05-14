@@ -335,4 +335,116 @@ describe("pollPublishStatus — fail-fast mode", () => {
     expect(result.pending).toBeUndefined();
     expect(result.status).toBe("SEND_TO_USER_INBOX");
   });
+
+  it("forwards uploadedBytes in the pending result", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: { status: "PROCESSING_DOWNLOAD", uploaded_bytes: 12345 },
+            error: { code: "ok", message: "" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const result = await mod.pollPublishStatus("p_id_test", {
+      timeoutMs: 100,
+      failFast: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.pending).toBe(true);
+    expect(result.status).toBe("PROCESSING_DOWNLOAD");
+    expect(result.uploadedBytes).toBe(12345);
+  });
+});
+
+describe("publishProductPhoto — admin publish flow", () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    vi.resetModules();
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.doUnmock("../../../functions/api/_lib/context.js");
+  });
+
+  // Stub D1 with a no-op prepared-statement chain. publishProductPhoto only
+  // needs INSERT/UPDATE writes to succeed; we don't care about the rows.
+  const fakeD1 = () => ({
+    prepare: () => ({
+      bind: () => ({
+        run: async () => ({ success: true }),
+        all: async () => ({ results: [] }),
+        first: async () => null,
+      }),
+    }),
+  });
+
+  const mockTikTokFetch = (...responses: object[]) => {
+    let i = 0;
+    const fetchMock = vi.fn(async () => {
+      const payload = responses[Math.min(i, responses.length - 1)];
+      i += 1;
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    return fetchMock;
+  };
+
+  // publishProductPhoto hard-codes a 12s fail-fast poll with 2s intervals,
+  // so this end-to-end test needs ~12s of real wallclock to drain the poll
+  // loop. We bump the per-test timeout accordingly.
+  it("forwards pending=true + uploadedBytes when TikTok stays in PROCESSING_DOWNLOAD", async () => {
+    const kv = buildKv({ tiktok_auth: validAuth() });
+    vi.doMock("../../../functions/api/_lib/context.js", () => ({
+      getCloudflareEnv: () => ({
+        TIKTOK_CLIENT_KEY: "test-client-key",
+        TIKTOK_CLIENT_SECRET: "test-client-secret",
+        STOREFRONT_CONFIG: kv,
+        DB: fakeD1(),
+      }),
+      setCloudflareContext: () => {},
+      requireKvBinding: () => kv,
+    }));
+    mockTikTokFetch(
+      // initPhotoPost response
+      {
+        data: { publish_id: "p_pub_url~v2.test" },
+        error: { code: "ok", message: "" },
+      },
+      // pollPublishStatus → PROCESSING_DOWNLOAD (non-terminal)
+      {
+        data: { status: "PROCESSING_DOWNLOAD", uploaded_bytes: 4096 },
+        error: { code: "ok", message: "" },
+      },
+    );
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+    const result = await mod.publishProductPhoto({
+      product: {
+        id: "prod-test-1",
+        title: "Test painting",
+        image: "https://canvhub.com/img.webp",
+      },
+      origin: "https://canvhub.com",
+      postMode: "MEDIA_UPLOAD",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.pending).toBe(true);
+    expect(result.status).toBe("PROCESSING_DOWNLOAD");
+    expect(result.uploadedBytes).toBe(4096);
+    expect(result.publishId).toBe("p_pub_url~v2.test");
+    expect(result.shareUrl).toBeNull();
+    expect(result.postId).toBeNull();
+  }, 20_000);
 });
