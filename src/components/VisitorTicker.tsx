@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Eye, ShoppingBag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import AnimeCounter from "@/components/motion/AnimeCounter";
 
 interface RecentSale {
   productTitle: string;
@@ -87,11 +88,14 @@ const VisitorTicker = () => {
           <Eye className="w-3.5 h-3.5 text-emerald-500" />
           <span>
             <span className="text-foreground font-semibold">
-              {live} viewing now
+              {/* anime.js-driven odometer roll-up. Re-targets whenever
+                  the polled `live` count changes (every 30 s). */}
+              <AnimeCounter value={live} from={1} durationMs={1400} /> viewing
+              now
             </span>
             <span className="text-muted-foreground ml-1">
-              · join {others} other{others === 1 ? "" : "s"} exploring the
-              gallery
+              · join <AnimeCounter value={others} from={0} durationMs={1100} />{" "}
+              other{others === 1 ? "" : "s"} exploring the gallery
             </span>
           </span>
         </span>

@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
+import GsapStaggerRail from "@/components/motion/GsapStaggerRail";
 import SectionReveal from "@/components/motion/SectionReveal";
 import SplitText from "@/components/motion/SplitText";
 import { useProducts, type ProductImage } from "@/contexts/ProductContext";
@@ -93,16 +94,16 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
           Clear
         </button>
       </motion.div>
-      <motion.div
-        variants={{
-          hidden: { opacity: 0, y: 24 },
-          visible: {
-            opacity: 1,
-            y: 0,
-            transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
-          },
-        }}
+      {/* Card stagger driven by GSAP ScrollTrigger — mirrors
+          RecommendedRow so both rails share the same entry motion. */}
+      <GsapStaggerRail
         className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory"
+        stagger={0.07}
+        duration={0.7}
+        xFrom={-28}
+        yFrom={12}
+        scaleFrom={0.94}
+        start="top 88%"
       >
         {visible.map((art) => {
           const effective =
@@ -118,6 +119,7 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
               key={art.id}
               to="/product/$id"
               params={{ id: art.id }}
+              data-rail-item
               className="group flex-none w-[160px] md:w-[180px] snap-start"
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-muted/30 rounded-sm shadow-[0_2px_18px_rgba(0,0,0,0.08)] transition-shadow duration-500 group-hover:shadow-[0_18px_44px_rgba(0,0,0,0.28)]">
@@ -157,7 +159,7 @@ export default function RecentlyViewed({ excludeId, limit = 8 }: Props) {
             </Link>
           );
         })}
-      </motion.div>
+      </GsapStaggerRail>
     </SectionReveal>
   );
 }

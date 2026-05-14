@@ -1,11 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Sparkles, Clock, Check, Copy } from "lucide-react";
-import { motion } from "framer-motion";
+import { animate } from "animejs";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { toast } from "sonner";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { findArtworkById } from "@/lib/artworks";
+
+gsap.registerPlugin(ScrollTrigger);
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const padDuration = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -21,6 +30,8 @@ const DailyFeature = () => {
   const { products } = useProducts();
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const sparkleRef = useRef<HTMLSpanElement | null>(null);
 
   const today = config.dailyFeatureToday;
 
@@ -34,6 +45,67 @@ const DailyFeature = () => {
     if (!today?.productId) return undefined;
     return findArtworkById(today.productId, products);
   }, [today?.productId, products]);
+
+  // GSAP timeline entrance + anime.js sparkle pulse loop. Both kick
+  // in only after the card is rendered (which requires `today` and
+  // `artwork`), so wiring lives in an effect that depends on the
+  // artwork id rather than at mount.
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    if (!today || !artwork) return;
+    const card = cardRef.current;
+    if (!card) return;
+
+    const image = card.querySelector<HTMLElement>("[data-daily-image]");
+    const copy = card.querySelector<HTMLElement>("[data-daily-copy]");
+
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: card,
+          start: "top 80%",
+          toggleActions: "play none none none",
+        },
+      });
+      if (image) {
+        tl.fromTo(
+          image,
+          { autoAlpha: 0, scale: 0.92, x: -32 },
+          { autoAlpha: 1, scale: 1, x: 0, duration: 0.95, ease: "power3.out" },
+          0,
+        );
+      }
+      if (copy) {
+        tl.fromTo(
+          copy,
+          { autoAlpha: 0, x: 36 },
+          { autoAlpha: 1, x: 0, duration: 0.95, ease: "power3.out" },
+          0.12,
+        );
+      }
+    }, card);
+
+    // anime.js sparkle pulse — a soft scale + opacity oscillation
+    // that draws the eye to the "Piece of the day" eyebrow without
+    // being distracting. Looped via alternate so it ping-pongs.
+    let sparkleControls: ReturnType<typeof animate> | null = null;
+    const sparkle = sparkleRef.current;
+    if (sparkle) {
+      sparkleControls = animate(sparkle, {
+        scale: [1, 1.18, 1],
+        opacity: [0.85, 1, 0.85],
+        rotate: [0, 8, 0],
+        duration: 2400,
+        loop: true,
+        ease: "inOutQuad",
+      });
+    }
+
+    return () => {
+      ctx.revert();
+      sparkleControls?.pause();
+    };
+  }, [today, artwork]);
 
   if (loading) return null;
   if (!today || !artwork) return null;
@@ -62,28 +134,11 @@ const DailyFeature = () => {
       aria-label="Daily featured artwork"
     >
       <div className="container mx-auto px-4">
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
-          variants={{
-            hidden: {},
-            visible: {
-              transition: { staggerChildren: 0.18, delayChildren: 0.05 },
-            },
-          }}
+        <div
+          ref={cardRef}
           className="grid md:grid-cols-2 gap-6 md:gap-10 items-center max-w-5xl mx-auto rounded-lg border border-border/60 bg-card/70 backdrop-blur p-5 md:p-8 shadow-sm"
         >
-          <motion.div
-            variants={{
-              hidden: { opacity: 0, x: -48 },
-              visible: {
-                opacity: 1,
-                x: 0,
-                transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
-              },
-            }}
-          >
+          <div data-daily-image>
             <Link
               to="/product/$id"
               params={{ id: artwork.id }}
@@ -96,20 +151,17 @@ const DailyFeature = () => {
                 className="w-full h-full object-cover transition-transform duration-500 hover:scale-[1.03]"
               />
             </Link>
-          </motion.div>
-          <motion.div
-            variants={{
-              hidden: { opacity: 0, x: 48 },
-              visible: {
-                opacity: 1,
-                x: 0,
-                transition: { duration: 0.85, ease: [0.16, 1, 0.3, 1] },
-              },
-            }}
-            className="flex flex-col gap-4"
-          >
+          </div>
+          <div data-daily-copy className="flex flex-col gap-4">
             <div className="inline-flex items-center gap-2 self-start text-[10px] uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300">
-              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              <span
+                ref={sparkleRef}
+                className="inline-flex items-center justify-center"
+                style={{ transformOrigin: "50% 50%" }}
+                aria-hidden="true"
+              >
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              </span>
               {headline}
             </div>
             <h2 className="font-display text-2xl md:text-3xl text-foreground leading-tight">
@@ -165,8 +217,8 @@ const DailyFeature = () => {
             >
               View this piece
             </Link>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
     </section>
   );

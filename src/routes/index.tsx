@@ -11,7 +11,7 @@ import DailyFeature from "@/components/DailyFeature";
 import CinematicCollectionCTA from "@/components/CinematicCollectionCTA";
 import HomepageVideoMontage from "@/components/HomepageVideoMontage";
 import Ornament from "@/components/decor/Ornament";
-import SectionDivider from "@/components/SectionDivider";
+import AnimeDivider from "@/components/motion/AnimeDivider";
 import SectionDock from "@/components/SectionDock";
 import IdleNudgeToast from "@/components/IdleNudgeToast";
 import { useUserAuth } from "@/contexts/UserAuthContext";
@@ -163,12 +163,12 @@ function Index() {
       <section id={HOME_SECTION_IDS.marquee}>
         <PaintingMarquee />
       </section>
-      <SectionDivider />
+      <AnimeDivider />
       <VisitorTicker />
       <section id={HOME_SECTION_IDS.daily}>
         <DailyFeature />
       </section>
-      <SectionDivider />
+      <AnimeDivider />
       {/* Optional studio reel — renders only when admin has set a
           videoUrl in /admin → Storefront → Studio reel; otherwise the
           page collapses straight from DailyFeature into the
