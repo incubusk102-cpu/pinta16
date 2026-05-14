@@ -121,7 +121,16 @@ interface PublishResult {
   error?: string;
   errorCode?: string | null;
   publishId?: string | null;
+  pending?: boolean;
+  uploadedBytes?: number | null;
 }
+
+const formatBytes = (n: number | null | undefined) => {
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+};
 
 const MAX_CAPTION_LENGTH = 2200;
 const FEED_PREVIEW_CAP = 150;
@@ -400,11 +409,31 @@ export function TikTokSection() {
         headers: jsonAuthHeaders(),
         body: JSON.stringify({ id: rowId }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        status?: string | null;
+        pending?: boolean;
+        uploadedBytes?: number | null;
+        failReason?: string | null;
+      };
       if (!res.ok || (!data.ok && data.error)) {
         setOauthToast({
           kind: "error",
-          text: data.error || `Refresh failed (HTTP ${res.status})`,
+          text: data.failReason
+            ? `TikTok rejected the post: ${data.failReason}`
+            : data.error || `Refresh failed (HTTP ${res.status})`,
+        });
+      } else if (data.pending) {
+        const bytes = formatBytes(data.uploadedBytes);
+        setOauthToast({
+          kind: "success",
+          text: `TikTok still processing — status: ${data.status || "PROCESSING_UPLOAD"} (${bytes} uploaded). Try Refresh again in ~30s.`,
+        });
+      } else {
+        setOauthToast({
+          kind: "success",
+          text: `TikTok finished — status: ${data.status || "SEND_TO_USER_INBOX"}. Check the @canvashub inbox to publish.`,
         });
       }
       await fetchPosts();
@@ -484,6 +513,8 @@ export function TikTokSection() {
           shareUrl: data.shareUrl ?? null,
           postId: data.postId ?? null,
           status: data.status ?? null,
+          pending: data.pending ?? false,
+          uploadedBytes: data.uploadedBytes ?? null,
         });
         setConfirmOpen(false);
       }
@@ -1004,16 +1035,31 @@ export function TikTokSection() {
                   >
                     {lastResult.ok ? (
                       <div>
-                        Published.{" "}
                         {lastResult.shareUrl ? (
-                          <a
-                            className="underline"
-                            href={lastResult.shareUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View on TikTok
-                          </a>
+                          <>
+                            Published.{" "}
+                            <a
+                              className="underline"
+                              href={lastResult.shareUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View on TikTok
+                            </a>
+                          </>
+                        ) : lastResult.pending ? (
+                          <>
+                            <div className="font-medium">
+                              Submitted to TikTok.
+                            </div>
+                            <div className="text-xs mt-0.5">
+                              Status: {lastResult.status || "PROCESSING_UPLOAD"}
+                              . TikTok delivers the inbox notification
+                              asynchronously — usually 1–5 minutes. Use the
+                              Refresh button on the row below to check progress,
+                              or open the @canvashub TikTok inbox directly.
+                            </div>
+                          </>
                         ) : (
                           <span>Status: {lastResult.status}</span>
                         )}

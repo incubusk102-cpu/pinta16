@@ -361,6 +361,11 @@ export const onRequestPost = async ({ request, env }) => {
         id: rowId,
         status: result.status || "failed",
         error: result.error || "polling failed",
+        failReason: result.failReason || null,
+        uploadedBytes:
+          typeof result.uploadedBytes === "number"
+            ? result.uploadedBytes
+            : null,
       });
     }
     if (result.pending) {
@@ -373,6 +378,10 @@ export const onRequestPost = async ({ request, env }) => {
         id: rowId,
         status: result.status || "PROCESSING_UPLOAD",
         pending: true,
+        uploadedBytes:
+          typeof result.uploadedBytes === "number"
+            ? result.uploadedBytes
+            : null,
       });
     }
     await d1Run(
