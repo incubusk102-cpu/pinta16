@@ -7,6 +7,7 @@ import {
   useTransform,
 } from "framer-motion";
 import FilmGrain from "@/components/FilmGrain";
+import GsapReveal from "@/components/motion/GsapReveal";
 import SplitText from "@/components/motion/SplitText";
 import { type Product, useProducts } from "@/contexts/ProductContext";
 import { type DisplayArtwork, getStorefrontArtworks } from "@/lib/artworks";
@@ -113,31 +114,47 @@ const CinematicCollectionCTA = () => {
     >
       {/* Background collage. Each tile is a real artwork, dimmed so
           the foreground headline stays readable while the colours
-          and brushwork still register. */}
+          and brushwork still register. The collage drifts vertically
+          via framer-motion's scroll parallax; the tiles themselves
+          stage in via a GSAP ScrollTrigger reveal (rise + scale +
+          fade) the first time the section enters the viewport. */}
       {tiles.length > 0 && (
         <motion.div
           aria-hidden
-          className="absolute inset-0 grid grid-cols-2 md:grid-cols-4"
+          className="absolute inset-0"
           style={reduce ? undefined : { y: collageY }}
         >
-          {tiles.map((art, i) => (
-            <div key={art.id} className="relative overflow-hidden">
-              <img
-                src={art.image}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="w-full h-full object-cover"
-                style={{
-                  // Saturation pulled down + brightness floor so the
-                  // foreground copy stays legible without losing the
-                  // sense that you're looking at actual paintings.
-                  filter: "saturate(0.85) brightness(0.6)",
-                  transform: i % 2 === 0 ? "scale(1.06)" : "scale(1.1)",
-                }}
-              />
-            </div>
-          ))}
+          <GsapReveal
+            className="absolute inset-0 grid grid-cols-2 md:grid-cols-4"
+            stagger={0.12}
+            duration={0.95}
+            yFrom={36}
+            scaleFrom={0.9}
+            start="top 85%"
+          >
+            {tiles.map((art, i) => (
+              <div
+                key={art.id}
+                data-gsap-reveal-item
+                className="relative overflow-hidden"
+              >
+                <img
+                  src={art.image}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-cover"
+                  style={{
+                    // Saturation pulled down + brightness floor so the
+                    // foreground copy stays legible without losing the
+                    // sense that you're looking at actual paintings.
+                    filter: "saturate(0.85) brightness(0.6)",
+                    transform: i % 2 === 0 ? "scale(1.06)" : "scale(1.1)",
+                  }}
+                />
+              </div>
+            ))}
+          </GsapReveal>
         </motion.div>
       )}
 
