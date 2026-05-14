@@ -93,6 +93,63 @@ describe("initPhotoPost — TikTok content posting body shape", () => {
     ]);
   });
 
+  it("omits DIRECT_POST-only fields from post_info in MEDIA_UPLOAD mode", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const result = await mod.initPhotoPost({
+      imageUrls: ["https://canvhub.com/img.webp"],
+      caption: "Test caption",
+      postMode: "MEDIA_UPLOAD",
+      privacyLevel: "PUBLIC_TO_EVERYONE",
+      disableComment: true,
+      autoAddMusic: true,
+    });
+
+    expect(result.ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    expect(body.post_info).toEqual({
+      title: "Test caption",
+      description: "Test caption",
+    });
+    expect(body.post_info).not.toHaveProperty("privacy_level");
+    expect(body.post_info).not.toHaveProperty("disable_comment");
+    expect(body.post_info).not.toHaveProperty("auto_add_music");
+    expect(body.post_info).not.toHaveProperty("brand_content_toggle");
+    expect(body.post_info).not.toHaveProperty("brand_organic_toggle");
+  });
+
+  it("includes DIRECT_POST-only fields in post_info when post_mode is DIRECT_POST", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const result = await mod.initPhotoPost({
+      imageUrls: ["https://canvhub.com/img.webp"],
+      caption: "Test caption",
+      postMode: "DIRECT_POST",
+      privacyLevel: "PUBLIC_TO_EVERYONE",
+      disableComment: true,
+      autoAddMusic: false,
+    });
+
+    expect(result.ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    expect(body.post_mode).toBe("DIRECT_POST");
+    expect(body.post_info).toMatchObject({
+      title: "Test caption",
+      description: "Test caption",
+      privacy_level: "PUBLIC_TO_EVERYONE",
+      disable_comment: true,
+      auto_add_music: false,
+      brand_content_toggle: false,
+      brand_organic_toggle: false,
+    });
+  });
+
   it("rejects non-HTTPS image URLs", async () => {
     mockEnv(buildKv({ tiktok_auth: validAuth() }));
     // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.

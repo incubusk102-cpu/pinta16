@@ -481,6 +481,8 @@ export const initPhotoPost = async ({
   privacyLevel = "SELF_ONLY",
   disableComment = false,
   autoAddMusic = false,
+  brandContentToggle = false,
+  brandOrganicToggle = false,
 }) => {
   const token = await getValidAccessToken();
   if (!token) return { ok: false, error: "Not connected to TikTok" };
@@ -496,16 +498,30 @@ export const initPhotoPost = async ({
     }
   }
   const trimmedCaption = String(caption || "").slice(0, MAX_CAPTION_LENGTH);
+  const resolvedMode =
+    postMode === "DIRECT_POST" ? "DIRECT_POST" : "MEDIA_UPLOAD";
+  // `privacy_level`, `disable_comment`, `auto_add_music`, and the
+  // `brand_*_toggle` fields only apply to DIRECT_POST. TikTok rejects
+  // MEDIA_UPLOAD requests that include them with `invalid_params`.
+  const postInfo =
+    resolvedMode === "DIRECT_POST"
+      ? {
+          title: trimmedCaption.slice(0, 90),
+          description: trimmedCaption,
+          privacy_level: privacyLevel,
+          disable_comment: Boolean(disableComment),
+          auto_add_music: Boolean(autoAddMusic),
+          brand_content_toggle: Boolean(brandContentToggle),
+          brand_organic_toggle: Boolean(brandOrganicToggle),
+        }
+      : {
+          title: trimmedCaption.slice(0, 90),
+          description: trimmedCaption,
+        };
   const body = {
     media_type: "PHOTO",
-    post_mode: postMode,
-    post_info: {
-      title: trimmedCaption.slice(0, 90),
-      description: trimmedCaption,
-      disable_comment: Boolean(disableComment),
-      privacy_level: privacyLevel,
-      auto_add_music: Boolean(autoAddMusic),
-    },
+    post_mode: resolvedMode,
+    post_info: postInfo,
     source_info: {
       source: "PULL_FROM_URL",
       photo_cover_index: 0,
