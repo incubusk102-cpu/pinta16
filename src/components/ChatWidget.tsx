@@ -5,12 +5,12 @@ import {
   Bell,
   BellOff,
   HelpCircle,
-  MessageSquare,
   Send,
   Sparkles,
   User,
   X,
 } from "lucide-react";
+import ChatLauncherIcon from "@/components/ChatLauncherIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1059,7 +1059,7 @@ export default function ChatWidget() {
                 : "Open chat"
             }
           >
-            <MessageSquare className="h-5 w-5" aria-hidden="true" />
+            <ChatLauncherIcon unread={unreadCount > 0} />
             {unreadCount > 0 && !reduceMotion && (
               <motion.span
                 aria-hidden="true"
