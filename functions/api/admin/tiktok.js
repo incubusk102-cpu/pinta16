@@ -9,6 +9,13 @@
 // POST ?action=apply-schema              → bootstrap the `tiktok_posts` table
 // POST ?action=publish                   → init + poll a publish job, write
 //                                          the result row to D1
+// POST ?action=refresh-status            → re-poll TikTok for a single row
+//                                          (body: { id }) and update the D1
+//                                          row in place. Use this on rows the
+//                                          publish action left in `processing`
+//                                          state because TikTok hadn't yet
+//                                          delivered the inbox notification
+//                                          within the fail-fast window.
 // POST ?action=set-auto-post             → flip the auto-post-on-create flag
 //                                          (body: { enabled: bool })
 // POST ?action=refresh-token             → manually refresh the access token
@@ -26,6 +33,7 @@ import {
   getAutoPostEnabled,
   getTikTokAccountStatus,
   isTikTokConfigured,
+  pollPublishStatus,
   publishProductPhoto,
   refreshAccessToken,
   resolveProductImageUrl,
@@ -306,6 +314,79 @@ export const onRequestPost = async ({ request, env }) => {
       postId: result.postId || null,
       shareUrl: result.shareUrl || null,
       status: result.status,
+    });
+  }
+
+  if (action === "refresh-status") {
+    if (!(await isSchemaApplied())) {
+      return json(503, {
+        error: "tiktok_posts table missing. POST ?action=apply-schema first.",
+      });
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json(400, { error: "Invalid JSON body" });
+    }
+    const rowId = String(body?.id || "").trim();
+    if (!rowId) return json(400, { error: "id required" });
+    const row = await d1First(
+      `SELECT id, publish_id, status FROM tiktok_posts WHERE id=?`,
+      [rowId],
+    );
+    if (!row) return json(404, { error: `Row not found: ${rowId}` });
+    if (!row.publish_id) {
+      return json(400, { error: "Row has no publish_id to poll" });
+    }
+    const result = await pollPublishStatus(row.publish_id, {
+      timeoutMs: 8000,
+      failFast: true,
+    });
+    const now = new Date().toISOString();
+    if (!result.ok) {
+      await d1Run(
+        `UPDATE tiktok_posts
+           SET status='failed', error_code=?, error_message=?, updated_at=?
+         WHERE id=?`,
+        [
+          result.errorCode || result.status || null,
+          result.error || "polling failed",
+          now,
+          rowId,
+        ],
+      );
+      return json(200, {
+        ok: false,
+        id: rowId,
+        status: result.status || "failed",
+        error: result.error || "polling failed",
+      });
+    }
+    if (result.pending) {
+      await d1Run(
+        `UPDATE tiktok_posts SET status='processing', updated_at=? WHERE id=?`,
+        [now, rowId],
+      );
+      return json(200, {
+        ok: true,
+        id: rowId,
+        status: result.status || "PROCESSING_UPLOAD",
+        pending: true,
+      });
+    }
+    await d1Run(
+      `UPDATE tiktok_posts
+         SET status='published', tiktok_post_id=?, share_url=?, posted_at=?, updated_at=?
+       WHERE id=?`,
+      [result.postId || null, result.shareUrl || null, now, now, rowId],
+    );
+    return json(200, {
+      ok: true,
+      id: rowId,
+      status: result.status,
+      postId: result.postId || null,
+      shareUrl: result.shareUrl || null,
     });
   }
 

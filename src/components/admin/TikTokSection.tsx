@@ -159,6 +159,7 @@ export function TikTokSection() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [posts, setPosts] = useState<TikTokPostRow[]>([]);
+  const [refreshingRowId, setRefreshingRowId] = useState<string | null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
     null,
@@ -387,6 +388,33 @@ export function TikTokSection() {
       await fetchStatus();
     } finally {
       setRefreshingToken(false);
+    }
+  };
+
+  const refreshRowStatus = async (rowId: string) => {
+    setRefreshingRowId(rowId);
+    try {
+      const res = await fetch("/api/admin/tiktok?action=refresh-status", {
+        method: "POST",
+        credentials: "include",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({ id: rowId }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || (!data.ok && data.error)) {
+        setOauthToast({
+          kind: "error",
+          text: data.error || `Refresh failed (HTTP ${res.status})`,
+        });
+      }
+      await fetchPosts();
+    } catch (err) {
+      setOauthToast({
+        kind: "error",
+        text: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRefreshingRowId(null);
     }
   };
 
@@ -1036,6 +1064,7 @@ export function TikTokSection() {
                       <th className="py-2 pr-2">Status</th>
                       <th className="py-2 pr-2">Permalink</th>
                       <th className="py-2 pr-2">Error</th>
+                      <th className="py-2 pr-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1074,6 +1103,28 @@ export function TikTokSection() {
                         </td>
                         <td className="py-2 pr-2 text-red-700 max-w-xs truncate">
                           {row.error_message || "—"}
+                        </td>
+                        <td className="py-2 pr-2">
+                          {(row.status === "processing" ||
+                            row.status === "pending") &&
+                          row.publish_id ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-[11px]"
+                              disabled={refreshingRowId === row.id}
+                              onClick={() => void refreshRowStatus(row.id)}
+                            >
+                              {refreshingRowId === row.id ? (
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                              )}
+                              Refresh
+                            </Button>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -567,7 +567,7 @@ export const initPhotoPost = async ({
 //   FAILED                                    — terminal failure
 export const pollPublishStatus = async (
   publishId,
-  { timeoutMs = POLL_TIMEOUT_MS } = {},
+  { timeoutMs = POLL_TIMEOUT_MS, failFast = false } = {},
 ) => {
   const token = await getValidAccessToken();
   if (!token) return { ok: false, error: "Not connected to TikTok" };
@@ -617,6 +617,19 @@ export const pollPublishStatus = async (
       };
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  // Fail-fast callers (e.g. the admin "publish" request) prefer a
+  // non-error "still processing" result over a hard timeout: TikTok
+  // routinely takes longer than the request window to deliver the
+  // MEDIA_UPLOAD inbox notification, but as long as no FAILED state
+  // came back the post is on track.
+  if (failFast) {
+    return {
+      ok: true,
+      pending: true,
+      status: lastStatus,
+      raw: lastRaw,
+    };
   }
   return {
     ok: false,
@@ -930,8 +943,14 @@ export const publishProductPhoto = async ({
       [publishId, nowIso(), rowId],
     );
 
+    // Short fail-fast poll: catches `picture_size_check_failed` /
+    // `file_format_check_failed` quickly, but doesn't make the admin
+    // request hang for the full async-processing window. TikTok often
+    // takes 1-2 minutes to deliver the MEDIA_UPLOAD inbox notification,
+    // which is fine — the post is queued the moment init succeeded.
     const pollResult = await pollPublishStatus(publishId, {
-      timeoutMs: 60000,
+      timeoutMs: 12000,
+      failFast: true,
     });
     if (!pollResult.ok) {
       await d1Run(
@@ -951,6 +970,24 @@ export const publishProductPhoto = async ({
         publishId,
         error: pollResult.error || "TikTok publishing failed",
         status: pollResult.status || null,
+      };
+    }
+
+    if (pollResult.pending) {
+      await d1Run(
+        `UPDATE tiktok_posts
+           SET status='processing', updated_at=?
+         WHERE id=?`,
+        [nowIso(), rowId],
+      );
+      return {
+        ok: true,
+        id: rowId,
+        publishId,
+        postId: null,
+        shareUrl: null,
+        status: pollResult.status || "PROCESSING_UPLOAD",
+        pending: true,
       };
     }
 
