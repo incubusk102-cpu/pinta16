@@ -20,6 +20,7 @@ import SiteFooter from "@/components/SiteFooter";
 import AmbientCursorGlow from "@/components/AmbientCursorGlow";
 import ScrollProgress from "@/components/ScrollProgress";
 import PageTransitions from "@/components/PageTransitions";
+import RouteWipeOverlay from "@/components/RouteWipeOverlay";
 import { QuickSpinProvider } from "@/contexts/QuickSpinContext";
 import { CompareProvider } from "@/contexts/CompareContext";
 import { FlyToCartProvider } from "@/contexts/FlyToCartContext";
@@ -223,6 +224,7 @@ function RootComponent() {
                                   <PageTransitions>
                                     <Outlet />
                                   </PageTransitions>
+                                  <RouteWipeOverlay />
                                   <ConditionalSiteFooter />
                                   <Suspense fallback={null}>
                                     <ConditionalOrderConfirmation />

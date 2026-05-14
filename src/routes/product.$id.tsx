@@ -33,6 +33,7 @@ import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import MagneticButton from "@/components/MagneticButton";
 import SplitText from "@/components/motion/SplitText";
+import GsapStaggerRail from "@/components/motion/GsapStaggerRail";
 import CuratorsNoteTypewriter from "@/components/CuratorsNoteTypewriter";
 import DominantColorChips from "@/components/DominantColorChips";
 import PaintingNotes from "@/components/PaintingNotes";
@@ -1060,6 +1061,40 @@ function ProductReviews({
   // <ReviewPhotoLightbox /> avoids that — same GPU-safe pattern
   // already used by the home-page reviews carousel.
   const [photoView, setPhotoView] = useState<ReviewPhotoView | null>(null);
+  const averageStarsRef = useRef<HTMLDivElement | null>(null);
+  const totalForStars = reviews.length
+    ? reviews.reduce((s, r) => s + r.rating, 0)
+    : 0;
+  const avgForStars = reviews.length ? totalForStars / reviews.length : 0;
+  const filledCount = Math.round(avgForStars);
+
+  // Pulse each filled star in the header rating as soon as the
+  // reviews list resolves. anime.js `stagger(70)` walks left-to-right
+  // so the visitor's eye lands on the rating. Replays whenever the
+  // count changes (e.g. a new review arrives via re-fetch). Skipped
+  // under prefers-reduced-motion.
+  useEffect(() => {
+    if (loading || reviews.length === 0) return;
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    const host = averageStarsRef.current;
+    if (!host) return;
+    const filled = host.querySelectorAll<HTMLElement>(
+      "[data-review-star-filled]",
+    );
+    if (filled.length === 0) return;
+    animate(Array.from(filled), {
+      scale: [1, 1.25, 1],
+      duration: 520,
+      delay: stagger(70),
+      ease: "outElastic(1, .6)",
+    });
+  }, [loading, reviews.length, filledCount]);
   if (loading) {
     return (
       <section className="mt-16 border-t border-border/40 pt-10">
@@ -1089,17 +1124,21 @@ function ProductReviews({
           Reviews from collectors
         </h2>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-0.5">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Star
-                key={n}
-                className={`w-4 h-4 ${
-                  n <= Math.round(avg)
-                    ? "fill-yellow-400 text-yellow-400"
-                    : "text-muted-foreground/40"
-                }`}
-              />
-            ))}
+          <div ref={averageStarsRef} className="flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((n) => {
+              const isFilled = n <= Math.round(avg);
+              return (
+                <Star
+                  key={n}
+                  data-review-star-filled={isFilled ? "" : undefined}
+                  className={`w-4 h-4 ${
+                    isFilled
+                      ? "fill-yellow-400 text-yellow-400"
+                      : "text-muted-foreground/40"
+                  }`}
+                />
+              );
+            })}
           </div>
           <span className="font-medium text-foreground">{avg.toFixed(1)}</span>
           <span>·</span>
@@ -1108,10 +1147,18 @@ function ProductReviews({
           </span>
         </div>
       </div>
-      <div className="grid md:grid-cols-2 gap-4">
+      <GsapStaggerRail
+        className="grid md:grid-cols-2 gap-4"
+        xFrom={0}
+        yFrom={16}
+        scaleFrom={0.97}
+        stagger={0.06}
+        duration={0.6}
+      >
         {reviews.map((r, i) => (
           <article
             key={`${r.orderId}-${i}`}
+            data-rail-item
             className="bg-card/40 border border-border/60 rounded-md p-5 flex flex-col gap-3"
           >
             <div className="flex items-center justify-between gap-2">
@@ -1170,7 +1217,7 @@ function ProductReviews({
             </p>
           </article>
         ))}
-      </div>
+      </GsapStaggerRail>
       <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </section>
   );

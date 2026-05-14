@@ -19,6 +19,7 @@ import {
   Search,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { animate } from "animejs";
 import { useCart, type CompletedOrder } from "@/contexts/CartContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -84,6 +85,46 @@ const GalleryNav = () => {
       setCartPulse(true);
       const t = setTimeout(() => setCartPulse(false), 600);
       lastItemCountRef.current = itemCount;
+      // Anime.js sparkle burst orbiting the cart icon. Layered on
+      // top of the existing framer-motion badge pulse so the
+      // confirmation reads as "something just landed" rather than
+      // just "count changed". Silent under prefers-reduced-motion.
+      const button = cartButtonRef.current;
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (button && !reduceMotion) {
+        const rect = button.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const colors = [
+          "rgba(253,224,71,0.95)", // yellow-300
+          "rgba(251,191,36,0.95)", // amber-400
+          "rgba(244,114,182,0.9)", // pink-400
+          "rgba(165,243,252,0.9)", // cyan-200
+        ];
+        for (let i = 0; i < 6; i += 1) {
+          const sparkle = document.createElement("span");
+          const angle = (Math.PI * 2 * i) / 6 + (Math.random() - 0.5) * 0.4;
+          const distance = 22 + Math.random() * 12;
+          const size = 4 + Math.random() * 3;
+          sparkle.setAttribute("aria-hidden", "true");
+          sparkle.style.cssText = `position:fixed;top:${cy - size / 2}px;left:${cx - size / 2}px;width:${size}px;height:${size}px;border-radius:9999px;background:${colors[i % colors.length]};box-shadow:0 0 10px ${colors[i % colors.length]};pointer-events:none;z-index:9999;will-change:transform,opacity;`;
+          document.body.appendChild(sparkle);
+          animate(sparkle, {
+            translateX: Math.cos(angle) * distance,
+            translateY: Math.sin(angle) * distance,
+            scale: [0.5, 1.1, 0.4],
+            opacity: [1, 1, 0],
+            duration: 620 + Math.random() * 160,
+            ease: "outQuad",
+            onComplete: () => {
+              sparkle.remove();
+            },
+          });
+        }
+      }
       return () => clearTimeout(t);
     }
     lastItemCountRef.current = itemCount;
