@@ -509,7 +509,7 @@ export const initPhotoPost = async ({
     source_info: {
       source: "PULL_FROM_URL",
       photo_cover_index: 0,
-      photo_images: imageUrls.map((url) => ({ image_url: url })),
+      photo_images: imageUrls,
     },
   };
   const res = await fetch(`${TIKTOK_API_HOST}/v2/post/publish/content/init/`, {
