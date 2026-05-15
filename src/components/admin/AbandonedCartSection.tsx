@@ -11,10 +11,13 @@ interface AbandonedCartConfig {
   enabled: boolean;
   nudge1Minutes: number;
   nudge2Minutes: number;
+  nudge3Minutes: number;
   nudge1Subject: string;
   nudge2Subject: string;
+  nudge3Subject: string;
   nudge1Heading: string;
   nudge2Heading: string;
+  nudge3Heading: string;
   ctaLabel: string;
   ctaUrl: string;
 }
@@ -24,27 +27,44 @@ interface AbandonedCartStats {
   pending: number;
   nudge1Sent: number;
   nudge2Sent: number;
+  nudge3Sent: number;
   converted: number;
   unsubscribed: number;
+  recoveredRevenue: number;
 }
 
 const DEFAULTS: AbandonedCartConfig = {
   enabled: true,
   nudge1Minutes: 60,
   nudge2Minutes: 1440,
+  nudge3Minutes: 4320,
   nudge1Subject: "You left something behind at Canvas Hub",
   nudge2Subject: "Still thinking about it? Your cart is waiting",
+  nudge3Subject: "Last chance \u2014 your cart at Canvas Hub",
   nudge1Heading: "Your cart is waiting",
   nudge2Heading: "Don\u2019t miss out on your picks",
+  nudge3Heading: "Final reminder",
   ctaLabel: "Complete your order",
   ctaUrl: "",
 };
+
+const peso = (n: number) =>
+  `\u20b1${(Number.isFinite(n) ? n : 0).toLocaleString("en-PH", {
+    maximumFractionDigits: 2,
+  })}`;
 
 const formatMinutes = (m: number) => {
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
   const remainder = m % 60;
-  if (remainder === 0) return h === 1 ? "1 hour" : `${h} hours`;
+  if (remainder === 0) {
+    if (h === 1) return "1 hour";
+    if (h % 24 === 0) {
+      const days = h / 24;
+      return days === 1 ? "1 day" : `${days} days`;
+    }
+    return `${h} hours`;
+  }
   return `${h}h ${remainder}m`;
 };
 
@@ -183,16 +203,18 @@ export function AbandonedCartSection() {
       </p>
 
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {(
             [
-              ["Pending", stats.pending],
-              ["Nudge 1 sent", stats.nudge1Sent],
-              ["Nudge 2 sent", stats.nudge2Sent],
-              ["Converted", stats.converted],
-              ["Unsubscribed", stats.unsubscribed],
-              ["Total (7d)", stats.total],
-            ] as [string, number][]
+              ["Pending", String(stats.pending)],
+              ["Nudge 1 sent", String(stats.nudge1Sent)],
+              ["Nudge 2 sent", String(stats.nudge2Sent)],
+              ["Nudge 3 sent", String(stats.nudge3Sent ?? 0)],
+              ["Converted", String(stats.converted)],
+              ["Recovered revenue", peso(Number(stats.recoveredRevenue) || 0)],
+              ["Unsubscribed", String(stats.unsubscribed)],
+              ["Total (7d)", String(stats.total)],
+            ] as [string, string][]
           ).map(([label, value]) => (
             <div
               key={label}
@@ -232,7 +254,7 @@ export function AbandonedCartSection() {
         <h3 className="text-sm font-medium flex items-center gap-1.5">
           <Mail className="w-4 h-4" /> Timing
         </h3>
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-3 gap-4">
           <div>
             <Label htmlFor="ac-nudge1">
               First reminder after ({formatMinutes(cfg.nudge1Minutes)})
@@ -269,6 +291,28 @@ export function AbandonedCartSection() {
                 setCfg((p) => ({
                   ...p,
                   nudge2Minutes: Math.max(60, Number(e.target.value) || 1440),
+                }))
+              }
+              className="mt-1"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Minutes after cart abandonment (min 60, max 10 080 = 7 days)
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="ac-nudge3">
+              Last-chance reminder after ({formatMinutes(cfg.nudge3Minutes)})
+            </Label>
+            <Input
+              id="ac-nudge3"
+              type="number"
+              min={60}
+              max={10080}
+              value={cfg.nudge3Minutes}
+              onChange={(e) =>
+                setCfg((p) => ({
+                  ...p,
+                  nudge3Minutes: Math.max(60, Number(e.target.value) || 4320),
                 }))
               }
               className="mt-1"
@@ -327,6 +371,34 @@ export function AbandonedCartSection() {
               maxLength={100}
               onChange={(e) =>
                 setCfg((p) => ({ ...p, nudge2Heading: e.target.value }))
+              }
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ac-subj3">
+              Nudge 3 (last chance) — subject line
+            </Label>
+            <Input
+              id="ac-subj3"
+              value={cfg.nudge3Subject}
+              maxLength={200}
+              onChange={(e) =>
+                setCfg((p) => ({ ...p, nudge3Subject: e.target.value }))
+              }
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ac-head3">
+              Nudge 3 (last chance) — email heading
+            </Label>
+            <Input
+              id="ac-head3"
+              value={cfg.nudge3Heading}
+              maxLength={100}
+              onChange={(e) =>
+                setCfg((p) => ({ ...p, nudge3Heading: e.target.value }))
               }
               className="mt-1"
             />

@@ -1562,7 +1562,11 @@ export const handler = async (event) => {
           ...captureRequestMeta(event),
         });
         // Mark the abandoned-cart entry as converted so the cron doesn't
-        // send recovery emails for a cart that already checked out.
+        // send recovery emails for a cart that already checked out. When
+        // at least one recovery email was sent before the conversion, also
+        // stamp the order total as `recoveredRevenue` so the admin
+        // Recovered-revenue stat tile can attribute the sale to cart
+        // recovery (vs. organic checkout).
         try {
           const acBinding = getCloudflareEnv().ABANDONED_CARTS;
           if (acBinding) {
@@ -1574,6 +1578,16 @@ export const handler = async (event) => {
               const entry = await acStore.get(acEmail, { type: "json" });
               if (entry && !entry.convertedAt) {
                 entry.convertedAt = new Date().toISOString();
+                if (
+                  entry.nudge1SentAt ||
+                  entry.nudge2SentAt ||
+                  entry.nudge3SentAt
+                ) {
+                  const total = Number(safeOrder.total);
+                  if (Number.isFinite(total) && total > 0) {
+                    entry.recoveredRevenue = total;
+                  }
+                }
                 await acStore.setJSON(acEmail, entry);
               }
             }

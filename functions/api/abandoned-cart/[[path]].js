@@ -10,7 +10,8 @@
 //   POST /api/abandoned-cart/process       Bearer-token protected (BACKUP_TOKEN).
 //                                          Called by the scheduled GitHub Action.
 //                                          Scans all entries and sends recovery
-//                                          emails at the 1 h and 24 h marks.
+//                                          emails at the 1 h, 24 h, and 72 h
+//                                          ("last chance") marks.
 //
 //   GET  /api/abandoned-cart/unsubscribe   Public. Query: ?id=<entryId>&t=<token>.
 //                                          Marks the entry as opted-out so no
@@ -23,11 +24,17 @@
 //     createdAt,            ISO 8601
 //     nudge1SentAt,         ISO 8601 | null
 //     nudge2SentAt,         ISO 8601 | null
+//     nudge3SentAt,         ISO 8601 | null
 //     convertedAt,          ISO 8601 | null  (set when an order is placed)
+//     recoveredRevenue,     number | undefined  (order total when a nudge
+//                           was sent before conversion — drives the
+//                           Recovered-revenue stat tile)
 //     unsubscribedAt,       ISO 8601 | null
 //   }
 //
-// Entries auto-expire after 7 days via KV TTL (expirationTtl).
+// Entries auto-expire after 7 days via KV TTL (expirationTtl). Once
+// converted, the conversion writer in orders.js drops the TTL so the
+// entry is preserved for revenue accounting.
 
 import { initRequestContext } from "../_lib/handler-wrapper.js";
 import { consumeRateLimit, rateLimitResponse } from "../_lib/rate-limit.js";
@@ -156,6 +163,7 @@ const handleSync = async (event, env, store) => {
     updatedAt: now,
     nudge1SentAt: (existing && existing.nudge1SentAt) || null,
     nudge2SentAt: (existing && existing.nudge2SentAt) || null,
+    nudge3SentAt: (existing && existing.nudge3SentAt) || null,
     convertedAt: null,
     unsubscribedAt: null,
   };
@@ -192,6 +200,8 @@ const handleProcess = async (env, store) => {
   const nudge1Ms = ((settings && settings.nudge1Minutes) || 60) * MS_PER_MINUTE;
   const nudge2Ms =
     ((settings && settings.nudge2Minutes) || 1440) * MS_PER_MINUTE;
+  const nudge3Ms =
+    ((settings && settings.nudge3Minutes) || 4320) * MS_PER_MINUTE;
 
   const orderEmail = await loadOrderEmailConfig();
   const now = Date.now();
@@ -226,6 +236,15 @@ const handleProcess = async (env, store) => {
         const result = await sendRecoveryEmail(entry, 2, orderEmail, settings);
         if (result.delivered) {
           entry.nudge2SentAt = new Date().toISOString();
+          await store.setJSON(blob.key, entry, {
+            expirationTtl: SEVEN_DAYS,
+          });
+          emailsSent++;
+        }
+      } else if (entry.nudge2SentAt && !entry.nudge3SentAt && age >= nudge3Ms) {
+        const result = await sendRecoveryEmail(entry, 3, orderEmail, settings);
+        if (result.delivered) {
+          entry.nudge3SentAt = new Date().toISOString();
           await store.setJSON(blob.key, entry, {
             expirationTtl: SEVEN_DAYS,
           });
@@ -312,21 +331,28 @@ const sendRecoveryEmail = async (entry, nudge, orderEmail, settings) => {
     nudge === 1
       ? (settings && settings.nudge1Subject) ||
         "You left something behind at Canvas Hub"
-      : (settings && settings.nudge2Subject) ||
-        "Still thinking about it? Your cart is waiting";
+      : nudge === 2
+        ? (settings && settings.nudge2Subject) ||
+          "Still thinking about it? Your cart is waiting"
+        : (settings && settings.nudge3Subject) ||
+          "Last chance \u2014 your cart at Canvas Hub";
 
   const heading =
     nudge === 1
       ? (settings && settings.nudge1Heading) || "Your cart is waiting"
-      : (settings && settings.nudge2Heading) ||
-        "Don\u2019t miss out on your picks";
+      : nudge === 2
+        ? (settings && settings.nudge2Heading) ||
+          "Don\u2019t miss out on your picks"
+        : (settings && settings.nudge3Heading) || "Final reminder";
 
   const ctaLabel = (settings && settings.ctaLabel) || "Complete your order";
 
   const introText =
     nudge === 1
       ? `Hi ${escapeHtml(firstName)},\n\nLooks like you left some beautiful artwork in your cart. We've saved it for you \u2014 come back and complete your order whenever you're ready.`
-      : `Hi ${escapeHtml(firstName)},\n\nYour handpicked paintings are still waiting. Original artwork sells fast \u2014 grab yours before someone else does.`;
+      : nudge === 2
+        ? `Hi ${escapeHtml(firstName)},\n\nYour handpicked paintings are still waiting. Original artwork sells fast \u2014 grab yours before someone else does.`
+        : `Hi ${escapeHtml(firstName)},\n\nThis is the final reminder for the paintings you saved at Canvas Hub. Your cart will clear in the next couple of days \u2014 grab yours before it\u2019s gone.`;
 
   const introHtml = introText
     .split(/\n{2,}/)
@@ -463,8 +489,10 @@ const handleStats = async (event, store) => {
   let pending = 0;
   let nudge1Sent = 0;
   let nudge2Sent = 0;
+  let nudge3Sent = 0;
   let converted = 0;
   let unsubscribed = 0;
+  let recoveredRevenue = 0;
 
   do {
     const page = await store.list({ cursor, limit: 100 });
@@ -476,8 +504,19 @@ const handleStats = async (event, store) => {
       total++;
       if (entry.convertedAt) {
         converted++;
+        // Count revenue only when at least one recovery email was sent
+        // before the conversion — otherwise it was an organic checkout
+        // and shouldn't be attributed to cart recovery.
+        if (entry.nudge1SentAt || entry.nudge2SentAt || entry.nudge3SentAt) {
+          const rev = Number(entry.recoveredRevenue);
+          if (Number.isFinite(rev) && rev > 0) {
+            recoveredRevenue += rev;
+          }
+        }
       } else if (entry.unsubscribedAt) {
         unsubscribed++;
+      } else if (entry.nudge3SentAt) {
+        nudge3Sent++;
       } else if (entry.nudge2SentAt) {
         nudge2Sent++;
       } else if (entry.nudge1SentAt) {
@@ -499,8 +538,10 @@ const handleStats = async (event, store) => {
     pending,
     nudge1Sent,
     nudge2Sent,
+    nudge3Sent,
     converted,
     unsubscribed,
+    recoveredRevenue: Math.round(recoveredRevenue * 100) / 100,
   });
 };
 
