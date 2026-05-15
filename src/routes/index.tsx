@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import HeroSlider from "@/components/HeroSlider";
-import FloemaHero from "@/components/floema/FloemaHero";
+import HomeHero from "@/components/HomeHero";
 import { useHeroSlides } from "@/contexts/HeroSlidesContext";
 import { useSEO } from "@/hooks/useSEO";
 import VisitorTicker from "@/components/VisitorTicker";
@@ -97,27 +97,28 @@ interface HeroOrFallbackProps {
 
 function HeroOrFallback({ suppressFallback = false }: HeroOrFallbackProps) {
   const { slides, loading } = useHeroSlides();
-  // Signed-in customers skip the cinematic welcome but still get any
-  // admin-promoted slides further down the page — the welcome itself
-  // is the only thing we suppress.
-  if (suppressFallback) {
-    if (loading) {
-      return <h1 className="sr-only">Canvas Hub</h1>;
-    }
-    return slides.length === 0 ? null : <HeroSlider />;
+  // When admin has uploaded hero slides via /admin → Hero slider,
+  // those take precedence (the operator's promotional copy / CTAs
+  // matter more than ambient brand atmosphere) and render for both
+  // signed-out and signed-in visitors — promotional banners are
+  // explicitly set up by the admin and meant for every shopper.
+  // Otherwise the homepage drops into the cinematic 3D hero — a
+  // floating framed painting with bloom on desktop, a static
+  // fallback on mobile — but only for signed-out visitors. Signed-in
+  // customers already onboarded, so the brand-welcome is suppressed
+  // and the page jumps straight into the curated carousels.
+  // We keep an `sr-only` <h1> path while data is loading so the
+  // smoke suite (`tests/e2e/smoke.spec.ts` asserts
+  // `page.locator("h1").first()` visible on `/`), document outline,
+  // and SEO crawlers still find a heading on the very first frame.
+  if (loading) {
+    return <h1 className="sr-only">Canvas Hub</h1>;
   }
-  // For everyone else the editorial Floema-style hero is the primary
-  // brand statement: oversized italic wordmark, sculpted 3D monogram,
-  // cream paper palette, floating "Get in touch" card. Admin-uploaded
-  // promotional slides render *below* it as a secondary band rather
-  // than replacing it — the redesign is the front door of the site,
-  // not a fallback.
-  return (
-    <>
-      <FloemaHero />
-      {!loading && slides.length > 0 ? <HeroSlider /> : null}
-    </>
-  );
+  if (slides.length === 0) {
+    if (suppressFallback) return null;
+    return <HomeHero />;
+  }
+  return <HeroSlider />;
 }
 
 // The previous text-only "Browse the collection" card has been
