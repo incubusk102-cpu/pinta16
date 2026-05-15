@@ -16,6 +16,7 @@ import { WishlistProvider } from "@/contexts/WishlistContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import AnnouncementBar from "@/components/AnnouncementBar";
+import FloemaNav from "@/components/FloemaNav";
 import SiteFooter from "@/components/SiteFooter";
 import AmbientCursorGlow from "@/components/AmbientCursorGlow";
 import ScrollProgress from "@/components/ScrollProgress";
@@ -133,6 +134,16 @@ function ConditionalAnnouncementBar() {
   return <AnnouncementBar />;
 }
 
+// Floating pill-style primary navigation. Hidden under `/admin` so
+// the admin tool keeps its own dense GalleryNav-driven shell.
+function ConditionalFloemaNav() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return <FloemaNav />;
+}
+
 function ConditionalSiteFooter() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -221,6 +232,7 @@ function RootComponent() {
                                   <GoogleAuthHashBridge />
                                   <ConditionalAmbientChrome />
                                   <ConditionalAnnouncementBar />
+                                  <ConditionalFloemaNav />
                                   <PageTransitions>
                                     <Outlet />
                                   </PageTransitions>
