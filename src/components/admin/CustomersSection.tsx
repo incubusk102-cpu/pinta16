@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Award,
-  Crown,
   Download,
+  Filter,
   Loader2,
+  Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
+  Settings2,
   StickyNote,
-  TrendingDown,
-  UserPlus,
+  Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,7 +34,50 @@ import {
 import { getAdminToken } from "@/contexts/AdminAuthContext";
 import ScrollableTable from "./ScrollableTable";
 
-type Segment = "vip" | "repeat" | "one_time" | "at_risk" | "lead";
+type SegmentId = string;
+
+// Backend mirror of `SEGMENT_CONSTANTS` exposed via
+// `/api/customers?action=list-segments`. Keep these unions in sync with
+// `functions/api/_lib/segments.js`.
+type SegmentField =
+  | "netSpend"
+  | "grossSpend"
+  | "ordersCount"
+  | "daysSinceOrder"
+  | "registered";
+type SegmentOp = "gte" | "gt" | "lte" | "lt" | "eq" | "neq";
+type SegmentColor =
+  | "amber"
+  | "emerald"
+  | "sky"
+  | "rose"
+  | "violet"
+  | "fuchsia"
+  | "teal"
+  | "muted";
+
+interface SegmentCondition {
+  field: SegmentField;
+  op: SegmentOp;
+  value: number | boolean;
+}
+
+interface SegmentRule {
+  id: SegmentId;
+  label: string;
+  color: SegmentColor;
+  priority: number;
+  conditions: SegmentCondition[];
+}
+
+interface SegmentsMeta {
+  fields: SegmentField[];
+  numericOps: SegmentOp[];
+  booleanOps: SegmentOp[];
+  colors: SegmentColor[];
+  maxSegments: number;
+  maxConditionsPerSegment: number;
+}
 
 interface Customer {
   email: string;
@@ -50,7 +95,7 @@ interface Customer {
   cities: string[];
   notes: string;
   tags: string[];
-  segment: Segment;
+  segment: SegmentId;
 }
 
 interface CustomerOrder {
@@ -65,29 +110,51 @@ interface CustomerOrder {
 
 interface Summary {
   total: number;
-  vip: number;
-  repeat: number;
-  atRisk: number;
-  leads: number;
-  oneTime: number;
   totalLtv: number;
+  segmentCounts: Record<SegmentId, number>;
 }
 
-const SEGMENT_LABEL: Record<Segment, string> = {
-  vip: "VIP",
-  repeat: "Repeat",
-  one_time: "One-time",
-  at_risk: "At-risk",
-  lead: "Lead",
+const COLOR_CLS: Record<SegmentColor, string> = {
+  amber: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  emerald: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  sky: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  rose: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  violet: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  fuchsia: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+  teal: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+  muted: "bg-muted text-muted-foreground",
 };
 
-const SEGMENT_CLS: Record<Segment, string> = {
-  vip: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  repeat: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  one_time: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-  at_risk: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
-  lead: "bg-muted text-muted-foreground",
+const FIELD_LABEL: Record<SegmentField, string> = {
+  netSpend: "Net spend (₱)",
+  grossSpend: "Gross spend (₱)",
+  ordersCount: "Orders count",
+  daysSinceOrder: "Days since last order",
+  registered: "Registered account",
 };
+
+const OP_LABEL: Record<SegmentOp, string> = {
+  gte: "≥",
+  gt: ">",
+  lte: "≤",
+  lt: "<",
+  eq: "=",
+  neq: "≠",
+};
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32);
+
+const segmentBadgeCls = (segment: SegmentRule | undefined) =>
+  COLOR_CLS[(segment?.color ?? "muted") as SegmentColor];
+
+const segmentLabel = (id: SegmentId, segments: SegmentRule[]) =>
+  segments.find((s) => s.id === id)?.label ?? id;
 
 const peso = (n: number) =>
   `₱${(Math.round(n * 100) / 100).toLocaleString(undefined, {
@@ -118,7 +185,75 @@ const fetchCustomers = async () => {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `HTTP ${res.status}`);
   }
-  return (await res.json()) as { customers: Customer[]; summary: Summary };
+  return (await res.json()) as {
+    customers: Customer[];
+    summary: Summary;
+    segments: SegmentRule[];
+    segmentsUpdatedAt: string;
+    segmentsIsDefault: boolean;
+  };
+};
+
+const fetchSegmentRules = async () => {
+  const token = getAdminToken();
+  if (!token) throw new Error("Sign in again");
+  const res = await fetch("/api/customers?action=list-segments", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return (await res.json()) as {
+    segments: SegmentRule[];
+    updatedAt: string;
+    isDefault: boolean;
+    meta: SegmentsMeta;
+  };
+};
+
+const saveSegmentRules = async (segments: SegmentRule[]) => {
+  const token = getAdminToken();
+  if (!token) throw new Error("Sign in again");
+  const res = await fetch("/api/customers", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ action: "save-segments", segments }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return (await res.json()) as {
+    segments: SegmentRule[];
+    updatedAt: string;
+    isDefault: boolean;
+  };
+};
+
+const resetSegmentRulesRequest = async () => {
+  const token = getAdminToken();
+  if (!token) throw new Error("Sign in again");
+  const res = await fetch("/api/customers", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ action: "reset-segments" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return (await res.json()) as {
+    segments: SegmentRule[];
+    updatedAt: string;
+    isDefault: boolean;
+  };
 };
 
 const fetchCustomerOrders = async (email: string) => {
@@ -153,11 +288,14 @@ const saveMeta = async (email: string, notes: string, tags: string[]) => {
 export function CustomersSection() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [segments, setSegments] = useState<SegmentRule[]>([]);
+  const [segmentsIsDefault, setSegmentsIsDefault] = useState(true);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [segmentFilter, setSegmentFilter] = useState<Segment | "all">("all");
+  const [segmentFilter, setSegmentFilter] = useState<SegmentId | "all">("all");
   const [drawerEmail, setDrawerEmail] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const load = async (showSpinner = true) => {
     if (showSpinner) setRefreshing(true);
@@ -165,6 +303,8 @@ export function CustomersSection() {
       const data = await fetchCustomers();
       setCustomers(data.customers);
       setSummary(data.summary);
+      setSegments(data.segments || []);
+      setSegmentsIsDefault(Boolean(data.segmentsIsDefault));
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Could not load customers",
@@ -175,9 +315,25 @@ export function CustomersSection() {
     }
   };
 
+  const onRulesSaved = useCallback(
+    (next: { segments: SegmentRule[]; isDefault: boolean }) => {
+      setSegments(next.segments);
+      setSegmentsIsDefault(next.isDefault);
+      // Re-fetch customers so segment assignments reflect the new rules.
+      void load();
+    },
+    [],
+  );
+
   useEffect(() => {
     void load(false);
   }, []);
+
+  const segmentById = useMemo(() => {
+    const m = new Map<SegmentId, SegmentRule>();
+    for (const s of segments) m.set(s.id, s);
+    return m;
+  }, [segments]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -274,6 +430,22 @@ export function CustomersSection() {
             type="button"
             variant="outline"
             size="sm"
+            onClick={() => setRulesOpen(true)}
+          >
+            <Settings2 className="w-3.5 h-3.5 mr-2" /> Segment rules
+            {!segmentsIsDefault ? (
+              <span
+                className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                aria-label="Custom segment rules in use"
+              >
+                Custom
+              </span>
+            ) : null}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={exportCsv}
             disabled={filtered.length === 0}
           >
@@ -298,26 +470,25 @@ export function CustomersSection() {
 
       {summary ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {segments
+            .slice()
+            .sort((a, b) => b.priority - a.priority)
+            .slice(0, 3)
+            .map((s) => (
+              <Stat
+                key={s.id}
+                icon={
+                  <span
+                    className={`w-4 h-4 rounded-sm ${segmentBadgeCls(s)}`}
+                  />
+                }
+                label={s.label}
+                value={(summary.segmentCounts?.[s.id] || 0).toLocaleString()}
+                hint={summarizeSegment(s)}
+              />
+            ))}
           <Stat
-            icon={<Crown className="w-4 h-4" />}
-            label="VIP customers"
-            value={summary.vip.toLocaleString()}
-            hint={`Net spend ≥ ${peso(10000)}`}
-          />
-          <Stat
-            icon={<Award className="w-4 h-4" />}
-            label="Repeat"
-            value={summary.repeat.toLocaleString()}
-            hint="2+ orders"
-          />
-          <Stat
-            icon={<TrendingDown className="w-4 h-4" />}
-            label="At-risk"
-            value={summary.atRisk.toLocaleString()}
-            hint="No order in 60+ days"
-          />
-          <Stat
-            icon={<UserPlus className="w-4 h-4" />}
+            icon={<Users className="w-4 h-4" />}
             label="Total LTV"
             value={peso(summary.totalLtv)}
             hint={`${summary.total.toLocaleString()} customers`}
@@ -337,18 +508,19 @@ export function CustomersSection() {
         </div>
         <Select
           value={segmentFilter}
-          onValueChange={(v) => setSegmentFilter(v as Segment | "all")}
+          onValueChange={(v) => setSegmentFilter(v as SegmentId | "all")}
         >
           <SelectTrigger className="h-9 w-44">
+            <Filter className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All segments</SelectItem>
-            <SelectItem value="vip">VIP</SelectItem>
-            <SelectItem value="repeat">Repeat</SelectItem>
-            <SelectItem value="one_time">One-time</SelectItem>
-            <SelectItem value="at_risk">At-risk</SelectItem>
-            <SelectItem value="lead">Lead</SelectItem>
+            {segments.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground ml-auto">
@@ -404,9 +576,9 @@ export function CustomersSection() {
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span
-                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${SEGMENT_CLS[c.segment]}`}
+                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${segmentBadgeCls(segmentById.get(c.segment))}`}
                     >
-                      {SEGMENT_LABEL[c.segment]}
+                      {segmentLabel(c.segment, segments)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
@@ -453,6 +625,7 @@ export function CustomersSection() {
 
       <CustomerDrawer
         customer={drawerCustomer}
+        segments={segments}
         onClose={() => setDrawerEmail(null)}
         onSaved={(next) => {
           setCustomers((prev) =>
@@ -464,9 +637,27 @@ export function CustomersSection() {
           );
         }}
       />
+
+      <SegmentRulesSheet
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        onSaved={onRulesSaved}
+      />
     </section>
   );
 }
+
+const summarizeSegment = (s: SegmentRule) => {
+  if (s.conditions.length === 0) return "Catch-all";
+  return s.conditions
+    .map((c) => {
+      if (c.field === "registered") {
+        return `${FIELD_LABEL[c.field]} ${OP_LABEL[c.op]} ${c.value ? "yes" : "no"}`;
+      }
+      return `${FIELD_LABEL[c.field]} ${OP_LABEL[c.op]} ${c.value}`;
+    })
+    .join(" · ");
+};
 
 function Stat({
   icon,
@@ -495,10 +686,12 @@ function Stat({
 
 function CustomerDrawer({
   customer,
+  segments,
   onClose,
   onSaved,
 }: {
   customer: Customer | null;
+  segments: SegmentRule[];
   onClose: () => void;
   onSaved: (next: { email: string; notes: string; tags: string[] }) => void;
 }) {
@@ -572,9 +765,9 @@ function CustomerDrawer({
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">Segment</span>
               <span
-                className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${SEGMENT_CLS[customer.segment]}`}
+                className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${segmentBadgeCls(segments.find((s) => s.id === customer.segment))}`}
               >
-                {SEGMENT_LABEL[customer.segment]}
+                {segmentLabel(customer.segment, segments)}
               </span>
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -729,5 +922,543 @@ function CustomerDrawer({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+interface SegmentDraft extends SegmentRule {
+  // `_uid` is a stable client-side key for React lists; it is stripped
+  // before posting to the API. Using it lets the user rename `id` without
+  // remounting the row.
+  _uid: string;
+}
+
+const draftFromRule = (rule: SegmentRule): SegmentDraft => ({
+  ...rule,
+  conditions: rule.conditions.map((c) => ({ ...c })),
+  _uid:
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+});
+
+const stripDraftUid = (draft: SegmentDraft): SegmentRule => {
+  const { _uid: _drop, ...rest } = draft;
+  void _drop;
+  return rest;
+};
+
+function SegmentRulesSheet({
+  open,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSaved: (next: { segments: SegmentRule[]; isDefault: boolean }) => void;
+}) {
+  const [drafts, setDrafts] = useState<SegmentDraft[]>([]);
+  const [meta, setMeta] = useState<SegmentsMeta | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setError(null);
+    void fetchSegmentRules()
+      .then((data) => {
+        setDrafts(data.segments.map(draftFromRule));
+        setMeta(data.meta);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Could not load rules");
+      })
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const usedIds = useMemo(
+    () => new Set(drafts.map((d) => d.id).filter(Boolean)),
+    [drafts],
+  );
+
+  const updateDraft = (uid: string, patch: Partial<SegmentDraft>) => {
+    setDrafts((prev) =>
+      prev.map((d) => (d._uid === uid ? { ...d, ...patch } : d)),
+    );
+  };
+
+  const updateCondition = (
+    uid: string,
+    index: number,
+    patch: Partial<SegmentCondition>,
+  ) => {
+    setDrafts((prev) =>
+      prev.map((d) =>
+        d._uid === uid
+          ? {
+              ...d,
+              conditions: d.conditions.map((c, i) =>
+                i === index ? ({ ...c, ...patch } as SegmentCondition) : c,
+              ),
+            }
+          : d,
+      ),
+    );
+  };
+
+  const addCondition = (uid: string) => {
+    setDrafts((prev) =>
+      prev.map((d) =>
+        d._uid === uid &&
+        (!meta || d.conditions.length < meta.maxConditionsPerSegment)
+          ? {
+              ...d,
+              conditions: [
+                ...d.conditions,
+                { field: "netSpend", op: "gte", value: 0 },
+              ],
+            }
+          : d,
+      ),
+    );
+  };
+
+  const removeCondition = (uid: string, index: number) => {
+    setDrafts((prev) =>
+      prev.map((d) =>
+        d._uid === uid
+          ? {
+              ...d,
+              conditions: d.conditions.filter((_, i) => i !== index),
+            }
+          : d,
+      ),
+    );
+  };
+
+  const removeSegment = (uid: string) => {
+    setDrafts((prev) => prev.filter((d) => d._uid !== uid));
+  };
+
+  const addSegment = () => {
+    if (meta && drafts.length >= meta.maxSegments) return;
+    let id = "segment";
+    let suffix = 1;
+    while (usedIds.has(id)) {
+      suffix += 1;
+      id = `segment_${suffix}`;
+    }
+    setDrafts((prev) => [
+      ...prev,
+      draftFromRule({
+        id,
+        label: `Segment ${suffix === 1 ? prev.length + 1 : suffix}`,
+        color: "muted",
+        priority: 10,
+        conditions: [],
+      }),
+    ]);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = drafts.map(stripDraftUid);
+      const result = await saveSegmentRules(payload);
+      onSaved({ segments: result.segments, isDefault: result.isDefault });
+      toast.success("Segment rules saved");
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setResetting(true);
+    setError(null);
+    try {
+      const result = await resetSegmentRulesRequest();
+      setDrafts(result.segments.map(draftFromRule));
+      onSaved({ segments: result.segments, isDefault: result.isDefault });
+      toast.success("Reset to default rules");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not reset";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="max-w-2xl w-full overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Customer segment rules</SheetTitle>
+        </SheetHeader>
+
+        <div className="mt-4 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Define how customers are bucketed into segments. Rules are evaluated
+            highest priority first; the first match wins. A rule with no
+            conditions acts as a catch-all. These rules also drive the broadcast
+            audience picker.
+          </p>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading rules…
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                {drafts.map((d) => (
+                  <SegmentEditorRow
+                    key={d._uid}
+                    draft={d}
+                    meta={meta}
+                    onChange={(patch) => updateDraft(d._uid, patch)}
+                    onConditionChange={(i, patch) =>
+                      updateCondition(d._uid, i, patch)
+                    }
+                    onConditionAdd={() => addCondition(d._uid)}
+                    onConditionRemove={(i) => removeCondition(d._uid, i)}
+                    onRemove={() => removeSegment(d._uid)}
+                    duplicateId={drafts.filter((x) => x.id === d.id).length > 1}
+                  />
+                ))}
+              </div>
+
+              {drafts.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  No segments yet. Add at least one before saving.
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addSegment}
+                  disabled={meta ? drafts.length >= meta.maxSegments : false}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1.5" /> Add segment
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void handleReset()}
+                  disabled={resetting || saving}
+                >
+                  {resetting ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Reset to defaults
+                </Button>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {drafts.length}
+                  {meta ? ` / ${meta.maxSegments}` : ""} segments
+                </span>
+              </div>
+
+              {error ? (
+                <p className="text-xs text-rose-500 break-words">{error}</p>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onClose}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={saving || drafts.length === 0}
+                >
+                  {saving ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Save rules
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function SegmentEditorRow({
+  draft,
+  meta,
+  onChange,
+  onConditionChange,
+  onConditionAdd,
+  onConditionRemove,
+  onRemove,
+  duplicateId,
+}: {
+  draft: SegmentDraft;
+  meta: SegmentsMeta | null;
+  onChange: (patch: Partial<SegmentDraft>) => void;
+  onConditionChange: (index: number, patch: Partial<SegmentCondition>) => void;
+  onConditionAdd: () => void;
+  onConditionRemove: (index: number) => void;
+  onRemove: () => void;
+  duplicateId: boolean;
+}) {
+  const colors = meta?.colors ?? ([] as SegmentColor[]);
+  const numericOps = meta?.numericOps ?? ([] as SegmentOp[]);
+  const booleanOps = meta?.booleanOps ?? ([] as SegmentOp[]);
+  const fields = meta?.fields ?? ([] as SegmentField[]);
+
+  const conditionLimitReached =
+    !!meta && draft.conditions.length >= meta.maxConditionsPerSegment;
+
+  return (
+    <div className="rounded-md border border-border/60 bg-card/40 p-3 space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="flex-1 min-w-[160px] space-y-1">
+          <Label htmlFor={`seg-label-${draft._uid}`} className="text-xs">
+            Label
+          </Label>
+          <Input
+            id={`seg-label-${draft._uid}`}
+            value={draft.label}
+            maxLength={40}
+            onChange={(e) => {
+              const label = e.target.value;
+              // Auto-generate slug from label only when the user hasn't
+              // already typed a custom id (id matches a prior slug of the
+              // label).
+              onChange({
+                label,
+                id:
+                  draft.id === slugify(draft.label) ? slugify(label) : draft.id,
+              });
+            }}
+            className="h-8"
+          />
+        </div>
+        <div className="w-36 space-y-1">
+          <Label htmlFor={`seg-id-${draft._uid}`} className="text-xs">
+            ID
+          </Label>
+          <Input
+            id={`seg-id-${draft._uid}`}
+            value={draft.id}
+            maxLength={32}
+            onChange={(e) => onChange({ id: slugify(e.target.value) })}
+            className="h-8 font-mono text-xs"
+            aria-invalid={duplicateId}
+          />
+        </div>
+        <div className="w-28 space-y-1">
+          <Label htmlFor={`seg-prio-${draft._uid}`} className="text-xs">
+            Priority
+          </Label>
+          <Input
+            id={`seg-prio-${draft._uid}`}
+            type="number"
+            min={0}
+            max={1000}
+            value={draft.priority}
+            onChange={(e) =>
+              onChange({ priority: Number(e.target.value) || 0 })
+            }
+            className="h-8 tabular-nums"
+          />
+        </div>
+        <div className="w-32 space-y-1">
+          <Label className="text-xs">Color</Label>
+          <Select
+            value={draft.color}
+            onValueChange={(v) => onChange({ color: v as SegmentColor })}
+          >
+            <SelectTrigger className="h-8">
+              <span
+                className={`w-3 h-3 rounded-sm mr-2 ${COLOR_CLS[draft.color]}`}
+              />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {colors.map((c) => (
+                <SelectItem key={c} value={c}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-sm ${COLOR_CLS[c]}`} />
+                    {c}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          aria-label={`Remove segment ${draft.label || draft.id}`}
+          className="text-muted-foreground hover:text-rose-500"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+
+      {duplicateId ? (
+        <p className="text-[11px] text-rose-500">
+          Duplicate segment ID. Each segment must have a unique slug.
+        </p>
+      ) : null}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">
+            Conditions (ALL must match · empty = catch-all)
+          </Label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onConditionAdd}
+            disabled={conditionLimitReached}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Condition
+          </Button>
+        </div>
+
+        {draft.conditions.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground italic">
+            No conditions — this segment matches every customer that hasn't
+            already been claimed by a higher-priority rule.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {draft.conditions.map((c, i) => (
+              <ConditionEditor
+                key={i}
+                condition={c}
+                fields={fields}
+                numericOps={numericOps}
+                booleanOps={booleanOps}
+                onChange={(patch) => onConditionChange(i, patch)}
+                onRemove={() => onConditionRemove(i)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConditionEditor({
+  condition,
+  fields,
+  numericOps,
+  booleanOps,
+  onChange,
+  onRemove,
+}: {
+  condition: SegmentCondition;
+  fields: SegmentField[];
+  numericOps: SegmentOp[];
+  booleanOps: SegmentOp[];
+  onChange: (patch: Partial<SegmentCondition>) => void;
+  onRemove: () => void;
+}) {
+  const isBoolean = condition.field === "registered";
+  const opChoices = isBoolean ? booleanOps : numericOps;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Select
+        value={condition.field}
+        onValueChange={(v) => {
+          const nextField = v as SegmentField;
+          const nextIsBoolean = nextField === "registered";
+          onChange({
+            field: nextField,
+            op: nextIsBoolean ? "eq" : "gte",
+            value: nextIsBoolean ? true : 0,
+          });
+        }}
+      >
+        <SelectTrigger className="h-8 w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {fields.map((f) => (
+            <SelectItem key={f} value={f}>
+              {FIELD_LABEL[f] ?? f}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={condition.op}
+        onValueChange={(v) => onChange({ op: v as SegmentOp })}
+      >
+        <SelectTrigger className="h-8 w-20">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {opChoices.map((o) => (
+            <SelectItem key={o} value={o}>
+              {OP_LABEL[o] ?? o}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {isBoolean ? (
+        <Select
+          value={condition.value ? "true" : "false"}
+          onValueChange={(v) => onChange({ value: v === "true" })}
+        >
+          <SelectTrigger className="h-8 w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="true">yes</SelectItem>
+            <SelectItem value="false">no</SelectItem>
+          </SelectContent>
+        </Select>
+      ) : (
+        <Input
+          type="number"
+          value={typeof condition.value === "number" ? condition.value : 0}
+          onChange={(e) => onChange({ value: Number(e.target.value) || 0 })}
+          className="h-8 w-28 tabular-nums"
+        />
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onRemove}
+        aria-label="Remove condition"
+        className="text-muted-foreground hover:text-rose-500"
+      >
+        <X className="w-3.5 h-3.5" />
+      </Button>
+    </div>
   );
 }

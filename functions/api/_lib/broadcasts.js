@@ -41,14 +41,7 @@
 //   "customers:lead"       Registered, no orders yet
 
 import { getStore } from "./kv-stores.js";
-
-// Mirror the customer segmentation thresholds from functions/api/customers.js
-// so the broadcasts audience picker pulls the same buckets the admin sees
-// in the Customers panel. Keep these in sync if customers.js ever changes
-// its thresholds.
-const SEGMENT_VIP_MIN_LTV = 10000;
-const SEGMENT_REPEAT_MIN_ORDERS = 2;
-const SEGMENT_AT_RISK_DAYS = 60;
+import { classifySegment, readSegmentRules } from "./segments.js";
 
 const INDEX_KEY = "broadcasts:index";
 const MAX_INDEX_ENTRIES = 200;
@@ -202,8 +195,9 @@ export const recordClick = async (id, recipientHash, url) => {
 
 // Build per-customer aggregates by joining users + orders. Mirrors the
 // shape used by functions/api/customers.js but trimmed down to what
-// broadcasts needs (email + segment + name).
-const aggregateCustomers = (users, orders) => {
+// broadcasts needs (email + segment + name). `segments` is the rule
+// list to classify with (loaded from KV by the caller).
+const aggregateCustomers = (users, orders, segments) => {
   const map = new Map();
   const ensure = (email) => {
     const key = normalizeEmail(email);
@@ -256,27 +250,22 @@ const aggregateCustomers = (users, orders) => {
     }
   }
 
-  // Compute segment for each row (must match customers.js logic).
+  // Compute segment for each row via the shared classifier so the
+  // broadcasts audience picker sees the same buckets — including any
+  // admin-customised rules — as the Customers panel.
   const now = Date.now();
   for (const row of map.values()) {
     const daysSinceOrder = row.lastOrderAt
       ? Math.floor((now - Date.parse(row.lastOrderAt)) / 86_400_000)
       : null;
-    if (row.netSpend >= SEGMENT_VIP_MIN_LTV) {
-      row.segment = "vip";
-    } else if (
-      row.ordersCount > 0 &&
-      typeof daysSinceOrder === "number" &&
-      daysSinceOrder > SEGMENT_AT_RISK_DAYS
-    ) {
-      row.segment = "at_risk";
-    } else if (row.ordersCount >= SEGMENT_REPEAT_MIN_ORDERS) {
-      row.segment = "repeat";
-    } else if (row.ordersCount === 1) {
-      row.segment = "one_time";
-    } else {
-      row.segment = "lead";
-    }
+    row.segment = classifySegment(
+      {
+        netSpend: row.netSpend,
+        ordersCount: row.ordersCount,
+        daysSinceOrder,
+      },
+      segments,
+    );
   }
 
   return [...map.values()];
@@ -323,11 +312,12 @@ export const resolveAudience = async (audience) => {
     try {
       const ordersStore = getStore("orders");
       const usersStore = getStore("users");
-      const [orders, users] = await Promise.all([
+      const [orders, users, rules] = await Promise.all([
         ordersStore.get("all-orders", { type: "json" }),
         usersStore.get("users-by-email", { type: "json" }),
+        readSegmentRules(),
       ]);
-      const customers = aggregateCustomers(users, orders);
+      const customers = aggregateCustomers(users, orders, rules.segments);
       const wantedSegment = segmentFromAudience(audience);
       for (const c of customers) {
         if (wantedSegment && c.segment !== wantedSegment) continue;

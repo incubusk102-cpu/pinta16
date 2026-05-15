@@ -4,6 +4,13 @@ import { isAuthenticated } from "./_lib/admin-auth.js";
 import { recordPiiAccess } from "./_lib/audit-log.js";
 import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { logError } from "./_lib/redact.js";
+import {
+  classifySegment,
+  readSegmentRules,
+  writeSegmentRules,
+  resetSegmentRules,
+  SEGMENT_CONSTANTS,
+} from "./_lib/segments.js";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -17,10 +24,6 @@ const USERS_STORE = "users";
 const USERS_KEY = "users-by-email";
 const META_STORE = "customer-meta";
 const META_KEY = "all-meta";
-
-const SEGMENT_VIP_MIN_LTV = 10000;
-const SEGMENT_REPEAT_MIN_ORDERS = 2;
-const SEGMENT_AT_RISK_DAYS = 60;
 
 const parseBody = (body) => {
   if (!body) return {};
@@ -61,7 +64,10 @@ const normalizeEmail = (email) =>
     .toLowerCase();
 
 // Build per-customer aggregates by joining users + orders by email.
-const aggregate = (users, orders, meta) => {
+// `segments` is the rule list to evaluate against each customer (from
+// `readSegmentRules`); falls back to the defaults inside `classifySegment`
+// when the array is empty.
+const aggregate = (users, orders, meta, segments) => {
   const map = new Map();
 
   const ensure = (email) => {
@@ -133,26 +139,20 @@ const aggregate = (users, orders, meta) => {
   const now = Date.now();
   const result = [];
   for (const c of map.values()) {
-    let segment = "new";
     const lastTs = c.lastOrderAt ? Date.parse(c.lastOrderAt) : NaN;
     const daysSinceOrder = Number.isFinite(lastTs)
       ? Math.floor((now - lastTs) / 86400000)
       : null;
-    if (c.netSpend >= SEGMENT_VIP_MIN_LTV) {
-      segment = "vip";
-    } else if (
-      c.ordersCount > 0 &&
-      daysSinceOrder !== null &&
-      daysSinceOrder > SEGMENT_AT_RISK_DAYS
-    ) {
-      segment = "at_risk";
-    } else if (c.ordersCount >= SEGMENT_REPEAT_MIN_ORDERS) {
-      segment = "repeat";
-    } else if (c.ordersCount === 1) {
-      segment = "one_time";
-    } else {
-      segment = "lead"; // registered but no orders yet
-    }
+    const segment = classifySegment(
+      {
+        netSpend: c.netSpend,
+        grossSpend: c.grossSpend,
+        ordersCount: c.ordersCount,
+        daysSinceOrder,
+        registered: c.registered,
+      },
+      segments,
+    );
     result.push({
       email: c.email,
       name: c.name,
@@ -187,42 +187,109 @@ export const handler = async (event) => {
       if (!(await isAuthenticated(event))) {
         return json(401, { error: "Admin authentication required" });
       }
-      const [usersData, ordersData, metaData] = await Promise.all([
+      const [usersData, ordersData, metaData, rules] = await Promise.all([
         readUsers(users),
         readOrders(orders),
         readMeta(meta),
+        readSegmentRules(),
       ]);
-      const list = aggregate(usersData, ordersData, metaData);
+      const list = aggregate(usersData, ordersData, metaData, rules.segments);
       // Lightweight summary so the UI can render top-line stats without
       // recomputing on the client.
-      const summary = list.reduce(
-        (acc, c) => {
-          acc.total += 1;
-          if (c.segment === "vip") acc.vip += 1;
-          if (c.segment === "repeat") acc.repeat += 1;
-          if (c.segment === "at_risk") acc.atRisk += 1;
-          if (c.segment === "lead") acc.leads += 1;
-          if (c.segment === "one_time") acc.oneTime += 1;
-          acc.totalLtv += c.netSpend;
-          return acc;
-        },
-        {
-          total: 0,
-          vip: 0,
-          repeat: 0,
-          atRisk: 0,
-          leads: 0,
-          oneTime: 0,
-          totalLtv: 0,
-        },
-      );
-      summary.totalLtv = Math.round(summary.totalLtv * 100) / 100;
+      const counts = {};
+      let totalLtv = 0;
+      for (const c of list) {
+        counts[c.segment] = (counts[c.segment] || 0) + 1;
+        totalLtv += c.netSpend;
+      }
+      const summary = {
+        total: list.length,
+        totalLtv: Math.round(totalLtv * 100) / 100,
+        segmentCounts: counts,
+        // Legacy keys retained for the existing CustomersSection stat cards.
+        // New code should read `segmentCounts` so renamed/added segments
+        // surface correctly.
+        vip: counts.vip || 0,
+        repeat: counts.repeat || 0,
+        atRisk: counts.at_risk || 0,
+        leads: counts.lead || 0,
+        oneTime: counts.one_time || 0,
+      };
       await recordPiiAccess(event, {
         resource: "customer",
         action: "list",
         detail: `Listed ${list.length} customer(s)`,
       });
-      return json(200, { customers: list, summary });
+      return json(200, {
+        customers: list,
+        summary,
+        segments: rules.segments,
+        segmentsUpdatedAt: rules.updatedAt,
+        segmentsIsDefault: rules.isDefault,
+      });
+    }
+
+    if (event.httpMethod === "GET" && action === "list-segments") {
+      if (!(await isAuthenticated(event))) {
+        return json(401, { error: "Admin authentication required" });
+      }
+      const rules = await readSegmentRules();
+      return json(200, {
+        segments: rules.segments,
+        updatedAt: rules.updatedAt,
+        isDefault: rules.isDefault,
+        meta: {
+          fields: SEGMENT_CONSTANTS.FIELDS,
+          numericOps: SEGMENT_CONSTANTS.NUMERIC_OPS,
+          booleanOps: SEGMENT_CONSTANTS.BOOLEAN_OPS,
+          colors: SEGMENT_CONSTANTS.COLORS,
+          maxSegments: SEGMENT_CONSTANTS.MAX_SEGMENTS,
+          maxConditionsPerSegment: SEGMENT_CONSTANTS.MAX_CONDITIONS_PER_SEGMENT,
+        },
+      });
+    }
+
+    if (event.httpMethod === "POST" && action === "save-segments") {
+      if (!(await isAuthenticated(event))) {
+        return json(401, { error: "Admin authentication required" });
+      }
+      const body = parseBody(event.body);
+      try {
+        const payload = await writeSegmentRules(body.segments);
+        await recordPiiAccess(event, {
+          resource: "customer-segments",
+          action: "update",
+          detail: `Saved ${payload.segments.length} segment rule(s)`,
+        });
+        return json(200, {
+          ok: true,
+          segments: payload.segments,
+          updatedAt: payload.updatedAt,
+          isDefault: false,
+        });
+      } catch (err) {
+        return json(400, {
+          error: err instanceof Error ? err.message : "Invalid segments",
+        });
+      }
+    }
+
+    if (event.httpMethod === "POST" && action === "reset-segments") {
+      if (!(await isAuthenticated(event))) {
+        return json(401, { error: "Admin authentication required" });
+      }
+      const rules = await resetSegmentRules();
+      await recordPiiAccess(event, {
+        resource: "customer-segments",
+        action: "update",
+        detail: "Reset segment rules to defaults",
+      });
+      return json(200, {
+        ok: true,
+        segments: rules.segments,
+        updatedAt: rules.updatedAt,
+        isDefault: true,
+      });
     }
 
     if (event.httpMethod === "GET" && action === "detail") {
