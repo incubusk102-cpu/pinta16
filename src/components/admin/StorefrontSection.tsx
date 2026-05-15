@@ -338,21 +338,21 @@ function FreeShippingRuleSection({
             {THRESHOLD_PRESETS.map((p) => {
               const active = threshold === p.value;
               return (
-                <button
+                <Button
                   key={p.value}
                   type="button"
+                  size="sm"
+                  variant={active ? "default" : "outline"}
                   disabled={!enabled}
                   onClick={() => onChange({ threshold: p.value })}
                   className={cn(
-                    "px-2.5 py-1 rounded-full text-xs border transition-colors",
-                    active
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-background/40 text-muted-foreground border-border/50 hover:border-foreground/40",
+                    "h-auto rounded-full px-2.5 py-1 text-xs",
+                    !active && "text-muted-foreground",
                     !enabled && "cursor-not-allowed",
                   )}
                 >
                   {p.label}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -389,19 +389,19 @@ function FreeShippingRuleSection({
             {SHIPPING_FEE_PRESETS.map((preset) => {
               const active = shippingFee === preset;
               return (
-                <button
+                <Button
                   key={preset}
                   type="button"
+                  size="sm"
+                  variant={active ? "default" : "outline"}
                   onClick={() => onChange({ shippingFee: preset })}
                   className={cn(
-                    "px-2.5 py-1 rounded-full text-xs border transition-colors",
-                    active
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-background/40 text-muted-foreground border-border/50 hover:border-foreground/40",
+                    "h-auto rounded-full px-2.5 py-1 text-xs",
+                    !active && "text-muted-foreground",
                   )}
                 >
                   ₱{preset.toLocaleString()}
-                </button>
+                </Button>
               );
             })}
           </div>

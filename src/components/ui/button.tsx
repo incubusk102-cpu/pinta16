@@ -4,28 +4,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+const brandButtonSurface =
+  "bg-[color-mix(in_oklab,var(--logo-color)_88%,var(--foreground))] text-background border-[color-mix(in_oklab,var(--logo-color)_72%,var(--foreground))] shadow-[0_10px_28px_-14px_color-mix(in_oklab,var(--logo-color)_70%,transparent)] hover:bg-[color-mix(in_oklab,var(--logo-color)_78%,var(--foreground))] hover:border-[color-mix(in_oklab,var(--logo-color)_84%,var(--foreground))] hover:shadow-[0_14px_34px_-12px_color-mix(in_oklab,var(--logo-color)_75%,transparent)]";
+
 const buttonVariants = cva(
-  "ripple-button inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "ripple-button inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border text-sm font-medium transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--logo-color)_70%,var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] active:shadow-sm [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:shadow-lg active:shadow-sm",
+        default: brandButtonSurface,
         destructive:
-          "bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 hover:shadow-lg active:shadow-sm",
-        success:
-          "border border-primary/20 bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:shadow-lg active:shadow-sm",
+          "border-destructive bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 hover:shadow-lg",
+        success: brandButtonSurface,
         warning:
-          "border border-input bg-secondary text-secondary-foreground shadow-sm hover:bg-accent hover:text-accent-foreground hover:shadow-md active:shadow-none",
+          "border-[color-mix(in_oklab,var(--logo-color)_45%,var(--border))] bg-[color-mix(in_oklab,var(--logo-color)_12%,var(--background))] text-foreground shadow-sm hover:bg-[color-mix(in_oklab,var(--logo-color)_20%,var(--background))] hover:border-[color-mix(in_oklab,var(--logo-color)_60%,var(--border))] hover:shadow-md",
         dangerSoft:
-          "border border-destructive/30 bg-background text-destructive shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:shadow-md active:shadow-none",
+          "border-destructive/35 bg-background text-destructive shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:shadow-md",
         outline:
-          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground hover:shadow-md hover:border-accent active:shadow-none",
+          "border-[color-mix(in_oklab,var(--logo-color)_35%,var(--border))] bg-background text-foreground shadow-sm hover:bg-[color-mix(in_oklab,var(--logo-color)_12%,var(--background))] hover:border-[color-mix(in_oklab,var(--logo-color)_60%,var(--border))] hover:shadow-md",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 hover:shadow-md active:shadow-none",
+          "border-[color-mix(in_oklab,var(--logo-color)_30%,var(--border))] bg-secondary text-secondary-foreground shadow-sm hover:bg-[color-mix(in_oklab,var(--logo-color)_16%,var(--secondary))] hover:text-foreground hover:shadow-md",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground active:bg-accent/80",
-        link: "text-primary underline-offset-4 hover:underline active:scale-100",
+          "border-transparent hover:bg-[color-mix(in_oklab,var(--logo-color)_12%,transparent)] hover:text-foreground active:bg-[color-mix(in_oklab,var(--logo-color)_18%,transparent)]",
+        link: "border-transparent text-foreground underline-offset-4 hover:text-[var(--logo-color)] hover:underline active:scale-100",
       },
       size: {
         default: "h-9 px-4 py-2",

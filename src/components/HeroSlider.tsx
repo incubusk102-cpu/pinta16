@@ -6,6 +6,7 @@ import {
 } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import FilmGrain from "@/components/FilmGrain";
 import {
   type HeroSlide,
@@ -72,8 +73,11 @@ const CtaLink = ({
   href: string;
   slideId: string;
 }) => {
-  const cls =
-    "inline-flex max-w-full items-center justify-center font-body text-[11px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase px-5 sm:px-10 py-3 sm:py-4 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 rounded-none shadow-lg shadow-background/25";
+  const cls = buttonVariants({
+    size: "lg",
+    className:
+      "max-w-full rounded-none px-5 py-3 font-body text-[11px] uppercase tracking-[0.2em] sm:px-10 sm:py-4 sm:text-xs sm:tracking-[0.3em]",
+  });
   const migrated = migrateLegacyHref(href);
   // Defence in depth: the server already blocks protocol-relative URLs
   // ("//evil.com") and dangerous schemes (`javascript:`, `data:`), but the

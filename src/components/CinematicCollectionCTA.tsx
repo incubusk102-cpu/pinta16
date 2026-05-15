@@ -6,6 +6,7 @@ import {
   useScroll,
   useTransform,
 } from "framer-motion";
+import { Button } from "@/components/ui/button";
 import FilmGrain from "@/components/FilmGrain";
 import GsapReveal from "@/components/motion/GsapReveal";
 import SplitText from "@/components/motion/SplitText";
@@ -213,12 +214,13 @@ const CinematicCollectionCTA = () => {
           viewport={{ once: true, margin: "-15% 0px" }}
           transition={{ duration: 0.85, delay: 0.55, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Link
-            to="/collection"
-            className="inline-flex items-center justify-center px-8 sm:px-10 py-4 bg-foreground text-background font-body text-xs tracking-[0.3em] uppercase hover:bg-foreground/90 transition-colors rounded-none shadow-lg shadow-background/30"
+          <Button
+            asChild
+            size="lg"
+            className="rounded-none px-8 font-body text-xs uppercase tracking-[0.3em] sm:px-10"
           >
-            Browse the collection
-          </Link>
+            <Link to="/collection">Browse the collection</Link>
+          </Button>
         </motion.div>
       </div>
     </section>
