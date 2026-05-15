@@ -617,9 +617,10 @@ export function ReviewsSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={Boolean(busyKey)}>
-              Cancel
+              Keep review
             </AlertDialogCancel>
             <AlertDialogAction
+              variant="dangerSoft"
               disabled={Boolean(busyKey)}
               onClick={(e) => {
                 e.preventDefault();
