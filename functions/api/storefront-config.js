@@ -945,6 +945,12 @@ const sanitizeSiteCopy = (raw) => {
 // `emailCaptureEnabled` is OFF by default so launching the modal
 // doesn't accidentally start a newsletter list — admins flip it on
 // once they're ready to collect emails for the voucher.
+// `variantB` defaults to `enabled: false` so existing deployments keep
+// the single-variant behaviour. When the admin turns it on, the modal
+// deterministically splits traffic by visitor id (mod 100 < `weight`
+// → variant B). When `weight === 0` no one ever gets B; when 100 it
+// becomes a pure swap of the existing copy. The headline / body /
+// voucherCode at the top level are variant A.
 const DEFAULT_NEW_USER_MODAL = {
   enabled: true,
   triggers: {
@@ -960,6 +966,15 @@ const DEFAULT_NEW_USER_MODAL = {
   body:
     "First time here? Sign up with Google to keep your favourites, " +
     "or grab your welcome discount before you browse.",
+  variantB: {
+    enabled: false,
+    weight: 50,
+    headline: "Your welcome gift inside",
+    body:
+      "New here? Drop your email and we'll send a discount code you can " +
+      "use on your first piece.",
+    voucherCode: "",
+  },
 };
 
 // Default WELCOME10 promo seeded on first read. Idempotent — only added
@@ -1418,6 +1433,26 @@ const buildDailyToday = (dailyFeature) => {
   };
 };
 
+const sanitizeNewUserModalVariantB = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const weight = Math.floor(Number(data.weight));
+  return {
+    enabled: data.enabled === true,
+    weight: Number.isFinite(weight) ? Math.min(100, Math.max(0, weight)) : 50,
+    headline: String(
+      data.headline ?? DEFAULT_NEW_USER_MODAL.variantB.headline,
+    ).slice(0, 120),
+    body: String(data.body ?? DEFAULT_NEW_USER_MODAL.variantB.body).slice(
+      0,
+      400,
+    ),
+    voucherCode: String(data.voucherCode ?? "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 30),
+  };
+};
+
 const sanitizeNewUserModal = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
   const triggersRaw =
@@ -1457,6 +1492,7 @@ const sanitizeNewUserModal = (raw) => {
       120,
     ),
     body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body).slice(0, 400),
+    variantB: sanitizeNewUserModalVariantB(data.variantB),
   };
 };
 
@@ -1821,6 +1857,7 @@ const publicView = (config) => {
       emailCaptureEnabled: config.newUserModal.emailCaptureEnabled,
       headline: config.newUserModal.headline,
       body: config.newUserModal.body,
+      variantB: { ...(config.newUserModal.variantB || {}) },
     },
     dailyFeature: {
       enabled: config.dailyFeature.enabled,
