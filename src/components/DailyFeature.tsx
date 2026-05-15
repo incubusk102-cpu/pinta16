@@ -5,6 +5,7 @@ import { animate } from "animejs";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { findArtworkById } from "@/lib/artworks";
@@ -185,10 +186,12 @@ const DailyFeature = () => {
                   {today.code}
                 </code>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={handleCopy}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase tracking-[0.15em] rounded border border-amber-300 bg-background hover:bg-amber-100/60 dark:border-amber-700 dark:hover:bg-amber-900/40"
+                className="rounded text-xs uppercase tracking-[0.15em]"
               >
                 {copied ? (
                   <>
@@ -199,7 +202,7 @@ const DailyFeature = () => {
                     <Copy className="w-3.5 h-3.5" /> Copy
                   </>
                 )}
-              </button>
+              </Button>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="w-3.5 h-3.5" aria-hidden="true" />
@@ -210,13 +213,15 @@ const DailyFeature = () => {
                 </span>
               </span>
             </div>
-            <Link
-              to="/product/$id"
-              params={{ id: artwork.id }}
-              className="inline-flex items-center justify-center self-start px-5 py-2.5 rounded-sm bg-foreground text-background text-xs uppercase tracking-[0.18em] hover:bg-foreground/90"
+            <Button
+              asChild
+              size="sm"
+              className="self-start rounded-sm text-xs uppercase tracking-[0.18em]"
             >
-              View this piece
-            </Link>
+              <Link to="/product/$id" params={{ id: artwork.id }}>
+                View this piece
+              </Link>
+            </Button>
           </div>
         </div>
       </div>

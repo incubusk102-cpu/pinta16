@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 
 // Floating "View Collection" pill that appears on mobile once the
 // customer has drifted into the editorial sections (About / ThankYou /
@@ -78,14 +79,15 @@ const MobileBackToCollection = () => {
           transition={{ duration: 0.25, ease: "easeOut" }}
           className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40"
         >
-          <Link
-            to="/collection"
-            className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-4 py-2.5 font-body text-[11px] tracking-[0.25em] uppercase shadow-[0_6px_20px_-4px_rgba(0,0,0,0.35)] hover:bg-foreground/90 active:scale-[0.98] transition-all"
-            aria-label="Browse the collection"
+          <Button
+            asChild
+            className="rounded-full px-4 py-2.5 font-body text-[11px] uppercase tracking-[0.25em]"
           >
-            View Collection
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-          </Link>
+            <Link to="/collection" aria-label="Browse the collection">
+              View Collection
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </Link>
+          </Button>
         </motion.div>
       )}
     </AnimatePresence>

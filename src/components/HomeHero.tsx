@@ -7,6 +7,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
+import { Button } from "@/components/ui/button";
 import AnimeHeading from "@/components/motion/AnimeHeading";
 import { useProducts } from "@/contexts/ProductContext";
 import { getStorefrontArtworks, type DisplayArtwork } from "@/lib/artworks";
@@ -151,12 +152,13 @@ function StaticHero({ featured }: { featured: DisplayArtwork }) {
         >
           Hand-crafted paintings, framed and ready to hang
         </AnimeHeading>
-        <Link
-          to="/collection"
-          className="pointer-events-auto mt-6 inline-flex items-center justify-center font-body text-[11px] tracking-[0.3em] uppercase px-6 py-3 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 hover-glow-cta"
+        <Button
+          asChild
+          size="lg"
+          className="pointer-events-auto mt-6 rounded-none px-6 font-body text-[11px] uppercase tracking-[0.3em] hover-glow-cta"
         >
-          Browse the collection
-        </Link>
+          <Link to="/collection">Browse the collection</Link>
+        </Button>
       </div>
       <Link
         to="/product/$id"
