@@ -66,6 +66,7 @@ import { AbandonedCartSection } from "@/components/admin/AbandonedCartSection";
 import { MarketingSection } from "@/components/admin/MarketingSection";
 import { MarketingTriggersSection } from "@/components/admin/MarketingTriggersSection";
 import { BroadcastsSection } from "@/components/admin/BroadcastsSection";
+import { DiscountCodesSection } from "@/components/admin/DiscountCodesSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
@@ -116,6 +117,7 @@ import {
   ImagePlus,
   Images,
   Star,
+  Tag,
   Trash2,
   X,
   TrendingUp,
@@ -183,6 +185,7 @@ type AdminSection =
   | "customers"
   | "marketing"
   | "broadcasts"
+  | "discountCodes"
   | "abandonedCart"
   | "marketingTriggers"
   | "storefront"
@@ -215,6 +218,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   customers: "Customers",
   marketing: "Marketing",
   broadcasts: "Broadcasts",
+  discountCodes: "Discount codes",
   abandonedCart: "Cart recovery",
   marketingTriggers: "Triggers",
   storefront: "Storefront",
@@ -617,6 +621,11 @@ const NAV_GROUPS: {
         key: "broadcasts",
         icon: <Send className="w-4 h-4" />,
         hint: "Newsletter blasts & one-off email campaigns",
+      },
+      {
+        key: "discountCodes",
+        icon: <Tag className="w-4 h-4" />,
+        hint: "Discount codes with per-code redemption stats",
       },
       {
         key: "abandonedCart",
@@ -1264,6 +1273,7 @@ function AdminDashboard() {
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}
           {section === "broadcasts" && <BroadcastsSection />}
+          {section === "discountCodes" && <DiscountCodesSection />}
           {section === "abandonedCart" && <AbandonedCartSection />}
           {section === "marketingTriggers" && <MarketingTriggersSection />}
           {section === "storefront" && <StorefrontSection />}
