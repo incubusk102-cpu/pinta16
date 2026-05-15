@@ -80,6 +80,7 @@ import { TikTokSection } from "@/components/admin/TikTokSection";
 import { SecuritySection } from "@/components/admin/SecuritySection";
 import { MigrateR2Card } from "@/components/admin/MigrateR2Card";
 import { MigrateVariantsCard } from "@/components/admin/MigrateVariantsCard";
+import { AdminErrorBoundary } from "@/components/admin/AdminErrorBoundary";
 import ExportPanel from "@/admin/ExportPanel";
 import AdminMobileUploadFAB from "@/components/admin/AdminMobileUploadFAB";
 import {
@@ -1251,44 +1252,46 @@ function AdminDashboard() {
           key={section}
           className="flex-1 px-4 sm:px-6 py-8 max-w-6xl w-full mx-auto animate-in fade-in duration-200"
         >
-          {section === "dashboard" && (
-            <DashboardSection
-              onOpenOrders={() => navigate("orders")}
-              onOpenStorefront={() => navigate("storefront")}
-              onOpenMessages={() => navigate("messages")}
-              onOpenReviews={() => navigate("reviews")}
-            />
-          )}
-          {section === "products" && <ProductsSection />}
-          {section === "orders" && <OrdersSection />}
-          {section === "returns" && <ReturnsSection />}
-          {section === "messages" && <MessagesSection />}
-          {section === "reviews" && <ReviewsSection />}
-          {section === "visitors" && <VisitorsSection />}
-          {section === "searchInsights" && <SearchInsightsSection />}
-          {section === "funnel" && <FunnelInsightsSection />}
-          {section === "notificationLog" && <NotificationLogSection />}
-          {section === "stockEvents" && <StockEventsSection />}
-          {section === "users" && <UsersSection />}
-          {section === "customers" && <CustomersSection />}
-          {section === "marketing" && <MarketingSection />}
-          {section === "broadcasts" && <BroadcastsSection />}
-          {section === "discountCodes" && <DiscountCodesSection />}
-          {section === "abandonedCart" && <AbandonedCartSection />}
-          {section === "marketingTriggers" && <MarketingTriggersSection />}
-          {section === "storefront" && <StorefrontSection />}
-          {section === "hero" && <HeroSlidesSection />}
-          {section === "siteCopy" && <SiteCopySection />}
-          {section === "welcomeEmail" && <WelcomeEmailSection />}
-          {section === "orderEmail" && <OrderEmailSection />}
-          {section === "orderPush" && <OrderPushSection />}
-          {section === "newUserModal" && <NewUserModalSection />}
-          {section === "appreciation" && <AppreciationSection />}
-          {section === "tiktok" && <TikTokSection />}
-          {section === "policies" && <PoliciesSection />}
-          {section === "exports" && <ExportsSection />}
-          {section === "security" && <SecuritySection />}
-          {section === "settings" && <SettingsSection />}
+          <AdminErrorBoundary section={SECTION_LABELS[section]}>
+            {section === "dashboard" && (
+              <DashboardSection
+                onOpenOrders={() => navigate("orders")}
+                onOpenStorefront={() => navigate("storefront")}
+                onOpenMessages={() => navigate("messages")}
+                onOpenReviews={() => navigate("reviews")}
+              />
+            )}
+            {section === "products" && <ProductsSection />}
+            {section === "orders" && <OrdersSection />}
+            {section === "returns" && <ReturnsSection />}
+            {section === "messages" && <MessagesSection />}
+            {section === "reviews" && <ReviewsSection />}
+            {section === "visitors" && <VisitorsSection />}
+            {section === "searchInsights" && <SearchInsightsSection />}
+            {section === "funnel" && <FunnelInsightsSection />}
+            {section === "notificationLog" && <NotificationLogSection />}
+            {section === "stockEvents" && <StockEventsSection />}
+            {section === "users" && <UsersSection />}
+            {section === "customers" && <CustomersSection />}
+            {section === "marketing" && <MarketingSection />}
+            {section === "broadcasts" && <BroadcastsSection />}
+            {section === "discountCodes" && <DiscountCodesSection />}
+            {section === "abandonedCart" && <AbandonedCartSection />}
+            {section === "marketingTriggers" && <MarketingTriggersSection />}
+            {section === "storefront" && <StorefrontSection />}
+            {section === "hero" && <HeroSlidesSection />}
+            {section === "siteCopy" && <SiteCopySection />}
+            {section === "welcomeEmail" && <WelcomeEmailSection />}
+            {section === "orderEmail" && <OrderEmailSection />}
+            {section === "orderPush" && <OrderPushSection />}
+            {section === "newUserModal" && <NewUserModalSection />}
+            {section === "appreciation" && <AppreciationSection />}
+            {section === "tiktok" && <TikTokSection />}
+            {section === "policies" && <PoliciesSection />}
+            {section === "exports" && <ExportsSection />}
+            {section === "security" && <SecuritySection />}
+            {section === "settings" && <SettingsSection />}
+          </AdminErrorBoundary>
         </main>
       </div>
 

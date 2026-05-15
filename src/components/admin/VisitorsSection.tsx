@@ -53,12 +53,17 @@ export function VisitorsSection() {
   // so a single visitor that lingers across multiple hours is counted
   // once. Fall back to the older summed-buckets approximation for
   // compatibility with deployments that haven't shipped the new field.
+  // Guard the array-ness of `history` so a malformed/old response shape
+  // (e.g. KV namespace missing the bucket array) can't crash the page.
+  const history: HistoryBucket[] = Array.isArray(data?.history)
+    ? data!.history
+    : [];
   const uniqueLast24h = data
     ? (data.unique24h ??
-      data.history.reduce((sum, bucket) => sum + bucket.visitors, 0))
+      history.reduce((sum, bucket) => sum + bucket.visitors, 0))
     : 0;
   const peak = data
-    ? Math.max(0, ...data.history.map((bucket) => bucket.visitors))
+    ? Math.max(0, ...history.map((bucket) => bucket.visitors))
     : 0;
 
   return (
@@ -87,8 +92,8 @@ export function VisitorsSection() {
 
       <div className="bg-card/40 border border-border/60 rounded-xl p-6">
         <h3 className="font-display text-base mb-4">Last 24 hours</h3>
-        {data && data.history.length > 0 ? (
-          <HistoryChart history={data.history} peak={peak} />
+        {data && history.length > 0 ? (
+          <HistoryChart history={history} peak={peak} />
         ) : (
           <p className="text-sm text-muted-foreground">
             No traffic recorded yet. Open the public site in another tab to
