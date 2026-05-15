@@ -76,7 +76,12 @@ test.describe("public smoke", () => {
     await expect(page).toHaveTitle(/Canvas Hub/, { timeout: 15_000 });
     await expect(page).toHaveTitle(/Filipino/, { timeout: 15_000 });
     const canonical = page.locator('link[rel="canonical"]').first();
-    await expect(canonical).toHaveAttribute("href", /canvhub\.com\/$/);
+    // `useSEO` derives the canonical from `window.location.origin`, so under
+    // `vite preview` (the CI webServer) it resolves to the preview origin
+    // (e.g. `http://127.0.0.1:4173/`), not `https://canvhub.com/`. Assert
+    // against the current page's origin so the check is origin-agnostic.
+    const { origin } = new URL(page.url());
+    await expect(canonical).toHaveAttribute("href", `${origin}/`);
     expect(errors).toEqual([]);
   });
 

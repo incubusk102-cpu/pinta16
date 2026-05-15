@@ -15,6 +15,7 @@ import AnimeDivider from "@/components/motion/AnimeDivider";
 import SectionDock from "@/components/SectionDock";
 import IdleNudgeToast from "@/components/IdleNudgeToast";
 import ScrollDepth from "@/components/motion/ScrollDepth";
+import SilentBoundary from "@/components/SilentBoundary";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
 // Cinematic 3D backdrop for the landing page. Renders a fixed,
@@ -25,7 +26,25 @@ import { useUserAuth } from "@/contexts/UserAuthContext";
 // fine-pointer only; mobile gets the CSS gradient fallback baked
 // into the component. Lazy so the three.js chunk is shared with
 // `Hero3D` / `PaintingViewer3D` and never blocks first paint.
-const LandingBackdrop3D = lazy(() => import("@/components/LandingBackdrop3D"));
+//
+// The `.catch()` on the import means a stale-chunk fetch failure (e.g.
+// a visitor whose tab is holding an `index.html` from before a deploy)
+// resolves to a no-op component instead of rejecting the Promise, so
+// the homepage continues to render normally. The existing
+// `installChunkReloadHandler` (src/lib/chunkReload.ts) still picks up
+// the `vite:preloadError` event and reloads the page in the
+// background to pick up the fresh chunks. The `<SilentBoundary>` at
+// the render site is the belt-and-braces guard for the same scenario
+// plus any runtime error inside Three.js / WebGL init on quirky
+// browsers.
+const LandingBackdrop3D = lazy(() =>
+  import("@/components/LandingBackdrop3D").catch(() => ({
+    // Empty fragment satisfies React.lazy's `() => Element` typing
+    // while still rendering nothing visible. Used only as the
+    // graceful no-op when the dynamic chunk fetch fails.
+    default: () => <></>,
+  })),
+);
 
 // Anchor ids consumed by the floating SectionDock. Centralised so the
 // wrapper <section> ids on this page and the dock's `items` list can't
@@ -165,10 +184,16 @@ function Index() {
           `fixed inset-0 -z-10` and never receives pointer events,
           so it's purely visual chrome. The Canvhub logo / wordmark
           live in GalleryNav / HomeHero / HeroSlider above this layer
-          and are not touched by the 3D scene. */}
-      <Suspense fallback={null}>
-        <LandingBackdrop3D />
-      </Suspense>
+          and are not touched by the 3D scene. Wrapped in a silent
+          error boundary so any render / chunk-load failure renders
+          null instead of taking the whole route down to the global
+          "Something went wrong" page — the backdrop is purely
+          decorative and the page must keep working without it. */}
+      <SilentBoundary label="landing-backdrop-3d">
+        <Suspense fallback={null}>
+          <LandingBackdrop3D />
+        </Suspense>
+      </SilentBoundary>
       {user && <GalleryNav />}
       {/* Signed-out visitors see the full welcome (`HomeHero` 3D scene
           when no slides are configured, or the admin slider when they
