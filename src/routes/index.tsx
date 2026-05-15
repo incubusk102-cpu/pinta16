@@ -15,6 +15,8 @@ import AnimeDivider from "@/components/motion/AnimeDivider";
 import SectionDock from "@/components/SectionDock";
 import IdleNudgeToast from "@/components/IdleNudgeToast";
 import ScrollDepth from "@/components/motion/ScrollDepth";
+import WallScene from "@/components/motion/WallScene";
+import TravelingDailyPainting from "@/components/motion/TravelingDailyPainting";
 import SilentBoundary from "@/components/SilentBoundary";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -213,8 +215,24 @@ function Index() {
       </ScrollDepth>
       <AnimeDivider />
       <VisitorTicker />
+      {/* Painting of the Day — the actual card stays where it has
+          always been, but it's wrapped in a `[data-daily-card]`
+          opacity shell that `<TravelingDailyPainting />` fades out as
+          the visitor scrolls the painting itself down to the
+          `<WallScene />` below. When the visitor scrolls back up the
+          card fades back in and the painting returns to it. Mobile /
+          reduced-motion visitors don't get the travel — the wrapper's
+          opacity falls back to `1` and the card stays visible. */}
       <ScrollDepth id={HOME_SECTION_IDS.daily}>
-        <DailyFeature />
+        <div
+          data-daily-card
+          style={{
+            opacity: "var(--daily-card-opacity, 1)",
+            transition: "opacity 80ms linear",
+          }}
+        >
+          <DailyFeature />
+        </div>
       </ScrollDepth>
       <AnimeDivider />
       {/* Optional studio reel — renders only when admin has set a
@@ -246,6 +264,18 @@ function Index() {
           aria-hidden="true"
           className="h-px"
         />
+        {/* On the wall today — the dedicated wall scene where the
+            Painting of the Day lands after the visitor has scrolled
+            past the Daily card and the carousels. `<TravelingDailyPainting />`
+            (mounted at the bottom of the route) interpolates a fixed
+            proxy painting from the Daily card into this section's
+            `[data-wall-target]` frame on scroll, then fades the
+            landed `<img>` inside this section in over the final 10% of
+            travel so the handoff between the flying proxy and the
+            section-flow painting is invisible. Reduced-motion /
+            coarse-pointer (mobile) visitors don't render the proxy at
+            all and see the landed painting from first paint. */}
+        <WallScene />
         <AboutSection />
         <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
           <Ornament label="Voices" />
@@ -264,6 +294,14 @@ function Index() {
       </Suspense>
       <SectionDock items={SECTION_DOCK_ITEMS} />
       <IdleNudgeToast />
+      {/* Floating proxy painting that physically travels from the
+          Daily card down to `<WallScene />` on scroll. Lives at the
+          end of the tree so its `position: fixed` element sits above
+          the page content but below modals / drawers (z-40 vs the
+          drawers' z-50). Reduced-motion / coarse-pointer visitors get
+          a `return null` from inside the component and see the
+          painting in both the Daily card and on the wall instead. */}
+      <TravelingDailyPainting />
     </div>
   );
 }
