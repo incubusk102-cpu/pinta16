@@ -18,6 +18,7 @@
 //                                             marketing emails.
 
 import { initRequestContext } from "../_lib/handler-wrapper.js";
+import { getCloudflareEnv } from "../_lib/context.js";
 import { consumeRateLimit, rateLimitResponse } from "../_lib/rate-limit.js";
 import { BodyTooLargeError, buildLambdaEvent } from "../_lib/lambda-event.js";
 import {
@@ -27,6 +28,11 @@ import {
 } from "../_lib/email.js";
 import { isAuthenticated } from "../_lib/admin-auth.js";
 import { connectLambda, getStore } from "../_lib/kv-stores.js";
+import { makeStore } from "../_lib/kv-store.js";
+import {
+  isBirthdayToday,
+  ensurePersonalReward,
+} from "../_lib/personal-rewards.js";
 import {
   buildUnsubToken as buildUnsubTokenHmac,
   constantTimeEqual as constantTimeEqualHmac,
@@ -107,6 +113,23 @@ const DEFAULT_TRIGGERS = {
     subject: "Price drop: {{title}} is now {{price}}",
     heading: "New sale alert",
   },
+  birthday: {
+    enabled: true,
+    subject: "Happy birthday \u2014 a gift from Canvas Hub",
+    heading: "Happy birthday!",
+  },
+  browseAbandonment: {
+    enabled: true,
+    delayDays: 3,
+    subject: "Still thinking it over?",
+    heading: "The piece you saved",
+  },
+  postPurchaseUpsell: {
+    enabled: true,
+    delayDays: 14,
+    subject: "You might also love these",
+    heading: "Curated for your collection",
+  },
 };
 
 const loadTriggersConfig = async () => {
@@ -127,6 +150,15 @@ const loadTriggersConfig = async () => {
         ...(mt.backInStock || {}),
       },
       priceDrop: { ...DEFAULT_TRIGGERS.priceDrop, ...(mt.priceDrop || {}) },
+      birthday: { ...DEFAULT_TRIGGERS.birthday, ...(mt.birthday || {}) },
+      browseAbandonment: {
+        ...DEFAULT_TRIGGERS.browseAbandonment,
+        ...(mt.browseAbandonment || {}),
+      },
+      postPurchaseUpsell: {
+        ...DEFAULT_TRIGGERS.postPurchaseUpsell,
+        ...(mt.postPurchaseUpsell || {}),
+      },
     };
   } catch {
     return DEFAULT_TRIGGERS;
@@ -633,6 +665,374 @@ const processPriceDrop = async (cfg, chrome, optouts, sent, metaStore) => {
   return { scanned, emailsSent, drops: drops.length };
 };
 
+// ── 5. Birthday ─────────────────────────────────────────────────────────
+// Iterates the USERS namespace, finds users whose stored `birthday`
+// (MM-DD or YYYY-MM-DD) matches today's UTC date, mints (or reuses) a
+// BDAY-XXX promo code for them via `ensurePersonalReward`, and sends an
+// email containing the code. Dedup key is the current UTC year, so we
+// can only send once per customer per calendar year.
+const processBirthday = async (cfg, chrome, optouts, sent) => {
+  if (cfg.enabled === false) return { skipped: true };
+  const env = getCloudflareEnv();
+  if (!env?.USERS) return { scanned: 0, emailsSent: 0 };
+  const usersStore = makeStore(env.USERS);
+  const usersBlob = await usersStore.get("users-by-email", { type: "json" });
+  if (!usersBlob || typeof usersBlob !== "object") {
+    return { scanned: 0, emailsSent: 0 };
+  }
+
+  let emailsSent = 0;
+  let scanned = 0;
+  const periodKey = String(new Date().getUTCFullYear());
+
+  for (const user of Object.values(usersBlob)) {
+    if (!user || typeof user !== "object") continue;
+    const email = normalizeEmail(user.email);
+    if (!email || !isValidEmail(email)) continue;
+    if (isOptedOut(optouts, email)) continue;
+    // user.birthday is "MM-DD" (anonymised) or "YYYY-MM-DD" (raw input).
+    // isBirthdayToday accepts MM-DD; pull the last 5 chars for the
+    // YYYY-MM-DD form so both shapes work.
+    const bd = String(user.birthday || "");
+    const mmdd = bd.length === 10 ? bd.slice(5) : bd;
+    if (!isBirthdayToday(mmdd)) continue;
+    if (wasSent(sent, email, "birthday", periodKey)) continue;
+
+    scanned++;
+    const firstName =
+      (user.name || user.fullName || "").split(/\s+/)[0] || "there";
+    const subject = cfg.subject || DEFAULT_TRIGGERS.birthday.subject;
+    const heading = cfg.heading || DEFAULT_TRIGGERS.birthday.heading;
+
+    // Mint (or reuse) the per-user BDAY-XXX code. Idempotent — same
+    // (user, year) tuple always resolves to the same code.
+    let reward = null;
+    try {
+      reward = await ensurePersonalReward({
+        user,
+        kind: "birthday",
+        periodKey,
+      });
+    } catch {
+      reward = null;
+    }
+    const code = reward?.code;
+    const promo = reward?.promo;
+    const codeValue = Number(promo?.value) || 500;
+
+    const unsubToken = await buildUnsubToken(email);
+    const unsubUrl = `${PUBLIC_SITE}/api/marketing-triggers/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubToken}`;
+
+    const codeBlock = code
+      ? `
+        <p style="margin:0 0 12px;">Use code <strong style="font-family:'EB Garamond',Georgia,serif;letter-spacing:0.04em;">${escapeHtml(code)}</strong> for ${formatPHP(codeValue)} off your next order — valid for 30 days.</p>
+        <p style="margin:16px 0;">
+          <a href="${PUBLIC_SITE}" style="display:inline-block;padding:10px 28px;background:#1c1c1c;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:500;">Claim your gift</a>
+        </p>`
+      : `
+        <p style="margin:0 0 12px;">Treat yourself to a piece you'll love — fresh originals are always landing in the gallery.</p>
+        <p style="margin:16px 0;">
+          <a href="${PUBLIC_SITE}" style="display:inline-block;padding:10px 28px;background:#1c1c1c;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:500;">Browse the gallery</a>
+        </p>`;
+
+    const bodyHtml = `
+      <p style="margin:0 0 12px;">Happy birthday, ${escapeHtml(firstName)} \u{1F389}</p>
+      ${codeBlock}
+    `;
+
+    const html = buildMarketingEmail(heading, bodyHtml, unsubUrl, chrome);
+    const text = code
+      ? `Happy birthday, ${firstName}!\n\nUse code ${code} for ${formatPHP(codeValue)} off your next order — valid for 30 days.\n\nShop: ${PUBLIC_SITE}\n\nUnsubscribe: ${unsubUrl}`
+      : `Happy birthday, ${firstName}!\n\nBrowse new arrivals: ${PUBLIC_SITE}\n\nUnsubscribe: ${unsubUrl}`;
+    const fromEmail = (chrome?.fromEmail || "order@canvhub.com").trim();
+    const fromName = (chrome?.fromName || "Canvas Hub").trim();
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+
+    const result = await sendEmail({ to: email, subject, html, text, from });
+    if (result.delivered) {
+      markSent(sent, email, "birthday", periodKey);
+      emailsSent++;
+    }
+  }
+
+  return { scanned, emailsSent };
+};
+
+// ── 6. Browse abandonment ───────────────────────────────────────────────
+// Reaches out to signed-in customers who saved a painting to their
+// wishlist N days ago but never ordered it. Source of truth is the
+// WISHLISTS KV namespace (one entry per signed-in user); we cross-
+// reference with the orders ledger so we don't nag someone who already
+// bought what they wishlisted. Dedup key is the productId, so each
+// (customer, painting) pair is emailed at most once.
+const processBrowseAbandonment = async (cfg, chrome, optouts, sent) => {
+  if (cfg.enabled === false) return { skipped: true };
+  const env = getCloudflareEnv();
+  if (!env?.WISHLISTS || !env?.USERS) {
+    return { scanned: 0, emailsSent: 0 };
+  }
+  const wishlistsStore = makeStore(env.WISHLISTS);
+  const usersStore = makeStore(env.USERS);
+  const productsStore = getStore("products");
+
+  const delayMs = (cfg.delayDays || 3) * MS_PER_DAY;
+  const now = Date.now();
+  let emailsSent = 0;
+  let scanned = 0;
+
+  // Build userId → user map from the USERS blob so we can resolve the
+  // user/<userId> wishlist key back to an email.
+  const usersBlob = await usersStore.get("users-by-email", { type: "json" });
+  if (!usersBlob || typeof usersBlob !== "object") {
+    return { scanned: 0, emailsSent: 0 };
+  }
+  const userById = new Map();
+  for (const u of Object.values(usersBlob)) {
+    if (u && typeof u === "object" && u.id) userById.set(u.id, u);
+  }
+  if (userById.size === 0) return { scanned: 0, emailsSent: 0 };
+
+  // Pull the customer's full purchase history once so we can skip
+  // wishlist entries that have already converted.
+  const ordersStore = getStore("orders");
+  const orders = await ordersStore.get("all-orders", { type: "json" });
+  const purchasedByEmail = new Map();
+  if (Array.isArray(orders)) {
+    for (const o of orders) {
+      const email = normalizeEmail(o.orderInfo?.email);
+      if (!email) continue;
+      if (!Array.isArray(o.items)) continue;
+      let set = purchasedByEmail.get(email);
+      if (!set) {
+        set = new Set();
+        purchasedByEmail.set(email, set);
+      }
+      for (const it of o.items) {
+        if (it && typeof it.id === "string") set.add(it.id);
+      }
+    }
+  }
+
+  // Resolve product titles / images lazily.
+  const products = await productsStore.get("all-products", { type: "json" });
+  const productMap = new Map();
+  if (Array.isArray(products)) {
+    for (const p of products) {
+      if (p && p.id) productMap.set(p.id, p);
+    }
+  }
+
+  // Enumerate wishlist keys (up to 1000 per cron run is plenty for now —
+  // KV.list() returns at most 1000 keys without paging).
+  const listing = await wishlistsStore.list({ prefix: "user/" });
+  for (const blob of listing.blobs || []) {
+    const userId = blob.key.replace(/^user\//, "");
+    const user = userById.get(userId);
+    if (!user) continue;
+    const email = normalizeEmail(user.email);
+    if (!email || !isValidEmail(email)) continue;
+    if (isOptedOut(optouts, email)) continue;
+
+    const doc = await wishlistsStore.get(blob.key, { type: "json" });
+    const items = Array.isArray(doc?.items) ? doc.items : [];
+    if (!items.length) continue;
+    const purchased = purchasedByEmail.get(email) || new Set();
+
+    // Pick the oldest wishlist entry that's at least delayMs old, that
+    // the customer hasn't already purchased, and that we haven't
+    // already nudged them about.
+    const sorted = [...items].sort((a, b) => {
+      const at = a.addedAt ? new Date(a.addedAt).getTime() : 0;
+      const bt = b.addedAt ? new Date(b.addedAt).getTime() : 0;
+      return at - bt;
+    });
+    let target = null;
+    for (const it of sorted) {
+      if (!it || typeof it.id !== "string") continue;
+      if (purchased.has(it.id)) continue;
+      const addedAt = it.addedAt ? new Date(it.addedAt).getTime() : 0;
+      if (!Number.isFinite(addedAt) || addedAt === 0) continue;
+      if (now - addedAt < delayMs) continue;
+      if (wasSent(sent, email, "browseAbandonment", it.id)) continue;
+      target = it;
+      break;
+    }
+    if (!target) continue;
+
+    scanned++;
+    const product = productMap.get(target.id);
+    const title =
+      (product && product.title) || target.title || "the piece you saved";
+    const subject = cfg.subject || DEFAULT_TRIGGERS.browseAbandonment.subject;
+    const heading = cfg.heading || DEFAULT_TRIGGERS.browseAbandonment.heading;
+    const firstName =
+      (user.name || user.fullName || "").split(/\s+/)[0] || "there";
+
+    const unsubToken = await buildUnsubToken(email);
+    const unsubUrl = `${PUBLIC_SITE}/api/marketing-triggers/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubToken}`;
+    const productUrl = `${PUBLIC_SITE}/gallery/${encodeURIComponent(target.id)}`;
+
+    const rawImg =
+      (product && product.images && product.images[0]?.url) ||
+      (product && product.image) ||
+      target.image ||
+      "";
+    const imgSrc = rawImg.startsWith("/") ? `${PUBLIC_SITE}${rawImg}` : rawImg;
+    const imageHtml =
+      imgSrc && /^https?:\/\//i.test(imgSrc)
+        ? `<p style="margin:0 0 16px;text-align:center;"><img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(title)}" style="max-width:280px;border-radius:4px;" /></p>`
+        : "";
+
+    const bodyHtml = `
+      <p style="margin:0 0 12px;">Hi ${escapeHtml(firstName)},</p>
+      <p style="margin:0 0 12px;">You saved <strong>${escapeHtml(title)}</strong> a few days back and it\u2019s still waiting for you. Original artwork is one-of-a-kind \u2014 if it speaks to you, it might not be here next week.</p>
+      ${imageHtml}
+      <p style="margin:16px 0;">
+        <a href="${escapeHtml(productUrl)}" style="display:inline-block;padding:10px 28px;background:#1c1c1c;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:500;">View painting</a>
+      </p>
+    `;
+
+    const html = buildMarketingEmail(heading, bodyHtml, unsubUrl, chrome);
+    const text = `Hi ${firstName},\n\nYou saved "${title}" a few days back and it's still waiting for you.\n\nView it here: ${productUrl}\n\nUnsubscribe: ${unsubUrl}`;
+    const fromEmail = (chrome?.fromEmail || "order@canvhub.com").trim();
+    const fromName = (chrome?.fromName || "Canvas Hub").trim();
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+
+    const result = await sendEmail({ to: email, subject, html, text, from });
+    if (result.delivered) {
+      markSent(sent, email, "browseAbandonment", target.id);
+      emailsSent++;
+    }
+  }
+
+  return { scanned, emailsSent };
+};
+
+// ── 7. Post-purchase upsell ─────────────────────────────────────────────
+// Email customers N days after their order is marked "received" with
+// three curated paintings — same category as their purchase when we
+// have one, otherwise newest available. Dedup key is the order id so
+// each order triggers at most one upsell email.
+const processPostPurchaseUpsell = async (cfg, chrome, optouts, sent) => {
+  if (cfg.enabled === false) return { skipped: true };
+  const delayMs = (cfg.delayDays || 14) * MS_PER_DAY;
+  const now = Date.now();
+  let emailsSent = 0;
+  let scanned = 0;
+
+  const ordersStore = getStore("orders");
+  const orders = await ordersStore.get("all-orders", { type: "json" });
+  if (!Array.isArray(orders)) return { scanned: 0, emailsSent: 0 };
+
+  const productsStore = getStore("products");
+  const products = await productsStore.get("all-products", { type: "json" });
+  if (!Array.isArray(products) || products.length === 0) {
+    return { scanned: 0, emailsSent: 0 };
+  }
+  const availableProducts = products.filter(
+    (p) => p && p.id && p.availability === "available",
+  );
+  if (availableProducts.length === 0) return { scanned: 0, emailsSent: 0 };
+
+  for (const o of orders) {
+    if (o.status !== "received") continue;
+    const email = o.orderInfo?.email;
+    if (!email || !isValidEmail(email)) continue;
+    if (isOptedOut(optouts, email)) continue;
+    if (wasSent(sent, email, "postPurchaseUpsell", o.id)) continue;
+
+    const receivedAt = findReceivedTimestamp(o);
+    if (!receivedAt) continue;
+    if (now - receivedAt < delayMs) continue;
+
+    // Find the category to target. Use the category of any item from
+    // this order whose product still exists.
+    const orderProductIds = new Set();
+    let targetCategory = "";
+    if (Array.isArray(o.items)) {
+      for (const it of o.items) {
+        if (!it || typeof it.id !== "string") continue;
+        orderProductIds.add(it.id);
+        if (!targetCategory) {
+          const match = products.find((p) => p && p.id === it.id);
+          if (match && match.category) targetCategory = match.category;
+        }
+      }
+    }
+
+    // Pick 3 candidates: same category preferred, skip anything the
+    // customer already owns.
+    const candidates = availableProducts.filter(
+      (p) => !orderProductIds.has(p.id),
+    );
+    const sameCat = targetCategory
+      ? candidates.filter((p) => p.category === targetCategory)
+      : [];
+    const picks =
+      sameCat.length >= 3 ? sameCat.slice(0, 3) : candidates.slice(0, 3);
+    if (picks.length === 0) continue;
+
+    scanned++;
+    const firstName = (o.orderInfo.fullName || "").split(/\s+/)[0] || "there";
+    const subject = cfg.subject || DEFAULT_TRIGGERS.postPurchaseUpsell.subject;
+    const heading = cfg.heading || DEFAULT_TRIGGERS.postPurchaseUpsell.heading;
+
+    const unsubToken = await buildUnsubToken(email);
+    const unsubUrl = `${PUBLIC_SITE}/api/marketing-triggers/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubToken}`;
+
+    const cardsHtml = picks
+      .map((p) => {
+        const productUrl = `${PUBLIC_SITE}/gallery/${encodeURIComponent(p.id)}`;
+        const rawImg = (p.images && p.images[0]?.url) || p.image || "";
+        const imgSrc = rawImg.startsWith("/")
+          ? `${PUBLIC_SITE}${rawImg}`
+          : rawImg;
+        const price =
+          p.salePrice && Number(p.salePrice) > 0
+            ? Number(p.salePrice)
+            : Number(p.price) || 0;
+        const imgCell =
+          imgSrc && /^https?:\/\//i.test(imgSrc)
+            ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(p.title || "")}" style="width:96px;height:96px;object-fit:cover;border-radius:4px;display:block;" />`
+            : "";
+        return `
+          <tr>
+            <td style="padding:8px 12px 8px 0;width:96px;">${imgCell}</td>
+            <td style="padding:8px 0;font-size:13px;color:#1c1c1c;vertical-align:top;">
+              <a href="${escapeHtml(productUrl)}" style="color:#1c1c1c;text-decoration:underline;">${escapeHtml(p.title || "Untitled")}</a>
+              <div style="font-size:12px;color:#7a7468;margin-top:4px;">${formatPHP(price)}</div>
+            </td>
+          </tr>`;
+      })
+      .join("");
+
+    const bodyHtml = `
+      <p style="margin:0 0 12px;">Hi ${escapeHtml(firstName)},</p>
+      <p style="margin:0 0 16px;">Hope your new piece is settling in well. Based on what you picked, we thought you might love one of these next:</p>
+      <table role="presentation" width="100%" style="border-top:1px solid #efece4;border-bottom:1px solid #efece4;margin:0 0 16px;">
+        ${cardsHtml}
+      </table>
+      <p style="margin:16px 0;">
+        <a href="${PUBLIC_SITE}" style="display:inline-block;padding:10px 28px;background:#1c1c1c;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:500;">Browse the gallery</a>
+      </p>
+    `;
+
+    const html = buildMarketingEmail(heading, bodyHtml, unsubUrl, chrome);
+    const text = `Hi ${firstName},\n\nBased on your last order we thought you might love:\n${picks.map((p) => `- ${p.title} (${formatPHP(Number(p.salePrice) > 0 ? p.salePrice : p.price)})`).join("\n")}\n\nShop: ${PUBLIC_SITE}\n\nUnsubscribe: ${unsubUrl}`;
+    const fromEmail = (chrome?.fromEmail || "order@canvhub.com").trim();
+    const fromName = (chrome?.fromName || "Canvas Hub").trim();
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+
+    const result = await sendEmail({ to: email, subject, html, text, from });
+    if (result.delivered) {
+      markSent(sent, email, "postPurchaseUpsell", o.id);
+      emailsSent++;
+    }
+  }
+
+  return { scanned, emailsSent };
+};
+
 // ── process (cron) ──────────────────────────────────────────────────────
 const handleProcess = async (env) => {
   const token = env.BACKUP_TOKEN;
@@ -676,6 +1076,22 @@ const handleProcess = async (env) => {
     optouts,
     sent,
     metaStore,
+  );
+
+  results.birthday = await processBirthday(cfg.birthday, chrome, optouts, sent);
+
+  results.browseAbandonment = await processBrowseAbandonment(
+    cfg.browseAbandonment,
+    chrome,
+    optouts,
+    sent,
+  );
+
+  results.postPurchaseUpsell = await processPostPurchaseUpsell(
+    cfg.postPurchaseUpsell,
+    chrome,
+    optouts,
+    sent,
   );
 
   // Persist updated sent log
@@ -791,6 +1207,9 @@ const handleStats = async () => {
     winback: 0,
     backInStock: 0,
     priceDrop: 0,
+    birthday: 0,
+    browseAbandonment: 0,
+    postPurchaseUpsell: 0,
   };
   for (const key of Object.keys(sent)) {
     const parts = key.split(":");

@@ -1000,6 +1000,23 @@ const DEFAULT_MARKETING_TRIGGERS = {
     subject: "Price drop: {{title}} is now {{price}}",
     heading: "New sale alert",
   },
+  birthday: {
+    enabled: true,
+    subject: "Happy birthday \u2014 a gift from Canvas Hub",
+    heading: "Happy birthday!",
+  },
+  browseAbandonment: {
+    enabled: true,
+    delayDays: 3,
+    subject: "Still thinking it over?",
+    heading: "The piece you saved",
+  },
+  postPurchaseUpsell: {
+    enabled: true,
+    delayDays: 14,
+    subject: "You might also love these",
+    heading: "Curated for your collection",
+  },
 };
 
 const sanitizeTriggerBlock = (raw, defaults) => {
@@ -1032,6 +1049,18 @@ const sanitizeMarketingTriggers = (raw) => {
     priceDrop: sanitizeTriggerBlock(
       data.priceDrop,
       DEFAULT_MARKETING_TRIGGERS.priceDrop,
+    ),
+    birthday: sanitizeTriggerBlock(
+      data.birthday,
+      DEFAULT_MARKETING_TRIGGERS.birthday,
+    ),
+    browseAbandonment: sanitizeTriggerBlock(
+      data.browseAbandonment,
+      DEFAULT_MARKETING_TRIGGERS.browseAbandonment,
+    ),
+    postPurchaseUpsell: sanitizeTriggerBlock(
+      data.postPurchaseUpsell,
+      DEFAULT_MARKETING_TRIGGERS.postPurchaseUpsell,
     ),
   };
 };
@@ -1900,6 +1929,9 @@ const handle = async ({ request, env }) => {
           "winback",
           "backInStock",
           "priceDrop",
+          "birthday",
+          "browseAbandonment",
+          "postPurchaseUpsell",
         ]) {
           if (incoming[key] && typeof incoming[key] === "object") {
             merged[key] = { ...(merged[key] || {}), ...incoming[key] };

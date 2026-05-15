@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Bell,
+  Cake,
+  Eye,
+  Gift,
   Loader2,
   Mail,
   RefreshCw,
@@ -28,6 +31,9 @@ interface MarketingTriggersConfig {
   winback: TriggerBlock;
   backInStock: TriggerBlock;
   priceDrop: TriggerBlock;
+  birthday: TriggerBlock;
+  browseAbandonment: TriggerBlock;
+  postPurchaseUpsell: TriggerBlock;
 }
 
 interface TriggerStats {
@@ -59,6 +65,23 @@ const DEFAULTS: MarketingTriggersConfig = {
     subject: "Price drop: {{title}} is now {{price}}",
     heading: "New sale alert",
   },
+  birthday: {
+    enabled: true,
+    subject: "Happy birthday \u2014 a gift from Canvas Hub",
+    heading: "Happy birthday!",
+  },
+  browseAbandonment: {
+    enabled: true,
+    delayDays: 3,
+    subject: "Still thinking it over?",
+    heading: "The piece you saved",
+  },
+  postPurchaseUpsell: {
+    enabled: true,
+    delayDays: 14,
+    subject: "You might also love these",
+    heading: "Curated for your collection",
+  },
 };
 
 async function fetchConfig(): Promise<MarketingTriggersConfig> {
@@ -77,6 +100,15 @@ async function fetchConfig(): Promise<MarketingTriggersConfig> {
     winback: { ...DEFAULTS.winback, ...mt?.winback },
     backInStock: { ...DEFAULTS.backInStock, ...mt?.backInStock },
     priceDrop: { ...DEFAULTS.priceDrop, ...mt?.priceDrop },
+    birthday: { ...DEFAULTS.birthday, ...mt?.birthday },
+    browseAbandonment: {
+      ...DEFAULTS.browseAbandonment,
+      ...mt?.browseAbandonment,
+    },
+    postPurchaseUpsell: {
+      ...DEFAULTS.postPurchaseUpsell,
+      ...mt?.postPurchaseUpsell,
+    },
   };
 }
 
@@ -106,6 +138,15 @@ async function saveConfig(
     winback: { ...DEFAULTS.winback, ...mt?.winback },
     backInStock: { ...DEFAULTS.backInStock, ...mt?.backInStock },
     priceDrop: { ...DEFAULTS.priceDrop, ...mt?.priceDrop },
+    birthday: { ...DEFAULTS.birthday, ...mt?.birthday },
+    browseAbandonment: {
+      ...DEFAULTS.browseAbandonment,
+      ...mt?.browseAbandonment,
+    },
+    postPurchaseUpsell: {
+      ...DEFAULTS.postPurchaseUpsell,
+      ...mt?.postPurchaseUpsell,
+    },
   };
 }
 
@@ -163,6 +204,29 @@ const TRIGGER_META: {
     hint: "Email newsletter subscribers when a product\u2019s price drops. Use {{title}} and {{price}} in the subject.",
     hasDelay: false,
     subjectHint: "Supports {{title}}, {{price}}",
+  },
+  {
+    key: "birthday",
+    label: "Birthday gift",
+    icon: Cake,
+    hint: "Email signed-in customers on their birthday with a personal BDAY-XXX promo code. One email per customer per year.",
+    hasDelay: false,
+  },
+  {
+    key: "browseAbandonment",
+    label: "Browse abandonment",
+    icon: Eye,
+    hint: "Reach out to customers who saved an item to their wishlist X days ago but never purchased it.",
+    hasDelay: true,
+    delayLabel: "Days since wishlist add",
+  },
+  {
+    key: "postPurchaseUpsell",
+    label: "Post-purchase upsell",
+    icon: Gift,
+    hint: "Suggest three curated paintings X days after an order is marked received \u2014 prefers the same category as the customer\u2019s purchase.",
+    hasDelay: true,
+    delayLabel: "Days after delivery",
   },
 ];
 
@@ -257,6 +321,9 @@ export function MarketingTriggersSection() {
                 ["Winbacks sent", stats.sent.winback || 0],
                 ["Back-in-stock", stats.sent.backInStock || 0],
                 ["Price drops", stats.sent.priceDrop || 0],
+                ["Birthday gifts", stats.sent.birthday || 0],
+                ["Browse nudges", stats.sent.browseAbandonment || 0],
+                ["Upsells sent", stats.sent.postPurchaseUpsell || 0],
                 ["Opted out", stats.optedOut],
                 ["Notify-me regs", stats.notifyMe.registrations],
               ] as [string, number][]
