@@ -14,7 +14,18 @@ import Ornament from "@/components/decor/Ornament";
 import AnimeDivider from "@/components/motion/AnimeDivider";
 import SectionDock from "@/components/SectionDock";
 import IdleNudgeToast from "@/components/IdleNudgeToast";
+import ScrollDepth from "@/components/motion/ScrollDepth";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+
+// Cinematic 3D backdrop for the landing page. Renders a fixed,
+// behind-content WebGL scene (gold particle halo + slowly rotating
+// wireframe icosahedron) that reacts to scroll position — the camera
+// dollies forward as the visitor moves down the page, giving the
+// homepage the "floating in space" depth Mario asked for. Desktop /
+// fine-pointer only; mobile gets the CSS gradient fallback baked
+// into the component. Lazy so the three.js chunk is shared with
+// `Hero3D` / `PaintingViewer3D` and never blocks first paint.
+const LandingBackdrop3D = lazy(() => import("@/components/LandingBackdrop3D"));
 
 // Anchor ids consumed by the floating SectionDock. Centralised so the
 // wrapper <section> ids on this page and the dock's `items` list can't
@@ -149,7 +160,15 @@ function Index() {
   // RecommendedRow, RecentlyViewed) and a single "Browse the Collection"
   // CTA below the daily feature for shoppers who want the full grid.
   return (
-    <div className="smooth-scroll">
+    <div className="smooth-scroll relative">
+      {/* Site-wide 3D backdrop — sits behind every section via
+          `fixed inset-0 -z-10` and never receives pointer events,
+          so it's purely visual chrome. The Canvhub logo / wordmark
+          live in GalleryNav / HomeHero / HeroSlider above this layer
+          and are not touched by the 3D scene. */}
+      <Suspense fallback={null}>
+        <LandingBackdrop3D />
+      </Suspense>
       {user && <GalleryNav />}
       {/* Signed-out visitors see the full welcome (`HomeHero` 3D scene
           when no slides are configured, or the admin slider when they
@@ -160,14 +179,18 @@ function Index() {
       <section id={HOME_SECTION_IDS.hero}>
         <HeroOrFallback suppressFallback={Boolean(user)} />
       </section>
-      <section id={HOME_SECTION_IDS.marquee}>
+      {/* Scroll-depth wrappers below — each section drifts up + scales
+          + brightens through its scroll window, pairing with the
+          backdrop's camera dolly to give the homepage a coherent
+          z-axis parallax. Honours `prefers-reduced-motion`. */}
+      <ScrollDepth id={HOME_SECTION_IDS.marquee}>
         <PaintingMarquee />
-      </section>
+      </ScrollDepth>
       <AnimeDivider />
       <VisitorTicker />
-      <section id={HOME_SECTION_IDS.daily}>
+      <ScrollDepth id={HOME_SECTION_IDS.daily}>
         <DailyFeature />
-      </section>
+      </ScrollDepth>
       <AnimeDivider />
       {/* Optional studio reel — renders only when admin has set a
           videoUrl in /admin → Storefront → Studio reel; otherwise the
