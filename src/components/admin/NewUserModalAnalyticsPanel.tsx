@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCcw, Beaker } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import type { NewUserModalVariant } from "@/contexts/StorefrontConfigContext";
 
 interface VariantRow {
-  variant: "a" | "b";
+  variant: string;
   impressions: number;
   copies: number;
   submits: number;
@@ -55,12 +56,60 @@ const formatTimestamp = (raw: string | null): string => {
   }
 };
 
-export function NewUserModalAnalyticsPanel() {
+interface NewUserModalAnalyticsPanelProps {
+  // Optional list of configured variants. When provided, rows for
+  // variants with no recorded events are still rendered so the admin
+  // can spot a misconfigured/disabled variant at a glance.
+  variants?: NewUserModalVariant[];
+}
+
+export function NewUserModalAnalyticsPanel({
+  variants = [],
+}: NewUserModalAnalyticsPanelProps = {}) {
   const { token } = useAdminAuth();
   const [days, setDays] = useState<string>("30");
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Build a label lookup so rows render "a — Variant A" instead of bare
+  // ids. Server-side responses don't carry labels (they're cosmetic and
+  // live in the storefront config).
+  const labelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const v of variants) map.set(v.id, v.label);
+    return map;
+  }, [variants]);
+
+  // Merge the API rows with the configured variants list so unfired
+  // variants still render with zeros. Preserve admin-configured order
+  // first, then append any beacon-only ids (e.g. from variants the
+  // admin renamed mid-test).
+  const mergedRows = useMemo((): VariantRow[] => {
+    const apiRows = data?.variants ?? [];
+    const byId = new Map<string, VariantRow>();
+    for (const row of apiRows) byId.set(row.variant, row);
+    const emptyRow = (id: string): VariantRow => ({
+      variant: id,
+      impressions: 0,
+      copies: 0,
+      submits: 0,
+      unique_impressions: 0,
+      unique_copies: 0,
+      unique_submits: 0,
+      last_seen_at: null,
+    });
+    const seen = new Set<string>();
+    const rows: VariantRow[] = [];
+    for (const v of variants) {
+      seen.add(v.id);
+      rows.push(byId.get(v.id) || emptyRow(v.id));
+    }
+    for (const row of apiRows) {
+      if (!seen.has(row.variant)) rows.push(row);
+    }
+    return rows;
+  }, [data, variants]);
 
   const load = useCallback(
     async (showSpinner: boolean) => {
@@ -173,15 +222,21 @@ export function NewUserModalAnalyticsPanel() {
             </tr>
           </thead>
           <tbody>
-            {data.variants.map((row) => {
+            {mergedRows.map((row) => {
               const conversions = row.unique_copies + row.unique_submits;
+              const label = labelById.get(row.variant);
               return (
                 <tr
                   key={row.variant}
                   className="border-b border-border/20 last:border-b-0"
                 >
-                  <td className="py-2 pr-3 font-mono uppercase">
-                    {row.variant}
+                  <td className="py-2 pr-3">
+                    <span className="font-mono uppercase">{row.variant}</span>
+                    {label ? (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {label}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="py-2 pr-3">{formatNumber(row.impressions)}</td>
                   <td className="py-2 pr-3 text-muted-foreground">
@@ -198,6 +253,17 @@ export function NewUserModalAnalyticsPanel() {
                 </tr>
               );
             })}
+            {mergedRows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="py-3 text-center text-xs text-muted-foreground"
+                >
+                  No events in the last {data.days} day
+                  {data.days === 1 ? "" : "s"} yet.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

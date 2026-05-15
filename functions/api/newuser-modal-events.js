@@ -1,11 +1,13 @@
 // /api/newuser-modal-events
 //
-// New-user discount modal A/B engagement endpoint.
+// New-user discount modal A/B/C/… engagement endpoint.
 //
 //   POST  → public beacon. Body:
 //             { sessionId, variant, eventType }
 //           sessionId: visitor UUIDv4 from localStorage (`canvhub_visitor_id`)
-//           variant:   "a" | "b"
+//           variant:   lowercase token matching /^[a-z0-9_-]{1,32}$/
+//                       (defaults are "a", "b", "c", … but the admin can
+//                       define custom ids)
 //           eventType: "impression" | "copy" | "submit"
 //           Always returns 200; { recorded: false } when D1 is unbound or
 //           input is invalid. Fire-and-forget — the modal must never break
@@ -13,8 +15,10 @@
 //
 //   GET   → admin readback. Auth required (same cookie/Bearer as the rest
 //           of /admin). Query: `?days=30` (default 30, max 365).
-//           Returns one row per variant with impressions / copies / submits
-//           plus the unique-session-id counterpart.
+//           Returns one row per variant that recorded at least one event
+//           in the window. Variants with no recorded events are omitted —
+//           the admin UI pairs the response with the configured variants
+//           list and back-fills empty rows itself.
 
 import { initRequestContext, isCsrfRejected } from "./_lib/handler-wrapper.js";
 import { isAuthenticated } from "./_lib/admin-auth.js";
@@ -23,7 +27,7 @@ import {
   recordNewUserModalEvent,
   newUserModalStats,
   NEWUSER_MODAL_EVENT_TYPES,
-  NEWUSER_MODAL_VARIANTS,
+  NEWUSER_MODAL_VARIANT_RE,
 } from "./_lib/d1.js";
 
 const json = (status, body) =>
@@ -68,7 +72,7 @@ export const onRequestPost = async ({ request, env }) => {
   if (!ID_RE.test(sessionId)) {
     return json(200, { recorded: false, reason: "invalid session_id" });
   }
-  if (!NEWUSER_MODAL_VARIANTS.has(variant)) {
+  if (!NEWUSER_MODAL_VARIANT_RE.test(variant)) {
     return json(200, { recorded: false, reason: "invalid variant" });
   }
   if (!NEWUSER_MODAL_EVENT_TYPES.has(eventType)) {

@@ -159,13 +159,23 @@ export interface NewUserModalTriggers {
   exitIntent: boolean;
 }
 
-// A/B treatment for the new-user discount modal. When `enabled` is
-// false (the default) the modal renders variant A only — the existing
-// top-level `headline` / `body` / `voucherCode`. When enabled the modal
-// deterministically splits visitors using their `canvhub_visitor_id`:
-// `weight` is 0–100 and represents the percentage routed to B.
+// Legacy 2-variant treatment kept for back-compat with KV blobs written
+// before the N-variant builder shipped. New code should use
+// `variants: NewUserModalVariant[]` instead.
 export interface NewUserModalVariantB {
   enabled: boolean;
+  weight: number;
+  headline: string;
+  body: string;
+  voucherCode: string;
+}
+
+// One leaf in the N-way A/B/C/… split. Defaults render as variants A and
+// B so existing localStorage `canvhub:newuser-modal:variant` assignments
+// stay valid after the rollout.
+export interface NewUserModalVariant {
+  id: string;
+  label: string;
   weight: number;
   headline: string;
   body: string;
@@ -182,6 +192,13 @@ export interface NewUserModalConfig {
   headline: string;
   body: string;
   variantB: NewUserModalVariantB;
+  // Authoritative list when present. variants[0] mirrors the top-level
+  // headline/body/voucherCode (variant A); variants[1] (when it exists)
+  // mirrors `variantB`. Up to 8 entries.
+  variants: NewUserModalVariant[];
+  // When false (the default) every visitor sees variants[0]. When true
+  // the modal hashes the visitor id and buckets by cumulative weight.
+  variantsEnabled: boolean;
 }
 
 export const DEFAULT_NEW_USER_MODAL_VARIANT_B: NewUserModalVariantB = {
@@ -193,6 +210,35 @@ export const DEFAULT_NEW_USER_MODAL_VARIANT_B: NewUserModalVariantB = {
     "use on your first piece.",
   voucherCode: "",
 };
+
+// Default A/B leaf — used as the seed when an admin first turns on the
+// builder and as the fallback shape when an incoming `variants[i]` is
+// missing fields.
+export const DEFAULT_NEW_USER_MODAL_VARIANT: NewUserModalVariant = {
+  id: "a",
+  label: "Variant A",
+  weight: 100,
+  headline: "Welcome to Canvas Hub",
+  body:
+    "First time here? Sign up with Google to keep your favourites, " +
+    "or grab your welcome discount before you browse.",
+  voucherCode: "",
+};
+
+// Maximum variants the admin can configure. Two is the historical
+// minimum (A/B); 8 keeps the picker UI manageable and the cumulative
+// weight math trivially correct.
+export const NEW_USER_MODAL_MAX_VARIANTS = 8;
+
+// Display labels for new variants spun up by the admin. Reads as
+// `Variant A`, `Variant B`, … and wraps for ids beyond Z.
+export const newUserModalVariantLabel = (index: number): string => {
+  const letter = String.fromCharCode(65 + (index % 26));
+  return `Variant ${letter}`;
+};
+
+export const newUserModalVariantId = (index: number): string =>
+  String.fromCharCode(97 + (index % 26));
 
 export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
   enabled: true,
@@ -210,6 +256,19 @@ export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
     "First time here? Sign up with Google to keep your favourites, " +
     "or grab your welcome discount before you browse.",
   variantB: DEFAULT_NEW_USER_MODAL_VARIANT_B,
+  variants: [
+    {
+      id: "a",
+      label: "Variant A",
+      weight: 100,
+      headline: "Welcome to Canvas Hub",
+      body:
+        "First time here? Sign up with Google to keep your favourites, " +
+        "or grab your welcome discount before you browse.",
+      voucherCode: "",
+    },
+  ],
+  variantsEnabled: false,
 };
 
 export interface DailyFeatureConfig {
@@ -478,6 +537,93 @@ const mergeNewUserModalVariantB = (raw: unknown): NewUserModalVariantB => {
   };
 };
 
+// Variant-id allow-list (lowercase alphanumeric + `_-`, 1\u201332 chars). Kept
+// in sync with the resolver lib + server sanitizer.
+const NEW_USER_MODAL_VARIANT_ID_RE = /^[a-z0-9_-]{1,32}$/;
+
+const mergeNewUserModalVariant = (
+  raw: unknown,
+  index: number,
+): NewUserModalVariant | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Partial<NewUserModalVariant>;
+  const fallbackId = String.fromCharCode(97 + (index % 26));
+  let id = String(data.id ?? fallbackId)
+    .trim()
+    .toLowerCase();
+  if (!NEW_USER_MODAL_VARIANT_ID_RE.test(id)) id = fallbackId;
+  const weight = Math.floor(Number(data.weight));
+  return {
+    id,
+    label:
+      typeof data.label === "string" && data.label.trim()
+        ? data.label.trim().slice(0, 60)
+        : `Variant ${String.fromCharCode(65 + (index % 26))}`,
+    weight: Number.isFinite(weight) ? Math.min(100, Math.max(0, weight)) : 0,
+    headline: String(data.headline ?? ""),
+    body: String(data.body ?? ""),
+    voucherCode: String(data.voucherCode ?? "")
+      .trim()
+      .toUpperCase(),
+  };
+};
+
+const mergeNewUserModalVariants = (
+  raw: unknown,
+  fallback: {
+    headline: string;
+    body: string;
+    voucherCode: string;
+    variantB: NewUserModalVariantB;
+  },
+): NewUserModalVariant[] => {
+  if (Array.isArray(raw) && raw.length > 0) {
+    const taken = new Set<string>();
+    const out: NewUserModalVariant[] = [];
+    for (
+      let i = 0;
+      i < raw.length && out.length < NEW_USER_MODAL_MAX_VARIANTS;
+      i++
+    ) {
+      const v = mergeNewUserModalVariant(raw[i], i);
+      if (!v) continue;
+      let id = v.id;
+      if (taken.has(id)) {
+        let suffix = 2;
+        while (taken.has(`${id}${suffix}`)) suffix += 1;
+        id = `${id}${suffix}`.slice(0, 32);
+      }
+      taken.add(id);
+      out.push({ ...v, id });
+    }
+    if (out.length > 0) return out;
+  }
+  // Synthesise from the legacy top-level + variantB fields so old KV
+  // blobs surface as the equivalent variants array client-side.
+  const a: NewUserModalVariant = {
+    id: "a",
+    label: "Variant A",
+    weight: fallback.variantB.enabled
+      ? Math.max(0, 100 - fallback.variantB.weight)
+      : 100,
+    headline: fallback.headline,
+    body: fallback.body,
+    voucherCode: fallback.voucherCode,
+  };
+  if (!fallback.variantB.enabled) return [a];
+  return [
+    a,
+    {
+      id: "b",
+      label: "Variant B",
+      weight: fallback.variantB.weight,
+      headline: fallback.variantB.headline,
+      body: fallback.variantB.body,
+      voucherCode: fallback.variantB.voucherCode || fallback.voucherCode,
+    },
+  ];
+};
+
 const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
   const data = (raw && typeof raw === "object" ? raw : {}) as Partial<{
     enabled: boolean;
@@ -489,8 +635,25 @@ const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
     headline: string;
     body: string;
     variantB: unknown;
+    variants: unknown;
+    variantsEnabled: boolean;
   }>;
   const triggersRaw = (data.triggers ?? {}) as Partial<NewUserModalTriggers>;
+  const variantB = mergeNewUserModalVariantB(data.variantB);
+  const headline = String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline);
+  const body = String(data.body ?? DEFAULT_NEW_USER_MODAL.body);
+  const voucherCode = String(data.voucherCode ?? "")
+    .trim()
+    .toUpperCase();
+  const variants = mergeNewUserModalVariants(data.variants, {
+    headline,
+    body,
+    voucherCode,
+    variantB,
+  });
+  // Keep the test \u201Cdisabled\u201D unless explicitly on AND we have something
+  // to test against; the resolver still falls back to variants[0].
+  const variantsEnabled = data.variantsEnabled === true && variants.length >= 2;
   return {
     enabled: data.enabled !== false,
     triggers: {
@@ -504,13 +667,13 @@ const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
     scrollPercent: Number.isFinite(data.scrollPercent)
       ? Math.min(95, Math.max(5, Math.floor(Number(data.scrollPercent))))
       : DEFAULT_NEW_USER_MODAL.scrollPercent,
-    voucherCode: String(data.voucherCode ?? "")
-      .trim()
-      .toUpperCase(),
+    voucherCode: variants[0]?.voucherCode || voucherCode,
     emailCaptureEnabled: data.emailCaptureEnabled === true,
-    headline: String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline),
-    body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body),
-    variantB: mergeNewUserModalVariantB(data.variantB),
+    headline: variants[0]?.headline || headline,
+    body: variants[0]?.body || body,
+    variantB,
+    variants,
+    variantsEnabled,
   };
 };
 

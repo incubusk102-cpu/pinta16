@@ -1407,7 +1407,13 @@ export async function recentStockEvents({
 // INSERT OR IGNORE; the client also dedupes impressions per page-load
 // so an SPA route change doesn't inflate the funnel.
 
-export const NEWUSER_MODAL_VARIANTS = new Set(["a", "b"]);
+// `variant` was originally a strict { a | b } enum. Now that the admin
+// can spin up arbitrary variant ids (A/B/C/D/…) we accept any
+// lowercase alphanumeric token, with the same character allow-list as
+// `session_id` but capped at 32 chars for the smaller column. The
+// regex prevents a malicious client from smuggling DB control chars
+// into the ts column or blowing up storage with overlong tokens.
+export const NEWUSER_MODAL_VARIANT_RE = /^[a-z0-9_-]{1,32}$/;
 export const NEWUSER_MODAL_EVENT_TYPES = new Set([
   "impression",
   "copy",
@@ -1433,7 +1439,7 @@ export async function recordNewUserModalEvent({
     return { recorded: false, reason: "invalid session_id" };
   }
   const v = String(variant || "").toLowerCase();
-  if (!NEWUSER_MODAL_VARIANTS.has(v)) {
+  if (!NEWUSER_MODAL_VARIANT_RE.test(v)) {
     return { recorded: false, reason: "invalid variant" };
   }
   const ev = String(eventType || "").toLowerCase();
@@ -1489,19 +1495,11 @@ export async function newUserModalStats({ days = 30 } = {}) {
       )
       .bind(since)
       .all();
-    const rows = result?.results || [];
-    const byVariant = new Map(rows.map((r) => [String(r.variant), r]));
-    const empty = (v) => ({
-      variant: v,
-      impressions: 0,
-      copies: 0,
-      submits: 0,
-      unique_impressions: 0,
-      unique_copies: 0,
-      unique_submits: 0,
-      last_seen_at: null,
-    });
-    return ["a", "b"].map((v) => byVariant.get(v) || empty(v));
+    // Return every variant that has at least one event in the window.
+    // The admin panel pairs these rows with the configured variants list
+    // and adds empty rows for any configured variant that hasn't fired
+    // an event yet, so we don't need to back-fill A/B here.
+    return result?.results || [];
   } catch {
     return null;
   }
