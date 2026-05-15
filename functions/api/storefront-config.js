@@ -1040,10 +1040,13 @@ const DEFAULT_ABANDONED_CART = {
   enabled: true,
   nudge1Minutes: 60,
   nudge2Minutes: 1440,
+  nudge3Minutes: 4320,
   nudge1Subject: "You left something behind at Canvas Hub",
   nudge2Subject: "Still thinking about it? Your cart is waiting",
+  nudge3Subject: "Last chance — your cart at Canvas Hub",
   nudge1Heading: "Your cart is waiting",
   nudge2Heading: "Don\u2019t miss out on your picks",
+  nudge3Heading: "Final reminder",
   ctaLabel: "Complete your order",
   ctaUrl: "",
 };
@@ -1052,6 +1055,7 @@ const sanitizeAbandonedCart = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
   const nudge1Min = Math.floor(Number(data.nudge1Minutes) || 0);
   const nudge2Min = Math.floor(Number(data.nudge2Minutes) || 0);
+  const nudge3Min = Math.floor(Number(data.nudge3Minutes) || 0);
   return {
     enabled: data.enabled !== false,
     nudge1Minutes:
@@ -1062,17 +1066,27 @@ const sanitizeAbandonedCart = (raw) => {
       nudge2Min >= 60 && nudge2Min <= 10080
         ? nudge2Min
         : DEFAULT_ABANDONED_CART.nudge2Minutes,
+    nudge3Minutes:
+      nudge3Min >= 60 && nudge3Min <= 10080
+        ? nudge3Min
+        : DEFAULT_ABANDONED_CART.nudge3Minutes,
     nudge1Subject: String(
       data.nudge1Subject ?? DEFAULT_ABANDONED_CART.nudge1Subject,
     ).slice(0, 200),
     nudge2Subject: String(
       data.nudge2Subject ?? DEFAULT_ABANDONED_CART.nudge2Subject,
     ).slice(0, 200),
+    nudge3Subject: String(
+      data.nudge3Subject ?? DEFAULT_ABANDONED_CART.nudge3Subject,
+    ).slice(0, 200),
     nudge1Heading: String(
       data.nudge1Heading ?? DEFAULT_ABANDONED_CART.nudge1Heading,
     ).slice(0, 100),
     nudge2Heading: String(
       data.nudge2Heading ?? DEFAULT_ABANDONED_CART.nudge2Heading,
+    ).slice(0, 100),
+    nudge3Heading: String(
+      data.nudge3Heading ?? DEFAULT_ABANDONED_CART.nudge3Heading,
     ).slice(0, 100),
     ctaLabel: String(data.ctaLabel ?? DEFAULT_ABANDONED_CART.ctaLabel).slice(
       0,
