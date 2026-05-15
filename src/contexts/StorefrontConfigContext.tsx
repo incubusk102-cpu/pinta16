@@ -159,6 +159,19 @@ export interface NewUserModalTriggers {
   exitIntent: boolean;
 }
 
+// A/B treatment for the new-user discount modal. When `enabled` is
+// false (the default) the modal renders variant A only — the existing
+// top-level `headline` / `body` / `voucherCode`. When enabled the modal
+// deterministically splits visitors using their `canvhub_visitor_id`:
+// `weight` is 0–100 and represents the percentage routed to B.
+export interface NewUserModalVariantB {
+  enabled: boolean;
+  weight: number;
+  headline: string;
+  body: string;
+  voucherCode: string;
+}
+
 export interface NewUserModalConfig {
   enabled: boolean;
   triggers: NewUserModalTriggers;
@@ -168,7 +181,18 @@ export interface NewUserModalConfig {
   emailCaptureEnabled: boolean;
   headline: string;
   body: string;
+  variantB: NewUserModalVariantB;
 }
+
+export const DEFAULT_NEW_USER_MODAL_VARIANT_B: NewUserModalVariantB = {
+  enabled: false,
+  weight: 50,
+  headline: "Your welcome gift inside",
+  body:
+    "New here? Drop your email and we'll send a discount code you can " +
+    "use on your first piece.",
+  voucherCode: "",
+};
 
 export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
   enabled: true,
@@ -185,6 +209,7 @@ export const DEFAULT_NEW_USER_MODAL: NewUserModalConfig = {
   body:
     "First time here? Sign up with Google to keep your favourites, " +
     "or grab your welcome discount before you browse.",
+  variantB: DEFAULT_NEW_USER_MODAL_VARIANT_B,
 };
 
 export interface DailyFeatureConfig {
@@ -429,6 +454,30 @@ const mergeThankYou = (raw: unknown): ThankYouConfig => {
   };
 };
 
+const mergeNewUserModalVariantB = (raw: unknown): NewUserModalVariantB => {
+  const data = (raw && typeof raw === "object" ? raw : {}) as Partial<{
+    enabled: boolean;
+    weight: number;
+    headline: string;
+    body: string;
+    voucherCode: string;
+  }>;
+  const weight = Number(data.weight);
+  return {
+    enabled: data.enabled === true,
+    weight: Number.isFinite(weight)
+      ? Math.min(100, Math.max(0, Math.floor(weight)))
+      : DEFAULT_NEW_USER_MODAL_VARIANT_B.weight,
+    headline: String(
+      data.headline ?? DEFAULT_NEW_USER_MODAL_VARIANT_B.headline,
+    ),
+    body: String(data.body ?? DEFAULT_NEW_USER_MODAL_VARIANT_B.body),
+    voucherCode: String(data.voucherCode ?? "")
+      .trim()
+      .toUpperCase(),
+  };
+};
+
 const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
   const data = (raw && typeof raw === "object" ? raw : {}) as Partial<{
     enabled: boolean;
@@ -439,6 +488,7 @@ const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
     emailCaptureEnabled: boolean;
     headline: string;
     body: string;
+    variantB: unknown;
   }>;
   const triggersRaw = (data.triggers ?? {}) as Partial<NewUserModalTriggers>;
   return {
@@ -460,6 +510,7 @@ const mergeNewUserModal = (raw: unknown): NewUserModalConfig => {
     emailCaptureEnabled: data.emailCaptureEnabled === true,
     headline: String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline),
     body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body),
+    variantB: mergeNewUserModalVariantB(data.variantB),
   };
 };
 

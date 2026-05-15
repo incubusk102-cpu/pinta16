@@ -254,4 +254,17 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_slide ON hero_slide_events(slide_id)`,
   `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_slide_type ON hero_slide_events(slide_id, event_type)`,
   `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_session ON hero_slide_events(session_id)`,
+
+  `CREATE TABLE IF NOT EXISTS newuser_modal_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    variant TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    country TEXT,
+    ts TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_newuser_modal_events_ts ON newuser_modal_events(ts)`,
+  `CREATE INDEX IF NOT EXISTS idx_newuser_modal_events_variant ON newuser_modal_events(variant)`,
+  `CREATE INDEX IF NOT EXISTS idx_newuser_modal_events_variant_type ON newuser_modal_events(variant, event_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_newuser_modal_events_session ON newuser_modal_events(session_id)`,
 ];

@@ -24,8 +24,10 @@ import {
 } from "@/components/ui/select";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { PREVIEW_EVENT } from "@/components/NewUserModal";
+import { NewUserModalAnalyticsPanel } from "@/components/admin/NewUserModalAnalyticsPanel";
 import {
   DEFAULT_NEW_USER_MODAL,
+  DEFAULT_NEW_USER_MODAL_VARIANT_B,
   useStorefrontConfig,
   type NewUserModalConfig,
 } from "@/contexts/StorefrontConfigContext";
@@ -142,13 +144,17 @@ export function NewUserModalSection() {
     }
   };
 
-  const handlePreview = () => {
+  const handlePreview = (variant?: "a" | "b") => {
     // Persist whatever the admin has tweaked locally before showing the
     // preview — otherwise the modal renders against the last-saved
     // config and the admin's unsaved copy / voucher / toggles wouldn't
     // be visible. Done as a non-blocking save: the toast confirms it.
     handleSave().then(() => {
-      window.dispatchEvent(new CustomEvent(PREVIEW_EVENT));
+      window.dispatchEvent(
+        new CustomEvent(PREVIEW_EVENT, {
+          detail: variant ? { variant } : undefined,
+        }),
+      );
     });
   };
 
@@ -412,6 +418,116 @@ export function NewUserModalSection() {
         </div>
       </section>
 
+      <section className="rounded-md border border-border/60 bg-card/30 p-4 sm:p-5 space-y-4">
+        <div>
+          <h3 className="font-display text-base">A/B variant (B)</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Optional second copy that splits new visitors deterministically by
+            their visitor id. The fields above are variant A. Disable variant B
+            to revert to a single copy.
+          </p>
+        </div>
+        <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
+          <div>
+            <p className="text-sm font-medium">Enable variant B</p>
+            <p className="text-xs text-muted-foreground">
+              When off, every visitor sees variant A.
+            </p>
+          </div>
+          <Switch
+            checked={cfg.variantB.enabled}
+            onCheckedChange={(v) =>
+              setCfg((c) => ({
+                ...c,
+                variantB: { ...c.variantB, enabled: v },
+              }))
+            }
+          />
+        </label>
+        {cfg.variantB.enabled && (
+          <div className="space-y-4 pl-1">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Traffic to variant B ({cfg.variantB.weight}%)
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={cfg.variantB.weight}
+                onChange={(e) => {
+                  const next = Math.min(
+                    100,
+                    Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                  );
+                  setCfg((c) => ({
+                    ...c,
+                    variantB: { ...c.variantB, weight: next },
+                  }));
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                0 → no one sees B (pause). 100 → every new visitor sees B.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Variant B headline
+              </Label>
+              <Input
+                value={cfg.variantB.headline}
+                maxLength={120}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    variantB: { ...c.variantB, headline: e.target.value },
+                  }))
+                }
+                placeholder={DEFAULT_NEW_USER_MODAL_VARIANT_B.headline}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Variant B body
+              </Label>
+              <Textarea
+                value={cfg.variantB.body}
+                maxLength={400}
+                rows={3}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    variantB: { ...c.variantB, body: e.target.value },
+                  }))
+                }
+                placeholder={DEFAULT_NEW_USER_MODAL_VARIANT_B.body}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Variant B voucher code (leave blank to use variant A's code)
+              </Label>
+              <Input
+                value={cfg.variantB.voucherCode}
+                maxLength={30}
+                onChange={(e) =>
+                  setCfg((c) => ({
+                    ...c,
+                    variantB: {
+                      ...c.variantB,
+                      voucherCode: e.target.value.toUpperCase(),
+                    },
+                  }))
+                }
+                placeholder="WELCOME15"
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      <NewUserModalAnalyticsPanel />
+
       <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
         <Button onClick={handleSave} disabled={saving}>
           {saving ? (
@@ -421,16 +537,41 @@ export function NewUserModalSection() {
           )}
           Save new-user modal
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handlePreview}
-          disabled={saving}
-          title="Save and pop the modal open right now—bypasses one-shot localStorage gate."
-        >
-          <Eye className="w-4 h-4 mr-2" />
-          Save & preview
-        </Button>
+        {cfg.variantB.enabled ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handlePreview("a")}
+              disabled={saving}
+              title="Save and pop variant A open."
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Preview A
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handlePreview("b")}
+              disabled={saving}
+              title="Save and pop variant B open."
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Preview B
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handlePreview()}
+            disabled={saving}
+            title="Save and pop the modal open right now—bypasses one-shot localStorage gate."
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            Save & preview
+          </Button>
+        )}
       </div>
     </div>
   );

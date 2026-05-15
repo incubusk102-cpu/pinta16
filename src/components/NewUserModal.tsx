@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Check,
   ChevronLeft,
@@ -14,6 +14,10 @@ import { useHeroSlides, type HeroSlide } from "@/contexts/HeroSlidesContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 import { jsonAuthHeaders } from "@/lib/api";
+import {
+  resolveNewUserModalVariant,
+  sendNewUserModalEvent,
+} from "@/lib/newuser-modal-variant";
 import { startWelcomeBonus } from "@/lib/welcomeBonus";
 
 // localStorage key — once the visitor closes / accepts the modal we
@@ -24,8 +28,14 @@ const CAROUSEL_INTERVAL_MS = 5000;
 const SWIPE_THRESHOLD_PX = 40;
 // Custom event admins fire from /admin → New-user modal → "Preview" so
 // they can pop the modal open from the admin UI regardless of
-// localStorage / signed-in / route filters.
+// localStorage / signed-in / route filters. `detail.variant` is an
+// optional override ("a" | "b") that forces the preview to render that
+// variant, regardless of which bucket the admin's persisted assignment
+// would otherwise land in.
 export const PREVIEW_EVENT = "canvhub:preview-newuser-modal";
+export interface PreviewEventDetail {
+  variant?: "a" | "b";
+}
 
 // Built-in fallback slides for the modal carousel when the admin
 // hasn't uploaded any Hero Slides yet. Pulls from the product
@@ -104,6 +114,39 @@ export default function NewUserModal() {
   const { user } = useUserAuth();
   const { slides } = useHeroSlides();
   const modal = config.newUserModal;
+  // Resolve which variant this visitor gets the first time we render
+  // (and only re-resolve when the admin edits the config). The helper
+  // persists the assignment to localStorage so subsequent triggers in
+  // the same session see the same copy.
+  const naturalResolved = useMemo(
+    () => resolveNewUserModalVariant(modal),
+    [modal],
+  );
+  // Admins can pin a variant via the preview event; null = natural
+  // resolution from the visitor id bucket.
+  const [previewVariant, setPreviewVariant] = useState<"a" | "b" | null>(null);
+  const resolved = useMemo(() => {
+    if (previewVariant === "a") {
+      return {
+        variant: "a" as const,
+        headline: modal.headline,
+        body: modal.body,
+        voucherCode: modal.voucherCode,
+      };
+    }
+    if (previewVariant === "b") {
+      return {
+        variant: "b" as const,
+        headline: modal.variantB.headline,
+        body: modal.variantB.body,
+        voucherCode: modal.variantB.voucherCode,
+      };
+    }
+    return naturalResolved;
+  }, [previewVariant, naturalResolved, modal]);
+  const headline = resolved.headline;
+  const body = resolved.body;
+  const voucherCode = resolved.voucherCode;
   const [open, setOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -115,6 +158,16 @@ export default function NewUserModal() {
   // single visitor never gets the same dialog popping up twice in one
   // session if they navigate between routes.
   const triggeredRef = useRef(false);
+  // Beacon “impression” at most once per visitor per page-load. The
+  // server-side INSERT OR IGNORE provides the network-retry safety net,
+  // but client-side dedupe is what keeps the funnel honest across the
+  // SPA's route transitions.
+  const beaconedImpressionRef = useRef(false);
+  useEffect(() => {
+    if (!open || beaconedImpressionRef.current || previewMode) return;
+    beaconedImpressionRef.current = true;
+    sendNewUserModalEvent(resolved.variant, "impression");
+  }, [open, previewMode, resolved.variant]);
 
   const eligible =
     !loading &&
@@ -129,12 +182,18 @@ export default function NewUserModal() {
   // on close, so the admin can preview repeatedly without clearing
   // localStorage.
   useEffect(() => {
-    const handler = () => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<PreviewEventDetail>).detail;
       setShowEmailForm(false);
       setSubmitted(false);
       setEmail("");
       setCopied(false);
       setPreviewMode(true);
+      setPreviewVariant(
+        detail?.variant === "a" || detail?.variant === "b"
+          ? detail.variant
+          : null,
+      );
       setOpen(true);
     };
     window.addEventListener(PREVIEW_EVENT, handler);
@@ -206,16 +265,18 @@ export default function NewUserModal() {
       // to be able to re-open it. Reset the trigger latch too so a
       // second preview after a real trigger still works.
       setPreviewMode(false);
+      setPreviewVariant(null);
+      beaconedImpressionRef.current = false;
       triggeredRef.current = false;
       return;
     }
     markSeen();
-    if (modal.voucherCode) {
+    if (voucherCode) {
       // Kick off the 24h welcome-bonus countdown the moment the modal
       // closes for real (not from an admin preview). The countdown
       // widget reads the same localStorage key and auto-applies the
       // code in cart later.
-      startWelcomeBonus(modal.voucherCode);
+      startWelcomeBonus(voucherCode);
     }
   };
 
@@ -232,11 +293,12 @@ export default function NewUserModal() {
   }, [open]);
 
   const handleCopy = async () => {
-    if (!modal.voucherCode) return;
+    if (!voucherCode) return;
     try {
-      await navigator.clipboard.writeText(modal.voucherCode);
+      await navigator.clipboard.writeText(voucherCode);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
+      if (!previewMode) sendNewUserModalEvent(resolved.variant, "copy");
     } catch {
       toast.error("Could not copy code");
     }
@@ -257,7 +319,7 @@ export default function NewUserModal() {
         body: JSON.stringify({
           email: email.trim(),
           source: "newuser-modal",
-          voucherCode: modal.voucherCode || undefined,
+          voucherCode: voucherCode || undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -270,9 +332,10 @@ export default function NewUserModal() {
         return;
       }
       setSubmitted(true);
-      if (modal.voucherCode && data.voucher?.sent) {
-        toast.success(`Sent ${modal.voucherCode} to ${email.trim()}`);
-      } else if (modal.voucherCode) {
+      if (!previewMode) sendNewUserModalEvent(resolved.variant, "submit");
+      if (voucherCode && data.voucher?.sent) {
+        toast.success(`Sent ${voucherCode} to ${email.trim()}`);
+      } else if (voucherCode) {
         // Subscribe persisted but the email transport wasn't configured.
         // Don't crash — the visitor still has the code on screen.
         toast.success("You're on the list. Code shown above.");
@@ -317,7 +380,7 @@ export default function NewUserModal() {
         )}
 
         <div className="grid md:grid-cols-2 max-h-[85vh] overflow-y-auto md:overflow-hidden">
-          <ModalHeroCarousel slides={slides} headline={modal.headline} />
+          <ModalHeroCarousel slides={slides} headline={headline} />
           <div className="flex flex-col px-6 py-7 md:py-9 md:px-8 md:overflow-y-auto">
             <div>
               <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -327,19 +390,19 @@ export default function NewUserModal() {
                 id="newuser-modal-title"
                 className="mt-2 font-display text-2xl md:text-3xl text-foreground leading-tight"
               >
-                {modal.headline}
+                {headline}
               </h2>
-              <p className="mt-3 text-sm text-muted-foreground">{modal.body}</p>
+              <p className="mt-3 text-sm text-muted-foreground">{body}</p>
             </div>
 
-            {modal.voucherCode && (
+            {voucherCode && (
               <div className="mt-5 rounded-md border border-dashed border-foreground/30 bg-muted/30 p-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                     Welcome code
                   </p>
                   <code className="mt-1 block font-mono text-lg tracking-[0.18em] text-foreground truncate">
-                    {modal.voucherCode}
+                    {voucherCode}
                   </code>
                 </div>
                 <button
@@ -364,7 +427,7 @@ export default function NewUserModal() {
               {!showEmailForm && (
                 <>
                   <GoogleNavSignIn active={open} />
-                  {modal.emailCaptureEnabled && modal.voucherCode && (
+                  {modal.emailCaptureEnabled && voucherCode && (
                     <button
                       type="button"
                       onClick={() => setShowEmailForm(true)}
