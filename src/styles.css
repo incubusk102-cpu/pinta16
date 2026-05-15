@@ -152,6 +152,56 @@
     border-color: var(--color-border);
   }
 
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    ) {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    )::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklab, currentColor 22%, transparent) 0%,
+      transparent 68%
+    );
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.35);
+    transition:
+      opacity 320ms var(--transition-smooth),
+      transform 520ms var(--transition-smooth);
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    ):is(:hover, :focus-visible)::after {
+    opacity: 0.12;
+    transform: scale(1.25);
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    ):active::after {
+    opacity: 0.24;
+    transform: scale(0.9);
+    transition-duration: 120ms;
+  }
+
+  :where(button, [role="button"], .ripple-button):is(
+      :disabled,
+      [aria-disabled="true"]
+    )::after {
+    opacity: 0;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -382,6 +432,10 @@
     }
     .hover-glow-cta {
       transition: none;
+    }
+    :where(button, [role="button"], .ripple-button)::after {
+      transition: none;
+      transform: none;
     }
     .hover-glow-cta:hover,
     .hover-glow-cta:focus-visible {
