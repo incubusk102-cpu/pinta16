@@ -32,6 +32,7 @@ import {
   type HeroTemplateId,
 } from "./heroSlideTemplates";
 import { HeroSlidePreview } from "./HeroSlidePreview";
+import { HeroSlideAnalyticsPanel } from "./HeroSlideAnalyticsPanel";
 
 const MAX_SLIDES = 8;
 // Original file ceiling before compression. Server still caps the encoded
@@ -428,6 +429,9 @@ export function HeroSlidesSection() {
           </select>
         </div>
       </div>
+
+      {/* Per-slide analytics readback (impressions / clicks / CTR). */}
+      <HeroSlideAnalyticsPanel slides={draftSlides} />
 
       {/* Slide list */}
       <div className="space-y-4">
