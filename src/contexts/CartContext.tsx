@@ -238,6 +238,7 @@ export interface CompletedOrder {
   refund?: OrderRefund;
   returnRequest?: ReturnRequest;
   shipment?: OrderShipment;
+  adminNote?: string;
   requestMeta?: RequestMeta;
   activityLog?: OrderActivityEntry[];
   /**

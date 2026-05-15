@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  XCircle,
   Filter,
   Loader2,
   Percent,
@@ -968,13 +969,18 @@ export const DiscountCodesSection = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>
+              <XCircle className="w-4 h-4 mr-2" />
+              Keep discount code
+            </AlertDialogCancel>
             <AlertDialogAction
+              className="border border-destructive/30 bg-destructive/10 text-destructive shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:shadow-md"
               onClick={() =>
                 confirmDelete ? void handleDelete(confirmDelete) : undefined
               }
             >
-              Delete
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete discount code
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

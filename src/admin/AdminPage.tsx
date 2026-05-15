@@ -1837,11 +1837,11 @@ function ProductsSection() {
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="warning"
                 onClick={reset}
                 disabled={submitting}
               >
-                Reset
+                Reset painting form
               </Button>
             </div>
           </form>
@@ -1988,10 +1988,11 @@ function ProductsSection() {
               )}
               <Button
                 size="sm"
+                variant="success"
                 disabled={!bulkAction || !bulkValue || bulkApplying}
                 onClick={() => void handleBulkApply()}
               >
-                {bulkApplying ? "Applying…" : "Apply"}
+                {bulkApplying ? "Applying…" : "Apply bulk update"}
               </Button>
               <Button
                 size="sm"
@@ -2002,7 +2003,7 @@ function ProductsSection() {
                   setBulkValue("");
                 }}
               >
-                Clear
+                Clear product selection
               </Button>
             </div>
           )}
@@ -4688,7 +4689,7 @@ function OrdersSection() {
                       className="h-8 text-xs"
                       onClick={() => void saveAdminNote(order.id, noteInput)}
                     >
-                      Save
+                      Save order note
                     </Button>
                     <Button
                       variant="ghost"
@@ -4696,20 +4697,15 @@ function OrdersSection() {
                       className="h-8 text-xs"
                       onClick={() => setEditingNoteId(null)}
                     >
-                      Cancel
+                      Cancel note edit
                     </Button>
                   </div>
                 ) : (
                   <div className="flex items-start gap-2">
                     <StickyNote className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
-                    {adminNotes[order.id] ||
-                    (order as unknown as Record<string, unknown>).adminNote ? (
+                    {adminNotes[order.id] || order.adminNote ? (
                       <p className="text-xs text-muted-foreground flex-1">
-                        {adminNotes[order.id] ||
-                          String(
-                            (order as unknown as Record<string, unknown>)
-                              .adminNote ?? "",
-                          )}
+                        {adminNotes[order.id] || order.adminNote}
                       </p>
                     ) : (
                       <p className="text-xs text-muted-foreground/50 italic flex-1">
@@ -4720,11 +4716,7 @@ function OrdersSection() {
                       type="button"
                       onClick={() => {
                         setNoteInput(
-                          adminNotes[order.id] ||
-                            String(
-                              (order as unknown as Record<string, unknown>)
-                                .adminNote ?? "",
-                            ),
+                          adminNotes[order.id] || order.adminNote || "",
                         );
                         setEditingNoteId(order.id);
                       }}
@@ -4755,17 +4747,7 @@ function OrdersSection() {
                 {expandedTimeline === order.id && (
                   <div className="mt-2 ml-1 space-y-0 border-l-2 border-border/30 pl-4">
                     {(() => {
-                      const log = Array.isArray(
-                        (order as unknown as Record<string, unknown>)
-                          .activityLog,
-                      )
-                        ? ((order as unknown as Record<string, unknown>)
-                            .activityLog as {
-                            at: string;
-                            type: string;
-                            actor?: string;
-                          }[])
-                        : [];
+                      const log = order.activityLog ?? [];
                       const events =
                         log.length > 0
                           ? [...log].sort((a, b) =>
@@ -4907,9 +4889,10 @@ function OrdersSection() {
                 disabled={refundingId === confirmRefundFor.id}
                 onClick={() => setConfirmRefundFor(null)}
               >
-                Cancel
+                Keep order as-is
               </Button>
               <Button
+                variant="warning"
                 size="sm"
                 disabled={refundingId === confirmRefundFor.id}
                 onClick={() => void handleRefund(confirmRefundFor)}
@@ -5082,6 +5065,7 @@ function ShipmentEditor({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button
+          variant="success"
           size="sm"
           className="h-7 text-xs"
           disabled={busy || !canSave}
@@ -5100,13 +5084,13 @@ function ShipmentEditor({
         </Button>
         {existing && (
           <Button
-            variant="ghost"
+            variant="dangerSoft"
             size="sm"
             className="h-7 text-xs"
             disabled={busy}
             onClick={onClear}
           >
-            Clear
+            Clear tracking
           </Button>
         )}
         {/* Admin-side waybill download — works any time, even before

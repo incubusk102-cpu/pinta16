@@ -230,9 +230,13 @@ export function UsersSection() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleRunCleanup}>
-                Run now
+              <AlertDialogCancel>Keep users</AlertDialogCancel>
+              <AlertDialogAction
+                className="border border-amber-500/30 bg-amber-500 text-amber-950 shadow-md hover:bg-amber-400"
+                onClick={handleRunCleanup}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Run inactive-user cleanup
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -312,10 +316,12 @@ export function UsersSection() {
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel>Keep account</AlertDialogCancel>
                             <AlertDialogAction
+                              className="border border-destructive/30 bg-destructive/10 text-destructive shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:shadow-md"
                               onClick={() => handleDelete(user)}
                             >
+                              <Trash2 className="w-4 h-4 mr-2" />
                               Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>
