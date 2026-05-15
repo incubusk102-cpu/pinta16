@@ -793,6 +793,77 @@
   }
 }
 
+/* ── Floema-style editorial hero ──────────────────────────────────
+   Companion styles for `src/components/floema/FloemaHero.tsx`.
+   Kept here rather than inline so the C-shaped CSS mask, which
+   relies on long radial gradients, stays readable.
+
+   The hero is an editorial moment, not a theme-aware surface — it
+   always renders on a cream paper background with dark ink type
+   regardless of the visitor's `light` / `dark` site theme. The
+   theme tokens are scoped to a local cascade so descendant
+   components (anime headings, the glassmorphic CTA, etc.) inherit
+   the right foreground / muted shades without each having to
+   hard-code light-mode colours.
+*/
+@layer utilities {
+  .floema-hero {
+    /* Local cascade overriding the global light/dark tokens so the
+       hero reads as a printed magazine spread on any theme. */
+    --background: oklch(0.96 0.012 80);
+    --foreground: oklch(0.18 0.01 60);
+    --muted-foreground: oklch(0.42 0.01 60);
+    --logo-color: #6b4f23;
+    background: radial-gradient(
+      circle at 50% 60%,
+      #f3ead6 0%,
+      #ecdfc3 55%,
+      #d6c39a 100%
+    );
+    color: var(--foreground);
+  }
+  .floema-hero h1,
+  .floema-hero p,
+  .floema-hero a {
+    color: inherit;
+  }
+
+  /* C-shaped mask used by the static-fallback for the 3D sculpture.
+     A single radial-gradient mask: the painting only shows where the
+     gradient is opaque, so by drawing a ring with an opaque outer
+     band, transparent inner core, and a wedge of transparency on
+     the right (via the gradient angle) we get a sculpted "C" rather
+     than a full disc. */
+  .floema-fallback-mask {
+    -webkit-mask:
+      radial-gradient(
+          circle at 52% 50%,
+          transparent 0%,
+          transparent 36%,
+          #000 41%,
+          #000 50%,
+          transparent 55%
+        )
+        center / 100% 100% no-repeat,
+      linear-gradient(105deg, #000 60%, transparent 60%) center / 100% 100%
+        no-repeat;
+    -webkit-mask-composite: source-in;
+    mask:
+      radial-gradient(
+          circle at 52% 50%,
+          transparent 0%,
+          transparent 36%,
+          #000 41%,
+          #000 50%,
+          transparent 55%
+        )
+        center / 100% 100% no-repeat,
+      linear-gradient(105deg, #000 60%, transparent 60%) center / 100% 100%
+        no-repeat;
+    mask-composite: intersect;
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }
