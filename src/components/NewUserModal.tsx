@@ -16,6 +16,7 @@ import { useUserAuth } from "@/contexts/UserAuthContext";
 import { jsonAuthHeaders } from "@/lib/api";
 import {
   resolveNewUserModalVariant,
+  previewNewUserModalVariant,
   sendNewUserModalEvent,
 } from "@/lib/newuser-modal-variant";
 import { startWelcomeBonus } from "@/lib/welcomeBonus";
@@ -29,12 +30,12 @@ const SWIPE_THRESHOLD_PX = 40;
 // Custom event admins fire from /admin → New-user modal → "Preview" so
 // they can pop the modal open from the admin UI regardless of
 // localStorage / signed-in / route filters. `detail.variant` is an
-// optional override ("a" | "b") that forces the preview to render that
+// optional override (variant id) that forces the preview to render that
 // variant, regardless of which bucket the admin's persisted assignment
 // would otherwise land in.
 export const PREVIEW_EVENT = "canvhub:preview-newuser-modal";
 export interface PreviewEventDetail {
-  variant?: "a" | "b";
+  variant?: string;
 }
 
 // Built-in fallback slides for the modal carousel when the admin
@@ -124,23 +125,11 @@ export default function NewUserModal() {
   );
   // Admins can pin a variant via the preview event; null = natural
   // resolution from the visitor id bucket.
-  const [previewVariant, setPreviewVariant] = useState<"a" | "b" | null>(null);
+  const [previewVariant, setPreviewVariant] = useState<string | null>(null);
   const resolved = useMemo(() => {
-    if (previewVariant === "a") {
-      return {
-        variant: "a" as const,
-        headline: modal.headline,
-        body: modal.body,
-        voucherCode: modal.voucherCode,
-      };
-    }
-    if (previewVariant === "b") {
-      return {
-        variant: "b" as const,
-        headline: modal.variantB.headline,
-        body: modal.variantB.body,
-        voucherCode: modal.variantB.voucherCode,
-      };
+    if (previewVariant) {
+      const preview = previewNewUserModalVariant(modal, previewVariant);
+      if (preview) return preview;
     }
     return naturalResolved;
   }, [previewVariant, naturalResolved, modal]);
@@ -189,11 +178,11 @@ export default function NewUserModal() {
       setEmail("");
       setCopied(false);
       setPreviewMode(true);
-      setPreviewVariant(
-        detail?.variant === "a" || detail?.variant === "b"
-          ? detail.variant
-          : null,
-      );
+      const requested =
+        typeof detail?.variant === "string" && detail.variant.trim()
+          ? detail.variant.trim().toLowerCase()
+          : null;
+      setPreviewVariant(requested);
       setOpen(true);
     };
     window.addEventListener(PREVIEW_EVENT, handler);

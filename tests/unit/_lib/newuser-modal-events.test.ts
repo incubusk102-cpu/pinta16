@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
 import {
-  NEWUSER_MODAL_VARIANTS,
+  NEWUSER_MODAL_VARIANT_RE,
   NEWUSER_MODAL_EVENT_TYPES,
   recordNewUserModalEvent,
 } from "../../../functions/api/_lib/d1.js";
@@ -39,11 +39,18 @@ const makeFakeD1 = () => {
 };
 
 describe("NEWUSER_MODAL_* exports", () => {
-  it("exposes the expected variant allow-list", () => {
-    expect(NEWUSER_MODAL_VARIANTS instanceof Set).toBe(true);
-    expect(NEWUSER_MODAL_VARIANTS.has("a")).toBe(true);
-    expect(NEWUSER_MODAL_VARIANTS.has("b")).toBe(true);
-    expect(NEWUSER_MODAL_VARIANTS.size).toBe(2);
+  it("exposes a variant-id allow-list regex", () => {
+    expect(NEWUSER_MODAL_VARIANT_RE).toBeInstanceOf(RegExp);
+    // Allows legacy A/B + arbitrary slugs.
+    expect(NEWUSER_MODAL_VARIANT_RE.test("a")).toBe(true);
+    expect(NEWUSER_MODAL_VARIANT_RE.test("b")).toBe(true);
+    expect(NEWUSER_MODAL_VARIANT_RE.test("control")).toBe(true);
+    expect(NEWUSER_MODAL_VARIANT_RE.test("v2-bigger-cta")).toBe(true);
+    // Rejects bad input.
+    expect(NEWUSER_MODAL_VARIANT_RE.test("")).toBe(false);
+    expect(NEWUSER_MODAL_VARIANT_RE.test("A")).toBe(false);
+    expect(NEWUSER_MODAL_VARIANT_RE.test("too space")).toBe(false);
+    expect(NEWUSER_MODAL_VARIANT_RE.test("x".repeat(33))).toBe(false);
   });
 
   it("exposes the expected event-type allow-list", () => {
@@ -100,16 +107,30 @@ describe("recordNewUserModalEvent", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
-  it("rejects an unknown variant", async () => {
+  it("rejects a malformed variant id", async () => {
     const fake = makeFakeD1();
     setCloudflareContext({ DB: fake.db });
     const result = await recordNewUserModalEvent({
       sessionId: "abc123",
-      variant: "c",
+      // Spaces are disallowed by the variant-id regex.
+      variant: "bad variant",
       eventType: "impression",
     });
     expect(result).toEqual({ recorded: false, reason: "invalid variant" });
     expect(fake.calls).toHaveLength(0);
+  });
+
+  it("accepts arbitrary slug-shaped variants", async () => {
+    const fake = makeFakeD1();
+    setCloudflareContext({ DB: fake.db });
+    const result = await recordNewUserModalEvent({
+      sessionId: "abc123",
+      variant: "v2-bigger-cta",
+      eventType: "impression",
+    });
+    expect(result).toEqual({ recorded: true });
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0].binds[2]).toBe("v2-bigger-cta");
   });
 
   it("rejects an unknown event type", async () => {

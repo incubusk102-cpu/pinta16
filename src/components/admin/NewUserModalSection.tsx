@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Eye,
   Loader2,
   MousePointerClick,
+  Plus,
   Save,
   Sparkles,
   ScrollText,
   Timer,
+  Trash2,
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,10 +29,14 @@ import { PREVIEW_EVENT } from "@/components/NewUserModal";
 import { NewUserModalAnalyticsPanel } from "@/components/admin/NewUserModalAnalyticsPanel";
 import {
   DEFAULT_NEW_USER_MODAL,
-  DEFAULT_NEW_USER_MODAL_VARIANT_B,
+  NEW_USER_MODAL_MAX_VARIANTS,
+  newUserModalVariantId,
+  newUserModalVariantLabel,
   useStorefrontConfig,
   type NewUserModalConfig,
+  type NewUserModalVariant,
 } from "@/contexts/StorefrontConfigContext";
+import { listNewUserModalVariants } from "@/lib/newuser-modal-variant";
 
 interface AdminPromoSummary {
   code: string;
@@ -52,6 +58,74 @@ const formatPromoLabel = (p: AdminPromoSummary) => {
 };
 
 const NONE_VALUE = "__none__";
+const VARIANT_ID_RE = /^[a-z0-9_-]{1,32}$/;
+
+const sanitizeIdInput = (raw: string): string =>
+  raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, 32);
+
+// Build the next unused variant id when the admin clicks "Add variant".
+// Walks through a, b, c, … and falls back to numbered suffixes if all
+// 26 letters are taken (extremely unlikely with the 8-variant cap).
+const nextVariantId = (existing: NewUserModalVariant[]): string => {
+  const taken = new Set(existing.map((v) => v.id));
+  for (let i = 0; i < 26; i++) {
+    const id = newUserModalVariantId(i);
+    if (!taken.has(id)) return id;
+  }
+  for (let i = 1; i < 100; i++) {
+    const id = `v${i}`;
+    if (!taken.has(id)) return id;
+  }
+  return `v${existing.length + 1}`;
+};
+
+// Coerce whatever the server returned into a fully-populated config so
+// the form has stable defaults for both old (top-level only) and new
+// (variants array) shapes. Mirrors `listNewUserModalVariants` from the
+// resolver lib so the admin sees the same variants the modal would.
+const normalizeIncoming = (
+  raw: Partial<NewUserModalConfig>,
+): NewUserModalConfig => {
+  const merged: NewUserModalConfig = {
+    ...DEFAULT_NEW_USER_MODAL,
+    ...raw,
+    triggers: {
+      ...DEFAULT_NEW_USER_MODAL.triggers,
+      ...(raw.triggers || {}),
+    },
+    variantB: {
+      ...DEFAULT_NEW_USER_MODAL.variantB,
+      ...(raw.variantB || {}),
+    },
+    variants: Array.isArray(raw.variants) ? raw.variants : [],
+    variantsEnabled: raw.variantsEnabled === true,
+  };
+  const variants = listNewUserModalVariants(merged);
+  return {
+    ...merged,
+    variants: variants.length > 0 ? variants : DEFAULT_NEW_USER_MODAL.variants,
+  };
+};
+
+// Build a fresh variant ready to drop into the list, defaulting to the
+// active variant A's copy so the admin only has to tweak deltas.
+const makeBlankVariant = (
+  existing: NewUserModalVariant[],
+): NewUserModalVariant => {
+  const id = nextVariantId(existing);
+  const head = existing[0];
+  return {
+    id,
+    label: newUserModalVariantLabel(existing.length),
+    weight: 0,
+    headline: head?.headline || DEFAULT_NEW_USER_MODAL.headline,
+    body: head?.body || DEFAULT_NEW_USER_MODAL.body,
+    voucherCode: head?.voucherCode || "",
+  };
+};
 
 export function NewUserModalSection() {
   const { token } = useAdminAuth();
@@ -83,7 +157,7 @@ export function NewUserModalSection() {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
     if (data.config?.newUserModal) {
-      setCfg(data.config.newUserModal);
+      setCfg(normalizeIncoming(data.config.newUserModal));
     }
     if (Array.isArray(data.config?.promoCodes)) {
       setPromos(data.config.promoCodes);
@@ -110,7 +184,12 @@ export function NewUserModalSection() {
         };
         if (cancelled) return;
         if (data.config?.newUserModal) {
-          setCfg({ ...DEFAULT_NEW_USER_MODAL, ...data.config.newUserModal });
+          setCfg(
+            normalizeIncoming({
+              ...DEFAULT_NEW_USER_MODAL,
+              ...data.config.newUserModal,
+            }),
+          );
         }
         if (Array.isArray(data.config?.promoCodes)) {
           setPromos(data.config.promoCodes);
@@ -144,7 +223,7 @@ export function NewUserModalSection() {
     }
   };
 
-  const handlePreview = (variant?: "a" | "b") => {
+  const handlePreview = (variant?: string) => {
     // Persist whatever the admin has tweaked locally before showing the
     // preview — otherwise the modal renders against the last-saved
     // config and the admin's unsaved copy / voucher / toggles wouldn't
@@ -157,6 +236,58 @@ export function NewUserModalSection() {
       );
     });
   };
+
+  // Variants — mutators are co-located with the form state so the
+  // editor sub-component stays pure (it just receives a change handler).
+  const updateVariant = (index: number, next: NewUserModalVariant) => {
+    setCfg((c) => {
+      const variants = c.variants.slice();
+      variants[index] = next;
+      return { ...c, variants };
+    });
+  };
+
+  const removeVariant = (index: number) => {
+    setCfg((c) => {
+      if (c.variants.length <= 1) return c;
+      const variants = c.variants.filter((_, i) => i !== index);
+      return {
+        ...c,
+        variants,
+        // Auto-disable the test when we drop back to a single variant
+        // so we don't end up in a state where the toggle is on but the
+        // resolver short-circuits to variant A anyway.
+        variantsEnabled: c.variantsEnabled && variants.length >= 2,
+      };
+    });
+  };
+
+  const addVariant = () => {
+    setCfg((c) => {
+      if (c.variants.length >= NEW_USER_MODAL_MAX_VARIANTS) return c;
+      return {
+        ...c,
+        variants: [...c.variants, makeBlankVariant(c.variants)],
+      };
+    });
+  };
+
+  // Show a normalised breakdown when the test is on so the admin can see
+  // the actual % each variant will receive after weights are scaled.
+  const weightSummary = useMemo(() => {
+    if (!cfg.variantsEnabled || cfg.variants.length < 2) return "";
+    const total = cfg.variants.reduce(
+      (acc, v) => acc + Math.max(0, v.weight),
+      0,
+    );
+    if (total <= 0)
+      return "All weights are zero — every visitor will see Variant A.";
+    const parts = cfg.variants.map((v) => {
+      const pct = (Math.max(0, v.weight) / total) * 100;
+      return `${v.label || v.id.toUpperCase()} ${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
+    });
+    return `Split: ${parts.join(" / ")}`;
+  }, [cfg.variantsEnabled, cfg.variants]);
 
   const handleAutoCreateWelcome10 = async () => {
     setCreatingWelcome(true);
@@ -300,48 +431,14 @@ export function NewUserModalSection() {
 
       <section className="rounded-md border border-border/60 bg-card/30 p-4 sm:p-5 space-y-4">
         <div>
-          <h3 className="font-display text-base">Voucher</h3>
+          <h3 className="font-display text-base">Voucher shortcut</h3>
           <p className="text-xs text-muted-foreground mt-1">
-            Attach an existing Marketing promo, or auto-create a 10% welcome
-            code in one click.
+            Each variant picks its own promo below. This shortcut bootstraps a
+            10% welcome code and attaches it to Variant A in one click.
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Promo code</Label>
-          <Select
-            value={cfg.voucherCode || NONE_VALUE}
-            onValueChange={(v) =>
-              setCfg((c) => ({
-                ...c,
-                voucherCode: v === NONE_VALUE ? "" : v,
-              }))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="None — show no code" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_VALUE}>None — show no code</SelectItem>
-              {promos.length === 0 ? (
-                <SelectItem value="__no_promos" disabled>
-                  No promos configured yet
-                </SelectItem>
-              ) : (
-                promos.map((p) => (
-                  <SelectItem key={p.code} value={p.code}>
-                    {formatPromoLabel(p)}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Manage promo codes in Storefront → Promo codes.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 pt-2 border-t border-border/40">
+        <div className="flex items-center gap-3">
           <Button
             type="button"
             variant="outline"
@@ -356,8 +453,9 @@ export function NewUserModalSection() {
             {hasWelcome10 ? "Re-attach WELCOME10" : "Auto-create WELCOME10"}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Creates WELCOME10 (10% off, no min spend) if it doesn't exist and
-            attaches it to the modal.
+            Creates WELCOME10 (10% off, no min spend) if it doesn&apos;t exist
+            and attaches it to Variant A. Manage all promo codes in Storefront →
+            Promo codes.
           </p>
         </div>
       </section>
@@ -389,144 +487,83 @@ export function NewUserModalSection() {
       </section>
 
       <section className="rounded-md border border-border/60 bg-card/30 p-4 sm:p-5 space-y-4">
-        <div>
-          <h3 className="font-display text-base">Copy</h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Headline and body shown in the modal.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-display text-base">Variants</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Build out A/B/C/… copy variants and split traffic by weight. Each
+              variant gets its own headline, body and voucher; weights are
+              normalised at render time so they don&apos;t need to sum to 100.
+            </p>
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Headline</Label>
-          <Input
-            value={cfg.headline}
-            maxLength={120}
-            onChange={(e) =>
-              setCfg((c) => ({ ...c, headline: e.target.value }))
-            }
-            placeholder={DEFAULT_NEW_USER_MODAL.headline}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Body</Label>
-          <Textarea
-            value={cfg.body}
-            maxLength={400}
-            rows={3}
-            onChange={(e) => setCfg((c) => ({ ...c, body: e.target.value }))}
-            placeholder={DEFAULT_NEW_USER_MODAL.body}
-          />
-        </div>
-      </section>
 
-      <section className="rounded-md border border-border/60 bg-card/30 p-4 sm:p-5 space-y-4">
-        <div>
-          <h3 className="font-display text-base">A/B variant (B)</h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Optional second copy that splits new visitors deterministically by
-            their visitor id. The fields above are variant A. Disable variant B
-            to revert to a single copy.
-          </p>
-        </div>
         <label className="flex items-center justify-between gap-3 p-3 bg-background/30 border border-border/40 rounded-md">
           <div>
-            <p className="text-sm font-medium">Enable variant B</p>
+            <p className="text-sm font-medium">Enable multivariate test</p>
             <p className="text-xs text-muted-foreground">
-              When off, every visitor sees variant A.
+              When off, every visitor sees Variant A. When on, visitors are
+              bucketed deterministically by their visitor id against the
+              cumulative weights below.
             </p>
           </div>
           <Switch
-            checked={cfg.variantB.enabled}
+            checked={cfg.variantsEnabled}
+            disabled={cfg.variants.length < 2}
             onCheckedChange={(v) =>
-              setCfg((c) => ({
-                ...c,
-                variantB: { ...c.variantB, enabled: v },
-              }))
+              setCfg((c) => ({ ...c, variantsEnabled: v }))
             }
           />
         </label>
-        {cfg.variantB.enabled && (
-          <div className="space-y-4 pl-1">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Traffic to variant B ({cfg.variantB.weight}%)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={cfg.variantB.weight}
-                onChange={(e) => {
-                  const next = Math.min(
-                    100,
-                    Math.max(0, Math.floor(Number(e.target.value) || 0)),
-                  );
-                  setCfg((c) => ({
-                    ...c,
-                    variantB: { ...c.variantB, weight: next },
-                  }));
-                }}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                0 → no one sees B (pause). 100 → every new visitor sees B.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Variant B headline
-              </Label>
-              <Input
-                value={cfg.variantB.headline}
-                maxLength={120}
-                onChange={(e) =>
-                  setCfg((c) => ({
-                    ...c,
-                    variantB: { ...c.variantB, headline: e.target.value },
-                  }))
-                }
-                placeholder={DEFAULT_NEW_USER_MODAL_VARIANT_B.headline}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Variant B body
-              </Label>
-              <Textarea
-                value={cfg.variantB.body}
-                maxLength={400}
-                rows={3}
-                onChange={(e) =>
-                  setCfg((c) => ({
-                    ...c,
-                    variantB: { ...c.variantB, body: e.target.value },
-                  }))
-                }
-                placeholder={DEFAULT_NEW_USER_MODAL_VARIANT_B.body}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Variant B voucher code (leave blank to use variant A's code)
-              </Label>
-              <Input
-                value={cfg.variantB.voucherCode}
-                maxLength={30}
-                onChange={(e) =>
-                  setCfg((c) => ({
-                    ...c,
-                    variantB: {
-                      ...c.variantB,
-                      voucherCode: e.target.value.toUpperCase(),
-                    },
-                  }))
-                }
-                placeholder="WELCOME15"
-              />
-            </div>
-          </div>
-        )}
+
+        {weightSummary ? (
+          <p className="text-[11px] text-muted-foreground">{weightSummary}</p>
+        ) : null}
+
+        <div className="space-y-4">
+          {cfg.variants.map((variant, index) => (
+            <VariantEditor
+              key={`${variant.id}-${index}`}
+              index={index}
+              variant={variant}
+              promos={promos}
+              showWeight={cfg.variantsEnabled && cfg.variants.length >= 2}
+              onChange={(next) => updateVariant(index, next)}
+              onRemove={
+                cfg.variants.length > 1 ? () => removeVariant(index) : undefined
+              }
+              onPreview={() => handlePreview(variant.id)}
+              saving={saving}
+              idTaken={(candidate) =>
+                cfg.variants.some((v, i) => i !== index && v.id === candidate)
+              }
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addVariant}
+            disabled={cfg.variants.length >= NEW_USER_MODAL_MAX_VARIANTS}
+            title={
+              cfg.variants.length >= NEW_USER_MODAL_MAX_VARIANTS
+                ? `Up to ${NEW_USER_MODAL_MAX_VARIANTS} variants`
+                : "Add another variant"
+            }
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add variant
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            Up to {NEW_USER_MODAL_MAX_VARIANTS} variants.
+          </p>
+        </div>
       </section>
 
-      <NewUserModalAnalyticsPanel />
+      <NewUserModalAnalyticsPanel variants={cfg.variants} />
 
       <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
         <Button onClick={handleSave} disabled={saving}>
@@ -537,45 +574,217 @@ export function NewUserModalSection() {
           )}
           Save new-user modal
         </Button>
-        {cfg.variantB.enabled ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handlePreview("a")}
-              disabled={saving}
-              title="Save and pop variant A open."
-            >
-              <Eye className="w-4 h-4 mr-2" />
-              Preview A
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handlePreview("b")}
-              disabled={saving}
-              title="Save and pop variant B open."
-            >
-              <Eye className="w-4 h-4 mr-2" />
-              Preview B
-            </Button>
-          </>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handlePreview()}
-            disabled={saving}
-            title="Save and pop the modal open right now—bypasses one-shot localStorage gate."
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Save & preview
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => handlePreview()}
+          disabled={saving}
+          title="Save and pop the modal open with the visitor's natural variant."
+        >
+          <Eye className="w-4 h-4 mr-2" />
+          Save & preview
+        </Button>
       </div>
     </div>
   );
 }
+
+interface VariantEditorProps {
+  index: number;
+  variant: NewUserModalVariant;
+  promos: AdminPromoSummary[];
+  showWeight: boolean;
+  onChange: (next: NewUserModalVariant) => void;
+  onRemove?: () => void;
+  onPreview: () => void;
+  saving: boolean;
+  // Lets the parent flag duplicate ids without re-rendering the whole
+  // form on every keystroke.
+  idTaken: (candidate: string) => boolean;
+}
+
+const VariantEditor = ({
+  index,
+  variant,
+  promos,
+  showWeight,
+  onChange,
+  onRemove,
+  onPreview,
+  saving,
+  idTaken,
+}: VariantEditorProps) => {
+  const idInvalid =
+    !VARIANT_ID_RE.test(variant.id) ||
+    idTaken(variant.id) ||
+    variant.id.length === 0;
+
+  return (
+    <div className="rounded-md border border-border/40 bg-background/30 p-3 sm:p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-foreground/85 text-background text-xs font-mono uppercase">
+            {variant.id || "?"}
+          </span>
+          <Input
+            value={variant.label}
+            maxLength={60}
+            onChange={(e) => onChange({ ...variant, label: e.target.value })}
+            placeholder={newUserModalVariantLabel(index)}
+            className="h-8 text-sm w-48"
+            aria-label="Variant label"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onPreview}
+            disabled={saving}
+            title={`Save and preview ${variant.label || variant.id.toUpperCase()}.`}
+          >
+            <Eye className="w-4 h-4 mr-1.5" />
+            Preview
+          </Button>
+          {onRemove ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onRemove}
+              title="Remove variant"
+              aria-label="Remove variant"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+            ID
+          </Label>
+          <Input
+            value={variant.id}
+            maxLength={32}
+            onChange={(e) =>
+              onChange({
+                ...variant,
+                id: sanitizeIdInput(e.target.value),
+              })
+            }
+            placeholder={newUserModalVariantId(index)}
+            className={`h-8 text-sm font-mono ${
+              idInvalid
+                ? "border-destructive focus-visible:ring-destructive"
+                : ""
+            }`}
+            aria-invalid={idInvalid}
+          />
+          {idInvalid ? (
+            <p className="text-[11px] text-destructive">
+              {variant.id.length === 0
+                ? "ID required."
+                : idTaken(variant.id)
+                  ? "Already used by another variant."
+                  : "Use lowercase letters, digits, _ or -."}
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              Sticks to the visitor — keep stable mid-test.
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+            Voucher
+          </Label>
+          <Select
+            value={variant.voucherCode || NONE_VALUE}
+            onValueChange={(v) =>
+              onChange({
+                ...variant,
+                voucherCode: v === NONE_VALUE ? "" : v,
+              })
+            }
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="None — show no code" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE_VALUE}>None — show no code</SelectItem>
+              {promos.length === 0 ? (
+                <SelectItem value="__no_promos" disabled>
+                  No promos configured yet
+                </SelectItem>
+              ) : (
+                promos.map((p) => (
+                  <SelectItem key={p.code} value={p.code}>
+                    {formatPromoLabel(p)}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+          Headline
+        </Label>
+        <Input
+          value={variant.headline}
+          maxLength={120}
+          onChange={(e) => onChange({ ...variant, headline: e.target.value })}
+          placeholder={DEFAULT_NEW_USER_MODAL.headline}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+          Body
+        </Label>
+        <Textarea
+          value={variant.body}
+          maxLength={400}
+          rows={3}
+          onChange={(e) => onChange({ ...variant, body: e.target.value })}
+          placeholder={DEFAULT_NEW_USER_MODAL.body}
+        />
+      </div>
+
+      {showWeight ? (
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+            Weight ({variant.weight})
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            value={variant.weight}
+            onChange={(e) => {
+              const next = Math.min(
+                100,
+                Math.max(0, Math.floor(Number(e.target.value) || 0)),
+              );
+              onChange({ ...variant, weight: next });
+            }}
+            className="w-32 h-8 text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Relative weight 0–100. The renderer normalises across all variants,
+            so the numbers don&apos;t need to sum to 100.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 const TriggerToggle = ({
   icon,

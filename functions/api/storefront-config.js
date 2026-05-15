@@ -951,6 +951,23 @@ const sanitizeSiteCopy = (raw) => {
 // → variant B). When `weight === 0` no one ever gets B; when 100 it
 // becomes a pure swap of the existing copy. The headline / body /
 // voucherCode at the top level are variant A.
+// Maximum number of variants the admin can configure. Two is the
+// historical minimum (A/B); 8 keeps the picker UI manageable and the
+// cumulative-weight math trivially correct.
+const NEW_USER_MODAL_MAX_VARIANTS = 8;
+const NEW_USER_MODAL_VARIANT_ID_RE = /^[a-z0-9_-]{1,32}$/;
+
+const DEFAULT_NEW_USER_MODAL_VARIANT_A = {
+  id: "a",
+  label: "Variant A",
+  weight: 100,
+  headline: "Welcome to Canvas Hub",
+  body:
+    "First time here? Sign up with Google to keep your favourites, " +
+    "or grab your welcome discount before you browse.",
+  voucherCode: "WELCOME10",
+};
+
 const DEFAULT_NEW_USER_MODAL = {
   enabled: true,
   triggers: {
@@ -975,6 +992,8 @@ const DEFAULT_NEW_USER_MODAL = {
       "use on your first piece.",
     voucherCode: "",
   },
+  variants: [DEFAULT_NEW_USER_MODAL_VARIANT_A],
+  variantsEnabled: false,
 };
 
 // Default WELCOME10 promo seeded on first read. Idempotent — only added
@@ -1453,10 +1472,130 @@ const sanitizeNewUserModalVariantB = (raw) => {
   };
 };
 
+const sanitizeNewUserModalVariant = (raw, index, takenIds) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const fallbackId = String.fromCharCode(97 + (index % 26));
+  let id = String(data.id ?? fallbackId)
+    .trim()
+    .toLowerCase();
+  if (!NEW_USER_MODAL_VARIANT_ID_RE.test(id)) id = fallbackId;
+  // Dedupe: if another already-sanitised variant grabbed this id, suffix
+  // with the index so we keep one row per slot instead of dropping it.
+  if (takenIds.has(id)) {
+    let suffix = 2;
+    let next = `${id}${suffix}`;
+    while (takenIds.has(next)) {
+      suffix += 1;
+      next = `${id}${suffix}`;
+    }
+    id = NEW_USER_MODAL_VARIANT_ID_RE.test(next)
+      ? next
+      : `${fallbackId}${index}`;
+  }
+  takenIds.add(id);
+
+  const weightRaw = Math.floor(Number(data.weight));
+  const weight = Number.isFinite(weightRaw)
+    ? Math.min(100, Math.max(0, weightRaw))
+    : 0;
+  const labelRaw =
+    typeof data.label === "string" && data.label.trim()
+      ? data.label.trim()
+      : `Variant ${String.fromCharCode(65 + (index % 26))}`;
+  return {
+    id,
+    label: labelRaw.slice(0, 60),
+    weight,
+    headline: String(data.headline ?? "").slice(0, 120),
+    body: String(data.body ?? "").slice(0, 400),
+    voucherCode: String(data.voucherCode ?? "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 30),
+  };
+};
+
+// Build a 1–8-entry variants array from the incoming blob, falling back
+// to a single variant A synthesised from the legacy top-level fields
+// when no explicit `variants` array is provided. Mirrors the
+// `listNewUserModalVariants` helper on the client so both ends agree on
+// which variants are "real".
+const sanitizeNewUserModalVariants = (raw, fallback) => {
+  const list = Array.isArray(raw) ? raw : [];
+  if (list.length > 0) {
+    const taken = new Set();
+    return list
+      .slice(0, NEW_USER_MODAL_MAX_VARIANTS)
+      .map((entry, idx) => sanitizeNewUserModalVariant(entry, idx, taken));
+  }
+  // No variants array — derive one from the legacy fields.
+  const fb = fallback && typeof fallback === "object" ? fallback : {};
+  const variantA = {
+    id: "a",
+    label: "Variant A",
+    weight: 100,
+    headline: String(fb.headline ?? DEFAULT_NEW_USER_MODAL.headline).slice(
+      0,
+      120,
+    ),
+    body: String(fb.body ?? DEFAULT_NEW_USER_MODAL.body).slice(0, 400),
+    voucherCode: String(fb.voucherCode ?? "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 30),
+  };
+  const vb =
+    fb.variantB && typeof fb.variantB === "object" ? fb.variantB : null;
+  if (vb && vb.enabled === true) {
+    const weightB = Math.min(
+      100,
+      Math.max(0, Math.floor(Number(vb.weight) || 50)),
+    );
+    return [
+      { ...variantA, weight: Math.max(0, 100 - weightB) },
+      {
+        id: "b",
+        label: "Variant B",
+        weight: weightB,
+        headline: String(
+          vb.headline ?? DEFAULT_NEW_USER_MODAL.variantB.headline,
+        ).slice(0, 120),
+        body: String(vb.body ?? DEFAULT_NEW_USER_MODAL.variantB.body).slice(
+          0,
+          400,
+        ),
+        voucherCode: String(vb.voucherCode ?? "")
+          .trim()
+          .toUpperCase()
+          .slice(0, 30),
+      },
+    ];
+  }
+  return [variantA];
+};
+
 const sanitizeNewUserModal = (raw) => {
   const data = raw && typeof raw === "object" ? raw : {};
   const triggersRaw =
     data.triggers && typeof data.triggers === "object" ? data.triggers : {};
+  const variants = sanitizeNewUserModalVariants(data.variants, data);
+  const head = variants[0];
+  const second = variants.length >= 2 ? variants[1] : null;
+  const rawVariantB = sanitizeNewUserModalVariantB(data.variantB);
+  // Keep `variantB` in sync with variants[1] so legacy readers see the
+  // same copy/voucher the modal renders. `enabled` is gated on the
+  // builder being on AND there being at least 2 variants — anything else
+  // collapses back to the single-copy path.
+  const variantsEnabled = data.variantsEnabled === true && variants.length >= 2;
+  const variantB = second
+    ? {
+        enabled: variantsEnabled,
+        weight: second.weight,
+        headline: second.headline || rawVariantB.headline,
+        body: second.body || rawVariantB.body,
+        voucherCode: second.voucherCode,
+      }
+    : { ...rawVariantB, enabled: false };
   return {
     enabled: data.enabled !== false,
     triggers: {
@@ -1482,17 +1621,13 @@ const sanitizeNewUserModal = (raw) => {
         ),
       ),
     ),
-    voucherCode: String(data.voucherCode ?? "")
-      .trim()
-      .toUpperCase()
-      .slice(0, 30),
+    voucherCode: head.voucherCode,
     emailCaptureEnabled: data.emailCaptureEnabled === true,
-    headline: String(data.headline ?? DEFAULT_NEW_USER_MODAL.headline).slice(
-      0,
-      120,
-    ),
-    body: String(data.body ?? DEFAULT_NEW_USER_MODAL.body).slice(0, 400),
-    variantB: sanitizeNewUserModalVariantB(data.variantB),
+    headline: head.headline || DEFAULT_NEW_USER_MODAL.headline,
+    body: head.body || DEFAULT_NEW_USER_MODAL.body,
+    variantB,
+    variants,
+    variantsEnabled,
   };
 };
 
@@ -1858,6 +1993,10 @@ const publicView = (config) => {
       headline: config.newUserModal.headline,
       body: config.newUserModal.body,
       variantB: { ...(config.newUserModal.variantB || {}) },
+      variants: Array.isArray(config.newUserModal.variants)
+        ? config.newUserModal.variants.map((v) => ({ ...v }))
+        : [],
+      variantsEnabled: config.newUserModal.variantsEnabled === true,
     },
     dailyFeature: {
       enabled: config.dailyFeature.enabled,
@@ -2336,6 +2475,13 @@ const handle = async ({ request, env }) => {
               ? incoming.triggers
               : {}),
           },
+          // When the admin sends a `variants` array, treat it as
+          // authoritative — don't merge it with the existing one. This
+          // matters for deletes: the existing slot would otherwise
+          // resurface every save.
+          variants: Array.isArray(incoming.variants)
+            ? incoming.variants
+            : existing.newUserModal.variants,
         };
         const next = sanitizeConfig({
           ...existing,
