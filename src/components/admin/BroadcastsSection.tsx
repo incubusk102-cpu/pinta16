@@ -816,7 +816,7 @@ export function BroadcastsSection() {
               Keep as draft
             </AlertDialogCancel>
             <AlertDialogAction
-              className="border border-emerald-500/30 bg-emerald-600 text-white shadow-md hover:bg-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
+              variant="success"
               onClick={() => void handleSendNow()}
               disabled={sending}
             >
@@ -850,7 +850,7 @@ export function BroadcastsSection() {
           <AlertDialogFooter>
             <AlertDialogCancel>Keep broadcast</AlertDialogCancel>
             <AlertDialogAction
-              className="border border-destructive/30 bg-destructive/10 text-destructive shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:shadow-md"
+              variant="dangerSoft"
               onClick={() =>
                 confirmDelete ? void handleDelete(confirmDelete) : undefined
               }

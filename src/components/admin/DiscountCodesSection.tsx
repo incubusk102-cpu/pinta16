@@ -974,7 +974,7 @@ export const DiscountCodesSection = () => {
               Keep discount code
             </AlertDialogCancel>
             <AlertDialogAction
-              className="border border-destructive/30 bg-destructive/10 text-destructive shadow-sm hover:bg-destructive hover:text-destructive-foreground hover:shadow-md"
+              variant="dangerSoft"
               onClick={() =>
                 confirmDelete ? void handleDelete(confirmDelete) : undefined
               }
