@@ -13,6 +13,7 @@ import {
   useHeroSlides,
 } from "@/contexts/HeroSlidesContext";
 import { isExternalHref, safeHref } from "@/lib/safeUrl";
+import { sendHeroSlideEvent } from "@/lib/hero-slide-event";
 
 const SWIPE_PX = 50;
 
@@ -62,7 +63,15 @@ const ALIGN_CLASSES: Record<HeroSlide["align"], string> = {
 const migrateLegacyHref = (href: string): string =>
   href === "#gallery" || href === "/#gallery" ? "/collection" : href;
 
-const CtaLink = ({ label, href }: { label: string; href: string }) => {
+const CtaLink = ({
+  label,
+  href,
+  slideId,
+}: {
+  label: string;
+  href: string;
+  slideId: string;
+}) => {
   const cls =
     "inline-flex max-w-full items-center justify-center font-body text-[11px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase px-5 sm:px-10 py-3 sm:py-4 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 rounded-none shadow-lg shadow-background/25";
   const migrated = migrateLegacyHref(href);
@@ -82,7 +91,13 @@ const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const target = external ? "_blank" : undefined;
   const rel = external ? "noopener noreferrer" : undefined;
   return (
-    <a href={finalHref} target={target} rel={rel} className={cls}>
+    <a
+      href={finalHref}
+      target={target}
+      rel={rel}
+      className={cls}
+      onClick={() => sendHeroSlideEvent(slideId, "click")}
+    >
       {label}
     </a>
   );
@@ -130,7 +145,11 @@ const SlideContent = ({ slide, active }: SlideContentProps) => (
           transition={{ duration: 0.8, delay: 0.55 }}
           className="mt-2"
         >
-          <CtaLink label={slide.ctaLabel} href={slide.ctaHref} />
+          <CtaLink
+            label={slide.ctaLabel}
+            href={slide.ctaHref}
+            slideId={slide.id}
+          />
         </motion.div>
       )}
     </div>
@@ -190,6 +209,20 @@ const HeroSlider = () => {
   useEffect(() => {
     if (index !== safeIndex) setIndex(safeIndex);
   }, [index, safeIndex]);
+
+  // Per-slide impression beacon. Fires once per slide_id per
+  // page-load so an autoplay loop-around doesn't double-count. The
+  // server-side INSERT OR IGNORE is keyed on the event id alone, so
+  // dedupe has to happen client-side — `seenRef` is the source of
+  // truth for "this slide already counted in this session view".
+  const seenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (count === 0) return;
+    const id = slides[safeIndex]?.id;
+    if (!id || seenRef.current.has(id)) return;
+    seenRef.current.add(id);
+    sendHeroSlideEvent(id, "impression");
+  }, [count, safeIndex, slides]);
 
   // Autoplay. Including `index` in deps re-arms the timer on manual
   // navigation, so clicking next/prev/dot doesn't fire an immediate auto-advance.

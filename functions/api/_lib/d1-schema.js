@@ -240,4 +240,18 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_publish_id ON tiktok_posts(publish_id)`,
   `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_posted_at ON tiktok_posts(posted_at)`,
   `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_created_at ON tiktok_posts(created_at)`,
+
+  `CREATE TABLE IF NOT EXISTS hero_slide_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    slide_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    country TEXT,
+    device TEXT,
+    ts TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_ts ON hero_slide_events(ts)`,
+  `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_slide ON hero_slide_events(slide_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_slide_type ON hero_slide_events(slide_id, event_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_hero_slide_events_session ON hero_slide_events(session_id)`,
 ];
