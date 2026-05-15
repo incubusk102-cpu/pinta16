@@ -696,13 +696,14 @@ export function SecuritySection() {
                 )
               }
               disabled={!alertChanged || savingAlert}
+              variant="success"
             >
               {savingAlert ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              <span className="ml-2">Save</span>
+              <span className="ml-2">Save login alerts</span>
             </Button>
           </div>
         </div>
@@ -767,13 +768,14 @@ export function SecuritySection() {
                 )
               }
               disabled={!turnstileChanged || savingTurnstile}
+              variant="success"
             >
               {savingTurnstile ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              <span className="ml-2">Save</span>
+              <span className="ml-2">Save CAPTCHA mode</span>
             </Button>
           </div>
         </div>
@@ -828,13 +830,14 @@ export function SecuritySection() {
                 )
               }
               disabled={!bodyCapChanged || savingBodyCap}
+              variant="success"
             >
               {savingBodyCap ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              <span className="ml-2">Save</span>
+              <span className="ml-2">Save body cap</span>
             </Button>
           </div>
         </div>
@@ -879,6 +882,7 @@ export function SecuritySection() {
                 );
               }}
               disabled={!ipListChangedRaw || savingIpList}
+              variant="success"
             >
               {savingIpList ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -898,7 +902,7 @@ export function SecuritySection() {
           </span>
           <Button
             onClick={() => void resetCounters()}
-            variant="outline"
+            variant="warning"
             size="sm"
             disabled={resetting}
           >
@@ -1026,6 +1030,7 @@ export function SecuritySection() {
                 )
               }
               disabled={!rateLimitsChanged || savingRateLimits}
+              variant="success"
             >
               {savingRateLimits ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

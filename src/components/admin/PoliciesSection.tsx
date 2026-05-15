@@ -198,7 +198,7 @@ export function PoliciesSection() {
         <div className="flex flex-wrap gap-2 justify-end">
           <Button
             type="button"
-            variant="outline"
+            variant="warning"
             size="sm"
             onClick={resetToDefault}
             disabled={resetting || saving}
@@ -212,6 +212,7 @@ export function PoliciesSection() {
           </Button>
           <Button
             type="button"
+            variant="success"
             size="sm"
             onClick={save}
             disabled={!dirty || saving}
@@ -221,7 +222,7 @@ export function PoliciesSection() {
             ) : (
               <Save className="w-3.5 h-3.5 mr-2" />
             )}
-            Save
+            Save {SLUG_LABEL[active]}
           </Button>
         </div>
       </div>
