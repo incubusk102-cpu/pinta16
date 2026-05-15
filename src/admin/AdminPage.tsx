@@ -65,6 +65,7 @@ import ReturnsSection from "@/components/admin/ReturnsSection";
 import { AbandonedCartSection } from "@/components/admin/AbandonedCartSection";
 import { MarketingSection } from "@/components/admin/MarketingSection";
 import { MarketingTriggersSection } from "@/components/admin/MarketingTriggersSection";
+import { BroadcastsSection } from "@/components/admin/BroadcastsSection";
 import { StorefrontSection } from "@/components/admin/StorefrontSection";
 import { PoliciesSection } from "@/components/admin/PoliciesSection";
 import { HeroSlidesSection } from "@/components/admin/HeroSlidesSection";
@@ -106,6 +107,7 @@ import {
   Plus,
   QrCode,
   RefreshCw,
+  Send,
   Settings,
   Shield,
   Eye,
@@ -180,6 +182,7 @@ type AdminSection =
   | "users"
   | "customers"
   | "marketing"
+  | "broadcasts"
   | "abandonedCart"
   | "marketingTriggers"
   | "storefront"
@@ -211,6 +214,7 @@ const SECTION_LABELS: Record<AdminSection, string> = {
   users: "Users",
   customers: "Customers",
   marketing: "Marketing",
+  broadcasts: "Broadcasts",
   abandonedCart: "Cart recovery",
   marketingTriggers: "Triggers",
   storefront: "Storefront",
@@ -609,6 +613,11 @@ const NAV_GROUPS: {
     label: "Customize",
     items: [
       { key: "marketing", icon: <TrendingUp className="w-4 h-4" /> },
+      {
+        key: "broadcasts",
+        icon: <Send className="w-4 h-4" />,
+        hint: "Newsletter blasts & one-off email campaigns",
+      },
       {
         key: "abandonedCart",
         icon: <ShoppingCart className="w-4 h-4" />,
@@ -1254,6 +1263,7 @@ function AdminDashboard() {
           {section === "users" && <UsersSection />}
           {section === "customers" && <CustomersSection />}
           {section === "marketing" && <MarketingSection />}
+          {section === "broadcasts" && <BroadcastsSection />}
           {section === "abandonedCart" && <AbandonedCartSection />}
           {section === "marketingTriggers" && <MarketingTriggersSection />}
           {section === "storefront" && <StorefrontSection />}
