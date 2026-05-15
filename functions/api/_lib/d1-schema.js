@@ -232,6 +232,11 @@ export const D1_SCHEMA_STATEMENTS = [
     error_message TEXT,
     posted_by TEXT,
     posted_at TEXT,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    like_count INTEGER NOT NULL DEFAULT 0,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    share_count INTEGER NOT NULL DEFAULT 0,
+    engagement_refreshed_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -240,6 +245,7 @@ export const D1_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_publish_id ON tiktok_posts(publish_id)`,
   `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_posted_at ON tiktok_posts(posted_at)`,
   `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_created_at ON tiktok_posts(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_tiktok_posts_view_count ON tiktok_posts(view_count)`,
 
   `CREATE TABLE IF NOT EXISTS hero_slide_events (
     id TEXT PRIMARY KEY,

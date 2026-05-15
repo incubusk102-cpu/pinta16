@@ -3,6 +3,9 @@
 // GET  ?action=status                    → connection + token + creator info
 //                                          (also reports `autoPostEnabled`)
 // GET  ?action=posts&limit=50            → recent rows from `tiktok_posts`
+// GET  ?action=leaderboard&limit=10      → top published posts ordered by
+//                                          view_count DESC (engagement
+//                                          leaderboard for the admin panel)
 // GET  ?action=caption&productId=...     → server-rendered caption + image URL
 // GET  ?action=connect-url               → mints a state token + returns the
 //                                          OAuth authorize URL to redirect to
@@ -16,6 +19,12 @@
 //                                          state because TikTok hadn't yet
 //                                          delivered the inbox notification
 //                                          within the fail-fast window.
+// POST ?action=refresh-engagement        → pull live view / like / comment /
+//                                          share counts from TikTok's
+//                                          /v2/video/query/ endpoint. Body
+//                                          `{ id }` refreshes a single row;
+//                                          empty body refreshes up to the
+//                                          last 100 published rows.
 // POST ?action=set-auto-post             → flip the auto-post-on-create flag
 //                                          (body: { enabled: bool })
 // POST ?action=refresh-token             → manually refresh the access token
@@ -36,6 +45,7 @@ import {
   pollPublishStatus,
   publishProductPhoto,
   refreshAccessToken,
+  refreshTikTokPostEngagement,
   resolveProductImageUrl,
   setAutoPostEnabled,
   MAX_CAPTION_LENGTH,
@@ -84,6 +94,30 @@ const isSchemaApplied = async () => {
   }
 };
 
+// SQLite's `ALTER TABLE ADD COLUMN` rejects duplicates with a
+// `duplicate column name: <col>` error. Since `D1_SCHEMA_STATEMENTS`
+// is the source-of-truth bootstrap path (admin re-runs it whenever
+// they hit "Apply schema"), tolerate that specific failure mode so
+// adding new columns to `tiktok_posts` in future migrations doesn't
+// hard-stop the rest of the bootstrap.
+const isBenignSchemaError = (err) => {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("duplicate column");
+};
+
+// Bring an existing `tiktok_posts` table up to the latest column set
+// (`view_count` / `like_count` / `comment_count` / `share_count` /
+// `engagement_refreshed_at`). For brand-new D1 instances these come
+// in via the inline CREATE TABLE in `d1-schema.js`; this helper is
+// the runtime equivalent of the matching `migrations/0013_*.sql`.
+const TIKTOK_POSTS_ALTER_STATEMENTS = [
+  `ALTER TABLE tiktok_posts ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE tiktok_posts ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE tiktok_posts ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE tiktok_posts ADD COLUMN share_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE tiktok_posts ADD COLUMN engagement_refreshed_at TEXT`,
+];
+
 const applySchema = async () => {
   if (!isD1Available()) return { ok: false, error: "D1 not configured" };
   try {
@@ -93,7 +127,22 @@ const applySchema = async () => {
       // ride because they're idempotent (`IF NOT EXISTS`) — keeps
       // schema parity if D1 was created fresh after the table
       // already existed in main.
-      await d1Run(sql);
+      try {
+        await d1Run(sql);
+      } catch (err) {
+        if (!isBenignSchemaError(err)) throw err;
+      }
+    }
+    // Migrate older `tiktok_posts` tables that pre-date the
+    // engagement columns. New columns must be added explicitly —
+    // CREATE TABLE IF NOT EXISTS is a no-op against an existing
+    // table even if its schema is stale.
+    for (const sql of TIKTOK_POSTS_ALTER_STATEMENTS) {
+      try {
+        await d1Run(sql);
+      } catch (err) {
+        if (!isBenignSchemaError(err)) throw err;
+      }
     }
     return { ok: true };
   } catch (err) {
@@ -162,6 +211,45 @@ export const onRequestGet = async ({ request, env }) => {
         [limit],
       );
       return json(200, { posts: rows?.results || [] });
+    } catch (err) {
+      return json(500, { error: err?.message || String(err) });
+    }
+  }
+
+  if (action === "leaderboard") {
+    if (!isD1Available()) {
+      return json(200, { posts: [], message: "D1 not configured" });
+    }
+    if (!(await isSchemaApplied())) {
+      return json(200, { posts: [], message: "Schema not applied yet" });
+    }
+    const limit = Math.min(
+      50,
+      Math.max(1, Number(url.searchParams.get("limit")) || 10),
+    );
+    try {
+      // Top published posts ranked by view_count, tiebreak by
+      // like_count then comment_count. Rows that have never been
+      // refreshed have view_count=0 and naturally fall to the
+      // bottom — the empty-state UI in the admin panel encourages
+      // the operator to hit "Refresh engagement".
+      const rows = await d1All(
+        `SELECT * FROM tiktok_posts
+           WHERE status='published'
+             AND tiktok_post_id IS NOT NULL
+             AND tiktok_post_id != ''
+           ORDER BY view_count DESC, like_count DESC, comment_count DESC, posted_at DESC
+           LIMIT ?`,
+        [limit],
+      );
+      const lastRefreshedRow = await d1First(
+        `SELECT MAX(engagement_refreshed_at) AS ts FROM tiktok_posts
+           WHERE status='published' AND tiktok_post_id IS NOT NULL`,
+      );
+      return json(200, {
+        posts: rows?.results || [],
+        lastRefreshedAt: lastRefreshedRow?.ts || null,
+      });
     } catch (err) {
       return json(500, { error: err?.message || String(err) });
     }
@@ -404,6 +492,42 @@ export const onRequestPost = async ({ request, env }) => {
       status: result.status,
       postId: result.postId || null,
       shareUrl: result.shareUrl || null,
+    });
+  }
+
+  if (action === "refresh-engagement") {
+    if (!isTikTokConfigured()) {
+      return json(503, {
+        error:
+          "TikTok not configured. Set TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET first.",
+      });
+    }
+    if (!(await isSchemaApplied())) {
+      return json(503, {
+        error: "tiktok_posts table missing. POST ?action=apply-schema first.",
+      });
+    }
+    let body = null;
+    try {
+      body = await request.json();
+    } catch {
+      // Empty body is allowed — "refresh all recent" mode.
+      body = null;
+    }
+    const rowId =
+      body && typeof body.id === "string" && body.id.trim()
+        ? body.id.trim()
+        : null;
+    const limit =
+      body && Number.isFinite(Number(body.limit)) ? Number(body.limit) : 100;
+    const result = await refreshTikTokPostEngagement({ rowId, limit });
+    if (!result.ok) {
+      return json(502, { error: result.error || "Engagement refresh failed" });
+    }
+    return json(200, {
+      ok: true,
+      refreshed: result.refreshed,
+      missing: result.missing,
     });
   }
 

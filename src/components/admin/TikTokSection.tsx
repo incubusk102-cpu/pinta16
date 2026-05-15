@@ -2,13 +2,18 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   ExternalLink,
+  Eye,
+  Heart,
   Image as ImageIcon,
   Loader2,
+  MessageCircle,
   RefreshCw,
   Send,
   Settings as SettingsIcon,
+  Share2,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -114,6 +119,11 @@ interface TikTokPostRow {
   posted_at: string | null;
   created_at: string;
   updated_at: string | null;
+  view_count?: number;
+  like_count?: number;
+  comment_count?: number;
+  share_count?: number;
+  engagement_refreshed_at?: string | null;
 }
 
 interface PublishResult {
@@ -133,6 +143,19 @@ const formatBytes = (n: number | null | undefined) => {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+// Compact "1.2K" / "3.4M" formatter for engagement counts in the
+// leaderboard table. Numbers under 1000 render as-is so the operator
+// can read exact early counts (e.g. 12 views vs 1.2K reads the same
+// way the TikTok app itself does).
+const compactNumber = (n: number | null | undefined) => {
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return "0";
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
+  if (n < 1_000_000_000)
+    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  return `${(n / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
 };
 
 const MAX_CAPTION_LENGTH = 2200;
@@ -197,6 +220,12 @@ export function TikTokSection() {
   // guidelines at https://developers.tiktok.com/...").
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<TikTokPostRow[]>([]);
+  const [leaderboardLastRefreshedAt, setLeaderboardLastRefreshedAt] = useState<
+    string | null
+  >(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [refreshingEngagement, setRefreshingEngagement] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
     null,
   );
@@ -287,6 +316,76 @@ export function TikTokSection() {
     }
   }, []);
 
+  const fetchLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true);
+    try {
+      const res = await fetch("/api/admin/tiktok?action=leaderboard&limit=10", {
+        credentials: "include",
+      });
+      const data = (await res.json()) as {
+        posts?: TikTokPostRow[];
+        lastRefreshedAt?: string | null;
+      };
+      if (res.ok && Array.isArray(data.posts)) {
+        setLeaderboard(data.posts);
+        setLeaderboardLastRefreshedAt(data.lastRefreshedAt ?? null);
+      } else {
+        setLeaderboard([]);
+        setLeaderboardLastRefreshedAt(null);
+      }
+    } catch {
+      setLeaderboard([]);
+      setLeaderboardLastRefreshedAt(null);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, []);
+
+  const refreshEngagement = useCallback(async () => {
+    setRefreshingEngagement(true);
+    try {
+      const res = await fetch("/api/admin/tiktok?action=refresh-engagement", {
+        method: "POST",
+        credentials: "include",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        refreshed?: number;
+        missing?: string[];
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setOauthToast({
+          kind: "error",
+          text: data.error || `Engagement refresh failed (HTTP ${res.status})`,
+        });
+      } else {
+        const refreshed =
+          typeof data.refreshed === "number" ? data.refreshed : 0;
+        const missing = Array.isArray(data.missing) ? data.missing.length : 0;
+        setOauthToast({
+          kind: "success",
+          text:
+            refreshed === 0
+              ? "No published posts to refresh yet."
+              : `Refreshed engagement for ${refreshed} post(s)${
+                  missing > 0 ? ` — ${missing} skipped (no TikTok data).` : "."
+                }`,
+        });
+      }
+      await Promise.all([fetchLeaderboard(), fetchPosts()]);
+    } catch (err) {
+      setOauthToast({
+        kind: "error",
+        text: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRefreshingEngagement(false);
+    }
+  }, [fetchLeaderboard, fetchPosts]);
+
   useEffect(() => {
     void fetchStatus();
   }, [fetchStatus]);
@@ -294,10 +393,13 @@ export function TikTokSection() {
   useEffect(() => {
     if (status?.schemaApplied) {
       void fetchPosts();
+      void fetchLeaderboard();
     } else {
       setPosts([]);
+      setLeaderboard([]);
+      setLeaderboardLastRefreshedAt(null);
     }
-  }, [status?.schemaApplied, fetchPosts]);
+  }, [status?.schemaApplied, fetchPosts, fetchLeaderboard]);
 
   // OAuth roundtrip surfacing — when redirected back from the callback,
   // the URL has ?tiktok=connected | tiktok=failed&reason=...
@@ -1102,6 +1204,149 @@ export function TikTokSection() {
                   </div>
                 )}
               </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ─── engagement leaderboard ───────────────────────────────── */}
+      {status?.schemaApplied && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Engagement leaderboard
+                </CardTitle>
+                <CardDescription>
+                  Top published posts by view count. Pulled live from TikTok's
+                  <code className="mx-1 text-[10px]">/v2/video/query/</code>
+                  endpoint when you hit Refresh — counts default to zero until
+                  the first refresh.
+                </CardDescription>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void refreshEngagement()}
+                  disabled={refreshingEngagement || !status?.connected}
+                  title={
+                    !status?.connected
+                      ? "Connect a TikTok account first"
+                      : "Pull the latest view / like / comment / share counts from TikTok"
+                  }
+                >
+                  {refreshingEngagement ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                  )}
+                  Refresh engagement
+                </Button>
+                <span className="text-[11px] text-stone-500">
+                  {leaderboardLastRefreshedAt
+                    ? `Last refresh: ${formatDate(leaderboardLastRefreshedAt)}`
+                    : "Never refreshed."}
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {leaderboardLoading && (
+              <div className="flex items-center gap-2 text-stone-600">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+              </div>
+            )}
+            {!leaderboardLoading && leaderboard.length === 0 && (
+              <div className="text-sm text-stone-500">
+                No published posts yet. Once a post lands in TikTok's feed,
+                click <strong>Refresh engagement</strong> to pull its stats.
+              </div>
+            )}
+            {!leaderboardLoading && leaderboard.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-stone-500 border-b">
+                      <th className="py-2 pr-2 w-8">#</th>
+                      <th className="py-2 pr-2">Post</th>
+                      <th className="py-2 pr-2 text-right">
+                        <Eye className="w-3.5 h-3.5 inline-block" /> Views
+                      </th>
+                      <th className="py-2 pr-2 text-right">
+                        <Heart className="w-3.5 h-3.5 inline-block" /> Likes
+                      </th>
+                      <th className="py-2 pr-2 text-right">
+                        <MessageCircle className="w-3.5 h-3.5 inline-block" />{" "}
+                        Comments
+                      </th>
+                      <th className="py-2 pr-2 text-right">
+                        <Share2 className="w-3.5 h-3.5 inline-block" /> Shares
+                      </th>
+                      <th className="py-2 pr-2">Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboard.map((row, idx) => (
+                      <tr key={row.id} className="border-b last:border-b-0">
+                        <td className="py-2 pr-2 font-mono text-stone-500">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <div className="flex items-center gap-2">
+                            {row.image_url ? (
+                              <img
+                                src={row.image_url}
+                                alt=""
+                                className="w-8 h-8 rounded object-cover ring-1 ring-stone-200 shrink-0"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded bg-stone-100 ring-1 ring-stone-200 shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-mono text-[10px] truncate max-w-[12rem]">
+                                {row.product_id}
+                              </div>
+                              <div className="text-[10px] text-stone-500 truncate max-w-[12rem]">
+                                {formatDate(row.posted_at || row.created_at)}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right tabular-nums font-medium">
+                          {compactNumber(row.view_count)}
+                        </td>
+                        <td className="py-2 pr-2 text-right tabular-nums">
+                          {compactNumber(row.like_count)}
+                        </td>
+                        <td className="py-2 pr-2 text-right tabular-nums">
+                          {compactNumber(row.comment_count)}
+                        </td>
+                        <td className="py-2 pr-2 text-right tabular-nums">
+                          {compactNumber(row.share_count)}
+                        </td>
+                        <td className="py-2 pr-2">
+                          {row.share_url ? (
+                            <a
+                              className="underline inline-flex items-center gap-0.5"
+                              href={row.share_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>

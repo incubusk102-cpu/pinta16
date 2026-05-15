@@ -500,3 +500,153 @@ describe("generateTikTokCaption — hashtag cap", () => {
     expect(mod.generateTikTokCaption(undefined)).toBe("");
   });
 });
+
+describe("fetchVideoEngagement — /v2/video/query/ stats fetch", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    vi.resetModules();
+    originalFetch = globalThis.fetch;
+    fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.doUnmock("../../../functions/api/_lib/context.js");
+  });
+
+  it("returns an empty stats map without hitting the network for an empty videoIds list", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const result = await mod.fetchVideoEngagement({ videoIds: [] });
+    expect(result.ok).toBe(true);
+    expect(result.stats.size).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("POSTs to /v2/video/query/ with the expected body shape + fields list", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              videos: [
+                {
+                  id: "7311111111111111111",
+                  view_count: 12345,
+                  like_count: 678,
+                  comment_count: 90,
+                  share_count: 11,
+                },
+                {
+                  id: "7322222222222222222",
+                  view_count: 42,
+                  like_count: 3,
+                  comment_count: 0,
+                  share_count: 0,
+                },
+              ],
+            },
+            error: { code: "ok", message: "" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const result = await mod.fetchVideoEngagement({
+      videoIds: ["7311111111111111111", "7322222222222222222"],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.stats.get("7311111111111111111")).toEqual({
+      view_count: 12345,
+      like_count: 678,
+      comment_count: 90,
+      share_count: 11,
+    });
+    expect(result.stats.get("7322222222222222222")).toEqual({
+      view_count: 42,
+      like_count: 3,
+      comment_count: 0,
+      share_count: 0,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/v2/video/query/");
+    expect(String(url)).toContain("view_count");
+    expect(String(url)).toContain("like_count");
+    expect(String(url)).toContain("comment_count");
+    expect(String(url)).toContain("share_count");
+    expect(init?.method).toBe("POST");
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    expect(body.filters?.video_ids).toEqual([
+      "7311111111111111111",
+      "7322222222222222222",
+    ]);
+  });
+
+  it("surfaces TikTok-side errors (non-ok response code)", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    fetchMock.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: null,
+            error: {
+              code: "scope_not_authorized",
+              message: "video.list scope not granted",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const result = await mod.fetchVideoEngagement({ videoIds: ["abc"] });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("video.list");
+    expect(result.errorCode).toBe("scope_not_authorized");
+  });
+
+  it("returns ok=false when no access token is stored", async () => {
+    // No tiktok_auth in KV → getValidAccessToken returns null.
+    mockEnv(buildKv({}));
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const result = await mod.fetchVideoEngagement({ videoIds: ["abc"] });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/access token/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("batches large videoIds lists into groups of 20", async () => {
+    mockEnv(buildKv({ tiktok_auth: validAuth() }));
+    // Always return an empty videos array so we just verify request count.
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: { videos: [] },
+            error: { code: "ok", message: "" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
+    const mod = await import("../../../functions/api/_lib/tiktok.js");
+
+    const ids = Array.from({ length: 45 }, (_, i) => `id_${i}`);
+    const result = await mod.fetchVideoEngagement({ videoIds: ids });
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3); // 20 + 20 + 5
+  });
+});
