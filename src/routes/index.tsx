@@ -15,7 +15,6 @@ import AnimeDivider from "@/components/motion/AnimeDivider";
 import SectionDock from "@/components/SectionDock";
 import IdleNudgeToast from "@/components/IdleNudgeToast";
 import ScrollDepth from "@/components/motion/ScrollDepth";
-import WallMountScene from "@/components/motion/WallMountScene";
 import SilentBoundary from "@/components/SilentBoundary";
 import { useUserAuth } from "@/contexts/UserAuthContext";
 
@@ -214,20 +213,8 @@ function Index() {
       </ScrollDepth>
       <AnimeDivider />
       <VisitorTicker />
-      {/* Painting of the Day, mounted on a wall as the visitor
-          scrolls into it: WallMountScene fades a plaster wall in
-          behind DailyFeature, snaps a thin matte-black frame
-          (with a slim cream mat) around the painting, and grows a
-          soft cast-shadow underneath. Wrapped inside ScrollDepth
-          so the mount-on-wall composition itself still rises
-          toward the camera as part of the homepage's z-axis
-          parallax. Reduced-motion + coarse-pointer (mobile) users
-          skip the scrub and see the fully-mounted end state from
-          first paint. */}
       <ScrollDepth id={HOME_SECTION_IDS.daily}>
-        <WallMountScene>
-          <DailyFeature />
-        </WallMountScene>
+        <DailyFeature />
       </ScrollDepth>
       <AnimeDivider />
       {/* Optional studio reel — renders only when admin has set a
