@@ -36,7 +36,7 @@
 
 import { getCloudflareEnv } from "./context.js";
 import { makeStore } from "./kv-store.js";
-import { d1Run, isD1Available } from "./d1.js";
+import { d1All, d1First, d1Run, isD1Available } from "./d1.js";
 
 const TIKTOK_API_HOST = "https://open.tiktokapis.com";
 const TIKTOK_OAUTH_HOST = "https://www.tiktok.com";
@@ -62,11 +62,15 @@ const TIKTOK_AUTO_POST_KEY = "tiktok_auto_post";
 //   * `video.publish`     — required for /v2/post/publish/content/init/
 //                           (DIRECT_POST and MEDIA_UPLOAD both need it).
 //   * `video.upload`      — required to push images via PULL_FROM_URL.
+//   * `video.list`        — required for /v2/video/query/ which we use to
+//                           pull view/like/comment/share counts for the
+//                           engagement leaderboard in the admin panel.
 const TIKTOK_SCOPES = [
   "user.info.basic",
   "user.info.profile",
   "video.publish",
   "video.upload",
+  "video.list",
 ];
 
 // Refresh the access token if it expires within this many seconds.
@@ -1037,6 +1041,190 @@ export const publishProductPhoto = async ({
   } catch (err) {
     return { ok: false, error: err?.message || String(err) };
   }
+};
+
+// ─── engagement (views / likes / comments / shares) ───────────────────────────
+
+// Maximum number of video ids the TikTok `/v2/video/query/` endpoint
+// accepts in a single request. The official limit is 20 — anything
+// larger 400s with `invalid_params`.
+const TIKTOK_VIDEO_QUERY_BATCH = 20;
+
+// fetchVideoEngagement — pull live view / like / comment / share counts
+// for one or more TikTok video ids belonging to the connected creator.
+//
+// Returns:
+//   { ok: true, stats: Map<videoId, { view_count, like_count, comment_count, share_count }> }
+//   { ok: false, error: string, errorCode?: string }
+//
+// Implementation notes:
+//   * Uses `POST /v2/video/query/` with `?fields=...`. The request body
+//     is `{ filters: { video_ids: [...] } }`. Requires the `video.list`
+//     OAuth scope (see `TIKTOK_SCOPES`).
+//   * Batches input ids into groups of `TIKTOK_VIDEO_QUERY_BATCH` to
+//     stay under TikTok's per-request limit. A failure in any batch
+//     short-circuits the call so the caller sees the first error.
+//   * Returns an empty stats map when called with an empty / non-array
+//     `videoIds`. Callers can rely on `stats.get(id) ?? null` to detect
+//     "TikTok had no row for this id" (e.g. the post was deleted).
+export const fetchVideoEngagement = async ({ videoIds } = {}) => {
+  const ids = Array.isArray(videoIds)
+    ? videoIds.map((s) => String(s || "").trim()).filter(Boolean)
+    : [];
+  const stats = new Map();
+  if (ids.length === 0) return { ok: true, stats };
+
+  const token = await getValidAccessToken();
+  if (!token) {
+    return { ok: false, error: "TikTok access token unavailable" };
+  }
+
+  const fields = [
+    "id",
+    "view_count",
+    "like_count",
+    "comment_count",
+    "share_count",
+  ].join(",");
+
+  for (let i = 0; i < ids.length; i += TIKTOK_VIDEO_QUERY_BATCH) {
+    const batch = ids.slice(i, i + TIKTOK_VIDEO_QUERY_BATCH);
+    let res;
+    try {
+      res = await fetch(
+        `${TIKTOK_API_HOST}/v2/video/query/?fields=${encodeURIComponent(fields)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json; charset=UTF-8",
+          },
+          body: JSON.stringify({ filters: { video_ids: batch } }),
+        },
+      );
+    } catch (err) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error?.code !== "ok") {
+      return {
+        ok: false,
+        error: data?.error?.message || `HTTP ${res.status}`,
+        errorCode: data?.error?.code || null,
+      };
+    }
+    const videos = Array.isArray(data?.data?.videos) ? data.data.videos : [];
+    for (const v of videos) {
+      if (!v || !v.id) continue;
+      stats.set(String(v.id), {
+        view_count: Number(v.view_count) || 0,
+        like_count: Number(v.like_count) || 0,
+        comment_count: Number(v.comment_count) || 0,
+        share_count: Number(v.share_count) || 0,
+      });
+    }
+  }
+  return { ok: true, stats };
+};
+
+// refreshTikTokPostEngagement — fetch engagement counts for one or more
+// `tiktok_posts` rows and write the results back to D1.
+//
+// Args:
+//   { rowId?: string, limit?: number }
+//   * rowId: refresh exactly this row (must be `status='published'`).
+//   * If rowId is omitted, refresh up to `limit` (default 100) of the
+//     most recent published rows that have a `tiktok_post_id`.
+//
+// Returns:
+//   { ok: true, refreshed: number, missing: string[], error?: string }
+//   { ok: false, error: string }
+//
+// `missing` lists the row ids that had a `tiktok_post_id` but TikTok
+// did not return a video record for them (most commonly because the
+// post was deleted on TikTok). The row is left untouched in that case.
+export const refreshTikTokPostEngagement = async ({
+  rowId = null,
+  limit = 100,
+} = {}) => {
+  if (!isD1Available()) {
+    return { ok: false, error: "D1 not configured" };
+  }
+
+  let rows;
+  try {
+    if (rowId) {
+      const row = await d1First(
+        `SELECT id, tiktok_post_id FROM tiktok_posts WHERE id = ?`,
+        [rowId],
+      );
+      rows = row ? [row] : [];
+    } else {
+      const cap = Math.min(
+        500,
+        Math.max(1, Number.isFinite(limit) ? Number(limit) : 100),
+      );
+      const result = await d1All(
+        `SELECT id, tiktok_post_id FROM tiktok_posts
+         WHERE status='published' AND tiktok_post_id IS NOT NULL AND tiktok_post_id != ''
+         ORDER BY posted_at DESC, created_at DESC
+         LIMIT ?`,
+        [cap],
+      );
+      rows = Array.isArray(result?.results) ? result.results : [];
+    }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+
+  const candidates = rows.filter(
+    (r) => r && r.tiktok_post_id && String(r.tiktok_post_id).trim(),
+  );
+  if (candidates.length === 0) {
+    return { ok: true, refreshed: 0, missing: [] };
+  }
+
+  const fetched = await fetchVideoEngagement({
+    videoIds: candidates.map((r) => r.tiktok_post_id),
+  });
+  if (!fetched.ok) return { ok: false, error: fetched.error };
+
+  const now = nowIso();
+  let refreshed = 0;
+  const missing = [];
+  for (const row of candidates) {
+    const stats = fetched.stats.get(String(row.tiktok_post_id));
+    if (!stats) {
+      missing.push(row.id);
+      continue;
+    }
+    try {
+      await d1Run(
+        `UPDATE tiktok_posts
+           SET view_count = ?,
+               like_count = ?,
+               comment_count = ?,
+               share_count = ?,
+               engagement_refreshed_at = ?,
+               updated_at = ?
+         WHERE id = ?`,
+        [
+          stats.view_count,
+          stats.like_count,
+          stats.comment_count,
+          stats.share_count,
+          now,
+          now,
+          row.id,
+        ],
+      );
+      refreshed += 1;
+    } catch {
+      // Single-row write failure shouldn't kill the rest of the batch.
+      missing.push(row.id);
+    }
+  }
+  return { ok: true, refreshed, missing };
 };
 
 // shouldAutoPostProduct — decide whether the create-product hook
