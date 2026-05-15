@@ -112,6 +112,89 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
+// ─── Per-slide CTR ribbon ──────────────────────────────────────────────────
+
+interface SlideStat {
+  slideId: string;
+  impressions: number;
+  clicks: number;
+  uniqueImpressions: number;
+  ctr: number;
+}
+
+const STAT_WINDOW_DAYS = 30;
+
+const formatCount = (n: number): string =>
+  new Intl.NumberFormat("en-PH").format(Math.max(0, Math.floor(n)));
+
+const formatCtr = (ctr: number): string => {
+  if (!Number.isFinite(ctr) || ctr <= 0) return "—";
+  return `${(ctr * 100).toFixed(1)}%`;
+};
+
+// Thin header bar rendered at the top of every slide article in the
+// admin editor. Surfaces the last-30-day impressions / clicks / CTR
+// for that slide so editors can see which slide actually pulls weight
+// rather than guessing. Renders three muted-tone states ("loading",
+// "no traffic yet", "analytics unavailable") so the chrome stays
+// useful on day-zero deploys without a D1 binding.
+function SlideStatsRibbon({
+  index,
+  stat,
+  unavailable,
+}: {
+  index: number;
+  stat: SlideStat | undefined;
+  unavailable: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/40 bg-muted/20 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-medium text-foreground">Slide {index + 1}</span>
+      {unavailable ? (
+        <span className="normal-case tracking-normal text-muted-foreground/70">
+          Analytics unavailable
+        </span>
+      ) : stat ? (
+        <span
+          className="flex flex-wrap items-center gap-x-3 gap-y-0.5 normal-case tracking-normal text-muted-foreground"
+          aria-label={`Last ${STAT_WINDOW_DAYS} days: ${formatCount(
+            stat.impressions,
+          )} impressions, ${formatCount(stat.clicks)} clicks, ${formatCtr(
+            stat.ctr,
+          )} CTR`}
+        >
+          <span>
+            <span className="text-foreground/80">
+              {formatCount(stat.impressions)}
+            </span>{" "}
+            impressions
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            <span className="text-foreground/80">
+              {formatCount(stat.clicks)}
+            </span>{" "}
+            clicks
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            <span className="text-foreground/80">{formatCtr(stat.ctr)}</span>{" "}
+            CTR
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="text-muted-foreground/70">
+            last {STAT_WINDOW_DAYS}d
+          </span>
+        </span>
+      ) : (
+        <span className="normal-case tracking-normal text-muted-foreground/70">
+          No traffic yet · last {STAT_WINDOW_DAYS}d
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function HeroSlidesSection() {
   const {
     slides: liveSlides,
@@ -126,6 +209,8 @@ export function HeroSlidesSection() {
     useState<HeroSettings>(liveSettings);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [slideStats, setSlideStats] = useState<Record<string, SlideStat>>({});
+  const [statsUnavailable, setStatsUnavailable] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const mobileFileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -158,6 +243,46 @@ export function HeroSlidesSection() {
         );
       } finally {
         setLoading(false);
+      }
+    };
+    void load();
+  }, []);
+
+  // Load the last-30-day per-slide CTR rollup. Soft-fails to "no stats
+  // yet" on D1-not-bound deployments or auth/transient errors — the rest
+  // of the editor keeps working unchanged.
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const token = getAdminToken();
+        const res = await fetch(
+          `/api/hero-slides/stats?days=${STAT_WINDOW_DAYS}`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        );
+        if (!res.ok) {
+          setStatsUnavailable(true);
+          return;
+        }
+        const data = (await res.json()) as {
+          available?: boolean;
+          results?: SlideStat[];
+        };
+        if (data.available === false) {
+          setStatsUnavailable(true);
+          return;
+        }
+        const map: Record<string, SlideStat> = {};
+        for (const row of data.results || []) {
+          if (row && typeof row.slideId === "string") {
+            map[row.slideId] = row;
+          }
+        }
+        setSlideStats(map);
+        setStatsUnavailable(false);
+      } catch {
+        setStatsUnavailable(true);
       }
     };
     void load();
@@ -436,6 +561,11 @@ export function HeroSlidesSection() {
             key={slide.id}
             className="border border-border/60 rounded-xl overflow-hidden bg-background/40"
           >
+            <SlideStatsRibbon
+              index={idx}
+              stat={slideStats[slide.id]}
+              unavailable={statsUnavailable}
+            />
             <div className="grid md:grid-cols-[280px_1fr] gap-4 p-4">
               {/* Image + live preview cell. The thumbnail mirrors the
                   homepage hero (image + overlay copy + alignment + CTA

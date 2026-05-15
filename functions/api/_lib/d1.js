@@ -1301,3 +1301,89 @@ export async function recentStockEvents({
     return null;
   }
 }
+
+// ─── Hero events ─────────────────────────────────────────────────────────────
+
+const HERO_EVENT_KINDS = new Set(["impression", "click"]);
+const HERO_SLIDE_ID_RE = /^[A-Za-z0-9_-]{4,64}$/;
+
+// Record a single hero-carousel event from the public homepage beacon.
+// Caller is `functions/api/hero-slides/events.js`. Null-safe when env.DB
+// is unbound (admin still gets a "D1 unavailable" stats response).
+//
+// For impressions the client passes a deterministic id of the form
+// `hi_<sessionId>_<slideId>` so the INSERT OR IGNORE collapses repeat
+// fires from autoplay loops or back-button revisits into a single row
+// per (session, slide). Clicks pass a fresh uuid every time because
+// repeat clicks on the same CTA should count.
+export async function recordHeroEvent({ id, sessionId, slideId, kind }) {
+  const db = getD1();
+  if (!db) return null;
+  const sid = String(sessionId || "")
+    .trim()
+    .slice(0, 64);
+  if (!sid || !/^[a-zA-Z0-9_-]+$/.test(sid)) return null;
+  const slide = String(slideId || "").trim();
+  if (!HERO_SLIDE_ID_RE.test(slide)) return null;
+  const k = String(kind || "").toLowerCase();
+  if (!HERO_EVENT_KINDS.has(k)) return null;
+  const eventId =
+    typeof id === "string" && id.length > 0 && id.length <= 96
+      ? id.slice(0, 96)
+      : `he_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const now = new Date().toISOString();
+  try {
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO hero_events
+         (id, session_id, slide_id, kind, ts)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(eventId, sid, slide, k, now)
+      .run();
+    return { recorded: true, id: eventId };
+  } catch {
+    return null;
+  }
+}
+
+// Aggregated per-slide stats for the admin Hero Slides editor.
+// Returns one row per slide_id present in the window with impressions,
+// clicks, unique-session impressions, and the derived CTR. Caller is
+// `functions/api/hero-slides/stats.js`. CTR is left at 0 when there
+// are no impressions to avoid the divide-by-zero spike.
+export async function heroSlideStats({ days = 30 } = {}) {
+  const db = getD1();
+  if (!db) return null;
+  const since = sinceFromDays(days);
+  try {
+    const result = await db
+      .prepare(
+        `SELECT slide_id,
+                SUM(CASE WHEN kind = 'impression' THEN 1 ELSE 0 END) AS impressions,
+                SUM(CASE WHEN kind = 'click' THEN 1 ELSE 0 END) AS clicks,
+                COUNT(DISTINCT CASE WHEN kind = 'impression' THEN session_id END)
+                  AS unique_impressions
+         FROM hero_events
+         WHERE ts >= ?
+         GROUP BY slide_id`,
+      )
+      .bind(since)
+      .all();
+    const rows = result?.results || [];
+    return rows.map((r) => {
+      const impressions = Number(r.impressions) || 0;
+      const clicks = Number(r.clicks) || 0;
+      const ctr = impressions > 0 ? clicks / impressions : 0;
+      return {
+        slideId: String(r.slide_id || ""),
+        impressions,
+        clicks,
+        uniqueImpressions: Number(r.unique_impressions) || 0,
+        ctr: Math.round(ctr * 10000) / 10000,
+      };
+    });
+  } catch {
+    return null;
+  }
+}

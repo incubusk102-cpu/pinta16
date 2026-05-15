@@ -13,6 +13,7 @@ import {
   useHeroSlides,
 } from "@/contexts/HeroSlidesContext";
 import { isExternalHref, safeHref } from "@/lib/safeUrl";
+import { sendHeroBeacon } from "@/lib/heroAnalytics";
 
 const SWIPE_PX = 50;
 
@@ -62,7 +63,15 @@ const ALIGN_CLASSES: Record<HeroSlide["align"], string> = {
 const migrateLegacyHref = (href: string): string =>
   href === "#gallery" || href === "/#gallery" ? "/collection" : href;
 
-const CtaLink = ({ label, href }: { label: string; href: string }) => {
+const CtaLink = ({
+  label,
+  href,
+  slideId,
+}: {
+  label: string;
+  href: string;
+  slideId: string;
+}) => {
   const cls =
     "inline-flex max-w-full items-center justify-center font-body text-[11px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase px-5 sm:px-10 py-3 sm:py-4 bg-foreground/95 text-background hover:bg-foreground transition-colors duration-300 rounded-none shadow-lg shadow-background/25";
   const migrated = migrateLegacyHref(href);
@@ -81,8 +90,21 @@ const CtaLink = ({ label, href }: { label: string; href: string }) => {
   const external = isExternalHref(finalHref);
   const target = external ? "_blank" : undefined;
   const rel = external ? "noopener noreferrer" : undefined;
+  // Fire the click beacon synchronously on mousedown / activate so it
+  // survives the same-tab navigation that immediately follows. The
+  // beacon helper uses navigator.sendBeacon + keepalive so the request
+  // isn't cancelled when the page unloads.
+  const onClick = () => {
+    sendHeroBeacon({ slideId, kind: "click" });
+  };
   return (
-    <a href={finalHref} target={target} rel={rel} className={cls}>
+    <a
+      href={finalHref}
+      target={target}
+      rel={rel}
+      className={cls}
+      onClick={onClick}
+    >
       {label}
     </a>
   );
@@ -130,7 +152,11 @@ const SlideContent = ({ slide, active }: SlideContentProps) => (
           transition={{ duration: 0.8, delay: 0.55 }}
           className="mt-2"
         >
-          <CtaLink label={slide.ctaLabel} href={slide.ctaHref} />
+          <CtaLink
+            label={slide.ctaLabel}
+            href={slide.ctaHref}
+            slideId={slide.id}
+          />
         </motion.div>
       )}
     </div>
@@ -164,6 +190,19 @@ const HeroSlider = () => {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.7, 1], [1, 1, 0.7]);
 
   const count = slides.length;
+
+  // Fire one impression beacon per (session, slide) the first time a
+  // slide actually settles on screen. The server INSERT OR IGNORE
+  // dedupes repeats, but de-duping client-side too saves the wasted
+  // POST when autoplay loops the same slide every 6 seconds.
+  const impressedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (count === 0) return;
+    const slide = slides[Math.min(index, count - 1)];
+    if (!slide || impressedRef.current.has(slide.id)) return;
+    impressedRef.current.add(slide.id);
+    sendHeroBeacon({ slideId: slide.id, kind: "impression" });
+  }, [count, index, slides]);
 
   const next = useCallback(() => {
     setDirection(1);
