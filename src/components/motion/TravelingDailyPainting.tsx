@@ -255,21 +255,23 @@ const TravelingDailyPainting = () => {
             opacity: "var(--frame-progress, 0)",
           }}
         />
-        {/* Matte-black outer frame — padding (the "thickness" of the
-            frame) interpolates from 0 to 10px as the painting lands so
-            the picture looks bare in flight and framed at rest. */}
+        {/* Frame composition — the matte-black wood outer was removed
+            per user feedback (felt persistent / boxy on the wall) so
+            the in-flight proxy now mirrors the wall destination: just
+            a thin gold trim around a cream matt around the painting,
+            scaled in from "naked image" → "matted + gold trim" via
+            `--frame-progress`. A soft drop shadow scales in on the
+            outer container so the painting still reads as a physical
+            object lifting onto the wall. */}
         <div
-          className="relative h-full w-full overflow-hidden"
+          className="relative h-full w-full"
           style={{
-            backgroundColor: "#0f0f0f",
-            padding: "calc(var(--frame-progress, 0) * 10px)",
-            borderRadius: "calc(2px + var(--frame-progress, 0) * 1px)",
             boxShadow:
               "0 calc(var(--frame-progress, 0) * 18px) calc(var(--frame-progress, 0) * 30px) calc(var(--frame-progress, 0) * -14px) rgba(20,15,5,0.45)",
           }}
         >
-          {/* Gold-leaf inner trim — same idea, padding scales with
-              progress so the gold band appears only on landing. */}
+          {/* Gold-leaf trim — padding scales with progress so the
+              gold band appears only on landing. */}
           <div
             className="relative h-full w-full"
             style={{

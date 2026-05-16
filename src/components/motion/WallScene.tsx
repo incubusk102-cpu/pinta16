@@ -200,21 +200,21 @@ const WallScene = () => {
               data-wall-target
               className="relative z-10 aspect-square w-full"
               style={{
-                // Matte-black outer wood frame. Two thin inset shadows
-                // give it micro-bevels (top-left highlight, bottom-right
-                // shadow) without us needing a real wood-grain texture.
-                backgroundColor: "#0f0f0f",
-                padding: "10px",
-                boxShadow: [
-                  "inset 0 1px 0 rgba(255,255,255,0.06)",
-                  "inset 0 -1px 0 rgba(0,0,0,0.55)",
-                  "0 18px 30px -14px rgba(20,15,5,0.45)",
-                ].join(", "),
-                borderRadius: "2px",
+                // The outer frame layer is the target rect that the
+                // flying proxy lands into. It's intentionally
+                // transparent — no matte-black wood border, no inset
+                // bevels — so the painting reads as the matt + thin
+                // gold trim only (per user feedback that the heavy
+                // black border felt persistent / boxy on the wall).
+                // The drop shadow under the frame stays on the
+                // sibling cast-shadow div for visual weight against
+                // the wall.
+                backgroundColor: "transparent",
               }}
             >
-              {/* Gold-leaf inner trim — warm gold ring just inside the
-                  matte black. This is the "premium" detail. */}
+              {/* Gold-leaf trim — warm gold hairline that hugs the
+                  outside of the cream matt. With the matte-black wood
+                  removed this is the only visible frame element. */}
               <div
                 className="relative h-full w-full"
                 style={{
@@ -224,7 +224,8 @@ const WallScene = () => {
                   borderRadius: "1px",
                 }}
               >
-                {/* Slim cream mat between gold trim and the painting. */}
+                {/* Slim cream mat between the gold trim and the
+                    painting. */}
                 <div
                   className="relative h-full w-full"
                   style={{
