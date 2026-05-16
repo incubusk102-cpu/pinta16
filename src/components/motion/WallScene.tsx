@@ -22,11 +22,17 @@ import { findArtworkById } from "@/lib/artworks";
  *   --daily-travel-progress      : 0..1  (fade-in as the wall enters view)
  *   --daily-wall-leave-opacity   : 0..1  (fade-out as the wall leaves view)
  *
- * The wall content's opacity is the product of the two: the painting
- * fades in linearly with travel progress so the section reads as
- * empty until the painting has actually arrived, and fades back out
- * symmetrically as the section scrolls off the top so the painting
- * doesn't linger over the page below.
+ * The wall content's opacity is the product of the two: a `clamp()`
+ * curve over travel progress holds the wall at 0 for the first ~85%
+ * of the journey and ramps it up to 1 only as the flying proxy is
+ * landing — so the section truly reads as empty page space until the
+ * painting arrives, instead of showing a faint half-opacity 3D scene
+ * underneath the in-flight proxy. On the way back up the same curve
+ * runs in reverse: the wall painting lifts off cleanly, the proxy
+ * picks up at full opacity, and the painting flies up to the Daily
+ * card and disappears into it. `--daily-wall-leave-opacity` is the
+ * symmetric fade-out so the painting doesn't linger over the page
+ * below once the visitor has fully scrolled past the section.
  *
  * When no `<TravelingDailyPainting />` is mounted (reduced-motion /
  * no daily artwork), both variables are unset and the fallback (1)
@@ -65,8 +71,14 @@ const WallScene = () => {
       {/* Opacity shell driven by two scroll-linked variables.
           `--daily-travel-progress` (0..1) ramps from 0 → 1 as the
           flying proxy painting flies down from the Daily card into
-          the section, so the painting reads as empty page space
-          until the proxy has actually landed.
+          the section. We pipe it through a `clamp()` curve so the
+          wall stays at opacity 0 for the first 85% of the journey
+          and ramps up to 1 over the final 15% (≈ where the proxy
+          fades out from 0.9 → 1.0 in `TravelingDailyPainting`), so
+          the section reads as empty page space throughout the
+          flight and the painting only "appears" once the proxy is
+          landing — and symmetrically lifts off cleanly on the way
+          back up before the proxy carries it to the Daily card.
           `--daily-wall-leave-opacity` (0..1) does the opposite on
           the way out: 1 while the section is in view, 0 once the
           section has fully scrolled off the top.
@@ -74,13 +86,14 @@ const WallScene = () => {
           the section is actually on screen — it fades back into the
           Daily card on the way up, and fades out into empty page
           space on the way down. With no proxy mounted (reduced-motion
-          / no artwork) both variables are unset and the fallback `1`
-          on each side keeps the painting visible from first paint. */}
+          / no artwork) `--daily-travel-progress` falls back to `1`,
+          the clamp resolves to 1, and the painting is visible from
+          first paint without any scroll required. */}
       <div
         className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 sm:px-6"
         style={{
           opacity:
-            "calc(var(--daily-travel-progress, 1) * var(--daily-wall-leave-opacity, 1))",
+            "calc(clamp(0, (var(--daily-travel-progress, 1) - 0.85) / 0.15, 1) * var(--daily-wall-leave-opacity, 1))",
         }}
       >
         {/* `[data-wall-target]` is the rect that

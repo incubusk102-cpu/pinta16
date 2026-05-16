@@ -76,19 +76,29 @@ const WallPainting3D = ({ imageUrl }: WallPainting3DProps) => {
         }
       >
         <Canvas
-          // Initial camera position is pulled noticeably further back
-          // than the product-page modal viewer (which sits at z=5.5)
-          // so the painting fits the square wall box with comfortable
-          // air around it. The modal viewer's canvas is the visitor's
-          // whole viewport (usually landscape on desktop), so the same
-          // mesh has more horizontal world-space to spread into; the
-          // wall scene is constrained to `aspect-square`, where the
-          // 4-unit-wide painting at z=5.5 overflows. Pulling back to
-          // z=9 (with the OrbitControls min/max bounds widened below
-          // for pinch headroom) frames the painting at roughly the
-          // same proportions you'd see in the modal viewer on a
-          // landscape screen.
-          camera={{ position: [0, 0, 9], fov: 35 }}
+          // Initial camera position is tuned so the painting + wood
+          // frame fills the square wall box almost edge-to-edge, with
+          // only a sliver of breathing room around it. This matters
+          // for the handoff with `<TravelingDailyPainting />`: the
+          // flying proxy is a 2D `<img>` that's `object-cover`-fitted
+          // into the same `[data-wall-target]` square, so it visually
+          // fills the box. Crossfading the proxy into a 3D painting
+          // that's significantly smaller would read as the painting
+          // "shrinking on arrival" — pulling the camera in to z=7
+          // makes the 3D painting land at roughly the same on-screen
+          // size as the 2D proxy, so the handoff is positionally and
+          // proportionally seamless. The 4-unit-tall painting + 0.18
+          // frame at fov=35, z=7 yields a visible height of
+          // 2·7·tan(17.5°) ≈ 4.41 world units — just enough to fit
+          // the 4.36-unit painting+frame without clipping.
+          //
+          // The product-page modal viewer (which lives at z=5.5) is
+          // not adjusted here — its canvas is the visitor's whole
+          // viewport (usually landscape), so the same mesh has more
+          // horizontal world-space to spread into and a closer camera
+          // is fine. The wall scene is constrained to `aspect-square`
+          // so we need slightly more distance to fit the long edge.
+          camera={{ position: [0, 0, 7], fov: 35 }}
           dpr={[1, 2]}
           shadows
           gl={{ antialias: true, alpha: true }}

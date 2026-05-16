@@ -125,10 +125,34 @@ const TravelingDailyPainting = () => {
       originRect = o;
       destinationRect = d;
 
-      const x = o.left + (d.left - o.left) * progress;
-      const y = o.top + (d.top - o.top) * progress;
-      const w = o.width + (d.width - o.width) * progress;
-      const h = o.height + (d.height - o.height) * progress;
+      // Park the proxy at the origin during the fade-in window (0 →
+      // 0.1) and at the destination during the fade-out window (0.9 →
+      // 1.0), so the crossfades on each end happen at the same screen
+      // position as the thing the proxy is crossfading with — the
+      // Daily card on the way out, and the 3D wall painting on the
+      // way in. Without this, the proxy's lerped position at e.g.
+      // progress=0.95 is 5% of the way back toward the Daily card
+      // (i.e. visibly above the wall target), so when the wall
+      // painting fades in at its `[data-wall-target]` rect the
+      // visitor sees the painting jump downward on landing — and
+      // mirror-image on the way back, the painting appears to
+      // disappear from the wall and instantly reappear in flight
+      // rather than smoothly lifting off the wall. Clamping the lerp
+      // progress to the "travel" window (0.1 → 0.9) keeps the proxy
+      // pinned in place during the visual handoffs.
+      const TRAVEL_START = 0.1;
+      const TRAVEL_END = 0.9;
+      const lerp =
+        progress <= TRAVEL_START
+          ? 0
+          : progress >= TRAVEL_END
+            ? 1
+            : (progress - TRAVEL_START) / (TRAVEL_END - TRAVEL_START);
+
+      const x = o.left + (d.left - o.left) * lerp;
+      const y = o.top + (d.top - o.top) * lerp;
+      const w = o.width + (d.width - o.width) * lerp;
+      const h = o.height + (d.height - o.height) * lerp;
 
       // Snap-to-pixel for crisper rendering — sub-pixel translations
       // are common during scroll and antialiasing can make the
@@ -140,11 +164,15 @@ const TravelingDailyPainting = () => {
       // Fade the proxy in/out at the two endpoints so the crossfade
       // between (original ↔ proxy) and (proxy ↔ landed) is invisible.
       // Hold the proxy fully opaque through the middle 80% of travel.
+      // The opacity windows match the parked-position windows above
+      // (0 → 0.1 fade in at origin, 0.9 → 1.0 fade out at destination)
+      // so the proxy is always at the crossfade target's position
+      // while its opacity ramps.
       const proxyOpacity =
-        progress < 0.1
-          ? progress * 10
-          : progress > 0.9
-            ? Math.max(0, (1 - progress) * 10)
+        progress < TRAVEL_START
+          ? progress / TRAVEL_START
+          : progress > TRAVEL_END
+            ? Math.max(0, (1 - progress) / (1 - TRAVEL_END))
             : 1;
 
       proxy.style.opacity = proxyOpacity.toFixed(4);
