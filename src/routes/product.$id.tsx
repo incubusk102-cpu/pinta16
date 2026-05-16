@@ -20,11 +20,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import GalleryNav from "@/components/GalleryNav";
-import CartDrawer from "@/components/CartDrawer";
-import CheckoutForm from "@/components/CheckoutForm";
 import RelatedProducts from "@/components/RelatedProducts";
 import SimilarPaintingsRail from "@/components/SimilarPaintingsRail";
-import RecentlyViewed from "@/components/RecentlyViewed";
 import ReviewPhotoLightbox, {
   type ReviewPhotoView,
 } from "@/components/ReviewPhotoLightbox";
@@ -75,6 +72,19 @@ const PaintingViewer3D = lazy(() => import("@/components/PaintingViewer3D"));
 // still code-split it from the product page itself to keep the
 // initial bundle slim for the common case where neither is opened.
 const WallPreview3D = lazy(() => import("@/components/WallPreview3D"));
+// CartDrawer / CheckoutForm are conditional UI that only renders
+// after the customer taps "Add to cart" / "Checkout", so we lazy
+// them to keep the product page's initial JS smaller. Loading them
+// the same way as the homepage + collection routes also resolves
+// the Vite INEFFECTIVE_DYNAMIC_IMPORT warning we used to emit
+// because the static import here was defeating the lazy split in
+// those other routes.
+const CartDrawer = lazy(() => import("@/components/CartDrawer"));
+const CheckoutForm = lazy(() => import("@/components/CheckoutForm"));
+// "Recently viewed" rail renders below the fold (after the related
+// + similar painting rails), so lazy-loading it keeps the initial
+// product-page bundle smaller without affecting the first paint.
+const RecentlyViewed = lazy(() => import("@/components/RecentlyViewed"));
 
 interface ProductReview {
   orderId: string;

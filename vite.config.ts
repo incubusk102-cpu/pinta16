@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from "path";
 
@@ -24,7 +23,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    tsconfigPaths(),
     // Must come last so the plugin can read the final emitted bundle
     // and upload its source maps. Silently no-ops without an auth
     // token, so local `npm run build` keeps working unchanged.
@@ -54,6 +52,12 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Use Vite's native tsconfig paths resolution instead of the
+    // `vite-tsconfig-paths` plugin (which Vite 8 deprecates). The
+    // `@/*` alias above keeps explicit aliases sourced from one
+    // place, while this enables resolution of any additional paths
+    // declared in tsconfig.json without an extra plugin.
+    tsconfigPaths: true,
   },
   build: {
     outDir: "dist",
