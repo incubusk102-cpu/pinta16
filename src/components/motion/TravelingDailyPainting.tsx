@@ -17,8 +17,6 @@ const prefersCoarsePointer = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
 
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-
 /**
  * `<TravelingDailyPainting />` — a fixed-position floating "proxy"
  * painting that physically travels from the Painting of the Day card
@@ -72,8 +70,6 @@ const TravelingDailyPainting = () => {
   }, [today?.productId, products]);
 
   const proxyRef = useRef<HTMLDivElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const frameRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!artwork) return;
@@ -82,9 +78,7 @@ const TravelingDailyPainting = () => {
     const isCoarsePointer = prefersCoarsePointer();
 
     const proxy = proxyRef.current;
-    const img = imgRef.current;
-    const frame = frameRef.current;
-    if (!proxy || !img || !frame) return;
+    if (!proxy) return;
 
     const root = document.documentElement;
 
@@ -149,14 +143,15 @@ const TravelingDailyPainting = () => {
 
       proxy.style.opacity = proxyOpacity.toFixed(4);
 
-      // Frame, gold trim, cream matt and shadow ramp in as the
-      // painting approaches the wall — the picture is "unframed" while
-      // in flight (matches what's in the Daily card) and "framed" once
-      // it lands. We drive the bevel via CSS variables on the frame
-      // element so all four shells (frame / gold / matt / shadow)
-      // animate from the same source.
-      const frameProgress = clamp01((progress - 0.45) / 0.55);
-      frame.style.setProperty("--frame-progress", frameProgress.toFixed(4));
+      // The proxy itself is a naked `<img>` — no frame chrome, no
+      // gold trim, no cream matt. The destination on the wall is now
+      // a Three.js painting viewer (`<WallPainting3D />`) which
+      // already renders its own beveled wood frame in 3D, so trying
+      // to fade a 2D frame in during flight would clash with the
+      // 3D frame appearing on landing. The handoff is a straight
+      // image → 3D-scene crossfade, driven by the proxy's own opacity
+      // (above) and the wall's `--daily-travel-progress` opacity
+      // shell.
 
       // Daily card opacity — falls off in the first 12% of progress so
       // the painting "lifts out" of the card cleanly without us
@@ -238,80 +233,17 @@ const TravelingDailyPainting = () => {
         willChange: "transform, opacity",
       }}
     >
-      <div
-        ref={frameRef}
-        className="relative h-full w-full"
-        style={
-          {
-            // `--frame-progress` is set from JS (0 → 1 as the painting
-            // travels). All four shells below interpolate from "flush
-            // image" to "framed and matted" against this single var.
-            "--frame-progress": "0",
-          } as React.CSSProperties
-        }
-      >
-        {/* Cast shadow — soft ellipse that grows in as the painting
-            nears the wall. Identical formula to the WallScene shadow
-            so the two read as the same piece of art. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-[8%] -bottom-[3%] h-[8%]"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 100% at 50% 50%, rgba(20,12,2,0.32) 0%, rgba(20,12,2,0) 75%)",
-            filter: "blur(2px)",
-            opacity: "var(--frame-progress, 0)",
-          }}
-        />
-        {/* Frame composition — the matte-black wood outer was removed
-            per user feedback (felt persistent / boxy on the wall) so
-            the in-flight proxy now mirrors the wall destination: just
-            a thin gold trim around a cream matt around the painting,
-            scaled in from "naked image" → "matted + gold trim" via
-            `--frame-progress`. A soft drop shadow scales in on the
-            outer container so the painting still reads as a physical
-            object lifting onto the wall. */}
-        <div
-          className="relative h-full w-full"
-          style={{
-            boxShadow:
-              "0 calc(var(--frame-progress, 0) * 18px) calc(var(--frame-progress, 0) * 30px) calc(var(--frame-progress, 0) * -14px) rgba(20,15,5,0.45)",
-          }}
-        >
-          {/* Gold-leaf trim — padding scales with progress so the
-              gold band appears only on landing. */}
-          <div
-            className="relative h-full w-full"
-            style={{
-              padding: "calc(var(--frame-progress, 0) * 2px)",
-              background:
-                "linear-gradient(135deg, #d8b56a 0%, #c9a96e 50%, #a78348 100%)",
-              borderRadius: "1px",
-            }}
-          >
-            {/* Cream matt between gold and painting. */}
-            <div
-              className="relative h-full w-full"
-              style={{
-                padding: "calc(var(--frame-progress, 0) * 10px)",
-                backgroundColor: "#f5f3ee",
-              }}
-            >
-              <img
-                ref={imgRef}
-                src={image}
-                alt=""
-                decoding="async"
-                draggable={false}
-                className="h-full w-full object-cover"
-                style={{
-                  borderRadius: "0",
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Naked `<img>` proxy — no frame chrome, no shadow, no matt.
+          The destination on the wall is a 3D Three.js viewer with its
+          own beveled wood frame, so the proxy stays simple during
+          flight and crossfades into the 3D scene on landing. */}
+      <img
+        src={image}
+        alt=""
+        decoding="async"
+        draggable={false}
+        className="h-full w-full object-cover"
+      />
     </div>
   );
 };
