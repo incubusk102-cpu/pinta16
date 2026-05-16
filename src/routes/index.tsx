@@ -284,8 +284,16 @@ function Index() {
           of the lazy sections (About / ThankYou / Reviews / Contact)
           took a while to load, the entire subtree would suspend and
           the ScrollTrigger would silently no-op because its trigger
-          selector would resolve to `null`. */}
-      <WallScene />
+          selector would resolve to `null`.
+
+          Wrapped in a SilentBoundary so a render-time crash inside the
+          3D wall viewer (e.g. WebGL init failure on a quirky browser,
+          or a stale-chunk error after a deploy) never takes down the
+          whole homepage — the wall is decorative and the page must
+          keep working without it. */}
+      <SilentBoundary label="wall-scene">
+        <WallScene />
+      </SilentBoundary>
       <Suspense fallback={null}>
         <AboutSection />
         <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
@@ -311,8 +319,24 @@ function Index() {
           the page content but below modals / drawers (z-40 vs the
           drawers' z-50). Reduced-motion / coarse-pointer visitors get
           a `return null` from inside the component and see the
-          painting in both the Daily card and on the wall instead. */}
-      <TravelingDailyPainting />
+          painting in both the Daily card and on the wall instead.
+
+          Wrapped in a SilentBoundary because the inner ScrollTrigger
+          setup talks to GSAP through a `useEffect` and runs through a
+          handful of synchronous GSAP callbacks. If any of those throw
+          (e.g. the GSAP `ScrollTrigger.onRefresh` TDZ crash hit in PR
+          #498 / fixed in PR #499, or any future regression in this
+          choreography), the boundary catches the render-time error
+          and returns null so the rest of the homepage — hero,
+          marquee, Daily card, carousels, wall — keeps rendering. The
+          travel animation is purely decorative; the painting still
+          shows in both the Daily card and the wall via the
+          `--daily-card-opacity` / `--daily-travel-progress` CSS
+          fallback values, so visitors don't lose access to the
+          artwork even when the travel itself is disabled. */}
+      <SilentBoundary label="traveling-daily-painting">
+        <TravelingDailyPainting />
+      </SilentBoundary>
     </div>
   );
 }
