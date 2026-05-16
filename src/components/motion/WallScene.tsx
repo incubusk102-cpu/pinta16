@@ -7,29 +7,30 @@ import { findArtworkById } from "@/lib/artworks";
  * `<WallScene />` — the "Painting of the Day" landing slot further
  * down the homepage. The Daily card's painting physically travels into
  * this section as the visitor scrolls past the Daily card (see
- * `<TravelingDailyPainting />`), then takes over as the inline auto-
- * rotating Three.js viewer once the travel completes.
+ * `<TravelingDailyPainting />`), then takes over as the inline
+ * pinch-zoomable Three.js viewer once the travel completes.
  *
  * Per user request the bespoke "wall" design (plaster gradient,
  * picture rail, baseboard, spotlight, hanging cord, matte-black wood
  * frame, gold trim, cream matt, cast shadow, museum nameplate) was
  * stripped — the section sits on the site's default page background
- * and contains nothing but the painting itself. The `<WallPainting3D />`
- * viewer is the same Three.js scene the customer sees when they open
- * a painting at `/product/:id`; auto-rotation runs as a decorative
- * idle, pointer events are disabled so vertical scrolling / taps
- * pass through to the page.
+ * and contains nothing but the painting itself.
  *
- * Visibility is coordinated with `<TravelingDailyPainting />` via a
- * CSS custom property on `:root`:
+ * Visibility is coordinated with `<TravelingDailyPainting />` via two
+ * CSS custom properties on `:root`:
  *
- *   --daily-travel-progress: 0..1
+ *   --daily-travel-progress      : 0..1  (fade-in as the wall enters view)
+ *   --daily-wall-leave-opacity   : 0..1  (fade-out as the wall leaves view)
  *
- * The wall content fades in linearly with travel progress so the
- * section reads as empty until the painting has actually arrived.
+ * The wall content's opacity is the product of the two: the painting
+ * fades in linearly with travel progress so the section reads as
+ * empty until the painting has actually arrived, and fades back out
+ * symmetrically as the section scrolls off the top so the painting
+ * doesn't linger over the page below.
+ *
  * When no `<TravelingDailyPainting />` is mounted (reduced-motion /
- * no daily artwork), the variable is unset and the fallback (1) shows
- * the painting from first paint — no scroll required.
+ * no daily artwork), both variables are unset and the fallback (1)
+ * shows the painting from first paint — no scroll required.
  *
  * The Three.js viewer is heavy (~120 KB gzipped) so it's lazy-imported
  * — only the small WallScene shell ships in the initial homepage
@@ -61,18 +62,25 @@ const WallScene = () => {
       aria-label={`${artwork.title} — on the wall`}
       className="relative isolate w-full py-16 sm:py-20 md:py-28"
     >
-      {/* Opacity shell driven by `--daily-travel-progress`. On first
-          paint with the travel animation enabled the variable is `0`
-          and the painting is invisible — the section reads as empty
-          page space. As the proxy painting flies down from the Daily
-          card the shell fades in linearly so the 3D viewer takes over
-          where the proxy lands. With no proxy mounted (reduced-motion
-          / no artwork) the variable is unset and the fallback `1`
-          shows the painting from first paint. */}
+      {/* Opacity shell driven by two scroll-linked variables.
+          `--daily-travel-progress` (0..1) ramps from 0 → 1 as the
+          flying proxy painting flies down from the Daily card into
+          the section, so the painting reads as empty page space
+          until the proxy has actually landed.
+          `--daily-wall-leave-opacity` (0..1) does the opposite on
+          the way out: 1 while the section is in view, 0 once the
+          section has fully scrolled off the top.
+          Multiplying the two means the painting is shown only while
+          the section is actually on screen — it fades back into the
+          Daily card on the way up, and fades out into empty page
+          space on the way down. With no proxy mounted (reduced-motion
+          / no artwork) both variables are unset and the fallback `1`
+          on each side keeps the painting visible from first paint. */}
       <div
         className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 sm:px-6"
         style={{
-          opacity: "var(--daily-travel-progress, 1)",
+          opacity:
+            "calc(var(--daily-travel-progress, 1) * var(--daily-wall-leave-opacity, 1))",
         }}
       >
         {/* `[data-wall-target]` is the rect that

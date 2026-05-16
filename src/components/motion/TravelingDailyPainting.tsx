@@ -107,6 +107,12 @@ const TravelingDailyPainting = () => {
     setVar("--daily-travel-progress", 0);
     setVar("--daily-card-opacity", 1);
     setVar("--daily-travel-opacity", 0);
+    // Companion variable for the leave-fade trigger below. Starts at
+    // 1 (fully visible) and falls to 0 as the wall section scrolls
+    // off the top of the viewport. `<WallScene />` multiplies this
+    // against `--daily-travel-progress` so the painting is shown only
+    // while the section is actually in view.
+    setVar("--daily-wall-leave-opacity", 1);
 
     const updateProxy = (progress: number) => {
       const o = originRect ?? findOrigin()?.getBoundingClientRect() ?? null;
@@ -162,6 +168,14 @@ const TravelingDailyPainting = () => {
       setVar("--daily-travel-opacity", proxyOpacity);
     };
 
+    const updateLeave = (progress: number) => {
+      // 1 → 0 as the section scrolls off the top. `WallScene`
+      // multiplies this against the travel progress, so the painting
+      // is shown only while the section is actually in view and
+      // fades out cleanly once the visitor scrolls past it.
+      setVar("--daily-wall-leave-opacity", 1 - progress);
+    };
+
     const ctx = gsap.context(() => {
       ScrollTrigger.create({
         // Trigger on the wall scene — start the travel when its top is
@@ -204,9 +218,33 @@ const TravelingDailyPainting = () => {
         },
       });
 
+      // Leave-fade trigger: independent from the travel trigger above
+      // so the two scroll windows don't compete for the same progress
+      // value. The leave window starts at the exact pin point where
+      // the travel ends ("top 30%" — wall section's top crossing 30%
+      // from the viewport top) so the wall painting is fully visible
+      // at the boundary, and runs until the section's bottom passes
+      // the viewport top ("bottom top" — section fully scrolled
+      // past). Mobile scroll smoothing is tightened the same way as
+      // the travel trigger so the fade tracks the finger position.
+      ScrollTrigger.create({
+        trigger: "[data-wall-scene]",
+        start: "top 30%",
+        end: "bottom top",
+        scrub: isCoarsePointer ? 0.15 : 0.4,
+        onUpdate: (self) => updateLeave(self.progress),
+        // `self` is the ScrollTrigger instance — same TDZ-safe pattern
+        // as the travel trigger above. GSAP calls `onRefresh`
+        // synchronously during `ScrollTrigger.create()`, before the
+        // create() return value is bound, so we read progress off
+        // `self` rather than closing over the returned reference.
+        onRefresh: (self) => updateLeave(self.progress),
+      });
+
       // First paint — apply progress 0 immediately so the proxy is
       // sized and positioned correctly before the first scroll event.
       updateProxy(0);
+      updateLeave(0);
     });
 
     return () => {
@@ -214,6 +252,7 @@ const TravelingDailyPainting = () => {
       root.style.removeProperty("--daily-travel-progress");
       root.style.removeProperty("--daily-card-opacity");
       root.style.removeProperty("--daily-travel-opacity");
+      root.style.removeProperty("--daily-wall-leave-opacity");
     };
   }, [artwork]);
 
