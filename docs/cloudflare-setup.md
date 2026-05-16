@@ -8,6 +8,33 @@ Cloudflare plan that already hosts `canvhub.com`.
 Apply in order. Each step is independent — you can stop at any point and the
 site keeps working.
 
+## 0. Disable the Pages git integration (one-time, important)
+
+The repo deploys via the GitHub Actions workflow at
+`.github/workflows/deploy.yml` (Direct Upload through Wrangler). If the
+Cloudflare Pages **git integration** is also connected to this repo, the
+two systems race on every push to `main`: each one builds and publishes
+its own deployment, and whichever one finishes last wins as production.
+
+When the git integration's queue lags behind (it routinely takes 10–90
+minutes to process a backlog of commits), an older commit's build can
+land on production _after_ a newer commit's build, silently reverting a
+hotfix and bringing the previous bug back to live traffic.
+
+To stop this race:
+
+1. `dash.cloudflare.com → Workers & Pages → canvhub → Settings → Builds &
+deployments → Git integration → Disconnect`.
+2. Confirm the disconnect. Existing deployments stay in place; only the
+   automatic-build-on-push behavior goes away.
+3. From now on every production deploy comes from the
+   `Deploy to Cloudflare Pages` GitHub Actions workflow, which is the
+   authoritative source.
+
+You can verify the disconnection worked by pushing a commit to a feature
+branch and checking the **Deployments** tab — you should see exactly one
+new deployment per push (the GitHub Actions one), not two.
+
 ## 1. Bot Fight Mode (5 seconds)
 
 Cuts a chunk of automated scraper / brute-force traffic at the edge before
