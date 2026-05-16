@@ -979,7 +979,9 @@ function ProductPage() {
 
         <SimilarPaintingsRail currentId={artwork.id} />
         <RelatedProducts currentId={artwork.id} />
-        <RecentlyViewed excludeId={artwork.id} />
+        <Suspense fallback={null}>
+          <RecentlyViewed excludeId={artwork.id} />
+        </Suspense>
       </main>
 
       {zoomed && (
@@ -1058,8 +1060,10 @@ function ProductPage() {
           );
         }}
       />
-      <CartDrawer />
-      <CheckoutForm />
+      <Suspense fallback={null}>
+        <CartDrawer />
+        <CheckoutForm />
+      </Suspense>
     </div>
   );
 }
