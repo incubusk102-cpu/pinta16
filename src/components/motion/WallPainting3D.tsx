@@ -76,7 +76,19 @@ const WallPainting3D = ({ imageUrl }: WallPainting3DProps) => {
         }
       >
         <Canvas
-          camera={{ position: [0, 0, 5.5], fov: 35 }}
+          // Initial camera position is pulled noticeably further back
+          // than the product-page modal viewer (which sits at z=5.5)
+          // so the painting fits the square wall box with comfortable
+          // air around it. The modal viewer's canvas is the visitor's
+          // whole viewport (usually landscape on desktop), so the same
+          // mesh has more horizontal world-space to spread into; the
+          // wall scene is constrained to `aspect-square`, where the
+          // 4-unit-wide painting at z=5.5 overflows. Pulling back to
+          // z=9 (with the OrbitControls min/max bounds widened below
+          // for pinch headroom) frames the painting at roughly the
+          // same proportions you'd see in the modal viewer on a
+          // landscape screen.
+          camera={{ position: [0, 0, 9], fov: 35 }}
           dpr={[1, 2]}
           shadows
           gl={{ antialias: true, alpha: true }}
@@ -116,8 +128,13 @@ const WallPainting3D = ({ imageUrl }: WallPainting3DProps) => {
             enableZoom
             enablePan={false}
             enableRotate={false}
+            // `minDistance` matches the product-page modal viewer so a
+            // pinch-in gives the same close-up detail. `maxDistance`
+            // is bumped above the modal's 10 because the inline view
+            // starts further out (z=9), and visitors should still
+            // have some pinch-out headroom past the resting framing.
             minDistance={3}
-            maxDistance={10}
+            maxDistance={14}
             autoRotate={autoRotate}
             autoRotateSpeed={0.6}
             touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }}
