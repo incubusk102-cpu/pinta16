@@ -52,11 +52,13 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
  * `<WallScene />` reads `--daily-travel-progress` to fade in at the
  * end of the travel.
  *
- * Reduced-motion and coarse-pointer (mobile / tablet) visitors don't
- * render this component at all — they see the painting in both the
- * Daily card and on the wall in their resting positions. The CSS
- * variables stay unset, so the fallbacks (`1`) make both copies
- * visible without any scroll choreography.
+ * Reduced-motion visitors don't render this component at all — they
+ * see the painting in both the Daily card and on the wall in their
+ * resting positions. The CSS variables stay unset, so the fallbacks
+ * (`1`) make both copies visible without any scroll choreography.
+ * Coarse-pointer visitors (mobile / tablet) DO get the travel
+ * animation — the scrub time is just tightened so it tracks finger
+ * scrolling without feeling laggy.
  */
 const TravelingDailyPainting = () => {
   const { config, loading } = useStorefrontConfig();
@@ -76,7 +78,8 @@ const TravelingDailyPainting = () => {
   useEffect(() => {
     if (!artwork) return;
     if (prefersReducedMotion()) return;
-    if (prefersCoarsePointer()) return;
+
+    const isCoarsePointer = prefersCoarsePointer();
 
     const proxy = proxyRef.current;
     const img = imgRef.current;
@@ -173,7 +176,13 @@ const TravelingDailyPainting = () => {
         trigger: "[data-wall-scene]",
         start: "top bottom",
         end: "top 30%",
-        scrub: 0.4,
+        // Touch scrolling has its own momentum / damping; a long
+        // scrub time on mobile makes the painting feel like it's
+        // dragging behind the finger. Tighten the smoothing so the
+        // travel tracks the actual scroll position closely on
+        // mobile, and keep the slightly smoothed value on desktop
+        // where wheel scrolling is more discrete.
+        scrub: isCoarsePointer ? 0.15 : 0.4,
         onUpdate: (self) => {
           // Re-resolve rects each update — the page can grow / shrink
           // when admin-driven sections load in (`InspiredByYouRail`,

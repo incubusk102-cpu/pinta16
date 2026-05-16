@@ -122,141 +122,163 @@ const WallScene = () => {
           }}
         />
 
-        {/* Hanging cord — two thin angled lines from a single nail
-            point above the frame. Pure CSS, no images. Sits above the
-            frame in z-order. */}
+        {/* Frame composition — everything that "appears with the
+            painting" is grouped under a single opacity shell driven by
+            `--daily-travel-progress`. On first paint with the travel
+            animation enabled the variable is `0` and the entire frame
+            chrome (cord, matte-black frame, gold trim, cream matt,
+            cast shadow, nameplate) is invisible — the wall just shows
+            plaster + picture rail + baseboard + spotlight. As the
+            visitor scrolls and the proxy painting flies down, this
+            shell fades in linearly so the frame materialises around
+            the painting as it lands. When no `<TravelingDailyPainting />`
+            is mounted (reduced-motion / no daily artwork), the variable
+            is unset and the CSS fallback `1` shows the finished frame
+            from first paint. */}
         <div
-          aria-hidden="true"
-          className="relative z-10 mb-[-1px] flex h-10 w-full justify-center"
+          className="relative z-10 flex w-full flex-col items-center"
+          style={{
+            opacity: "var(--daily-travel-progress, 1)",
+          }}
         >
-          <div className="relative h-full w-44">
-            {/* Nail dot — small dark circle at the apex */}
-            <span
-              className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full"
-              style={{
-                background: "#1c1c1c",
-                boxShadow: "0 1px 0 rgba(0,0,0,0.35)",
-              }}
-            />
-            {/* Left cord — thin line angling down-left */}
-            <span
-              className="absolute left-1/2 top-1 h-px w-[55%] origin-top-left"
-              style={{
-                background:
-                  "linear-gradient(90deg, rgba(28,28,28,0.85), rgba(28,28,28,0.45))",
-                transform: "rotate(135deg)",
-              }}
-            />
-            {/* Right cord — thin line angling down-right */}
-            <span
-              className="absolute right-1/2 top-1 h-px w-[55%] origin-top-right"
-              style={{
-                background:
-                  "linear-gradient(90deg, rgba(28,28,28,0.45), rgba(28,28,28,0.85))",
-                transform: "rotate(-135deg)",
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Frame + painting block. This is what
-            `<TravelingDailyPainting />` targets via `[data-wall-target]`
-            to know where to land the proxy. The painting `<img>` lives
-            inside this block (the "landed" copy of the painting) and is
-            faded in by `--daily-travel-progress`. */}
-        <div className="relative z-10 w-full max-w-md">
-          {/* Cast shadow under the frame — soft ellipse, gives the
-              painting visual weight against the wall. */}
+          {/* Hanging cord — two thin angled lines from a single nail
+              point above the frame. Pure CSS, no images. Sits above the
+              frame in z-order. */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-6 -bottom-3 z-0 h-6"
-            style={{
-              background:
-                "radial-gradient(ellipse 60% 100% at 50% 50%, rgba(20,12,2,0.32) 0%, rgba(20,12,2,0) 75%)",
-              filter: "blur(2px)",
-            }}
-          />
-
-          <div
-            data-wall-target
-            className="relative z-10 aspect-square w-full"
-            style={{
-              // Matte-black outer wood frame. Two thin inset shadows
-              // give it micro-bevels (top-left highlight, bottom-right
-              // shadow) without us needing a real wood-grain texture.
-              backgroundColor: "#0f0f0f",
-              padding: "10px",
-              boxShadow: [
-                "inset 0 1px 0 rgba(255,255,255,0.06)",
-                "inset 0 -1px 0 rgba(0,0,0,0.55)",
-                "0 18px 30px -14px rgba(20,15,5,0.45)",
-              ].join(", "),
-              borderRadius: "2px",
-            }}
+            className="relative z-10 mb-[-1px] flex h-10 w-full justify-center"
           >
-            {/* Gold-leaf inner trim — warm gold ring just inside the
-                matte black. This is the "premium" detail. */}
-            <div
-              className="relative h-full w-full"
-              style={{
-                padding: "2px",
-                background:
-                  "linear-gradient(135deg, #d8b56a 0%, #c9a96e 50%, #a78348 100%)",
-                borderRadius: "1px",
-              }}
-            >
-              {/* Slim cream mat between gold trim and the painting. */}
-              <div
-                className="relative h-full w-full"
+            <div className="relative h-full w-44">
+              {/* Nail dot — small dark circle at the apex */}
+              <span
+                className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full"
                 style={{
-                  padding: "10px",
-                  backgroundColor: "#f5f3ee",
+                  background: "#1c1c1c",
+                  boxShadow: "0 1px 0 rgba(0,0,0,0.35)",
                 }}
-              >
-                {/* The "landed" painting. Opacity is driven by the
-                    `--daily-travel-progress` CSS variable, so it only
-                    appears at the very end of the travel (0.9 → 1.0).
-                    On mobile / reduced-motion (no traveling proxy
-                    mounted), the variable is unset and the fallback
-                    (1) shows the painting from first paint. */}
-                <img
-                  data-landed-painting
-                  src={image}
-                  alt={artwork.title}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover"
-                  style={{
-                    opacity:
-                      "max(0, calc((var(--daily-travel-progress, 1) - 0.9) * 10))",
-                  }}
-                />
-              </div>
+              />
+              {/* Left cord — thin line angling down-left */}
+              <span
+                className="absolute left-1/2 top-1 h-px w-[55%] origin-top-left"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(28,28,28,0.85), rgba(28,28,28,0.45))",
+                  transform: "rotate(135deg)",
+                }}
+              />
+              {/* Right cord — thin line angling down-right */}
+              <span
+                className="absolute right-1/2 top-1 h-px w-[55%] origin-top-right"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(28,28,28,0.45), rgba(28,28,28,0.85))",
+                  transform: "rotate(-135deg)",
+                }}
+              />
             </div>
           </div>
 
-          {/* Museum-style nameplate just below the frame. Cream strip
-              with the painting title in display serif, dark-on-cream
-              keyline. Fades in with the painting. */}
-          <div
-            className="relative z-10 mx-auto mt-5 max-w-xs px-4 py-2 text-center"
-            style={{
-              background: "linear-gradient(180deg, #f5f3ee 0%, #ece7da 100%)",
-              borderTop: "1px solid rgba(28,28,28,0.18)",
-              borderBottom: "1px solid rgba(28,28,28,0.18)",
-              opacity:
-                "max(0, calc((var(--daily-travel-progress, 1) - 0.9) * 10))",
-            }}
-          >
-            <p className="font-display text-base text-foreground sm:text-lg">
-              {artwork.title}
-            </p>
-            {artwork.medium ? (
-              <p className="mt-0.5 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                {artwork.medium}
-                {artwork.dimensions ? ` · ${artwork.dimensions}` : ""}
+          {/* Frame + painting block. This is what
+              `<TravelingDailyPainting />` targets via `[data-wall-target]`
+              to know where to land the proxy. The painting `<img>` lives
+              inside this block (the "landed" copy of the painting) and is
+              faded in by `--daily-travel-progress`. */}
+          <div className="relative z-10 w-full max-w-md">
+            {/* Cast shadow under the frame — soft ellipse, gives the
+                painting visual weight against the wall. */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-6 -bottom-3 z-0 h-6"
+              style={{
+                background:
+                  "radial-gradient(ellipse 60% 100% at 50% 50%, rgba(20,12,2,0.32) 0%, rgba(20,12,2,0) 75%)",
+                filter: "blur(2px)",
+              }}
+            />
+
+            <div
+              data-wall-target
+              className="relative z-10 aspect-square w-full"
+              style={{
+                // Matte-black outer wood frame. Two thin inset shadows
+                // give it micro-bevels (top-left highlight, bottom-right
+                // shadow) without us needing a real wood-grain texture.
+                backgroundColor: "#0f0f0f",
+                padding: "10px",
+                boxShadow: [
+                  "inset 0 1px 0 rgba(255,255,255,0.06)",
+                  "inset 0 -1px 0 rgba(0,0,0,0.55)",
+                  "0 18px 30px -14px rgba(20,15,5,0.45)",
+                ].join(", "),
+                borderRadius: "2px",
+              }}
+            >
+              {/* Gold-leaf inner trim — warm gold ring just inside the
+                  matte black. This is the "premium" detail. */}
+              <div
+                className="relative h-full w-full"
+                style={{
+                  padding: "2px",
+                  background:
+                    "linear-gradient(135deg, #d8b56a 0%, #c9a96e 50%, #a78348 100%)",
+                  borderRadius: "1px",
+                }}
+              >
+                {/* Slim cream mat between gold trim and the painting. */}
+                <div
+                  className="relative h-full w-full"
+                  style={{
+                    padding: "10px",
+                    backgroundColor: "#f5f3ee",
+                  }}
+                >
+                  {/* The "landed" painting. Opacity is driven by the
+                      `--daily-travel-progress` CSS variable, so it only
+                      appears at the very end of the travel (0.9 → 1.0)
+                      — combined with the outer opacity shell this gives
+                      a clean handoff from the flying proxy. When no
+                      proxy is mounted (reduced-motion / no artwork),
+                      the variable is unset and the fallback (1) shows
+                      the painting from first paint. */}
+                  <img
+                    data-landed-painting
+                    src={image}
+                    alt={artwork.title}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                    style={{
+                      opacity:
+                        "max(0, calc((var(--daily-travel-progress, 1) - 0.9) * 10))",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Museum-style nameplate just below the frame. Cream strip
+                with the painting title in display serif, dark-on-cream
+                keyline. Fades in with the painting. */}
+            <div
+              className="relative z-10 mx-auto mt-5 max-w-xs px-4 py-2 text-center"
+              style={{
+                background: "linear-gradient(180deg, #f5f3ee 0%, #ece7da 100%)",
+                borderTop: "1px solid rgba(28,28,28,0.18)",
+                borderBottom: "1px solid rgba(28,28,28,0.18)",
+                opacity:
+                  "max(0, calc((var(--daily-travel-progress, 1) - 0.9) * 10))",
+              }}
+            >
+              <p className="font-display text-base text-foreground sm:text-lg">
+                {artwork.title}
               </p>
-            ) : null}
+              {artwork.medium ? (
+                <p className="mt-0.5 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  {artwork.medium}
+                  {artwork.dimensions ? ` · ${artwork.dimensions}` : ""}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
