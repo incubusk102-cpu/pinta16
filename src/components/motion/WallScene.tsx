@@ -70,7 +70,7 @@ const WallScene = () => {
           / no artwork) the variable is unset and the fallback `1`
           shows the painting from first paint. */}
       <div
-        className="mx-auto flex w-full max-w-md flex-col items-center px-4 sm:px-6"
+        className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 sm:px-6"
         style={{
           opacity: "var(--daily-travel-progress, 1)",
         }}
@@ -79,7 +79,11 @@ const WallScene = () => {
             `<TravelingDailyPainting />` interpolates its flying proxy
             into. The square aspect ratio gives the 3D scene the same
             framing as the source image inside the Daily card so the
-            proxy → 3D handoff is positionally seamless. */}
+            proxy → 3D handoff is positionally seamless. The container
+            is widened to `max-w-3xl` (was `max-w-md`) so the inline
+            wall viewer renders the painting at a similar visual scale
+            to the product-page `<PaintingViewer3D />` modal — visitors
+            land on a piece that fills the section, not a small card. */}
         <div data-wall-target className="relative aspect-square w-full">
           <Suspense fallback={null}>
             <WallPainting3D imageUrl={image} />
