@@ -168,7 +168,7 @@ const TravelingDailyPainting = () => {
     };
 
     const ctx = gsap.context(() => {
-      const trigger = ScrollTrigger.create({
+      ScrollTrigger.create({
         // Trigger on the wall scene — start the travel when its top is
         // about to enter the viewport, finish when its top reaches a
         // little above the centre so the landing locks in before the
@@ -193,11 +193,19 @@ const TravelingDailyPainting = () => {
           updateProxy(self.progress);
         },
         // Refresh rects on every ScrollTrigger refresh (resize, async
-        // sections loading in) so the lerp stays accurate.
-        onRefresh: () => {
+        // sections loading in) so the lerp stays accurate. `self` is
+        // the ScrollTrigger instance — we read progress off it rather
+        // than closing over the returned reference because GSAP calls
+        // `onRefresh` synchronously during `ScrollTrigger.create()`,
+        // before the create() return value is bound. Capturing the
+        // returned reference would throw a TDZ error on the very
+        // first refresh when the trigger element is already in the
+        // DOM (which is the case once `<WallScene />` mounts eagerly
+        // outside the lazy-section Suspense).
+        onRefresh: (self) => {
           originRect = null;
           destinationRect = null;
-          updateProxy(trigger.progress);
+          updateProxy(self.progress);
         },
       });
 
