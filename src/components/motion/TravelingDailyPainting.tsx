@@ -52,11 +52,13 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
  * `<WallScene />` reads `--daily-travel-progress` to fade in at the
  * end of the travel.
  *
- * Reduced-motion and coarse-pointer (mobile / tablet) visitors don't
- * render this component at all — they see the painting in both the
- * Daily card and on the wall in their resting positions. The CSS
- * variables stay unset, so the fallbacks (`1`) make both copies
- * visible without any scroll choreography.
+ * Reduced-motion visitors don't render this component at all — they
+ * see the painting in both the Daily card and on the wall in their
+ * resting positions. The CSS variables stay unset, so the fallbacks
+ * (`1`) make both copies visible without any scroll choreography.
+ * Coarse-pointer visitors (mobile / tablet) DO get the travel
+ * animation — the scrub time is just tightened so it tracks finger
+ * scrolling without feeling laggy.
  */
 const TravelingDailyPainting = () => {
   const { config, loading } = useStorefrontConfig();
@@ -76,7 +78,8 @@ const TravelingDailyPainting = () => {
   useEffect(() => {
     if (!artwork) return;
     if (prefersReducedMotion()) return;
-    if (prefersCoarsePointer()) return;
+
+    const isCoarsePointer = prefersCoarsePointer();
 
     const proxy = proxyRef.current;
     const img = imgRef.current;
@@ -173,7 +176,13 @@ const TravelingDailyPainting = () => {
         trigger: "[data-wall-scene]",
         start: "top bottom",
         end: "top 30%",
-        scrub: 0.4,
+        // Touch scrolling has its own momentum / damping; a long
+        // scrub time on mobile makes the painting feel like it's
+        // dragging behind the finger. Tighten the smoothing so the
+        // travel tracks the actual scroll position closely on
+        // mobile, and keep the slightly smoothed value on desktop
+        // where wheel scrolling is more discrete.
+        scrub: isCoarsePointer ? 0.15 : 0.4,
         onUpdate: (self) => {
           // Re-resolve rects each update — the page can grow / shrink
           // when admin-driven sections load in (`InspiredByYouRail`,
@@ -246,21 +255,23 @@ const TravelingDailyPainting = () => {
             opacity: "var(--frame-progress, 0)",
           }}
         />
-        {/* Matte-black outer frame — padding (the "thickness" of the
-            frame) interpolates from 0 to 10px as the painting lands so
-            the picture looks bare in flight and framed at rest. */}
+        {/* Frame composition — the matte-black wood outer was removed
+            per user feedback (felt persistent / boxy on the wall) so
+            the in-flight proxy now mirrors the wall destination: just
+            a thin gold trim around a cream matt around the painting,
+            scaled in from "naked image" → "matted + gold trim" via
+            `--frame-progress`. A soft drop shadow scales in on the
+            outer container so the painting still reads as a physical
+            object lifting onto the wall. */}
         <div
-          className="relative h-full w-full overflow-hidden"
+          className="relative h-full w-full"
           style={{
-            backgroundColor: "#0f0f0f",
-            padding: "calc(var(--frame-progress, 0) * 10px)",
-            borderRadius: "calc(2px + var(--frame-progress, 0) * 1px)",
             boxShadow:
               "0 calc(var(--frame-progress, 0) * 18px) calc(var(--frame-progress, 0) * 30px) calc(var(--frame-progress, 0) * -14px) rgba(20,15,5,0.45)",
           }}
         >
-          {/* Gold-leaf inner trim — same idea, padding scales with
-              progress so the gold band appears only on landing. */}
+          {/* Gold-leaf trim — padding scales with progress so the
+              gold band appears only on landing. */}
           <div
             className="relative h-full w-full"
             style={{

@@ -264,18 +264,29 @@ function Index() {
           aria-hidden="true"
           className="h-px"
         />
-        {/* On the wall today — the dedicated wall scene where the
-            Painting of the Day lands after the visitor has scrolled
-            past the Daily card and the carousels. `<TravelingDailyPainting />`
-            (mounted at the bottom of the route) interpolates a fixed
-            proxy painting from the Daily card into this section's
-            `[data-wall-target]` frame on scroll, then fades the
-            landed `<img>` inside this section in over the final 10% of
-            travel so the handoff between the flying proxy and the
-            section-flow painting is invisible. Reduced-motion /
-            coarse-pointer (mobile) visitors don't render the proxy at
-            all and see the landed painting from first paint. */}
-        <WallScene />
+      </Suspense>
+      {/* On the wall today — the dedicated wall scene where the
+          Painting of the Day lands after the visitor has scrolled
+          past the Daily card and the carousels. `<TravelingDailyPainting />`
+          (mounted at the bottom of the route) interpolates a fixed
+          proxy painting from the Daily card into this section's
+          `[data-wall-target]` frame on scroll, then fades the
+          landed `<img>` inside this section in over the final 10% of
+          travel so the handoff between the flying proxy and the
+          section-flow painting is invisible. Reduced-motion visitors
+          don't render the proxy at all and see the landed painting
+          from first paint.
+
+          WallScene is mounted OUTSIDE the lazy-section Suspense so
+          its `[data-wall-scene]` / `[data-wall-target]` markers are in
+          the DOM before `<TravelingDailyPainting />` creates its
+          ScrollTrigger. If WallScene were inside the Suspense and any
+          of the lazy sections (About / ThankYou / Reviews / Contact)
+          took a while to load, the entire subtree would suspend and
+          the ScrollTrigger would silently no-op because its trigger
+          selector would resolve to `null`. */}
+      <WallScene />
+      <Suspense fallback={null}>
         <AboutSection />
         <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
           <Ornament label="Voices" />
