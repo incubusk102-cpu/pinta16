@@ -65,3 +65,25 @@ export const jsonAuthHeaders = (): Record<string, string> => ({
   "Content-Type": "application/json",
   ...authHeaders(),
 });
+
+/**
+ * Fetch wrapper that aborts if the request exceeds `timeoutMs`.
+ * The AbortController is cleaned up on both success and failure.
+ */
+export const fetchWithTimeout = async (
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 15_000,
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: options.signal ?? controller.signal,
+    });
+    return res;
+  } finally {
+    window.clearTimeout(timer);
+  }
+};

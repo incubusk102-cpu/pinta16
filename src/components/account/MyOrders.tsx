@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Filter, Package, RefreshCw, Search, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { formatPHP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,6 +41,7 @@ export default function MyOrders() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   // Per-order resync UI state — captures the latest server error so
   // the customer can see exactly why their order isn't showing in
   // admin yet, plus a "syncing" flag for the spinner.
@@ -210,7 +212,9 @@ export default function MyOrders() {
               <li key={o.id}>
                 <button
                   type="button"
-                  onClick={() => viewOrder(o.id)}
+                  onClick={() =>
+                    setExpanded((prev) => (prev === o.id ? null : o.id))
+                  }
                   className="w-full py-3 flex items-start justify-between gap-3 text-left rounded-md -mx-2 px-2 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 transition-colors"
                   aria-label={`View journey for order ${o.id}`}
                 >
@@ -228,9 +232,78 @@ export default function MyOrders() {
                     </p>
                   </div>
                   <p className="text-sm font-semibold whitespace-nowrap">
-                    ₱{o.total.toLocaleString()}
+                    {formatPHP(o.total)}
                   </p>
                 </button>
+                {expanded === o.id && (
+                  <div className="px-2 pb-3 space-y-2 text-xs border-t border-border/20 pt-2">
+                    <ul className="space-y-1">
+                      {o.items.map((item, idx) => (
+                        <li
+                          key={idx}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate text-foreground/90">
+                            {item.title}
+                            {item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                          </span>
+                          <span className="shrink-0 text-muted-foreground">
+                            {formatPHP(item.price * item.quantity)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {o.orderInfo && (
+                      <div className="text-muted-foreground">
+                        <p className="font-medium text-foreground/80 text-[10px] uppercase tracking-wider mb-0.5">
+                          Shipping
+                        </p>
+                        <p>
+                          {[
+                            o.orderInfo.addressLine1 || o.orderInfo.address,
+                            o.orderInfo.barangay
+                              ? `Brgy. ${o.orderInfo.barangay}`
+                              : "",
+                            o.orderInfo.city,
+                            o.orderInfo.province,
+                            o.orderInfo.postalCode,
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </p>
+                      </div>
+                    )}
+                    {o.shipment?.trackingNumber && (
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground/80 text-[10px] uppercase tracking-wider">
+                          Tracking
+                        </span>{" "}
+                        {o.shipment.courier ? `${o.shipment.courier} · ` : ""}
+                        {o.shipment.trackingNumber}
+                      </p>
+                    )}
+                    {o.orderInfo?.courier && (
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground/80 text-[10px] uppercase tracking-wider">
+                          Courier
+                        </span>{" "}
+                        {o.orderInfo.courier}
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          viewOrder(o.id);
+                        }}
+                        className="text-[11px] underline text-foreground/70 hover:text-foreground"
+                      >
+                        Full journey →
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {needsSync && (
                   <div className="mt-1 mb-2 -mx-2 px-2 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
                     <RefreshCw className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />

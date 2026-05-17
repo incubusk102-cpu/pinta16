@@ -10,6 +10,8 @@ interface ImageWithFallbackProps extends ImgHTMLAttributes<HTMLImageElement> {
   // phones, half on tablets, third on desktop. Override per call site
   // (e.g. hero is "100vw", thumbnails are "300px").
   sizes?: string;
+  /** When true, sets `fetchpriority="high"` on the <img> for LCP hints. */
+  priority?: boolean;
 }
 
 // Matches public/images/<basename>.<png|jpe?g> — the only sources
@@ -50,6 +52,7 @@ const ImageWithFallback = ({
   loading = "lazy",
   decoding = "async",
   sizes,
+  priority,
   ...rest
 }: ImageWithFallbackProps) => {
   const [errored, setErrored] = useState(false);
@@ -78,10 +81,13 @@ const ImageWithFallback = ({
       src={src}
       alt={alt}
       className={className}
-      loading={loading}
+      loading={priority ? "eager" : loading}
       decoding={decoding}
       sizes={staticMatch ? (sizes ?? DEFAULT_SIZES) : sizes}
       onError={() => setErrored(true)}
+      {...(priority
+        ? ({ fetchpriority: "high" } as Record<string, string>)
+        : {})}
       {...rest}
     />
   );

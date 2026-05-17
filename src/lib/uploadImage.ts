@@ -6,6 +6,7 @@
 // surface here as a `kind: "fallback"` result.
 
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import { fetchWithTimeout } from "@/lib/api";
 
 export interface UploadResult {
   url: string;
@@ -42,14 +43,18 @@ export const uploadImageToR2 = async (blob: Blob): Promise<UploadOutcome> => {
 
   let res: Response;
   try {
-    res = await fetch("/api/uploads", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": blob.type || "application/octet-stream",
+    res = await fetchWithTimeout(
+      "/api/uploads",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": blob.type || "application/octet-stream",
+        },
+        body: blob,
       },
-      body: blob,
-    });
+      90_000,
+    );
   } catch (err) {
     return {
       kind: "error",

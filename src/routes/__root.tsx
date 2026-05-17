@@ -225,6 +225,12 @@ function RootComponent() {
                             <CommandPaletteProvider>
                               <QuickSpinProvider>
                                 <SmoothScrollProvider>
+                                  <a
+                                    href="#main-content"
+                                    className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
+                                  >
+                                    Skip to content
+                                  </a>
                                   <BootMountMark />
                                   <HeartbeatBridge />
                                   <ReferralCaptureBridge />

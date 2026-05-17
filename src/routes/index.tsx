@@ -19,6 +19,7 @@ import WallScene from "@/components/motion/WallScene";
 import TravelingDailyPainting from "@/components/motion/TravelingDailyPainting";
 import SilentBoundary from "@/components/SilentBoundary";
 import { useUserAuth } from "@/contexts/UserAuthContext";
+import { ProductRailSkeleton } from "@/components/ui/ProductCardSkeleton";
 
 // Cinematic 3D backdrop for the landing page. Renders a fixed,
 // behind-content WebGL scene (gold particle halo + slowly rotating
@@ -241,7 +242,14 @@ function Index() {
           collection scene. */}
       <HomepageVideoMontage />
       <CinematicCollectionCTA />
-      <Suspense fallback={null}>
+      <Suspense
+        fallback={
+          <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-8 py-8">
+            <ProductRailSkeleton />
+            <ProductRailSkeleton />
+          </section>
+        }
+      >
         <section
           id={HOME_SECTION_IDS.forYou}
           className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto"

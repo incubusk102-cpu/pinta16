@@ -6,6 +6,7 @@
 // MIME types it expects (validated server-side).
 
 import { getAdminToken } from "@/contexts/AdminAuthContext";
+import { fetchWithTimeout } from "@/lib/api";
 
 export interface UploadResult {
   url: string;
@@ -41,14 +42,18 @@ export const uploadVideoToR2 = async (blob: Blob): Promise<UploadOutcome> => {
 
   let res: Response;
   try {
-    res = await fetch("/api/video-uploads", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": blob.type || "application/octet-stream",
+    res = await fetchWithTimeout(
+      "/api/video-uploads",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": blob.type || "application/octet-stream",
+        },
+        body: blob,
       },
-      body: blob,
-    });
+      120_000,
+    );
   } catch (err) {
     return {
       kind: "error",

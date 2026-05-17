@@ -1,4 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { motion } from "framer-motion";
 import {
   ShoppingCart,
@@ -219,13 +225,40 @@ const GalleryNav = () => {
     });
   }, [pathname]);
 
-  // ESC to close while drawer is open. Body scroll is intentionally NOT
-  // locked — the drawer is transparent so visitors can keep scrolling the
-  // page underneath while the menu options stay visible on the right.
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  // Focus trap + ESC to close while drawer is open.
   useEffect(() => {
     if (!menuOpen) return;
+    const drawer = drawerRef.current;
+    if (drawer) {
+      const first = drawer.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      first?.focus();
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        hamburgerRef.current?.focus();
+        return;
+      }
+      if (e.key === "Tab" && drawer) {
+        const focusable = drawer.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -279,7 +312,12 @@ const GalleryNav = () => {
     id: string;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
-  }[] = [{ id: "reviews", label: t("nav.reviews"), icon: Star }];
+    to?: string;
+  }[] = [
+    { id: "reviews", label: t("nav.reviews"), icon: Star },
+    { id: "about", label: "About", icon: Info, to: "/about" },
+    { id: "contact", label: "Contact", icon: MessageSquare, to: "/contact" },
+  ];
 
   // The full filterable gallery now lives at /collection (it was lifted
   // off the homepage so the landing experience reads like an editorial
@@ -294,6 +332,7 @@ const GalleryNav = () => {
   return (
     <>
       <motion.nav
+        aria-label="Main navigation"
         className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,backdrop-filter,border-color,box-shadow] duration-500 ease-out ${
           scrolled
             ? "bg-background/70 supports-[backdrop-filter]:bg-background/55 backdrop-blur-xl backdrop-saturate-150 border-b border-border/15 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]"
@@ -424,12 +463,12 @@ const GalleryNav = () => {
               // explicit: the X button in the drawer header, ESC, or a
               // route change. Calling `openMenu` again while already
               // open is a no-op.
+              ref={hamburgerRef}
               onClick={openMenu}
               // Hover-to-open is disabled on the homepage so the drawer
               // doesn't pop open accidentally while customers are scrolling
               // the hero / collection. Other routes still get hover-open.
               onMouseEnter={onIndex ? undefined : openMenu}
-              onFocus={onIndex ? undefined : openMenu}
               // Always render with explicit `text-foreground` so the icon
               // never inherits a faded colour from the parent. When the
               // nav is transparent (top of homepage), wrap it in a frosted
@@ -474,9 +513,10 @@ const GalleryNav = () => {
           they scrolled past the header. Keeping it at the top of the
           fragment ensures the drawer covers the full viewport height. */}
       <aside
+        ref={drawerRef}
         id="mobile-nav-drawer"
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-label="Site menu"
         aria-hidden={!menuOpen}
         className={`fixed top-0 right-0 bottom-0 z-[70] w-[88%] max-w-[360px] bg-card border-l border-border/40 shadow-2xl flex flex-col transform transition-transform duration-200 ease-out ${
@@ -555,7 +595,18 @@ const GalleryNav = () => {
                 </button>
                 {browseItems.map((item) => {
                   const Icon = item.icon;
-                  return (
+                  return item.to ? (
+                    <Link
+                      key={item.id}
+                      to={item.to}
+                      onClick={closeMenu}
+                      className="w-full flex items-center gap-3 px-5 py-3 text-sm text-foreground/85 hover:bg-accent/50 active:bg-accent transition-colors"
+                    >
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </Link>
+                  ) : (
                     <button
                       key={item.id}
                       onClick={() => scrollTo(item.id)}
