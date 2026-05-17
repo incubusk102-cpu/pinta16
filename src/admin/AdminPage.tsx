@@ -5175,8 +5175,10 @@ function SettingsSection() {
   const { device, browser } = useCurrentSessionInfo();
   // Find the section navigator the AdminPage shell installed on the
   // dashboard — used by the quick-link buttons below to jump to
-  // /admin → Security without forcing a hard reload.
+  // /admin → Security without forcing a hard reload. SSR-guarded
+  // because admin components default to client-only.
   const navigateToSection = useCallback((target: AdminSection) => {
+    if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("section", target);
     window.history.pushState(null, "", url.toString());

@@ -10,7 +10,7 @@ history, and not any registry.
 
 You'll notice the sequence jumps:
 
-```
+```text
 0008_stock_events.sql
 0010_tiktok_posts.sql
 ```
@@ -44,7 +44,7 @@ the next available number (currently `0014_*`) and **must not** reuse
    `ALTER TABLE … ADD COLUMN IF NOT EXISTS …` via the standard D1 dance)
    so re-running a partially-applied migration doesn't error out.
 4. Apply locally first:
-   ```
+   ```bash
    npx wrangler d1 migrations apply canvhub --local
    ```
    then in CI / preview before promoting to production.

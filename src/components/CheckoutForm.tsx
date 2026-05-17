@@ -86,6 +86,16 @@ const pesoFormatter = (n: number): string =>
   `\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
 const pesoDiscountFormatter = (n: number): string =>
   `-\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+// Static-string helper for places that aren't streaming through an
+// AnimeCounter — wraps the same `Intl.NumberFormat("en-PH")` /
+// `currency: "PHP"` shape the rest of the codebase uses for one-off
+// peso renders. Whole pesos only; checkout never shows fractional
+// centavos on the storefront side.
+const phpCurrency = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  maximumFractionDigits: 0,
+});
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
 // Per-tab draft of the guest checkout form. We persist on every change
@@ -1749,7 +1759,7 @@ const CheckoutForm = () => {
                                           {shippingIsWaived
                                             ? `Estimated fee: Free (${zoneLabel(zoneForRegion(form.region))})`
                                             : previewedFee != null
-                                              ? `Estimated fee: \u20b1${previewedFee.toLocaleString()} (${zoneLabel(zoneForRegion(form.region))})`
+                                              ? `Estimated fee: ${phpCurrency.format(previewedFee)} (${zoneLabel(zoneForRegion(form.region))})`
                                               : "Fee not configured for this region — flat rate will apply."}
                                         </p>
                                       )}
