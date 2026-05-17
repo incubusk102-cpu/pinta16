@@ -11,6 +11,62 @@ import { isAuthenticated } from "./_lib/admin-auth.js";
 import { buildLambdaEvent } from "./_lib/lambda-event.js";
 import { recordStockEvent, STOCK_STATES } from "./_lib/d1.js";
 import { publishProductPhoto, shouldAutoPostProduct } from "./_lib/tiktok.js";
+import {
+  filterProducts,
+  sortProducts as filterSort,
+} from "./_lib/product-filter.js";
+
+// Maximum page size when callers don't ask for `?all=true`. Picked
+// so a 4-column gallery grid fills a couple of viewports per page
+// without us having to think about every screen size individually.
+const DEFAULT_PAGE_LIMIT = 24;
+const MAX_PAGE_LIMIT = 100;
+
+const parsePositiveInt = (raw) => {
+  if (raw == null) return null;
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return Math.floor(num);
+};
+
+const parseFloatOrNull = (raw) => {
+  if (raw == null || raw === "") return null;
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return null;
+  return num;
+};
+
+// Parse and clamp every list/page query param up front so the handler
+// branch below stays straightforward. Returns the literal `all=true`
+// escape hatch as a flag too, so the caller can decide whether to
+// short-circuit out to the legacy full-array response.
+const parseListQuery = (url) => {
+  const params = url.searchParams;
+  const wantAll = params.get("all") === "true";
+  const rawLimit = parsePositiveInt(params.get("limit"));
+  const limit = rawLimit
+    ? Math.min(rawLimit, MAX_PAGE_LIMIT)
+    : DEFAULT_PAGE_LIMIT;
+
+  // Accept both repeated query params (`?category=A&category=B`) and
+  // comma-separated values (`?category=A,B`) — `filterProducts`
+  // normalises either shape into a clean list.
+  const allCategories = params.getAll("category");
+  const allAvailabilities = params.getAll("availability");
+  const allBuckets = params.getAll("priceBuckets");
+  const filters = {
+    category: allCategories.length > 0 ? allCategories : undefined,
+    availability: allAvailabilities.length > 0 ? allAvailabilities : undefined,
+    priceBuckets: allBuckets.length > 0 ? allBuckets : undefined,
+    priceMin: parseFloatOrNull(params.get("priceMin")) ?? undefined,
+    priceMax: parseFloatOrNull(params.get("priceMax")) ?? undefined,
+    search: params.get("search") || undefined,
+  };
+  const sort = params.get("sort") || "newest";
+  const cursor = params.get("cursor") || null;
+
+  return { wantAll, limit, filters, sort, cursor };
+};
 
 const normaliseAvailability = (value) => {
   if (typeof value !== "string") return "available";
@@ -123,8 +179,56 @@ const handle = async ({ request, env, waitUntil }) => {
 
   try {
     if (method === "GET") {
-      const products = sortProducts(await readProducts(store));
-      return json(200, { products });
+      const all = await readProducts(store);
+      const url = new URL(request.url);
+      const { wantAll, limit, filters, sort, cursor } = parseListQuery(url);
+
+      // Admin pages still expect the full array to power things like
+      // bulk-edit and the dashboard's per-status counts. They opt in
+      // explicitly with `?all=true`, which skips filtering, sorting,
+      // and pagination — the wire shape stays exactly what the SPA
+      // shipped with before this endpoint learned to paginate.
+      if (wantAll) {
+        return json(200, { products: sortProducts(all) });
+      }
+
+      // Public paginated responses always hide drafts and live
+      // embargoes so the storefront doesn't have to filter them
+      // after the fact (which would break the page-count math). The
+      // admin `?all=true` path above leaves the array untouched so
+      // dashboards / bulk edit still see the full set.
+      const now = Date.now();
+      const visible = all.filter((p) => {
+        if ((p.availability || "available") === "draft") return false;
+        if (p.embargoUntil) {
+          const t = new Date(p.embargoUntil).getTime();
+          if (!Number.isNaN(t) && t > now) return false;
+        }
+        return true;
+      });
+
+      const filtered = filterProducts(visible, filters);
+      const sorted = filterSort(filtered, sort);
+      // Resolve the cursor to a slice offset by id-lookup. A stale
+      // cursor (product deleted between pages, or the filter set
+      // narrowed so the id no longer appears) falls back to offset 0
+      // so the client just re-renders from the top rather than
+      // erroring out.
+      const cursorIndex = cursor
+        ? sorted.findIndex((p) => p.id === cursor)
+        : -1;
+      const start = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+      const slice = sorted.slice(start, start + limit);
+      const nextCursor =
+        start + limit < sorted.length && slice.length > 0
+          ? slice[slice.length - 1].id
+          : null;
+      return json(200, {
+        products: slice,
+        nextCursor,
+        hasMore: nextCursor !== null,
+        total: sorted.length,
+      });
     }
 
     if (method === "POST") {

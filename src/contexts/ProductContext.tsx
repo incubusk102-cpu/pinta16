@@ -255,6 +255,12 @@ interface ProductContextType {
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 const STORAGE_KEY = "canvhub_products";
 const PRODUCTS_API = "/api/products";
+// The endpoint learned to paginate for the public gallery, but admin
+// pages (and any consumer that goes through `ProductProvider`) still
+// want the entire product array up front so they can do client-side
+// filtering, bulk edits, and dashboard tallies. `?all=true` skips
+// the pagination layer and gives us the legacy full-list response.
+const PRODUCTS_FULL_API = `${PRODUCTS_API}?all=true`;
 
 const readStoredProducts = (): Product[] => {
   if (typeof window === "undefined") return [];
@@ -359,7 +365,7 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
     const controller = new AbortController();
     loadAbortRef.current = controller;
     try {
-      const response = await fetch(PRODUCTS_API, {
+      const response = await fetch(PRODUCTS_FULL_API, {
         signal: controller.signal,
       });
       if (!response.ok) throw new Error("Failed to load products");

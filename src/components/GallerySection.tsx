@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { animate, stagger } from "animejs";
 import SplitText from "@/components/motion/SplitText";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Loader2, Search, SlidersHorizontal, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
 import {
   getEffectivePrice,
   PRODUCT_CATEGORIES,
-  useProducts,
 } from "@/contexts/ProductContext";
+import {
+  usePaginatedProducts,
+  type PaginatedSort,
+} from "@/hooks/usePaginatedProducts";
 import {
   Select,
   SelectContent,
@@ -31,7 +34,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   AVAILABILITY_LABEL,
-  getStorefrontArtworks,
+  defaultArtworks,
+  isEmbargoed,
+  productToDisplay,
   type Availability,
   type DisplayArtwork,
 } from "@/lib/artworks";
@@ -133,6 +138,34 @@ const matchesArtwork = (
   return haystack.includes(q);
 };
 
+// Mirror of the server's sort vocabulary applied to `DisplayArtwork`.
+// Only used for the small default-artwork prefix that lives outside
+// the paginated API — the bulk of the grid is already sorted by the
+// server.
+const sortDisplayArtworks = (
+  list: DisplayArtwork[],
+  sortBy: SortOption,
+): DisplayArtwork[] => {
+  const copy = [...list];
+  switch (sortBy) {
+    case "name-asc":
+      return copy.sort((a, b) =>
+        a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+      );
+    case "name-desc":
+      return copy.sort((a, b) =>
+        b.title.localeCompare(a.title, undefined, { sensitivity: "base" }),
+      );
+    case "price-asc":
+      return copy.sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
+    case "price-desc":
+      return copy.sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
+    case "featured":
+    default:
+      return copy;
+  }
+};
+
 // Helper: toggle a value inside a string-set state.
 const toggleValue = (
   list: string[],
@@ -179,68 +212,114 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
     initialSearch?.price ? initialSearch.price.split(",").filter(Boolean) : [],
   );
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const { products } = useProducts();
   const { user } = useUserAuth();
   const { config } = useStorefrontConfig();
   const galleryCopy = config.siteCopy.gallery;
-  const isLoggedIn = Boolean(user);
   const isMobile = useIsMobile();
 
-  const allArtworks = useMemo(
-    () =>
-      getStorefrontArtworks(products, {
-        vipEarlyAccess: user?.vipEarlyAccess === true,
-      }),
-    [products, user?.vipEarlyAccess],
+  // Map the UI's dropdown vocabulary to the server's sort keys. The
+  // server doesn't have a `featured` notion — it's a synonym for
+  // "newest first" until we ship a manual curated order.
+  const serverSort: PaginatedSort = useMemo(() => {
+    switch (sortBy) {
+      case "name-asc":
+        return "title-az";
+      case "name-desc":
+        return "title-za";
+      case "price-asc":
+        return "price-asc";
+      case "price-desc":
+        return "price-desc";
+      case "featured":
+      default:
+        return "newest";
+    }
+  }, [sortBy]);
+
+  // `usePaginatedProducts` does all the filter / sort / paginate work
+  // against `/api/products` and gives us a flattened list of the
+  // pages loaded so far plus the metadata to drive the "Load more"
+  // button and the "Showing X of Y" indicator below the grid.
+  const {
+    products: serverProducts,
+    hasMore,
+    isFetchingNextPage,
+    fetchNextPage,
+    total: serverTotal,
+    isLoading: isLoadingFirstPage,
+  } = usePaginatedProducts({
+    search: query,
+    category:
+      filterCategories.length > 0 ? filterCategories.join(",") : undefined,
+    availability:
+      filterAvailabilities.length > 0
+        ? filterAvailabilities.join(",")
+        : undefined,
+    priceBuckets:
+      filterPriceBuckets.length > 0 ? filterPriceBuckets : undefined,
+    sort: serverSort,
+    limit: 24,
+  });
+
+  const customArtworks = useMemo(
+    () => serverProducts.map((p) => productToDisplay(p)),
+    [serverProducts],
   );
 
-  const availableCategories = useMemo(() => {
-    const set = new Set<string>();
-    for (const art of allArtworks) {
-      const c = (art.category || "").trim();
-      if (c) set.add(c);
-    }
-    const merged = new Set<string>([...PRODUCT_CATEGORIES, ...set]);
-    return Array.from(merged).sort();
-  }, [allArtworks]);
-
-  const filteredArtworks = useMemo(() => {
-    return allArtworks.filter((art) =>
-      matchesArtwork(
-        art,
-        query,
-        filterCategories,
-        filterAvailabilities,
-        filterPriceBuckets,
-      ),
+  // The 15 stock paintings are bundled into the SPA, not stored in
+  // KV, so they live outside the paginated API. We always render
+  // them and we apply the same filter/sort the server is doing —
+  // otherwise a shopper who searches for "Mayon" would see only the
+  // server-side matches and miss the stock "Mayon Village Path".
+  // VIP early access still works because the embargo flag only
+  // exists on uploaded products, never on defaults.
+  const defaultsFiltered = useMemo(() => {
+    const list = defaultArtworks.filter(
+      (art) =>
+        art.availability !== "draft" &&
+        (user?.vipEarlyAccess === true || !isEmbargoed(art)) &&
+        matchesArtwork(
+          art,
+          query,
+          filterCategories,
+          filterAvailabilities,
+          filterPriceBuckets,
+        ),
     );
+    return sortDisplayArtworks(list, sortBy);
   }, [
-    allArtworks,
     query,
     filterCategories,
     filterAvailabilities,
     filterPriceBuckets,
+    sortBy,
+    user?.vipEarlyAccess,
   ]);
 
-  const sortedArtworks = useMemo(() => {
-    const copy = [...filteredArtworks];
-    switch (sortBy) {
-      case "name-asc":
-        return copy.sort((a, b) =>
-          a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
-        );
-      case "name-desc":
-        return copy.sort((a, b) =>
-          b.title.localeCompare(a.title, undefined, { sensitivity: "base" }),
-        );
-      case "price-asc":
-        return copy.sort((a, b) => getEffectivePrice(a) - getEffectivePrice(b));
-      case "price-desc":
-        return copy.sort((a, b) => getEffectivePrice(b) - getEffectivePrice(a));
-      default:
-        return copy;
+  // The grid renders defaults first (small, static, ranked the same
+  // way) then the streaming server pages. Mixing them in a single
+  // array keeps the lightbox navigation and ArtworkCard indexing
+  // logic below untouched.
+  const sortedArtworks = useMemo(
+    () => [...defaultsFiltered, ...customArtworks],
+    [defaultsFiltered, customArtworks],
+  );
+
+  const totalMatches = defaultsFiltered.length + serverTotal;
+
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const art of defaultArtworks) {
+      const c = (art.category || "").trim();
+      if (c) set.add(c);
     }
-  }, [filteredArtworks, sortBy]);
+    for (const p of serverProducts) {
+      const c = (p.category || "").trim();
+      if (c) set.add(c);
+    }
+    const merged = new Set<string>([...PRODUCT_CATEGORIES, ...set]);
+    return Array.from(merged).sort();
+  }, [serverProducts]);
 
   // Debounced search-event beacon. The gallery filters in-memory so there's
   // no server hit per keystroke; instead we beacon once per stable query
@@ -501,8 +580,18 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
         )}
 
         <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
-          {sortedArtworks.length}{" "}
-          {sortedArtworks.length === 1 ? "piece" : "pieces"}
+          {totalMatches === 0 ? (
+            <>0 pieces</>
+          ) : sortedArtworks.length >= totalMatches ? (
+            <>
+              {totalMatches} {totalMatches === 1 ? "piece" : "pieces"}
+            </>
+          ) : (
+            <>
+              Showing {sortedArtworks.length} of {totalMatches}{" "}
+              {totalMatches === 1 ? "artwork" : "artworks"}
+            </>
+          )}
         </p>
 
         <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
@@ -627,15 +716,14 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
                 onClick={() => setFilterSheetOpen(false)}
                 className="font-body text-[11px] tracking-[0.2em] uppercase text-background bg-foreground hover:bg-foreground/90 rounded-sm px-6 py-2.5 transition-colors"
               >
-                Show {sortedArtworks.length}{" "}
-                {sortedArtworks.length === 1 ? "result" : "results"}
+                Show {totalMatches} {totalMatches === 1 ? "result" : "results"}
               </button>
             </div>
           </SheetContent>
         </Sheet>
       </div>
 
-      {sortedArtworks.length === 0 ? (
+      {totalMatches === 0 && !isLoadingFirstPage ? (
         <div className="py-20 text-center">
           <p className="font-body text-sm text-muted-foreground">
             No paintings match your filters yet.
@@ -660,6 +748,26 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
               onClick={() => setLightboxIndex(index)}
             />
           ))}
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="mt-10 flex justify-center">
+          <button
+            type="button"
+            onClick={fetchNextPage}
+            disabled={isFetchingNextPage}
+            aria-busy={isFetchingNextPage}
+            className="inline-flex items-center gap-2 font-body text-[11px] tracking-[0.2em] uppercase text-foreground border border-border/60 rounded-sm px-6 py-3 hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isFetchingNextPage && (
+              <Loader2
+                className="w-3.5 h-3.5 animate-spin"
+                aria-hidden="true"
+              />
+            )}
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </button>
         </div>
       )}
 

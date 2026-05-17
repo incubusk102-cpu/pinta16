@@ -4,7 +4,8 @@ import {
   createRootRoute,
   useRouterState,
 } from "@tanstack/react-router";
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
@@ -209,64 +210,84 @@ function ConditionalVisitorDelight() {
 }
 
 function RootComponent() {
+  // Lazily instantiate the QueryClient inside the component so React
+  // gives us a stable instance per mount without the SSR-unsafe
+  // top-level `new QueryClient()` pattern. The 60s `staleTime` keeps
+  // the gallery grid from refetching every time the modal closes /
+  // the user navigates back, while still letting visibility / online
+  // listeners in the providers below pull fresh data when warranted.
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60_000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   return (
-    <ThemeProvider>
-      <LocaleProvider>
-        <AdminAuthProvider>
-          <UserAuthProvider>
-            <WishlistProvider>
-              <StorefrontConfigProvider>
-                <PoliciesProvider>
-                  <HeroSlidesProvider>
-                    <ProductProvider>
-                      <CartProvider>
-                        <CompareProvider>
-                          <FlyToCartProvider>
-                            <CommandPaletteProvider>
-                              <QuickSpinProvider>
-                                <SmoothScrollProvider>
-                                  <a
-                                    href="#main-content"
-                                    className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
-                                  >
-                                    Skip to content
-                                  </a>
-                                  <BootMountMark />
-                                  <HeartbeatBridge />
-                                  <ReferralCaptureBridge />
-                                  <GoogleAuthHashBridge />
-                                  <ConditionalAmbientChrome />
-                                  <ConditionalAnnouncementBar />
-                                  <PageTransitions>
-                                    <Outlet />
-                                  </PageTransitions>
-                                  <RouteWipeOverlay />
-                                  <ConditionalSiteFooter />
-                                  <Suspense fallback={null}>
-                                    <ConditionalOrderConfirmation />
-                                    <ChatWidget />
-                                    <NewUserModal />
-                                    <PwaPrompts />
-                                    <CommandPalette />
-                                  </Suspense>
-                                  <ConditionalVisitorDelight />
-                                  <ConditionalKeyboardShortcuts />
-                                  <CompareDrawer />
-                                  <Toaster richColors position="top-right" />
-                                </SmoothScrollProvider>
-                              </QuickSpinProvider>
-                            </CommandPaletteProvider>
-                          </FlyToCartProvider>
-                        </CompareProvider>
-                      </CartProvider>
-                    </ProductProvider>
-                  </HeroSlidesProvider>
-                </PoliciesProvider>
-              </StorefrontConfigProvider>
-            </WishlistProvider>
-          </UserAuthProvider>
-        </AdminAuthProvider>
-      </LocaleProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <LocaleProvider>
+          <AdminAuthProvider>
+            <UserAuthProvider>
+              <WishlistProvider>
+                <StorefrontConfigProvider>
+                  <PoliciesProvider>
+                    <HeroSlidesProvider>
+                      <ProductProvider>
+                        <CartProvider>
+                          <CompareProvider>
+                            <FlyToCartProvider>
+                              <CommandPaletteProvider>
+                                <QuickSpinProvider>
+                                  <SmoothScrollProvider>
+                                    <a
+                                      href="#main-content"
+                                      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
+                                    >
+                                      Skip to content
+                                    </a>
+                                    <BootMountMark />
+                                    <HeartbeatBridge />
+                                    <ReferralCaptureBridge />
+                                    <GoogleAuthHashBridge />
+                                    <ConditionalAmbientChrome />
+                                    <ConditionalAnnouncementBar />
+                                    <PageTransitions>
+                                      <Outlet />
+                                    </PageTransitions>
+                                    <RouteWipeOverlay />
+                                    <ConditionalSiteFooter />
+                                    <Suspense fallback={null}>
+                                      <ConditionalOrderConfirmation />
+                                      <ChatWidget />
+                                      <NewUserModal />
+                                      <PwaPrompts />
+                                      <CommandPalette />
+                                    </Suspense>
+                                    <ConditionalVisitorDelight />
+                                    <ConditionalKeyboardShortcuts />
+                                    <CompareDrawer />
+                                    <Toaster richColors position="top-right" />
+                                  </SmoothScrollProvider>
+                                </QuickSpinProvider>
+                              </CommandPaletteProvider>
+                            </FlyToCartProvider>
+                          </CompareProvider>
+                        </CartProvider>
+                      </ProductProvider>
+                    </HeroSlidesProvider>
+                  </PoliciesProvider>
+                </StorefrontConfigProvider>
+              </WishlistProvider>
+            </UserAuthProvider>
+          </AdminAuthProvider>
+        </LocaleProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
