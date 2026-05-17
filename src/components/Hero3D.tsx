@@ -229,6 +229,26 @@ export default function Hero3D() {
     [1, 0.6, 0],
   );
 
+  // Lift the framed painting out of the hero on scroll so it parallaxes
+  // up faster than the section itself and visibly recedes into the
+  // backdrop. The translation and scale plateau at progress 0.7 so the
+  // frame settles at a "spot" near the top of the section and a piece
+  // of it keeps peeking through until the section finishes scrolling
+  // off, instead of blinking away in lockstep with the page. Honours
+  // reduced motion by collapsing the keyframes to a no-op.
+  const sceneLiftEnd = reduced ? "0%" : "-22%";
+  const sceneScaleEnd = reduced ? 1 : 0.78;
+  const sceneY = useTransform(
+    scrollYProgress,
+    [0, 0.7, 1],
+    ["0%", sceneLiftEnd, sceneLiftEnd],
+  );
+  const sceneScale = useTransform(
+    scrollYProgress,
+    [0, 0.7, 1],
+    [1, sceneScaleEnd, sceneScaleEnd],
+  );
+
   if (artworks.length === 0) {
     // No paintings published yet — keep the screen-reader-only
     // heading so SEO / smoke tests still find an h1.
@@ -253,20 +273,26 @@ export default function Hero3D() {
         className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(58,38,24,0.18),transparent_65%)]"
       />
 
-      <Canvas
-        camera={{ position: [0, 0, 5.2], fov: 38 }}
-        dpr={[1, 1.75]}
-        gl={{
-          antialias: true,
-          alpha: true,
-          powerPreference: "high-performance",
-        }}
-        className="!absolute !inset-0"
+      <motion.div
+        aria-hidden="true"
+        style={{ y: sceneY, scale: sceneScale }}
+        className="absolute inset-0 will-change-transform"
       >
-        <Suspense fallback={null}>
-          <Scene imageUrl={featuredImage} reduced={reduced} />
-        </Suspense>
-      </Canvas>
+        <Canvas
+          camera={{ position: [0, 0, 5.2], fov: 38 }}
+          dpr={[1, 1.75]}
+          gl={{
+            antialias: true,
+            alpha: true,
+            powerPreference: "high-performance",
+          }}
+          className="!absolute !inset-0"
+        >
+          <Suspense fallback={null}>
+            <Scene imageUrl={featuredImage} reduced={reduced} />
+          </Suspense>
+        </Canvas>
+      </motion.div>
 
       <motion.div
         style={{ y: wordmarkY, opacity: wordmarkOpacity }}
