@@ -7,6 +7,14 @@ import {
 } from "@/contexts/CartContext";
 import { toast } from "sonner";
 import { jsonAuthHeaders } from "@/lib/api";
+import { formatPHP } from "@/lib/format";
+
+// Cloudflare Workers run in UTC; the storefront's audience is in PH.
+// Format requested / updated stamps in Asia/Manila so the customer
+// sees the local time the refund was filed, not a UTC value that's
+// off by 8 hours.
+const formatManila = (iso: string) =>
+  new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila" });
 
 interface RefundBannerProps {
   orderId: string;
@@ -83,14 +91,14 @@ const RefundBanner = ({
     ) {
       lastSeenStatusRef.current = status;
       if (status === "succeeded") {
-        toast.success(`Refund of ₱${amount.toLocaleString()} completed`);
+        toast.success(`Refund of ${formatPHP(amount)} completed`);
       } else {
         toast.error(failureMessage || "Refund failed");
       }
     }
   }, [status, amount, failureMessage]);
 
-  const checkNow = async () => {
+  const handleCheckNow = async () => {
     setChecking(true);
     try {
       const res = await fetch("/api/orders", {
@@ -131,10 +139,10 @@ const RefundBanner = ({
         <p className="font-body text-xs tracking-wider uppercase">
           {copy.title}
         </p>
-        {status === "pending" && (
+        {(status === "pending" || status === "failed") && (
           <button
             type="button"
-            onClick={() => void checkNow()}
+            onClick={() => void handleCheckNow()}
             disabled={checking}
             className="ml-auto inline-flex items-center gap-1 text-[11px] underline hover:no-underline disabled:opacity-50"
           >
@@ -143,16 +151,14 @@ const RefundBanner = ({
             ) : (
               <RefreshCw className="w-3 h-3" />
             )}
-            Check now
+            {status === "failed" ? "Check status" : "Check now"}
           </button>
         )}
       </div>
-      <p className="text-xs">Amount: ₱{amount.toLocaleString()}</p>
+      <p className="text-xs">Amount: {formatPHP(amount)}</p>
       <p className="text-[11px] opacity-80">
-        Requested {new Date(requestedAt).toLocaleString()}
-        {completedAt
-          ? ` · Updated ${new Date(completedAt).toLocaleString()}`
-          : ""}
+        Requested {formatManila(requestedAt)}
+        {completedAt ? ` · Updated ${formatManila(completedAt)}` : ""}
       </p>
       {status === "pending" && (
         <p className="text-[11px] opacity-80">

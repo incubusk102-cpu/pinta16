@@ -2940,6 +2940,16 @@ export const handler = async (event) => {
       }
 
       if (action === "check-refund") {
+        // Throttle refund-status polls. Storefront banners poll every
+        // 30s while a refund is pending; 30 / minute / IP leaves ample
+        // headroom for manual "Check now" taps while blocking abuse.
+        const limit = await consumeRateLimit(event, {
+          bucket: "check-refund",
+          windowMs: 60_000,
+          max: 30,
+        });
+        if (!limit.allowed) return rateLimitResponse(limit.retryAfter);
+
         const { orderId } = body;
         if (!orderId || typeof orderId !== "string") {
           return json(400, { error: "Invalid orderId" });
@@ -2983,19 +2993,20 @@ export const handler = async (event) => {
             "GET",
           );
         } catch (e) {
-          return json(502, {
-            error: "Could not load refund status from PayMongo",
-            detail: e instanceof Error ? e.message : String(e),
-          });
+          // Suppress PayMongo error detail in the public response —
+          // it can echo internal IDs / SKU info. Log server-side for
+          // operator debugging.
+          logError("PayMongo refund status error:", e);
+          return json(502, { error: "Could not verify refund status" });
         }
         const attrs = latest?.data?.attributes || {};
         const newStatus = attrs.status || refund.status;
-        const notifications = Array.isArray(existing.notifications)
-          ? [...existing.notifications]
-          : [];
-        const recipient = existing.orderInfo?.email || "";
         const updatedRefund = { ...refund, status: newStatus };
         if (newStatus !== refund.status) {
+          const notifications = Array.isArray(existing.notifications)
+            ? [...existing.notifications]
+            : [];
+          const recipient = existing.orderInfo?.email || "";
           if (newStatus === "succeeded") {
             updatedRefund.completedAt = new Date().toISOString();
             const note = {
@@ -3031,13 +3042,13 @@ export const handler = async (event) => {
             });
             notifications.push(note);
           }
+          orders[idx] = {
+            ...existing,
+            refund: updatedRefund,
+            notifications,
+          };
+          await store.setJSON(ORDERS_KEY, orders);
         }
-        orders[idx] = {
-          ...existing,
-          refund: updatedRefund,
-          notifications,
-        };
-        await store.setJSON(ORDERS_KEY, orders);
         return json(200, { order: sanitize(orders[idx]) });
       }
 

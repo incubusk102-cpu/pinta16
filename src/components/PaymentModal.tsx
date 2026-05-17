@@ -9,8 +9,10 @@ import {
   Download,
   ChevronDown,
   AlertCircle,
+  XCircle,
 } from "lucide-react";
 import { checkPaymentStatus as checkPaymentStatusFn } from "@/utils/payment.functions";
+import { formatPHP } from "@/lib/format";
 
 interface PaymentModalProps {
   paymentIntentId: string;
@@ -21,7 +23,6 @@ interface PaymentModalProps {
 }
 
 type PaymentStatus =
-  | "loading"
   | "awaiting_payment"
   | "checking"
   | "succeeded"
@@ -58,6 +59,10 @@ const PaymentModal = ({
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+  // Count consecutive background-poll failures so we can prompt the
+  // customer to take over manually after several silent retries.
+  // Reset on any successful poll or manual check.
+  const consecutiveErrorsRef = useRef(0);
 
   const applyPaymentStatus = useCallback(
     (paymentStatus: string | undefined) => {
@@ -92,6 +97,14 @@ const PaymentModal = ({
         setStatusMessage(
           "Payment session expired. Please close this and try again.",
         );
+      } else if (paymentStatus === "cancelled") {
+        // Terminal: customer (or PayMongo) cancelled the intent before
+        // it cleared. Surface this via the failed branch so the modal
+        // shows a clean "try again" UX instead of a bare status line.
+        setStatus("failed");
+        setStatusMessage(
+          "Payment was cancelled. Please close this and try again.",
+        );
       } else if (paymentStatus) {
         setStatus("awaiting_payment");
         setStatusMessage(`Status: ${paymentStatus}`);
@@ -106,6 +119,7 @@ const PaymentModal = ({
 
     try {
       const data = await checkPaymentStatusFn({ data: { paymentIntentId } });
+      consecutiveErrorsRef.current = 0;
       applyPaymentStatus(data.attributes?.status);
     } catch (error) {
       console.error("Status check failed:", error);
@@ -159,13 +173,22 @@ const PaymentModal = ({
       try {
         const data = await checkPaymentStatusFn({ data: { paymentIntentId } });
         if (cancelled) return;
+        consecutiveErrorsRef.current = 0;
         applyPaymentStatus(data.attributes?.status);
       } catch (error) {
         // Swallow transient errors silently — the next tick will retry,
         // and we don't want to flash an error toast at the customer
-        // every few seconds for a flaky network.
+        // every few seconds for a flaky network. After 3 misses in a
+        // row, surface a hint so the customer knows they can take over
+        // manually instead of staring at a frozen modal.
         if (!cancelled) {
           console.warn("Auto status check failed:", error);
+          consecutiveErrorsRef.current += 1;
+          if (consecutiveErrorsRef.current >= 3) {
+            setStatusMessage(
+              "Having trouble connecting. Tap Check Now to retry manually.",
+            );
+          }
         }
       }
     };
@@ -312,7 +335,7 @@ const PaymentModal = ({
                 Your order is being confirmed...
               </p>
               <p className="font-body text-xs text-muted-foreground mt-4">
-                Amount paid: ₱{total.toLocaleString()}
+                Amount paid: {formatPHP(total)}
               </p>
             </motion.div>
           ) : status === "timeout" ? (
@@ -334,6 +357,25 @@ const PaymentModal = ({
                 Try Again
               </button>
             </div>
+          ) : status === "failed" ? (
+            <div className="text-center py-8">
+              <XCircle className="w-16 h-16 mx-auto mb-6 text-destructive" />
+              <h3 className="font-display text-xl text-foreground mb-2">
+                Payment couldn't be completed
+              </h3>
+              {statusMessage && (
+                <p className="font-body text-xs text-muted-foreground mb-6">
+                  {statusMessage}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3 bg-destructive text-destructive-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-destructive/90 transition-all duration-300 rounded-sm flex items-center justify-center gap-2"
+              >
+                Close
+              </button>
+            </div>
           ) : (
             <div className="text-center">
               <div className="mb-6">
@@ -349,7 +391,7 @@ const PaymentModal = ({
 
               <div className="mb-6 p-4 bg-muted/30 border border-border/10 rounded-sm">
                 <p className="font-body text-2xl font-semibold text-foreground mb-1">
-                  ₱{total.toLocaleString()}
+                  {formatPHP(total)}
                 </p>
                 <p className="font-body text-[10px] text-muted-foreground">
                   Total Amount
@@ -488,7 +530,7 @@ const PaymentModal = ({
                 </div>
               )}
 
-              {qrCodeUrl && status !== "failed" && (
+              {qrCodeUrl && (
                 <div className="mb-3 flex items-center justify-center gap-2 text-muted-foreground">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   <p className="font-body text-[10px]">

@@ -1,11 +1,7 @@
 import { wrapHandler } from "./_lib/handler-wrapper.js";
 import { consumeRateLimit, rateLimitResponse } from "./_lib/rate-limit.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { logError } from "./_lib/redact.js";
-
-const jsonHeaders = {
-  "Content-Type": "application/json",
-  "X-Content-Type-Options": "nosniff",
-};
 
 const parseBody = (body) => {
   if (!body) return {};
@@ -18,6 +14,15 @@ const parseBody = (body) => {
 
 const buildAuthHeader = (secretKey) =>
   `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
+
+// PayMongo secret keys are always `sk_<env>_<random>`. Reject anything
+// that doesn't match so a misconfigured publishable key (`pk_…`) can't
+// silently 401 every status poll in production.
+const getPaymongoSecret = () => {
+  const key = process.env.PAYMONGO_SECRET_KEY?.trim();
+  if (!key || !key.startsWith("sk_")) return null;
+  return key;
+};
 
 const readPayMongoError = async (response) => {
   const text = await response.text();
@@ -37,7 +42,7 @@ const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
-      headers: jsonHeaders,
+      headers: withSecurityHeaders(),
       body: JSON.stringify({ error: "Method not allowed" }),
     };
   }
@@ -64,16 +69,16 @@ const handler = async (event) => {
     ) {
       return {
         statusCode: 400,
-        headers: jsonHeaders,
+        headers: withSecurityHeaders(),
         body: JSON.stringify({ error: "Invalid payment intent ID" }),
       };
     }
 
-    const secretKey = process.env.PAYMONGO_SECRET_KEY?.trim();
+    const secretKey = getPaymongoSecret();
     if (!secretKey) {
       return {
         statusCode: 500,
-        headers: jsonHeaders,
+        headers: withSecurityHeaders(),
         body: JSON.stringify({ error: "Payment not configured" }),
       };
     }
@@ -94,7 +99,7 @@ const handler = async (event) => {
       logError("PayMongo status error:", detail);
       return {
         statusCode: 500,
-        headers: jsonHeaders,
+        headers: withSecurityHeaders(),
         body: JSON.stringify({ error: "Status check failed" }),
       };
     }
@@ -102,14 +107,14 @@ const handler = async (event) => {
     const result = await response.json();
     return {
       statusCode: 200,
-      headers: jsonHeaders,
+      headers: withSecurityHeaders(),
       body: JSON.stringify(result.data),
     };
   } catch (error) {
     logError("check-payment error:", error);
     return {
       statusCode: 500,
-      headers: jsonHeaders,
+      headers: withSecurityHeaders(),
       body: JSON.stringify({ error: "Internal server error" }),
     };
   }
