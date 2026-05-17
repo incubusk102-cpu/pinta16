@@ -6,25 +6,42 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <title>Canvas Hub — Affordable Art Gallery</title>
+    <!-- Static title / description must match the homepage values
+         emitted by `useSEO` in `src/routes/index.tsx` (`Index()`).
+         Non-JS crawlers (older Bingbot, Pinterest's catalog feed
+         fetcher) and social link unfurlers (Facebook, Twitter, Slack,
+         iMessage) read the bare HTML *before* the SPA mounts and
+         `useSEO` rewrites `<head>`, so the static copy here is what
+         shows up in search snippets, link previews, and Pinterest
+         pins. Keep these strings in sync with `Index()` whenever the
+         homepage copy changes. -->
+    <title>
+      Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order
+    </title>
     <meta
       name="description"
-      content="Discover hand-crafted paintings that transform spaces. Original art, made to order."
+      content="Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide."
     />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Canvas Hub" />
-    <meta property="og:title" content="Canvas Hub — Affordable Art Gallery" />
+    <meta
+      property="og:title"
+      content="Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order"
+    />
     <meta
       property="og:description"
-      content="Discover hand-crafted paintings that transform spaces. Original art, made to order."
+      content="Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide."
     />
     <meta property="og:url" content="https://canvhub.com/" />
     <meta property="og:image" content="https://canvhub.com/icon-512.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Canvas Hub — Affordable Art Gallery" />
+    <meta
+      name="twitter:title"
+      content="Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order"
+    />
     <meta
       name="twitter:description"
-      content="Discover hand-crafted paintings that transform spaces. Original art, made to order."
+      content="Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide."
     />
     <meta name="twitter:image" content="https://canvhub.com/icon-512.png" />
 

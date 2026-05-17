@@ -15,7 +15,7 @@
 // exists for historical records.
 
 import { useCallback, useMemo, useState } from "react";
-import { Loader2, RefreshCw, Database, Images } from "lucide-react";
+import { Loader2, RefreshCw, Database, Images, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,11 @@ import { compressImageVariants } from "@/lib/imageCompress";
 import { hashImageDataUrl } from "@/lib/imageHash";
 import { uploadImageToR2 } from "@/lib/uploadImage";
 import { VARIANT_WIDTHS } from "@/lib/productImage";
+
+// Same per-browser dismissal pattern as `MigrateR2Card`. Separate key
+// so each migration can be hidden independently — operators sometimes
+// finish the R2 backfill long before the variants regeneration.
+const DISMISS_KEY = "canvhub_hide_variants_migration";
 
 interface ScanRow {
   productId: string;
@@ -52,6 +57,26 @@ const isMigratableUrl = (url: string): boolean => {
 
 export const MigrateVariantsCard = () => {
   const { products, updateProduct } = useProducts();
+
+  // Initialize from localStorage synchronously so dismissed cards never
+  // flash on mount. SSR-safe: `typeof window` guards the access.
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(DISMISS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const dismiss = useCallback(() => {
+    try {
+      localStorage.setItem(DISMISS_KEY, "1");
+    } catch {
+      /* private mode / disabled storage — still hide for the rest of this tab */
+    }
+    setDismissed(true);
+  }, []);
 
   const scan: ScanRow[] = useMemo(() => {
     const rows: ScanRow[] = [];
@@ -212,6 +237,8 @@ export const MigrateVariantsCard = () => {
 
   const noWorkLeft = scan.length === 0;
 
+  if (dismissed) return null;
+
   return (
     <section className="rounded-2xl border bg-card p-5 space-y-4">
       <header className="flex items-start justify-between gap-3 flex-wrap">
@@ -230,18 +257,32 @@ export const MigrateVariantsCard = () => {
             re-run.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            setProgress({ productsDone: 0, imagesDone: 0, errors: [] })
-          }
-          disabled={migrating}
-        >
-          <RefreshCw className="w-4 h-4 mr-1" />
-          Reset
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setProgress({ productsDone: 0, imagesDone: 0, errors: [] })
+            }
+            disabled={migrating}
+          >
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Reset
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={dismiss}
+            disabled={migrating}
+            title="Hide this card on this browser"
+            aria-label="Hide this card"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Hide completed
+          </Button>
+        </div>
       </header>
 
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
