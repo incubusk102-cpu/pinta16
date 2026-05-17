@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { animate, stagger } from "animejs";
 import SplitText from "@/components/motion/SplitText";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
 import Lightbox from "./Lightbox";
@@ -144,15 +144,40 @@ const toggleValue = (
   );
 };
 
-const GallerySection = () => {
+interface GallerySectionProps {
+  initialSearch?: {
+    q?: string;
+    sort?: string;
+    categories?: string;
+    availability?: string;
+    price?: string;
+  };
+}
+
+const isValidSort = (v: string): v is SortOption =>
+  SORT_OPTIONS.some((o) => o.value === v);
+
+const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>("featured");
-  const [query, setQuery] = useState("");
-  const [filterCategories, setFilterCategories] = useState<string[]>([]);
-  const [filterAvailabilities, setFilterAvailabilities] = useState<string[]>(
-    [],
+  const [sortBy, setSortBy] = useState<SortOption>(
+    initialSearch?.sort && isValidSort(initialSearch.sort)
+      ? initialSearch.sort
+      : "featured",
   );
-  const [filterPriceBuckets, setFilterPriceBuckets] = useState<string[]>([]);
+  const [query, setQuery] = useState(initialSearch?.q ?? "");
+  const [filterCategories, setFilterCategories] = useState<string[]>(
+    initialSearch?.categories
+      ? initialSearch.categories.split(",").filter(Boolean)
+      : [],
+  );
+  const [filterAvailabilities, setFilterAvailabilities] = useState<string[]>(
+    initialSearch?.availability
+      ? initialSearch.availability.split(",").filter(Boolean)
+      : [],
+  );
+  const [filterPriceBuckets, setFilterPriceBuckets] = useState<string[]>(
+    initialSearch?.price ? initialSearch.price.split(",").filter(Boolean) : [],
+  );
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const { products } = useProducts();
   const { user } = useUserAuth();
@@ -180,7 +205,6 @@ const GallerySection = () => {
   }, [allArtworks]);
 
   const filteredArtworks = useMemo(() => {
-    if (!isLoggedIn) return allArtworks;
     return allArtworks.filter((art) =>
       matchesArtwork(
         art,
@@ -192,7 +216,6 @@ const GallerySection = () => {
     );
   }, [
     allArtworks,
-    isLoggedIn,
     query,
     filterCategories,
     filterAvailabilities,
@@ -201,7 +224,6 @@ const GallerySection = () => {
 
   const sortedArtworks = useMemo(() => {
     const copy = [...filteredArtworks];
-    if (!isLoggedIn) return copy;
     switch (sortBy) {
       case "name-asc":
         return copy.sort((a, b) =>
@@ -218,7 +240,7 @@ const GallerySection = () => {
       default:
         return copy;
     }
-  }, [filteredArtworks, sortBy, isLoggedIn]);
+  }, [filteredArtworks, sortBy]);
 
   // Debounced search-event beacon. The gallery filters in-memory so there's
   // no server hit per keystroke; instead we beacon once per stable query
@@ -228,7 +250,6 @@ const GallerySection = () => {
   // public search must keep working even if D1 isn't configured.
   const lastBeaconedQueryRef = useRef<string>("");
   useEffect(() => {
-    if (!isLoggedIn) return;
     const trimmed = query.trim();
     if (trimmed.length < 2) return;
     if (trimmed.toLowerCase() === lastBeaconedQueryRef.current) return;
@@ -265,7 +286,6 @@ const GallerySection = () => {
     return () => window.clearTimeout(handle);
   }, [
     query,
-    isLoggedIn,
     sortedArtworks.length,
     filterCategories,
     filterAvailabilities,
@@ -284,7 +304,6 @@ const GallerySection = () => {
     ) {
       return;
     }
-    if (!isLoggedIn) return;
     const host = document.querySelector<HTMLElement>("[data-gallery-controls]");
     if (!host) return;
     const rows = Array.from(host.children) as HTMLElement[];
@@ -309,7 +328,7 @@ const GallerySection = () => {
     return () => {
       controls.pause();
     };
-  }, [isLoggedIn]);
+  }, []);
 
   const activeFilterCount =
     filterCategories.length +
@@ -387,242 +406,234 @@ const GallerySection = () => {
         </SplitText>
       </motion.div>
 
-      {isLoggedIn && (
-        <div data-gallery-controls className="space-y-6 mb-12 sm:mb-16">
-          <div className="relative max-w-md mx-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search paintings, mediums, or styles…"
-              aria-label="Search paintings"
-              className="pl-9 pr-9 h-11 font-body text-sm"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+      <div data-gallery-controls className="space-y-6 mb-12 sm:mb-16">
+        <div className="relative max-w-md mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search paintings, mediums, or styles…"
+            aria-label="Search paintings"
+            className="pl-9 pr-9 h-11 font-body text-sm"
+          />
+          {query && (
             <button
               type="button"
-              onClick={() => setFilterSheetOpen(true)}
-              className="inline-flex items-center justify-center gap-2 font-body text-[11px] tracking-[0.2em] uppercase text-foreground border border-border/60 rounded-sm px-5 py-2.5 hover:bg-accent transition-colors"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-              Filter
-              {activeFilterCount > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-foreground text-background font-body text-[10px] tracking-normal">
-                  {activeFilterCount}
-                </span>
-              )}
+              <X className="w-4 h-4" />
             </button>
+          )}
+        </div>
 
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="gallery-sort"
-                className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
-              >
-                Sort
-              </label>
-              <Select
-                value={sortBy}
-                onValueChange={(value) => setSortBy(value as SortOption)}
-              >
-                <SelectTrigger
-                  id="gallery-sort"
-                  className="w-[170px] font-body text-xs"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SORT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {hasAnyConstraint && (
-              <button
-                type="button"
-                onClick={clearEverything}
-                className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-              >
-                Clear all
-              </button>
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={() => setFilterSheetOpen(true)}
+            className="inline-flex items-center justify-center gap-2 font-body text-[11px] tracking-[0.2em] uppercase text-foreground border border-border/60 rounded-sm px-5 py-2.5 hover:bg-accent transition-colors"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-foreground text-background font-body text-[10px] tracking-normal">
+                {activeFilterCount}
+              </span>
             )}
+          </button>
+
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="gallery-sort"
+              className="font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground"
+            >
+              Sort
+            </label>
+            <Select
+              value={sortBy}
+              onValueChange={(value) => setSortBy(value as SortOption)}
+            >
+              <SelectTrigger
+                id="gallery-sort"
+                className="w-[170px] font-body text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {activePills.length > 0 && (
-            <ul className="flex flex-wrap items-center justify-center gap-2">
-              {activePills.map((pill) => (
-                <li key={pill.key}>
-                  <button
-                    type="button"
-                    onClick={pill.remove}
-                    aria-label={`Remove filter ${pill.label}`}
-                    className="inline-flex items-center gap-1.5 font-body text-[11px] tracking-[0.1em] uppercase rounded-full border border-border/60 bg-background px-3 py-1.5 text-foreground hover:bg-accent transition-colors"
-                  >
-                    {pill.label}
-                    <X className="w-3 h-3" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
-            {sortedArtworks.length}{" "}
-            {sortedArtworks.length === 1 ? "piece" : "pieces"}
-          </p>
-
-          <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-            <SheetContent
-              side={isMobile ? "bottom" : "right"}
-              className={
-                isMobile
-                  ? "h-[85vh] rounded-t-2xl p-0 flex flex-col"
-                  : "w-full sm:max-w-md p-0 flex flex-col"
-              }
+          {hasAnyConstraint && (
+            <button
+              type="button"
+              onClick={clearEverything}
+              className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
             >
-              <SheetHeader className="px-6 pt-6 pb-3 border-b border-border/40 text-left">
-                <SheetTitle className="font-display text-2xl">
-                  Filter
-                </SheetTitle>
-                <SheetDescription className="font-body text-xs tracking-[0.15em] uppercase text-muted-foreground">
-                  {activeFilterCount === 0
-                    ? "Narrow the collection by category, price, and availability."
-                    : `${activeFilterCount} active`}
-                </SheetDescription>
-              </SheetHeader>
+              Clear all
+            </button>
+          )}
+        </div>
 
-              <ScrollArea className="flex-1">
-                <div className="px-6 py-6 space-y-8">
-                  <section aria-labelledby="filter-categories-heading">
-                    <h3
-                      id="filter-categories-heading"
-                      className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
-                    >
-                      Categories
-                    </h3>
-                    <ul className="space-y-3">
+        {activePills.length > 0 && (
+          <ul className="flex flex-wrap items-center justify-center gap-2">
+            {activePills.map((pill) => (
+              <li key={pill.key}>
+                <button
+                  type="button"
+                  onClick={pill.remove}
+                  aria-label={`Remove filter ${pill.label}`}
+                  className="inline-flex items-center gap-1.5 font-body text-[11px] tracking-[0.1em] uppercase rounded-full border border-border/60 bg-background px-3 py-1.5 text-foreground hover:bg-accent transition-colors"
+                >
+                  {pill.label}
+                  <X className="w-3 h-3" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center">
+          {sortedArtworks.length}{" "}
+          {sortedArtworks.length === 1 ? "piece" : "pieces"}
+        </p>
+
+        <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
+          <SheetContent
+            side={isMobile ? "bottom" : "right"}
+            className={
+              isMobile
+                ? "h-[85vh] rounded-t-2xl p-0 flex flex-col"
+                : "w-full sm:max-w-md p-0 flex flex-col"
+            }
+          >
+            <SheetHeader className="px-6 pt-6 pb-3 border-b border-border/40 text-left">
+              <SheetTitle className="font-display text-2xl">Filter</SheetTitle>
+              <SheetDescription className="font-body text-xs tracking-[0.15em] uppercase text-muted-foreground">
+                {activeFilterCount === 0
+                  ? "Narrow the collection by category, price, and availability."
+                  : `${activeFilterCount} active`}
+              </SheetDescription>
+            </SheetHeader>
+
+            <ScrollArea className="flex-1">
+              <div className="px-6 py-6 space-y-8">
+                <section aria-labelledby="filter-categories-heading">
+                  <h3
+                    id="filter-categories-heading"
+                    className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
+                  >
+                    Categories
+                  </h3>
+                  <ul className="space-y-3">
+                    <FilterCheckbox
+                      id="filter-cat-uncategorized"
+                      checked={filterCategories.includes(UNCATEGORIZED_VALUE)}
+                      onCheckedChange={() =>
+                        toggleValue(
+                          filterCategories,
+                          UNCATEGORIZED_VALUE,
+                          setFilterCategories,
+                        )
+                      }
+                      label="Uncategorized"
+                    />
+                    {availableCategories.map((c) => (
                       <FilterCheckbox
-                        id="filter-cat-uncategorized"
-                        checked={filterCategories.includes(UNCATEGORIZED_VALUE)}
+                        key={c}
+                        id={`filter-cat-${c}`}
+                        checked={filterCategories.includes(c)}
+                        onCheckedChange={() =>
+                          toggleValue(filterCategories, c, setFilterCategories)
+                        }
+                        label={c}
+                      />
+                    ))}
+                  </ul>
+                </section>
+
+                <section aria-labelledby="filter-price-heading">
+                  <h3
+                    id="filter-price-heading"
+                    className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
+                  >
+                    Price
+                  </h3>
+                  <ul className="space-y-3">
+                    {PRICE_BUCKETS.map((b) => (
+                      <FilterCheckbox
+                        key={b.value}
+                        id={`filter-price-${b.value}`}
+                        checked={filterPriceBuckets.includes(b.value)}
                         onCheckedChange={() =>
                           toggleValue(
-                            filterCategories,
-                            UNCATEGORIZED_VALUE,
-                            setFilterCategories,
+                            filterPriceBuckets,
+                            b.value,
+                            setFilterPriceBuckets,
                           )
                         }
-                        label="Uncategorized"
+                        label={b.label}
                       />
-                      {availableCategories.map((c) => (
-                        <FilterCheckbox
-                          key={c}
-                          id={`filter-cat-${c}`}
-                          checked={filterCategories.includes(c)}
-                          onCheckedChange={() =>
-                            toggleValue(
-                              filterCategories,
-                              c,
-                              setFilterCategories,
-                            )
-                          }
-                          label={c}
-                        />
-                      ))}
-                    </ul>
-                  </section>
+                    ))}
+                  </ul>
+                </section>
 
-                  <section aria-labelledby="filter-price-heading">
-                    <h3
-                      id="filter-price-heading"
-                      className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
-                    >
-                      Price
-                    </h3>
-                    <ul className="space-y-3">
-                      {PRICE_BUCKETS.map((b) => (
-                        <FilterCheckbox
-                          key={b.value}
-                          id={`filter-price-${b.value}`}
-                          checked={filterPriceBuckets.includes(b.value)}
-                          onCheckedChange={() =>
-                            toggleValue(
-                              filterPriceBuckets,
-                              b.value,
-                              setFilterPriceBuckets,
-                            )
-                          }
-                          label={b.label}
-                        />
-                      ))}
-                    </ul>
-                  </section>
-
-                  <section aria-labelledby="filter-availability-heading">
-                    <h3
-                      id="filter-availability-heading"
-                      className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
-                    >
-                      Availability
-                    </h3>
-                    <ul className="space-y-3">
-                      {STOREFRONT_AVAILABILITIES.map((a) => (
-                        <FilterCheckbox
-                          key={a}
-                          id={`filter-avail-${a}`}
-                          checked={filterAvailabilities.includes(a)}
-                          onCheckedChange={() =>
-                            toggleValue(
-                              filterAvailabilities,
-                              a,
-                              setFilterAvailabilities,
-                            )
-                          }
-                          label={AVAILABILITY_LABEL[a]}
-                        />
-                      ))}
-                    </ul>
-                  </section>
-                </div>
-              </ScrollArea>
-
-              <div className="border-t border-border/40 px-6 py-4 flex items-center justify-between gap-3 bg-background">
-                <button
-                  type="button"
-                  onClick={clearAllFilters}
-                  disabled={!hasActiveFilters}
-                  className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
-                >
-                  Clear filters
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterSheetOpen(false)}
-                  className="font-body text-[11px] tracking-[0.2em] uppercase text-background bg-foreground hover:bg-foreground/90 rounded-sm px-6 py-2.5 transition-colors"
-                >
-                  Show {sortedArtworks.length}{" "}
-                  {sortedArtworks.length === 1 ? "result" : "results"}
-                </button>
+                <section aria-labelledby="filter-availability-heading">
+                  <h3
+                    id="filter-availability-heading"
+                    className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-3"
+                  >
+                    Availability
+                  </h3>
+                  <ul className="space-y-3">
+                    {STOREFRONT_AVAILABILITIES.map((a) => (
+                      <FilterCheckbox
+                        key={a}
+                        id={`filter-avail-${a}`}
+                        checked={filterAvailabilities.includes(a)}
+                        onCheckedChange={() =>
+                          toggleValue(
+                            filterAvailabilities,
+                            a,
+                            setFilterAvailabilities,
+                          )
+                        }
+                        label={AVAILABILITY_LABEL[a]}
+                      />
+                    ))}
+                  </ul>
+                </section>
               </div>
-            </SheetContent>
-          </Sheet>
-        </div>
-      )}
+            </ScrollArea>
+
+            <div className="border-t border-border/40 px-6 py-4 flex items-center justify-between gap-3 bg-background">
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                disabled={!hasActiveFilters}
+                className="font-body text-[11px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
+              >
+                Clear filters
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterSheetOpen(false)}
+                className="font-body text-[11px] tracking-[0.2em] uppercase text-background bg-foreground hover:bg-foreground/90 rounded-sm px-6 py-2.5 transition-colors"
+              >
+                Show {sortedArtworks.length}{" "}
+                {sortedArtworks.length === 1 ? "result" : "results"}
+              </button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
 
       {sortedArtworks.length === 0 ? (
         <div className="py-20 text-center">

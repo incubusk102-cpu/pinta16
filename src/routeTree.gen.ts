@@ -9,9 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as AboutRouteImport } from "./routes/about";
 import { Route as AccountRouteImport } from "./routes/account";
 import { Route as AdminRouteImport } from "./routes/admin";
 import { Route as CollectionRouteImport } from "./routes/collection";
+import { Route as ContactRouteImport } from "./routes/contact";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as SignupRouteImport } from "./routes/signup";
 import { Route as TrackRouteImport } from "./routes/track";
@@ -20,6 +22,11 @@ import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
 import { Route as PreviewIdRouteImport } from "./routes/preview.$id";
 import { Route as WishlistShareRouteImport } from "./routes/wishlist.share";
 
+const AboutRoute = AboutRouteImport.update({
+  id: "/about",
+  path: "/about",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const AccountRoute = AccountRouteImport.update({
   id: "/account",
   path: "/account",
@@ -33,6 +40,11 @@ const AdminRoute = AdminRouteImport.update({
 const CollectionRoute = CollectionRouteImport.update({
   id: "/collection",
   path: "/collection",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ContactRoute = ContactRouteImport.update({
+  id: "/contact",
+  path: "/contact",
   getParentRoute: () => rootRouteImport,
 } as any);
 const IndexRoute = IndexRouteImport.update({
@@ -73,9 +85,11 @@ const WishlistShareRoute = WishlistShareRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
+  "/about": typeof AboutRoute;
   "/account": typeof AccountRoute;
   "/admin": typeof AdminRoute;
   "/collection": typeof CollectionRoute;
+  "/contact": typeof ContactRoute;
   "/signup": typeof SignupRoute;
   "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
@@ -85,9 +99,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
+  "/about": typeof AboutRoute;
   "/account": typeof AccountRoute;
   "/admin": typeof AdminRoute;
   "/collection": typeof CollectionRoute;
+  "/contact": typeof ContactRoute;
   "/signup": typeof SignupRoute;
   "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
@@ -98,9 +114,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
+  "/about": typeof AboutRoute;
   "/account": typeof AccountRoute;
   "/admin": typeof AdminRoute;
   "/collection": typeof CollectionRoute;
+  "/contact": typeof ContactRoute;
   "/signup": typeof SignupRoute;
   "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
@@ -112,9 +130,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
+    | "/about"
     | "/account"
     | "/admin"
     | "/collection"
+    | "/contact"
     | "/signup"
     | "/track"
     | "/policy/$slug"
@@ -124,9 +144,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
+    | "/about"
     | "/account"
     | "/admin"
     | "/collection"
+    | "/contact"
     | "/signup"
     | "/track"
     | "/policy/$slug"
@@ -136,9 +158,11 @@ export interface FileRouteTypes {
   id:
     | "__root__"
     | "/"
+    | "/about"
     | "/account"
     | "/admin"
     | "/collection"
+    | "/contact"
     | "/signup"
     | "/track"
     | "/policy/$slug"
@@ -149,9 +173,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
+  AboutRoute: typeof AboutRoute;
   AccountRoute: typeof AccountRoute;
   AdminRoute: typeof AdminRoute;
   CollectionRoute: typeof CollectionRoute;
+  ContactRoute: typeof ContactRoute;
   SignupRoute: typeof SignupRoute;
   TrackRoute: typeof TrackRoute;
   PolicySlugRoute: typeof PolicySlugRoute;
@@ -162,6 +188,13 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/about": {
+      id: "/about";
+      path: "/about";
+      fullPath: "/about";
+      preLoaderRoute: typeof AboutRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/account": {
       id: "/account";
       path: "/account";
@@ -181,6 +214,13 @@ declare module "@tanstack/react-router" {
       path: "/collection";
       fullPath: "/collection";
       preLoaderRoute: typeof CollectionRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/contact": {
+      id: "/contact";
+      path: "/contact";
+      fullPath: "/contact";
+      preLoaderRoute: typeof ContactRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/": {
@@ -237,9 +277,11 @@ declare module "@tanstack/react-router" {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
   CollectionRoute: CollectionRoute,
+  ContactRoute: ContactRoute,
   SignupRoute: SignupRoute,
   TrackRoute: TrackRoute,
   PolicySlugRoute: PolicySlugRoute,

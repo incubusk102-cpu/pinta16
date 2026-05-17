@@ -1,8 +1,16 @@
 import { lazy, Suspense } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import GallerySection from "@/components/GallerySection";
 import { useSEO } from "@/hooks/useSEO";
+
+interface CollectionSearch {
+  q?: string;
+  sort?: string;
+  categories?: string;
+  availability?: string;
+  price?: string;
+}
 
 // /collection is the dedicated browse page. The homepage was trimmed to
 // hero + dynamic carousels (marquee, daily feature, recommended,
@@ -20,6 +28,14 @@ const InspiredByYouRail = lazy(() => import("@/components/InspiredByYouRail"));
 
 export const Route = createFileRoute("/collection")({
   component: CollectionPage,
+  validateSearch: (raw: Record<string, unknown>): CollectionSearch => ({
+    q: typeof raw.q === "string" ? raw.q : undefined,
+    sort: typeof raw.sort === "string" ? raw.sort : undefined,
+    categories: typeof raw.categories === "string" ? raw.categories : undefined,
+    availability:
+      typeof raw.availability === "string" ? raw.availability : undefined,
+    price: typeof raw.price === "string" ? raw.price : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "The Collection — Canvas Hub" },
@@ -42,6 +58,7 @@ export const Route = createFileRoute("/collection")({
 });
 
 function CollectionPage() {
+  const search = useSearch({ from: "/collection" });
   useSEO({
     title: "The Collection — Canvas Hub",
     description:
@@ -51,8 +68,8 @@ function CollectionPage() {
   return (
     <div className="min-h-screen bg-background">
       <GalleryNav />
-      <main className="pt-24 md:pt-28">
-        <GallerySection />
+      <main id="main-content" className="pt-24 md:pt-28">
+        <GallerySection initialSearch={search} />
         <Suspense fallback={null}>
           <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
             <InspiredByYouRail />

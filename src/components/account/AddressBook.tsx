@@ -3,6 +3,7 @@ import { Loader2, MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { isValidPhone, formatPhPhone } from "@/lib/sanitize";
 import {
   type AddressInput as AddressInputType,
   type SavedAddress,
@@ -57,6 +58,7 @@ export default function AddressBook() {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<AddressInputType>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   if (!user) return null;
   const list = user.addresses || [];
@@ -115,6 +117,11 @@ export default function AddressBook() {
       );
       return;
     }
+    if (form.phone && !isValidPhone(form.phone)) {
+      setPhoneError("Enter a valid PH mobile number");
+      return;
+    }
+    setPhoneError("");
     setBusy(true);
     try {
       if (editingId === "new") {
@@ -283,14 +290,27 @@ export default function AddressBook() {
               }
               className="text-sm"
             />
-            <Input
-              placeholder="Phone"
-              value={form.phone}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, phone: e.target.value }))
-              }
-              className="text-sm sm:col-span-2"
-            />
+            <div className="sm:col-span-2 space-y-1">
+              <Input
+                placeholder="Phone (e.g. 0917 123 4567)"
+                value={form.phone}
+                onChange={(e) => {
+                  setPhoneError("");
+                  setForm((prev) => ({ ...prev, phone: e.target.value }));
+                }}
+                onBlur={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    phone: formatPhPhone(prev.phone),
+                  }))
+                }
+                className={`text-sm ${phoneError ? "border-destructive/60" : ""}`}
+                aria-invalid={!!phoneError}
+              />
+              {phoneError && (
+                <p className="text-[10px] text-destructive">{phoneError}</p>
+              )}
+            </div>
           </div>
           <PhAddressFields value={addressValue} onChange={onAddressChange} />
           <Input

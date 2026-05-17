@@ -45,6 +45,12 @@ export interface UseSEOOptions {
   socialTitle?: string;
   /** Override og:description / twitter:description separately from the meta description. */
   socialDescription?: string;
+  /** Width of the og:image in pixels (default 1200). */
+  imageWidth?: number;
+  /** Height of the og:image in pixels (default 630). */
+  imageHeight?: number;
+  /** Alt text for og:image:alt. Falls back to description. */
+  imageAlt?: string;
 }
 
 const MANAGED_ATTR = "data-managed";
@@ -63,6 +69,19 @@ const upsertMeta = (selector: string, attr: string, value: string): void => {
     document.head.appendChild(tag);
   }
   tag.setAttribute(attr, value);
+};
+
+const upsertHreflang = (lang: string, href: string): void => {
+  const sel = `link[rel="alternate"][hreflang="${lang}"]`;
+  let link = document.head.querySelector<HTMLLinkElement>(sel);
+  if (!link) {
+    link = document.createElement("link");
+    link.setAttribute("rel", "alternate");
+    link.setAttribute("hreflang", lang);
+    link.setAttribute(MANAGED_ATTR, MANAGED_VALUE);
+    document.head.appendChild(link);
+  }
+  link.setAttribute("href", href);
 };
 
 const upsertCanonical = (href: string): void => {
@@ -122,13 +141,39 @@ export function useSEO(options: UseSEOOptions): void {
     upsertMeta('meta[property="og:description"]', "content", ogDescription);
     upsertMeta('meta[property="og:url"]', "content", canonical);
     upsertMeta('meta[property="og:image"]', "content", fullImage);
+    upsertMeta(
+      'meta[property="og:image:width"]',
+      "content",
+      String(options.imageWidth ?? 1200),
+    );
+    upsertMeta(
+      'meta[property="og:image:height"]',
+      "content",
+      String(options.imageHeight ?? 630),
+    );
+    upsertMeta(
+      'meta[property="og:image:alt"]',
+      "content",
+      options.imageAlt || description,
+    );
+    upsertMeta('meta[property="og:locale"]', "content", "en_PH");
 
     upsertMeta('meta[name="twitter:card"]', "content", "summary_large_image");
+    upsertMeta('meta[name="twitter:site"]', "content", "@canvashubph");
     upsertMeta('meta[name="twitter:title"]', "content", ogTitle);
     upsertMeta('meta[name="twitter:description"]', "content", ogDescription);
     upsertMeta('meta[name="twitter:image"]', "content", fullImage);
 
-    upsertCanonical(canonical);
+    // hreflang alternates — single-URL site serves both en and fil content.
+    // Full locale-prefixed URLs would require a URL rewrite strategy;
+    // documented inline as a future enhancement.
+    upsertHreflang("en", canonical);
+    upsertHreflang("fil", canonical);
+    upsertHreflang("x-default", canonical);
+
+    if (!noindex) {
+      upsertCanonical(canonical);
+    }
   }, [
     title,
     description,
@@ -138,5 +183,8 @@ export function useSEO(options: UseSEOOptions): void {
     image,
     socialTitle,
     socialDescription,
+    options.imageWidth,
+    options.imageHeight,
+    options.imageAlt,
   ]);
 }

@@ -54,6 +54,7 @@ import {
 } from "@/lib/artworks";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
 import { useSEO } from "@/hooks/useSEO";
+import { formatPHP } from "@/lib/format";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -85,6 +86,7 @@ const CheckoutForm = lazy(() => import("@/components/CheckoutForm"));
 // + similar painting rails), so lazy-loading it keeps the initial
 // product-page bundle smaller without affecting the first paint.
 const RecentlyViewed = lazy(() => import("@/components/RecentlyViewed"));
+const ZoomOverlay = lazy(() => import("@/components/ZoomOverlay"));
 
 interface ProductReview {
   orderId: string;
@@ -836,15 +838,15 @@ function ProductPage() {
               {discount > 0 ? (
                 <>
                   <span className="line-through text-muted-foreground text-base mr-2">
-                    ₱{artwork.price.toLocaleString()}
+                    {formatPHP(artwork.price)}
                   </span>
-                  <span>₱{effectivePrice.toLocaleString()}</span>
+                  <span>{formatPHP(effectivePrice)}</span>
                   <span className="ml-2 text-sm text-red-500 font-semibold">
                     {discount}% OFF
                   </span>
                 </>
               ) : (
-                <>₱{artwork.price.toLocaleString()}</>
+                <>{formatPHP(artwork.price)}</>
               )}
             </div>
 
@@ -985,12 +987,14 @@ function ProductPage() {
       </main>
 
       {zoomed && (
-        <ZoomOverlay
-          originRect={launchRect}
-          title={artwork.title}
-          src={variantSrc(currentImage, "lg")}
-          onClose={() => setZoomed(false)}
-        />
+        <Suspense fallback={null}>
+          <ZoomOverlay
+            originRect={launchRect}
+            title={artwork.title}
+            src={variantSrc(currentImage, "lg")}
+            onClose={() => setZoomed(false)}
+          />
+        </Suspense>
       )}
 
       {view3d && (
@@ -1242,94 +1246,5 @@ function ProductReviews({
       </GsapStaggerRail>
       <ReviewPhotoLightbox view={photoView} onChange={setPhotoView} />
     </section>
-  );
-}
-
-interface ZoomOverlayProps {
-  originRect: DOMRect | null;
-  title: string;
-  src: string;
-  onClose: () => void;
-}
-
-// Pinch-zoom overlay that grows out of the hero frame rectangle and
-// settles into a fullscreen viewer. The GSAP timeline mirrors the
-// PaintingViewer3D launcher so opening either modal reads as the
-// same "the artwork you were just looking at expanded into a
-// dedicated viewer" gesture.
-//
-// Esc closes the overlay (handled by the existing useEffect in the
-// parent route). Reduced-motion clients get an instant fade-in.
-function ZoomOverlay({ originRect, title, src, onClose }: ZoomOverlayProps) {
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const overlay = overlayRef.current;
-    if (!overlay) return;
-    if (!originRect || prefersReducedMotion()) {
-      // Reduced-motion path: simply fade in without any spatial
-      // morph. GSAP still owns the property so it is reverted on
-      // unmount alongside the spatial path.
-      const ctx = gsap.context(() => {
-        gsap.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2 });
-      }, overlay);
-      return () => ctx.revert();
-    }
-
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const cx = originRect.left + originRect.width / 2 - vw / 2;
-    const cy = originRect.top + originRect.height / 2 - vh / 2;
-    const sx = Math.max(originRect.width / vw, 0.05);
-    const sy = Math.max(originRect.height / vh, 0.05);
-
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        overlay,
-        {
-          autoAlpha: 0,
-          x: cx,
-          y: cy,
-          scaleX: sx,
-          scaleY: sy,
-          transformOrigin: "50% 50%",
-        },
-        {
-          autoAlpha: 1,
-          x: 0,
-          y: 0,
-          scaleX: 1,
-          scaleY: 1,
-          duration: 0.7,
-          ease: "power3.out",
-        },
-      );
-    }, overlay);
-
-    return () => {
-      ctx.revert();
-    };
-  }, [originRect]);
-
-  return (
-    <div
-      ref={overlayRef}
-      role="dialog"
-      aria-label={`${title} – zoomed`}
-      className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 md:p-6"
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-full bg-foreground text-background text-[11px] tracking-[0.2em] uppercase hover:opacity-90"
-        aria-label="Close zoomed view"
-      >
-        Close
-      </button>
-      <ZoomableImage src={src} alt={title} className="w-full h-full" />
-      <p className="mt-3 text-[10px] tracking-[0.25em] uppercase text-white/60">
-        Pinch · scroll · double-tap to zoom · drag to pan
-      </p>
-    </div>
   );
 }

@@ -17,8 +17,9 @@ import {
 // Set these to your actual Canvas Hub profile URLs to render the social
 // links. Left empty so we don't ship misleading aria-labels that point at
 // generic facebook.com / instagram.com homepages.
-const FACEBOOK_URL = "";
-const INSTAGRAM_URL = "";
+const FACEBOOK_URL = "https://www.facebook.com/canvashubph";
+const INSTAGRAM_URL = "https://www.instagram.com/canvashubph";
+const TIKTOK_URL = "https://www.tiktok.com/@canvashubph";
 
 const SLUG_LABEL_KEYS: Record<
   PolicySlug,
@@ -64,7 +65,7 @@ const SiteFooter = () => {
               Brand wordmark moved out: 'Canvas Hub' now lives only on the
               homepage hero (and meta tab titles), not in the footer of
               every page. */}
-        {(FACEBOOK_URL || INSTAGRAM_URL) && (
+        {(FACEBOOK_URL || INSTAGRAM_URL || TIKTOK_URL) && (
           <div className="sm:col-span-3 flex items-center gap-3">
             {FACEBOOK_URL && (
               <a
@@ -86,6 +87,24 @@ const SiteFooter = () => {
                 className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
               >
                 <Instagram className="w-4 h-4" />
+              </a>
+            )}
+            {TIKTOK_URL && (
+              <a
+                href={TIKTOK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="TikTok"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-4 h-4"
+                  aria-hidden="true"
+                >
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.73a8.19 8.19 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.16Z" />
+                </svg>
               </a>
             )}
           </div>
@@ -123,6 +142,30 @@ const SiteFooter = () => {
           <ul className="space-y-2">
             <li>
               <Link
+                to="/collection"
+                className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
+              >
+                Shop the Collection
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/about"
+                className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
+              >
+                About
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/contact"
+                className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
+              >
+                Contact
+              </Link>
+            </li>
+            <li>
+              <Link
                 to="/track"
                 className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
               >
@@ -139,11 +182,19 @@ const SiteFooter = () => {
                 {t("footer.contactSupport")}
               </a>
             </li>
+            <li>
+              <a
+                href="/sitemap.xml"
+                className="text-foreground/80 hover:text-foreground transition-colors"
+              >
+                Sitemap
+              </a>
+            </li>
           </ul>
         </nav>
 
         {/* Contact */}
-        <div>
+        <address className="not-italic">
           <p className="font-body text-xs tracking-[0.3em] uppercase text-muted-foreground mb-3">
             {t("contact.heading")}
           </p>
@@ -166,12 +217,19 @@ const SiteFooter = () => {
                 +63 956 468 5351
               </a>
             </li>
-            <li className="text-muted-foreground inline-flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5" />
-              Bagong Silang, Caloocan
+            <li>
+              <a
+                href="https://maps.google.com/?q=Bagong+Silang,+Caloocan,+Philippines"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                Bagong Silang, Caloocan
+              </a>
             </li>
           </ul>
-        </div>
+        </address>
       </div>
 
       {/* Payment methods */}

@@ -611,6 +611,8 @@ const CheckoutForm = () => {
             return "Please write a more detailed street address (min 4 chars)";
           return "";
         }
+        case "postalCode":
+          return value.trim() ? "" : "Postal code is required";
         case "courier":
           // Only require a courier when the storefront has rates set up.
           // Otherwise the legacy flat fee applies and the field is
@@ -634,6 +636,7 @@ const CheckoutForm = () => {
         "city",
         "barangay",
         "address",
+        "postalCode",
       ] as (keyof OrderInfo)[]
     ).forEach((key) => {
       const err = validateField(key, (form[key] as string) || "");
@@ -660,6 +663,7 @@ const CheckoutForm = () => {
       city: true,
       barangay: true,
       address: true,
+      postalCode: true,
       courier: true,
     });
     return Object.keys(newErrors).length === 0;
@@ -804,7 +808,9 @@ const CheckoutForm = () => {
       addressLine1: sanitizeText(enforceMaxLength(line1, 200)),
       addressLine2: "",
       province: sanitizeText(enforceMaxLength(provinceVal, 100)),
-      postalCode: "",
+      postalCode: sanitizeText(
+        enforceMaxLength((form.postalCode || "").trim(), 10),
+      ),
       country: sanitizeText(
         enforceMaxLength(form.country || "Philippines", 100),
       ),
@@ -857,7 +863,7 @@ const CheckoutForm = () => {
         line2: "",
         city: sanitizedForm.city || "",
         province: sanitizedForm.province || "",
-        postalCode: "",
+        postalCode: sanitizedForm.postalCode || "",
         country: sanitizedForm.country || "Philippines",
         region: sanitizedForm.region || "",
         barangay: sanitizedForm.barangay || "",
@@ -1674,6 +1680,52 @@ const CheckoutForm = () => {
                                             className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                                           />
                                         </div>
+                                        <div>
+                                          <label
+                                            htmlFor="checkout-postal-code"
+                                            className="font-body text-[11px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5 block"
+                                          >
+                                            Postal Code{" "}
+                                            <span className="text-destructive">
+                                              *
+                                            </span>
+                                          </label>
+                                          <input
+                                            id="checkout-postal-code"
+                                            type="text"
+                                            inputMode="numeric"
+                                            autoComplete="postal-code"
+                                            value={form.postalCode || ""}
+                                            onChange={(e) =>
+                                              setForm((prev) => ({
+                                                ...prev,
+                                                postalCode: e.target.value,
+                                              }))
+                                            }
+                                            onBlur={() =>
+                                              handleFieldBlur("postalCode")
+                                            }
+                                            placeholder="e.g. 1400"
+                                            maxLength={10}
+                                            disabled={formLocked}
+                                            aria-invalid={
+                                              touched.postalCode &&
+                                              !!errors.postalCode
+                                            }
+                                            className={`w-full px-3 py-2 bg-background border ${
+                                              touched.postalCode &&
+                                              errors.postalCode
+                                                ? "border-destructive/60"
+                                                : "border-border/30"
+                                            } text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm disabled:opacity-60 disabled:cursor-not-allowed`}
+                                          />
+                                          {touched.postalCode &&
+                                            errors.postalCode && (
+                                              <p className="font-body text-[10px] text-destructive mt-1">
+                                                {errors.postalCode}
+                                              </p>
+                                            )}
+                                        </div>
                                       </div>
                                     </fieldset>
                                     {[
@@ -1842,19 +1894,33 @@ const CheckoutForm = () => {
                                 )}
                               </label>
                               {key === "notes" ? (
-                                <textarea
-                                  value={form[key]}
-                                  onChange={(e) =>
-                                    setForm((prev) => ({
-                                      ...prev,
-                                      [key]: e.target.value,
-                                    }))
-                                  }
-                                  placeholder={placeholder}
-                                  rows={3}
-                                  disabled={formLocked}
-                                  className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
-                                />
+                                <>
+                                  <textarea
+                                    value={form[key]}
+                                    onChange={(e) =>
+                                      setForm((prev) => ({
+                                        ...prev,
+                                        [key]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder={placeholder}
+                                    rows={3}
+                                    maxLength={500}
+                                    disabled={formLocked}
+                                    className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
+                                  />
+                                  <p
+                                    className={`text-right text-[10px] mt-0.5 ${
+                                      form.notes.length > 475
+                                        ? "text-destructive"
+                                        : form.notes.length > 400
+                                          ? "text-amber-500"
+                                          : "text-muted-foreground/50"
+                                    }`}
+                                  >
+                                    {form.notes.length}/500
+                                  </p>
+                                </>
                               ) : (
                                 <input
                                   type={type || "text"}
