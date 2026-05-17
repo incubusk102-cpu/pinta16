@@ -166,6 +166,14 @@ const SiteFooter = () => {
             </li>
             <li>
               <Link
+                to="/resources"
+                className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
+              >
+                Resources
+              </Link>
+            </li>
+            <li>
+              <Link
                 to="/track"
                 className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground transition-colors"
               >

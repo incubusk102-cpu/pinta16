@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Truck,
   GitCompare,
+  BookOpen,
 } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { animate } from "animejs";
@@ -317,6 +318,7 @@ const GalleryNav = () => {
     { id: "reviews", label: t("nav.reviews"), icon: Star },
     { id: "about", label: "About", icon: Info, to: "/about" },
     { id: "contact", label: "Contact", icon: MessageSquare, to: "/contact" },
+    { id: "resources", label: "Resources", icon: BookOpen, to: "/resources" },
   ];
 
   // The full filterable gallery now lives at /collection (it was lifted
