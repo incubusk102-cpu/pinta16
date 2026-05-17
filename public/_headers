@@ -8,7 +8,7 @@
   Cross-Origin-Resource-Policy: same-site
   X-Robots-Tag: index, follow
   X-Permitted-Cross-Domain-Policies: none
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; media-src 'self' https: blob:; manifest-src 'self'; connect-src 'self' https://api.paymongo.com https://oauth2.googleapis.com https://accounts.google.com https://challenges.cloudflare.com https://cloudflareinsights.com https://api.maptiler.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; worker-src 'self' blob:; child-src 'self' blob:; frame-src https://accounts.google.com https://content.google.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com https://challenges.cloudflare.com https://static.cloudflareinsights.com https://pagead2.googlesyndication.com https://partner.googleadservices.com https://tpc.googlesyndication.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob: https://googleads.g.doubleclick.net; media-src 'self' https: blob:; manifest-src 'self'; connect-src 'self' https://api.paymongo.com https://oauth2.googleapis.com https://accounts.google.com https://challenges.cloudflare.com https://cloudflareinsights.com https://api.maptiler.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://pagead2.googlesyndication.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src https://accounts.google.com https://content.google.com https://challenges.cloudflare.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
 
 # CSP rationale (kept on the global `/*` rule above so it applies to every
 # SPA route — `/`, `/product/<id>`, `/admin`, etc. The previous `/*.html`
@@ -52,16 +52,33 @@
 #   script-src   accounts.google.com, apis.google.com, www.gstatic.com  Google Sign-In (GIS)
 #                challenges.cloudflare.com                              Turnstile widget
 #                static.cloudflareinsights.com                          Cloudflare Web Analytics beacon JS
+#                pagead2.googlesyndication.com                          Google AdSense adsbygoogle.js loader
+#                partner.googleadservices.com                           AdSense partner-side ad-serving scripts
+#                tpc.googlesyndication.com                              AdSense third-party ad-frame scripts
 #   style-src    fonts.googleapis.com                                   Google Fonts CSS
 #   font-src     fonts.gstatic.com, data:                               Google Fonts woff2 + base64 fallbacks
+#   img-src      googleads.g.doubleclick.net                            AdSense / DoubleClick ad creative images
+#                                                                       (redundant against the broad `https:` token
+#                                                                       above, listed explicitly so a future tightening
+#                                                                       of `img-src https:` doesn't accidentally break ads)
 #   connect-src  api.paymongo.com                                       PayMongo Sources API
 #                oauth2.googleapis.com, accounts.google.com             Google Sign-In token exchange
 #                challenges.cloudflare.com                              Turnstile siteverify
 #                cloudflareinsights.com                                 Cloudflare Web Analytics beacon POSTs
 #                api.maptiler.com                                       MapTiler vector tiles + geocoding (PR #163)
 #                *.ingest.sentry.io, *.ingest.us.sentry.io              Sentry browser-SDK ingest endpoints
+#                pagead2.googlesyndication.com                          AdSense beacon / XHR fetches from adsbygoogle.js
 #   frame-src    accounts.google.com, content.google.com                Google Sign-In iframe
 #                challenges.cloudflare.com                              Turnstile iframe
+#                googleads.g.doubleclick.net                            DoubleClick ad-creative iframes
+#                tpc.googlesyndication.com                              AdSense Trusted-Path Container iframes
+#
+# AdSense entries (pagead2 / partner.googleadservices / tpc / googleads
+# DoubleClick) are required by `src/lib/adsense.ts` and `src/components/AdUnit.tsx`.
+# When VITE_ADSENSE_PUBLISHER_ID is unset, `initAdSense` is never called and
+# `<AdUnit>` only renders the empty placeholder, so the allow-list entries
+# are inert in that case — exactly the same pattern as Sentry / CF Analytics
+# above.
 #
 # When VITE_CF_ANALYTICS_TOKEN / VITE_SENTRY_DSN / MAPTILER_API_KEY are
 # unset, the corresponding integration silently no-ops, so the allowlist
