@@ -112,6 +112,15 @@
   X-Robots-Tag: noindex, nofollow
 /signup
   X-Robots-Tag: noindex, nofollow
+# Public share links for personal wishlists carry a per-list token in
+# the URL. Indexing them would expose private collections to anyone
+# searching for the wishlist owner's name, so block crawlers at the
+# header layer in addition to the in-app `useSEO({ noindex: true })`
+# call.
+/wishlist/share
+  X-Robots-Tag: noindex, nofollow
+/wishlist/share/*
+  X-Robots-Tag: noindex, nofollow
 
 # Service worker should be revalidated on every load and scoped to the
 # whole origin so navigation requests can be intercepted.

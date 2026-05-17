@@ -1048,6 +1048,11 @@ function AdminDashboard() {
   useEffect(() => {
     let gPressed = false;
     let gTimer: ReturnType<typeof setTimeout> | null = null;
+    // `g` + letter shortcuts for every primary admin section. Letters
+    // follow the section name where possible (c → customers, x → exports,
+    // y → security), and collide-free near-matches where the obvious
+    // letter is already taken (t → triggers because m is messages, e →
+    // returns because r is reviews, b → broadcasts, a → abandoned cart).
     const NAV_KEYS: Record<string, AdminSection> = {
       d: "dashboard",
       o: "orders",
@@ -1056,6 +1061,13 @@ function AdminDashboard() {
       r: "reviews",
       s: "settings",
       u: "users",
+      c: "customers",
+      x: "exports",
+      t: "marketingTriggers",
+      b: "broadcasts",
+      a: "abandonedCart",
+      e: "returns",
+      y: "security",
     };
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -5122,11 +5134,56 @@ function ShipmentEditor({
   );
 }
 
+// Lightweight fingerprint of the current device the admin is logged in
+// from. Pure UA / language sniffing — we don't have a server-side
+// session ledger (the auth model is a single HMAC secret + token, no
+// per-device rows), so this card surfaces what *this* browser knows
+// about itself and gives a clear path to invalidate just this device.
+const useCurrentSessionInfo = () => {
+  return useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return { device: "Unknown device", browser: "Unknown browser" };
+    }
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    const detectBrowser = (): string => {
+      if (/Edg\//.test(ua)) return "Edge";
+      if (/OPR\//.test(ua)) return "Opera";
+      if (/Chrome\//.test(ua) && !/Chromium\//.test(ua)) return "Chrome";
+      if (/Firefox\//.test(ua)) return "Firefox";
+      if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return "Safari";
+      return "Browser";
+    };
+    const detectDevice = (): string => {
+      if (/iPhone|iPad|iPod/.test(ua))
+        return /iPad/.test(ua) ? "iPad" : "iPhone";
+      if (/Android/.test(ua)) return "Android";
+      if (/Mac/.test(platform) || /Mac OS X/.test(ua)) return "macOS";
+      if (/Win/.test(platform)) return "Windows";
+      if (/Linux/.test(platform)) return "Linux";
+      return "This device";
+    };
+    return { device: detectDevice(), browser: detectBrowser() };
+  }, []);
+};
+
 function SettingsSection() {
   const { changePassword, logout } = useAdminAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const { device, browser } = useCurrentSessionInfo();
+  // Find the section navigator the AdminPage shell installed on the
+  // dashboard — used by the quick-link buttons below to jump to
+  // /admin → Security without forcing a hard reload. SSR-guarded
+  // because admin components default to client-only.
+  const navigateToSection = useCallback((target: AdminSection) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", target);
+    window.history.pushState(null, "", url.toString());
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, []);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5196,14 +5253,59 @@ function SettingsSection() {
         </form>
       </section>
 
+      {/* Security shortcuts — jump straight to the dedicated Security
+          section so the admin doesn't have to scroll through the
+          sidebar to manage 2FA or passkeys. The actual configuration
+          UI lives in `<SecuritySection />`; these are wayfinding. */}
       <section className="bg-card/40 border border-border/60 rounded-xl p-6">
-        <h2 className="font-display text-lg mb-2">Sign out</h2>
+        <div className="flex items-center gap-2 mb-3">
+          <Shield className="w-4 h-4 text-primary" />
+          <h2 className="font-display text-lg">Security</h2>
+        </div>
         <p className="text-sm text-muted-foreground mb-4">
-          End your admin session on this device. You can sign back in any time
-          from this URL.
+          Manage two-factor authentication codes and passkeys for this admin
+          account.
         </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            variant="outline"
+            onClick={() => navigateToSection("security")}
+            className="w-full justify-start"
+          >
+            <KeyRound className="w-4 h-4 mr-2" />
+            Manage 2FA
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigateToSection("security")}
+            className="w-full justify-start"
+          >
+            <Shield className="w-4 h-4 mr-2" />
+            Manage passkeys
+          </Button>
+        </div>
+      </section>
+
+      {/* Your Sessions — admin auth uses a single HMAC session secret
+          rather than a per-device session ledger, so we can't list
+          every signed-in device. Instead we surface what we DO know
+          about the current device and give an explicit "Sign out of
+          all devices" path that rotates the session secret via a
+          password change. Anyone signed in elsewhere is kicked. */}
+      <section className="bg-card/40 border border-border/60 rounded-xl p-6">
+        <h2 className="font-display text-lg mb-2">Your sessions</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          You are signed in on this device. Sign out here, or change your
+          password above to invalidate every other admin session at once.
+        </p>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3 mb-4">
+          <p className="text-sm font-medium">Current session</p>
+          <p className="text-xs text-muted-foreground">
+            {device} · {browser} (this device)
+          </p>
+        </div>
         <Button variant="outline" onClick={logout} className="w-full">
-          <LogOut className="w-4 h-4 mr-2" /> Sign out
+          <LogOut className="w-4 h-4 mr-2" /> Sign out of this device
         </Button>
       </section>
     </div>

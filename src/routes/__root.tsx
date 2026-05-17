@@ -21,6 +21,7 @@ import AmbientCursorGlow from "@/components/AmbientCursorGlow";
 import ScrollProgress from "@/components/ScrollProgress";
 import PageTransitions from "@/components/PageTransitions";
 import RouteWipeOverlay from "@/components/RouteWipeOverlay";
+import { useSEO } from "@/hooks/useSEO";
 import { QuickSpinProvider } from "@/contexts/QuickSpinContext";
 import { CompareProvider } from "@/contexts/CompareContext";
 import { FlyToCartProvider } from "@/contexts/FlyToCartContext";
@@ -57,6 +58,15 @@ const KeyboardShortcutsOverlay = lazy(
 );
 
 function NotFoundComponent() {
+  // 404 pages must not be indexed — they're transient by definition
+  // (broken links, stale shares, mistyped URLs) and indexing them
+  // pollutes the SERP with content-less doorway pages.
+  useSEO({
+    title: "Page Not Found — Canvas Hub",
+    description:
+      "The page you're looking for doesn't exist or has been moved. Head back to the Canvas Hub gallery to keep browsing.",
+    noindex: true,
+  });
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">

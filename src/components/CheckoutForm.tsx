@@ -8,6 +8,7 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import gsap from "gsap";
+import { toast } from "sonner";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   X,
@@ -85,6 +86,16 @@ const pesoFormatter = (n: number): string =>
   `\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
 const pesoDiscountFormatter = (n: number): string =>
   `-\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+// Static-string helper for places that aren't streaming through an
+// AnimeCounter — wraps the same `Intl.NumberFormat("en-PH")` /
+// `currency: "PHP"` shape the rest of the codebase uses for one-off
+// peso renders. Whole pesos only; checkout never shows fractional
+// centavos on the storefront side.
+const phpCurrency = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  maximumFractionDigits: 0,
+});
 
 const RESUME_CHECKOUT_FLAG = "canvhub_resume_checkout";
 // Per-tab draft of the guest checkout form. We persist on every change
@@ -702,12 +713,19 @@ const CheckoutForm = () => {
     // challenge has completed. Avoids a guaranteed-fail round-trip
     // and keeps the rate-limit budget for real shoppers.
     if (isTurnstileEnabled() && !turnstileToken) {
-      alert(
+      toast.error(
         "Please complete the verification challenge below the form, then try again.",
       );
       return;
     }
     setIsCreatingPayment(true);
+    // Drop any stale QR from a previous attempt before kicking off a
+    // new payment-intent. Otherwise the PaymentModal would flash the
+    // old QR for a frame while the new createPayment call is in
+    // flight, which is confusing on slow networks and looks like the
+    // modal mis-recovered after a retry.
+    setQrCodeUrl(null);
+    setPaymentIntentId(null);
 
     try {
       const data = await createPayment({
@@ -739,12 +757,15 @@ const CheckoutForm = () => {
       // fresh one so a customer retry has a chance to succeed.
       setTurnstileToken(null);
       setTurnstileResetSignal((n) => n + 1);
-      alert(
+      toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to create payment. Please try again.",
+          : "Could not start payment. Please check your connection and try again.",
       );
     } finally {
+      // Always release the form lock — including on AbortController
+      // timeouts — so the customer can immediately retry without
+      // having to refresh the page.
       setIsCreatingPayment(false);
     }
   };
@@ -1082,9 +1103,13 @@ const CheckoutForm = () => {
   };
   // Preview of what the picked courier × region combo will charge,
   // shown next to the selector so the customer sees the impact of
-  // their choice before they commit.
+  // their choice before they commit. When the cart already qualifies
+  // for free shipping (admin threshold or voucher) we skip the fee
+  // lookup entirely so the preview row reads "Free" instead of
+  // confusingly quoting a courier fee the customer won't actually
+  // pay.
   const previewedFee =
-    form.courier && form.region
+    !shippingIsWaived && form.courier && form.region
       ? getShippingFee(
           storefrontConfig.shippingRates,
           form.courier,
@@ -1679,7 +1704,10 @@ const CheckoutForm = () => {
                                     the per-courier fee preview). */}
                                   {courierOptions.length > 0 && (
                                     <div>
-                                      <label className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
+                                      <label
+                                        htmlFor="checkout-courier"
+                                        className="font-body text-xs text-muted-foreground flex items-center gap-1.5 mb-2"
+                                      >
                                         <Truck className="w-3.5 h-3.5" />
                                         Courier{" "}
                                         {ratesConfigured && (
@@ -1704,7 +1732,18 @@ const CheckoutForm = () => {
                                         }}
                                         disabled={formLocked}
                                       >
-                                        <SelectTrigger className="h-10 text-sm">
+                                        <SelectTrigger
+                                          id="checkout-courier"
+                                          aria-invalid={
+                                            touched.courier && !!errors.courier
+                                          }
+                                          aria-describedby={
+                                            touched.courier && errors.courier
+                                              ? "checkout-courier-error"
+                                              : undefined
+                                          }
+                                          className="h-10 text-sm"
+                                        >
                                           <SelectValue placeholder="Pick a courier" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1717,13 +1756,18 @@ const CheckoutForm = () => {
                                       </Select>
                                       {form.courier && form.region && (
                                         <p className="font-body text-[11px] text-muted-foreground mt-1.5">
-                                          {previewedFee != null
-                                            ? `Estimated fee: \u20b1${previewedFee.toLocaleString()} (${zoneLabel(zoneForRegion(form.region))})`
-                                            : "Fee not configured for this region — flat rate will apply."}
+                                          {shippingIsWaived
+                                            ? `Estimated fee: Free (${zoneLabel(zoneForRegion(form.region))})`
+                                            : previewedFee != null
+                                              ? `Estimated fee: ${phpCurrency.format(previewedFee)} (${zoneLabel(zoneForRegion(form.region))})`
+                                              : "Fee not configured for this region — flat rate will apply."}
                                         </p>
                                       )}
                                       {touched.courier && errors.courier && (
-                                        <p className="font-body text-[10px] text-destructive mt-1">
+                                        <p
+                                          id="checkout-courier-error"
+                                          className="font-body text-[10px] text-destructive mt-1"
+                                        >
                                           {errors.courier}
                                         </p>
                                       )}

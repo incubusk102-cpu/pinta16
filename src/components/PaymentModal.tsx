@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Download,
   ChevronDown,
+  AlertCircle,
 } from "lucide-react";
 import { checkPaymentStatus as checkPaymentStatusFn } from "@/utils/payment.functions";
 
@@ -24,7 +25,8 @@ type PaymentStatus =
   | "awaiting_payment"
   | "checking"
   | "succeeded"
-  | "failed";
+  | "failed"
+  | "timeout";
 
 // How often to silently re-check payment status with PayMongo while
 // the modal is open. Each poll consumes one Workers KV write on the
@@ -73,8 +75,23 @@ const PaymentModal = ({
           "Payment is processing. We'll confirm automatically in a moment.",
         );
       } else if (paymentStatus === "awaiting_payment_method") {
+        // PayMongo leaves brand-new intents in this state until the
+        // first attach call lands, and occasionally bounces back to it
+        // when a wallet hand-off fails mid-stream but the intent is
+        // still spendable. Treat it as in-progress so the customer can
+        // re-scan, NOT as a hard failure.
+        setStatus("awaiting_payment");
+        setStatusMessage(
+          "Waiting for payment. Please scan the QR code and complete payment.",
+        );
+      } else if (paymentStatus === "expired") {
+        // Terminal: PayMongo has explicitly retired this intent. The
+        // QR will no longer accept funds — the customer needs to start
+        // a fresh payment from checkout.
         setStatus("failed");
-        setStatusMessage("Payment session expired. Please start again.");
+        setStatusMessage(
+          "Payment session expired. Please close this and try again.",
+        );
       } else if (paymentStatus) {
         setStatus("awaiting_payment");
         setStatusMessage(`Status: ${paymentStatus}`);
@@ -123,8 +140,21 @@ const PaymentModal = ({
       // flight, and stop entirely once we reach a terminal state.
       const current = statusRef.current;
       if (current === "checking") return;
-      if (current === "succeeded" || current === "failed") return;
-      if (Date.now() - startedAt > POLL_MAX_DURATION_MS) return;
+      if (
+        current === "succeeded" ||
+        current === "failed" ||
+        current === "timeout"
+      ) {
+        return;
+      }
+      if (Date.now() - startedAt > POLL_MAX_DURATION_MS) {
+        // Surface the cap to the customer so the modal stops looking
+        // like it's still working when we've actually given up. They
+        // can tap Try Again to start a fresh intent.
+        setStatus("timeout");
+        setStatusMessage("Payment session timed out. Please try again.");
+        return;
+      }
 
       try {
         const data = await checkPaymentStatusFn({ data: { paymentIntentId } });
@@ -285,6 +315,25 @@ const PaymentModal = ({
                 Amount paid: ₱{total.toLocaleString()}
               </p>
             </motion.div>
+          ) : status === "timeout" ? (
+            <div className="text-center py-8">
+              <AlertCircle className="w-16 h-16 mx-auto mb-6 text-destructive" />
+              <h3 className="font-display text-xl text-foreground mb-2">
+                Payment session timed out. Please try again.
+              </h3>
+              <p className="font-body text-xs text-muted-foreground mb-6">
+                We stopped checking after waiting too long for confirmation.
+                Your QR code is no longer being monitored.
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+            </div>
           ) : (
             <div className="text-center">
               <div className="mb-6">
@@ -395,6 +444,9 @@ const PaymentModal = ({
                     loading="lazy"
                     decoding="async"
                   />
+                  {/* Loading skeleton above sits underneath the QR; the
+                      conditional below shows a shimmer while PayMongo's
+                      attach call is in flight and qrCodeUrl is null. */}
                   <button
                     type="button"
                     onClick={handleDownload}
@@ -420,9 +472,17 @@ const PaymentModal = ({
                   </p>
                 </div>
               ) : (
-                <div className="mb-6 flex flex-col items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-[#0066FF] mb-3" />
-                  <p className="font-body text-xs text-muted-foreground">
+                <div
+                  className="mb-6 flex flex-col items-center justify-center py-8"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Generating QR code"
+                >
+                  <div
+                    className="mx-auto w-full max-w-xs aspect-square rounded-sm border border-border/20 bg-muted/40 animate-pulse"
+                    aria-hidden="true"
+                  />
+                  <p className="font-body text-xs text-muted-foreground mt-3">
                     Generating QR code...
                   </p>
                 </div>

@@ -14,10 +14,18 @@
 // same R2 key, so re-runs never duplicate objects in the bucket.
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw, Database, CloudUpload } from "lucide-react";
+import { Loader2, RefreshCw, Database, CloudUpload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { jsonAuthHeaders } from "@/lib/api";
+
+// One-shot migration: once an operator confirms the backfill landed,
+// the card is dead weight on the admin dashboard. Stash a flag in
+// localStorage so it disappears on every subsequent admin visit from
+// the same browser. Scoped per-browser on purpose — a second operator
+// can still see and run the migration from their own session if they
+// haven't dismissed it yet.
+const DISMISS_KEY = "canvhub_hide_r2_migration";
 
 interface ScanResponse {
   scanned: number;
@@ -49,6 +57,16 @@ const formatBytes = (bytes: number): string => {
 };
 
 export const MigrateR2Card = () => {
+  // Initialize from localStorage synchronously so dismissed cards never
+  // flash on mount. SSR-safe: `typeof window` guards the access.
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(DISMISS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -59,6 +77,15 @@ export const MigrateR2Card = () => {
     errors: Array<{ id: string; message: string }>;
     remaining: number | null;
   }>({ migrated: 0, bytesRecovered: 0, errors: [], remaining: null });
+
+  const dismiss = useCallback(() => {
+    try {
+      localStorage.setItem(DISMISS_KEY, "1");
+    } catch {
+      /* private mode / disabled storage — still hide for the rest of this tab */
+    }
+    setDismissed(true);
+  }, []);
 
   const runScan = useCallback(async () => {
     setScanning(true);
@@ -87,8 +114,9 @@ export const MigrateR2Card = () => {
   }, []);
 
   useEffect(() => {
+    if (dismissed) return;
     void runScan();
-  }, [runScan]);
+  }, [runScan, dismissed]);
 
   const runMigration = useCallback(async () => {
     setMigrating(true);
@@ -170,6 +198,8 @@ export const MigrateR2Card = () => {
 
   const noWorkLeft = scan != null && scan.withInline === 0;
 
+  if (dismissed) return null;
+
   return (
     <section className="rounded-2xl border bg-card p-5 space-y-4">
       <header className="flex items-start justify-between gap-3 flex-wrap">
@@ -186,20 +216,34 @@ export const MigrateR2Card = () => {
             CDN with immutable cache headers. Idempotent — safe to re-run.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={runScan}
-          disabled={scanning || migrating}
-        >
-          {scanning ? (
-            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-1" />
-          )}
-          Rescan
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={runScan}
+            disabled={scanning || migrating}
+          >
+            {scanning ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-1" />
+            )}
+            Rescan
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={dismiss}
+            disabled={migrating}
+            title="Hide this card on this browser"
+            aria-label="Hide this card"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Hide completed
+          </Button>
+        </div>
       </header>
 
       {scanError ? (
