@@ -184,8 +184,6 @@ faster. The exact timing depends on your bank or wallet provider.
   fell from a hook).
 - Variations in colour caused by your monitor, lighting, or
   framing choices made after delivery.
-- Custom commissions where the requested specifications were
-  followed.
 
 ## Your rights
 

@@ -110,8 +110,8 @@ interface ProductPickerProps {
  * order item is linked to a real product — that's what makes it
  * reviewable from the customer's order tracker. We still allow free
  * text (the "Use as custom item" affordance + an editable title field
- * once linked) so admins can record one-off commissions that aren't
- * in the catalog yet.
+ * once linked) so admins can record off-catalog or legacy orders that
+ * aren't in the catalog yet.
  */
 function ProductPicker({
   value,

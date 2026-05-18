@@ -15,7 +15,6 @@ export type HeroTemplateId =
   | "featured"
   | "sale"
   | "free-shipping"
-  | "commission"
   | "gift"
   | "newsletter"
   | "story";
@@ -108,19 +107,6 @@ export const HERO_TEMPLATES: HeroTemplate[] = [
       ctaLabel: "Explore paintings",
       ctaHref: "/collection",
       align: "center",
-    },
-  },
-  {
-    id: "commission",
-    label: "Made-to-order / commission",
-    hint: "Lead with a portrait or process shot to feel personal. CTA jumps to the contact form.",
-    fields: {
-      eyebrow: "Commissions open",
-      headline: "Commission a painting that's just yours",
-      subtext: "Tell us a story, a place, a feeling — we'll paint it.",
-      ctaLabel: "Start a commission",
-      ctaHref: "#contact",
-      align: "right",
     },
   },
   {
