@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { getRouter } from "./router";
 import { initObservability } from "./lib/observability";
+import { initAdSense } from "./lib/adsense";
 import { registerPwa } from "./lib/pwa";
 import { installChunkReloadHandler } from "./lib/chunkReload";
 import "./styles.css";
