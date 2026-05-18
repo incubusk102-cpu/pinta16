@@ -1521,9 +1521,26 @@ export const handler = async (event) => {
           }
         }
 
+        // Derive the final money fields from the validated pricing
+        // pipeline. Shipping is intentionally accepted as-is from the
+        // client (the user-facing checklist scopes the server-side
+        // validation to line-item prices); we still clamp it
+        // non-negative + Number() so a malformed payload can't poison
+        // the math. `serverTotal` rebuilds the persisted total from
+        // the server-rebuilt subtotal so a tampered cart cannot
+        // dictate what it pays.
+        const safeShippingFee = Math.max(0, Number(order.shippingFee) || 0);
+        const serverTotal = Math.max(
+          0,
+          serverSubtotal - validatedDiscount + safeShippingFee,
+        );
+
         const safeOrder = {
           id: orderId,
-          items: safeItems,
+          // Persist the catalog-repriced line items so downstream
+          // receipts / analytics / admin views never carry an
+          // attacker-supplied per-unit price.
+          items: pricedItems,
           orderInfo: {
             fullName: String(info.fullName).slice(0, 200),
             email: String(info.email).slice(0, 200),

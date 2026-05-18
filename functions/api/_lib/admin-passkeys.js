@@ -82,13 +82,15 @@ const getRpid = (event) => {
   // localhost / .local always pass through unchanged so the dev
   // experience keeps working without polluting the prod allowlist.
   if (host === "localhost" || host.endsWith(".local")) return host;
-  // Production: gate the derived host against the allowlist. Any
-  // unknown host falls back to the first allowlist entry, which keeps
-  // legitimate prod traffic working while making it impossible for a
-  // client to opt itself into a different RPID.
+  // Production: gate the derived host against the allowlist. WebAuthn
+  // allows an RP ID to be a registrable domain suffix of the caller's
+  // origin (per the W3C spec) so silently falling back to the first
+  // allowlist entry would let an unlisted subdomain authenticate
+  // against the canonical RPID and widen the trust boundary.
+  // Reject unknown hosts by returning an empty string so the caller
+  // surfaces a WebAuthn error instead of issuing credentials.
   if (RPID_ALLOWLIST.has(host)) return host;
-  const fallback = RPID_ALLOWLIST.values().next().value;
-  return fallback || "";
+  return "";
 };
 
 const getExpectedOrigin = (event) => {
