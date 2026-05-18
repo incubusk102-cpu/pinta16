@@ -34,13 +34,13 @@ export const DEFAULT_CHAT_FAQS: ChatFaqItem[] = [
     id: "sizing",
     question: "Sizing & dimensions",
     answer:
-      "Each artwork's detail page lists the exact width × height in inches and centimeters. Need a custom size? Tap 'Custom orders' below or talk to a live agent.",
+      "Each artwork's detail page lists the exact width × height in inches and centimeters. If you need help choosing a size for a specific wall, tap 'Talk to a live agent' and we'll walk through it with you.",
   },
   {
-    id: "custom",
-    question: "Custom orders",
+    id: "originals",
+    question: "Are these originals?",
     answer:
-      "Yes, we take commissioned pieces! Tap 'Talk to a live agent' and share the subject, preferred size, color palette, and deadline. We'll reply with a quote and timeline.",
+      "Every painting in the catalogue is an original, hand-painted canvas — no prints, no reproductions, no customisation. Each piece is one-of-a-kind and ships with a signed certificate of authenticity from the artist.",
   },
   {
     id: "authenticity",

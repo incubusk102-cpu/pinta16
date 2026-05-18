@@ -52,11 +52,11 @@ export const RESOURCE_ARTICLES = [
       "Primary-market provenance, the role of certificates of authenticity, secondary-market liquidity, and why loving a piece first usually beats price speculation.",
   },
   {
-    slug: "commissioning-custom-painting",
-    eyebrow: "Commissioning",
-    title: "How to commission a custom painting",
+    slug: "choosing-art-for-every-room",
+    eyebrow: "Home decor",
+    title: "Choosing the right painting for every room",
     blurb:
-      "Briefing the artist, milestones and deposits, scope changes, photographing reference material, and a sample commission contract you can adapt.",
+      "A room-by-room playbook: how to size the piece, what palette and subject pair best with each space, and the small placement details that decide whether a painting feels like a focal point or background noise.",
   },
 ] as const;
 
