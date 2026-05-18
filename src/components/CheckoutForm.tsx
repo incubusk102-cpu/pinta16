@@ -230,6 +230,7 @@ const CheckoutForm = () => {
     shippingFeePending,
     voucher,
     setCheckoutShipping,
+    hasUnavailableItems,
   } = useCart();
   // Mirrors the same state machine the cart drawer uses so the order
   // summary in checkout doesn't accidentally render "₱0 FREE" before
@@ -614,7 +615,10 @@ const CheckoutForm = () => {
           return "";
         }
         case "postalCode":
-          return value.trim() ? "" : "Postal code is required";
+          if (!value.trim()) return "Postal code is required";
+          if (!/^\d{4}$/.test(value.trim()))
+            return "Postal code must be exactly 4 digits";
+          return "";
         case "courier":
           // Only require a courier when the storefront has rates set up.
           // Otherwise the legacy flat fee applies and the field is
@@ -644,6 +648,26 @@ const CheckoutForm = () => {
       const err = validateField(key, (form[key] as string) || "");
       if (err) newErrors[key] = err;
     });
+    // Cross-validate cascading address fields against PSGC data when
+    // available. If the dataset hasn't loaded (offline / slow CDN),
+    // fall through — the server will catch mismatches anyway.
+    if (psgc) {
+      const province = (form.province || "").trim();
+      const city = (form.city || "").trim();
+      const barangay = (form.barangay || "").trim();
+      if (province && city && !newErrors.city) {
+        const validCities = getCitiesForProvince(psgc, province);
+        if (validCities.length > 0 && !validCities.includes(city)) {
+          newErrors.city = `"${city}" is not a valid city under ${province}`;
+        }
+      }
+      if (province && city && barangay && !newErrors.barangay) {
+        const validBrgys = getBarangaysForCity(psgc, province, city);
+        if (validBrgys.length > 0 && !validBrgys.includes(barangay)) {
+          newErrors.barangay = `"${barangay}" is not a valid barangay under ${city}`;
+        }
+      }
+    }
     // Courier is required only when the buyer can actually pick one. In
     // Lalamove-paid-to-rider mode the courier is auto-set to "lalamove"
     // and the picker is hidden, so we never block submit on it.
@@ -713,6 +737,12 @@ const CheckoutForm = () => {
   }, [form.email, form.fullName, items]);
 
   const handlePayWithQR = async () => {
+    if (hasUnavailableItems) {
+      toast.error(
+        "Some items in your cart are no longer available. Please return to the cart and remove them.",
+      );
+      return;
+    }
     if (!validate()) return;
     // Turnstile gate: when the widget is mounted (i.e. a site key is
     // configured) we don't let the user trigger PayMongo until the

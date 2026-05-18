@@ -25,6 +25,9 @@ import {
   loadCartItemsFromStorage,
   CART_STORAGE_KEY,
 } from "@/lib/cart-storage";
+import { toast } from "sonner";
+import { useProducts } from "@/contexts/ProductContext";
+import { isPurchasable, getAvailability } from "@/lib/artworks";
 export {
   cartLineKey,
   CART_STORAGE_KEY,
@@ -477,6 +480,11 @@ interface CartContextType {
     courier: string;
     zone: ShippingZone | null;
   }) => void;
+  // Map of cart item id → availability status for items that are NOT
+  // purchasable (sold, reserved, draft). Empty when all items are ok.
+  unavailableItems: Map<string, string>;
+  // True when at least one cart item fails the availability check.
+  hasUnavailableItems: boolean;
 }
 
 const DEFAULT_FREE_SHIPPING_THRESHOLD = 8000;
@@ -576,6 +584,7 @@ const mergeReviews = (
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { config } = useStorefrontConfig();
   const { user, token } = useUserAuth();
+  const { products } = useProducts();
   const userEmail = normalizeUserEmail(user?.email);
   const FREE_SHIPPING_THRESHOLD = config.freeShipping.enabled
     ? (config.freeShipping.threshold ?? DEFAULT_FREE_SHIPPING_THRESHOLD)
@@ -859,6 +868,46 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     },
     [config.promoCodes, subtotal],
   );
+
+  // Auto-remove an applied voucher when the subtotal drops below the
+  // promo's minSpend (e.g. customer removes items from cart). Without
+  // this, the discount stays visually applied but the server would
+  // reject the order for not meeting the minimum spend.
+  useEffect(() => {
+    if (!voucher.applied || !voucher.code) return;
+    const promo = config.promoCodes.find((p) => p.code === voucher.code);
+    if (!promo) return;
+    if (promo.minSpend > 0 && subtotal < promo.minSpend) {
+      removeVoucher();
+      toast.info(
+        `Voucher "${voucher.code}" removed — minimum spend of ₱${promo.minSpend.toLocaleString()} not met.`,
+      );
+    }
+  }, [
+    voucher.applied,
+    voucher.code,
+    subtotal,
+    config.promoCodes,
+    removeVoucher,
+  ]);
+
+  // Check each cart item's current availability against the product
+  // catalog. Items that are sold, reserved, or draft are flagged so
+  // the CartDrawer can render warning badges and the checkout button
+  // can be disabled.
+  const unavailableItems = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of items) {
+      const product = products.find((p) => p.id === item.id);
+      if (!product) continue;
+      const avail = getAvailability(product);
+      if (!isPurchasable(avail)) {
+        map.set(item.id, avail);
+      }
+    }
+    return map;
+  }, [items, products]);
+  const hasUnavailableItems = unavailableItems.size > 0;
 
   const voucherFreeShipping = voucher.applied && voucher.freeShipping;
   // Per-courier × per-zone fee from the storefront config takes
@@ -1195,6 +1244,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       checkoutCourier: checkoutShipping.courier,
       checkoutZone: checkoutShipping.zone,
       setCheckoutShipping,
+      unavailableItems,
+      hasUnavailableItems,
     }),
     [
       items,
@@ -1233,6 +1284,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       showConfirmation,
       checkoutShipping.courier,
       checkoutShipping.zone,
+      unavailableItems,
+      hasUnavailableItems,
     ],
   );
 
