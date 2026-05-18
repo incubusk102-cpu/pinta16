@@ -3,6 +3,7 @@ import { Package } from "lucide-react";
 import GalleryNav from "@/components/GalleryNav";
 import OrderTracker from "@/components/account/OrderTracker";
 import SiteFooter from "@/components/SiteFooter";
+import StorefrontErrorBoundary from "@/components/StorefrontErrorBoundary";
 import { useSEO } from "@/hooks/useSEO";
 
 // Read `?id=` from the live URL once at module level / render time
@@ -60,7 +61,11 @@ function TrackPage() {
   return (
     <div className="min-h-screen bg-background">
       <GalleryNav />
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 pt-28 pb-16">
+      <main
+        id="main-content"
+        className="max-w-2xl mx-auto px-4 sm:px-6 pt-28 pb-16"
+      >
+        <StorefrontErrorBoundary surface="track">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full border border-border/60 mb-4">
             <Package className="w-5 h-5 text-foreground/80" />
@@ -95,6 +100,7 @@ function TrackPage() {
           </Link>
           .
         </p>
+        </StorefrontErrorBoundary>
       </main>
       <SiteFooter />
     </div>

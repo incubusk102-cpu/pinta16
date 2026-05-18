@@ -11,6 +11,7 @@ import {
 } from "@/contexts/ProductContext";
 import { useSEO } from "@/hooks/useSEO";
 import { findDefaultArtwork } from "@/lib/artworks";
+import { formatPHP } from "@/lib/format";
 
 /**
  * Public, read-only wishlist view. Visitors generate this link from
@@ -130,7 +131,10 @@ function WishlistSharePage() {
   return (
     <div className="min-h-screen bg-background">
       <GalleryNav />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-28 pb-16">
+      <main
+        id="main-content"
+        className="max-w-5xl mx-auto px-4 sm:px-6 pt-28 pb-16"
+      >
         <Link
           to="/collection"
           className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -221,10 +225,10 @@ function WishlistSharePage() {
                             {product.year ? ` • ${product.year}` : ""}
                           </p>
                           <p className="text-sm text-foreground mt-3 font-medium">
-                            ₱{effective.toLocaleString("en-PH")}
+                            {formatPHP(effective)}
                             {discount > 0 && (
                               <span className="ml-2 text-muted-foreground line-through text-xs">
-                                ₱{product.price.toLocaleString("en-PH")}
+                                {formatPHP(product.price)}
                               </span>
                             )}
                           </p>

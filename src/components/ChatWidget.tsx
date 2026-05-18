@@ -122,10 +122,11 @@ const writeSoundPref = (on: boolean) => {
 const playNotificationDing = () => {
   if (typeof window === "undefined") return;
   try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
+    // `Window.webkitAudioContext` is declared in `src/types/window.d.ts`
+    // so we can read the vendor-prefixed fallback without a structural
+    // cast. Required for Safari < 14 / legacy Chrome on Android where
+    // the unprefixed `AudioContext` constructor is missing.
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const osc = ctx.createOscillator();

@@ -4,12 +4,17 @@ import {
   verifyTurnstileToken,
   turnstileFailureResponse,
 } from "./_lib/turnstile.js";
+import { withSecurityHeaders } from "./_lib/security-headers.js";
 import { logError } from "./_lib/redact.js";
 
-const jsonHeaders = {
-  "Content-Type": "application/json",
-  "X-Content-Type-Options": "nosniff",
-};
+// Every response below uses `withSecurityHeaders()` so the standard
+// hardening set — X-Frame-Options, Cache-Control: no-store,
+// Referrer-Policy, X-Content-Type-Options, etc. — is applied
+// uniformly. Previously the handler only sent
+// `X-Content-Type-Options`, which meant the payment intent response
+// (including the QR code URL) could be cached by upstream proxies and
+// embedded by other origins.
+const jsonHeaders = withSecurityHeaders();
 
 const parseBody = (body) => {
   if (!body) return {};

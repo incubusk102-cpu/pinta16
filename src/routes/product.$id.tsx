@@ -55,6 +55,7 @@ import {
 import { NotifyMeButton } from "@/components/NotifyMeButton";
 import { useSEO } from "@/hooks/useSEO";
 import { formatPHP } from "@/lib/format";
+import StorefrontErrorBoundary from "@/components/StorefrontErrorBoundary";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -102,23 +103,40 @@ interface ProductReview {
 
 export const Route = createFileRoute("/product/$id")({
   component: ProductPage,
-  head: ({ params }) => ({
-    meta: [
-      {
-        title: `Painting — Canvas Hub`,
-      },
-      {
-        name: "description",
-        content: "View painting details, photos, and pricing on Canvas Hub.",
-      },
-      { name: "robots", content: "index, follow" },
-      { property: "og:title", content: `Painting — Canvas Hub` },
-      {
-        property: "og:url",
-        content: `/product/${params.id}`,
-      },
-    ],
-  }),
+  // Static SSR head: we don't have the artwork loaded server-side at
+  // this point (products live in client-fetched KV via
+  // `useProducts()`), so the SSR-emitted title / og:title fall back
+  // to a `Painting #<id>` shape that still beats a generic
+  // "Painting — Canvas Hub" for both crawlers and link previews.
+  // Once the route mounts on the client, `useSEO()` inside
+  // <ProductPage /> swaps in the resolved artwork title /
+  // description / canonical, so social shares and search engines
+  // that execute JS see the enriched copy.
+  head: ({ params }) => {
+    const title = `Painting #${params.id} — Canvas Hub`;
+    const ogImage = `/api/r/products/${params.id}/main.jpg`;
+    return {
+      meta: [
+        { title },
+        {
+          name: "description",
+          content:
+            "View painting details, photos, and pricing on Canvas Hub.",
+        },
+        { name: "robots", content: "index, follow" },
+        { property: "og:title", content: title },
+        {
+          property: "og:url",
+          content: `/product/${params.id}`,
+        },
+        { property: "og:image", content: ogImage },
+        { property: "og:type", content: "product" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:image", content: ogImage },
+      ],
+    };
+  },
 });
 
 const availabilityBadgeClass: Record<Availability, string> = {
@@ -573,7 +591,11 @@ function ProductPage() {
         dangerouslySetInnerHTML={{ __html: jsonLd }}
       />
       <GalleryNav />
-      <main className="flex-1 pt-24 md:pt-32 pb-20 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full">
+      <main
+        id="main-content"
+        className="flex-1 pt-24 md:pt-32 pb-20 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full"
+      >
+        <StorefrontErrorBoundary surface={`product-${id}`}>
         <div className="mb-6">
           <Link
             to="/collection"
@@ -595,6 +617,7 @@ function ProductPage() {
               className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame holo-frame"
             >
               {isVideoActive && productVideo ? (
+                <>
                 <div className="w-full bg-black flex items-center justify-center">
                   <video
                     key={productVideo.url}
@@ -613,8 +636,35 @@ function ProductPage() {
                         type={productVideo.mimeType}
                       />
                     ) : null}
+                    {/* Accessibility: studio videos are short, ambient
+                        clips of the artist working on the piece — they
+                        carry no spoken dialogue, so there is no
+                        verbatim caption file to ship. We attach an
+                        empty WebVTT descriptions track instead, which
+                        AT users can detect as "descriptions available",
+                        plus the visible descriptive paragraph below
+                        the video so screen-reader and low-bandwidth
+                        users get the same context as visual
+                        viewers. */}
+                    <track
+                      kind="descriptions"
+                      srcLang="en"
+                      label="Studio video description"
+                      src="data:text/vtt;charset=utf-8,WEBVTT%0A%0A"
+                      default
+                    />
                   </video>
                 </div>
+                <p
+                  className="sr-only"
+                  aria-label={`${artwork.title} studio video description`}
+                >
+                  Short studio clip of {artwork.title} — a hand-crafted
+                  painting from Canvas Hub. The video has no spoken
+                  dialogue; it shows the artist working on the piece in
+                  the studio.
+                </p>
+                </>
               ) : (
                 <button
                   type="button"
@@ -984,6 +1034,7 @@ function ProductPage() {
         <Suspense fallback={null}>
           <RecentlyViewed excludeId={artwork.id} />
         </Suspense>
+        </StorefrontErrorBoundary>
       </main>
 
       {zoomed && (

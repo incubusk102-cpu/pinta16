@@ -2,6 +2,8 @@ import { lazy, Suspense } from "react";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
 import GallerySection from "@/components/GallerySection";
+import StorefrontErrorBoundary from "@/components/StorefrontErrorBoundary";
+import { ContentSkeleton } from "@/components/ui/ContentSkeleton";
 import { useSEO } from "@/hooks/useSEO";
 
 interface CollectionSearch {
@@ -69,12 +71,25 @@ function CollectionPage() {
     <div className="min-h-screen bg-background">
       <GalleryNav />
       <main id="main-content" className="pt-24 md:pt-28">
-        <GallerySection initialSearch={search} />
-        <Suspense fallback={null}>
-          <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
-            <InspiredByYouRail />
-          </section>
-        </Suspense>
+        <StorefrontErrorBoundary surface="collection">
+          {/* Gallery render path is the main customer experience on
+              /collection and hydrates a fairly heavy grid (filters,
+              live search, masonry layout). Show a grid skeleton during
+              hydration / chunk-fetch so the slot doesn't collapse to
+              0px height while the section's lazy children resolve. */}
+          <Suspense fallback={<ContentSkeleton variant="grid" rows={2} />}>
+            <GallerySection initialSearch={search} />
+          </Suspense>
+          {/* `InspiredByYouRail` renders a horizontal card row. The
+              "grid" variant is the closest match for the card-shaped
+              placeholder so the slot doesn't collapse during the rail's
+              lazy-chunk fetch. */}
+          <Suspense fallback={<ContentSkeleton variant="grid" rows={2} />}>
+            <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto">
+              <InspiredByYouRail />
+            </section>
+          </Suspense>
+        </StorefrontErrorBoundary>
       </main>
       <Suspense fallback={null}>
         <CartDrawer />

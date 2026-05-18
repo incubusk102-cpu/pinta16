@@ -1142,15 +1142,17 @@ export const WelcomeEmailSection = () => {
             import("@/emails/render"),
             import("@/emails/lib/template-vars"),
           ]);
+        // The form config is a structural superset of the React Email
+        // template's `WelcomeEmailConfig` (extra admin-only fields like
+        // `fromEmail`, `replyTo`, and `discount` are ignored by the
+        // template). Narrow it through a typed local instead of a
+        // double cast so TS still verifies the structural overlap
+        // between the admin form's `config` and the template's
+        // expected shape.
+        type RenderConfig = Parameters<typeof renderWelcomeEmail>[0]["config"];
+        const renderConfig: RenderConfig = config;
         const rendered = await renderWelcomeEmail({
-          // The form config is a structural superset of the React Email
-          // template's WelcomeEmailConfig (extra admin-only fields like
-          // `fromEmail`, `replyTo`, and `discount` are ignored by the
-          // template). Cast through `unknown` so TS doesn't insist on
-          // an exact type match.
-          config: config as unknown as Parameters<
-            typeof renderWelcomeEmail
-          >[0]["config"],
+          config: renderConfig,
           user: PREVIEW_USER,
           discount: previewDiscount
             ? {
