@@ -1,0 +1,31 @@
+# Google AdSense Authorized Sellers (IAB Tech Lab spec — ads.txt v1.1).
+#
+# Fetched at https://canvhub.com/ads.txt by:
+#   - Google AdSense
+#   - Google Ad Manager
+#   - DSPs and verification vendors (DoubleVerify, IAS, etc.) before
+#     bidding on inventory served from this domain.
+#
+# Each line declares: <ad system domain>, <publisher ID>, <relationship>, <certification authority ID>
+#
+#   google.com           — Google's ads.txt advertising domain.
+#   pub-XXXXXXXXXXXXXXXX — your AdSense publisher ID, set in Cloudflare
+#                          Pages env as `VITE_ADSENSE_PUBLISHER_ID`.
+#                          Looks like `ca-pub-1234567890123456`, but in
+#                          the ads.txt file the `ca-` prefix is dropped
+#                          (write `pub-1234567890123456`).
+#   DIRECT               — canvhub.com is the publisher and has a direct
+#                          billing relationship with Google. (The
+#                          alternative is `RESELLER`, used by ad
+#                          intermediaries — not applicable here.)
+#   f08c47fec0942fa0     — Google's TAG-ID. This value is constant and
+#                          identifies google.com to ads.txt parsers.
+#                          See https://iabtechlab.com/ads-txt/.
+#
+# Replace `pub-XXXXXXXXXXXXXXXX` below with the publisher ID that AdSense
+# issued for canvhub.com, then commit. Without this file, AdSense will
+# either:
+#   1. Show "Earnings at risk" warnings in the dashboard, OR
+#   2. Drop bid prices because verifying vendors mark the inventory
+#      as "unauthorized".
+google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0

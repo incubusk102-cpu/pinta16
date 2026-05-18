@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import SectionReveal from "@/components/motion/SectionReveal";
 import AdUnit from "@/components/AdUnit";
+import RelatedResourceCards from "@/components/resources/RelatedResourceCards";
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 24 },
@@ -215,6 +216,11 @@ const ResourcesSection = () => {
           craft; the ones who can't usually aren't worth collecting.
         </p>
       </motion.section>
+
+      {/* Deep-dive index — links the hub to the long-form `/resources/<slug>`
+          guides. Placed after the substantive overview sections so the
+          reader has context for which deep-dive to pick. */}
+      <RelatedResourceCards heading="Deep-dive guides" />
 
       {/* Ad placement 3 — near the footer of the article, after the
           reader has worked through the substantive guidance. Auto
