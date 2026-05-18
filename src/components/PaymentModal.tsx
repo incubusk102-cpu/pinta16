@@ -304,7 +304,17 @@ const PaymentModal = ({
           className="bg-card border border-border/20 rounded-sm max-w-md w-full p-8 relative"
         >
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (
+                status === "awaiting_payment" &&
+                !window.confirm(
+                  "A payment is still in progress. Are you sure you want to close?",
+                )
+              ) {
+                return;
+              }
+              onClose();
+            }}
             className="absolute top-4 right-4 p-2 hover:bg-accent rounded-sm transition-colors"
           >
             <X className="w-5 h-5 text-foreground" />
