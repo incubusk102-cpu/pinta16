@@ -45,6 +45,10 @@ export const sanitiseStoredItem = (raw: unknown): StoredCartItem | null => {
     price: Number(r.price) || 0,
     quantity,
   };
+  if (item.price <= 0) {
+    console.warn(`[cart-storage] Rejected item "${id}": price must be > 0`);
+    return null;
+  }
   if (typeof r.dimensions === "string" && r.dimensions.trim()) {
     item.dimensions = r.dimensions.trim().slice(0, 200);
   }

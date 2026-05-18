@@ -16,6 +16,7 @@ import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { LALAMOVE_PAID_TO_RIDER } from "@/lib/shipment";
 import { formatPHP } from "@/lib/format";
+import { AVAILABILITY_LABEL, type Availability } from "@/lib/artworks";
 import AnimeCounter from "./motion/AnimeCounter";
 
 const prefersReducedMotion = () =>
@@ -53,6 +54,8 @@ const CartDrawer = () => {
     applyVoucher,
     removeVoucher,
     setShowCheckout,
+    unavailableItems,
+    hasUnavailableItems,
   } = useCart();
   // The shipping line has three distinct states. Picking these apart up
   // front keeps the JSX readable and avoids the previous bug where a
@@ -230,6 +233,13 @@ const CartDrawer = () => {
                         <p className="font-body text-sm text-foreground mt-1">
                           {formatPHP(item.price * item.quantity)}
                         </p>
+                        {unavailableItems.has(item.id) && (
+                          <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-body tracking-[0.15em] uppercase rounded-sm bg-destructive/10 text-destructive border border-destructive/20">
+                            {AVAILABILITY_LABEL[
+                              unavailableItems.get(item.id) as Availability
+                            ] ?? "Unavailable"}
+                          </span>
+                        )}
                         <div className="flex items-center gap-2 mt-2">
                           <button
                             onClick={() =>
@@ -419,6 +429,19 @@ const CartDrawer = () => {
                             })}`
                           : ""}
                         . Your cart will still be here when checkout reopens.
+                      </p>
+                    </div>
+                  ) : hasUnavailableItems ? (
+                    <div className="mt-4 space-y-2">
+                      <button
+                        disabled
+                        className="w-full py-4 bg-muted text-muted-foreground font-body text-xs tracking-[0.3em] uppercase rounded-sm cursor-not-allowed"
+                      >
+                        Proceed to Checkout
+                      </button>
+                      <p className="text-[11px] text-destructive leading-snug px-1">
+                        Some items in your cart are no longer available. Remove
+                        them to continue.
                       </p>
                     </div>
                   ) : (
