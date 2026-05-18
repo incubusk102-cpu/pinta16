@@ -45,11 +45,13 @@ boot("router:created");
 
 installChunkReloadHandler();
 initObservability();
-// Fire-and-forget: `initAdSense` resolves to a no-op when
-// `VITE_ADSENSE_PUBLISHER_ID` is unset, so the loader stays silent on
-// local builds and on any deploy that hasn't been configured in
-// Cloudflare Pages env yet. The empty-string argument is the unused
-// fallback — `initAdSense` reads the env var first.
+// Fire-and-forget: `initAdSense` reads `VITE_ADSENSE_PUBLISHER_ID`
+// first, then this explicit argument, then a production-only hardcoded
+// `CANVHUB_PUBLISHER_ID` default. So the loader stays silent on dev
+// builds (no env var, no arg, no default) but always fires in
+// production — even on a deploy that hasn't had the Cloudflare Pages
+// env var configured — which is required for AdSense's "AdSense code
+// snippet" site verification.
 void initAdSense("");
 registerPwa();
 boot("services:initialised");
