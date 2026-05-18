@@ -36,24 +36,61 @@ const CHALLENGE_TTL_SECONDS = 300;
 
 const RP_NAME = "Canvas Hub";
 
+// Allowlist of valid RPIDs derived from server-side configuration.
+// Add entries here if WebAuthn ever needs to be served across multiple
+// apex domains — never accept a value supplied by the client.
+const RPID_ALLOWLIST = new Set(["canvhub.com", "www.canvhub.com"]);
+
 // Resolve the relying party ID (RPID) and expected origin from the
 // request. RPID is always the host without port — WebAuthn requires
 // this — and origin is the full https://host (or http://localhost for
 // dev). Both must match what the browser sees, otherwise verification
 // fails.
+//
+// SECURITY: the RPID is derived exclusively from the request's Origin
+// header (or the rawUrl as a same-origin fallback). The previous
+// implementation honored an `x-webauthn-rpid` request header, which
+// would have let a hostile client forge the relying party identity
+// during registration / authentication. Header overrides have been
+// removed; if multi-domain support is ever needed, extend
+// `RPID_ALLOWLIST` above and the post-derivation gate will accept it.
 const getRpid = (event) => {
-  // Honor an explicit override first (lets a deploy on a custom apex
-  // pin RPID across subdomains).
-  const override = event?.headers?.["x-webauthn-rpid"];
-  if (override) return String(override).split(":")[0];
-  // Pages forwards the public hostname in `host`. Strip any port.
-  const host = event?.headers?.host;
-  if (host) return String(host).split(":")[0];
-  try {
-    return new URL(event.rawUrl).hostname;
-  } catch {
-    return "";
+  const headers = event?.headers || {};
+  // Derive the host candidate from the Origin header first — that's
+  // the value the browser will use to scope the credential, so it must
+  // match exactly during verification.
+  let host = "";
+  const origin = headers.origin;
+  if (origin) {
+    try {
+      host = new URL(String(origin)).hostname;
+    } catch {
+      host = "";
+    }
   }
+  // Same-origin fallback for environments where the Origin header is
+  // stripped (some same-site fetches). Never trust client-supplied
+  // headers like `x-forwarded-host` or `x-webauthn-rpid` here.
+  if (!host) {
+    try {
+      host = new URL(event.rawUrl).hostname;
+    } catch {
+      host = "";
+    }
+  }
+  if (!host) return "";
+  // localhost / .local always pass through unchanged so the dev
+  // experience keeps working without polluting the prod allowlist.
+  if (host === "localhost" || host.endsWith(".local")) return host;
+  // Production: gate the derived host against the allowlist. WebAuthn
+  // allows an RP ID to be a registrable domain suffix of the caller's
+  // origin (per the W3C spec) so silently falling back to the first
+  // allowlist entry would let an unlisted subdomain authenticate
+  // against the canonical RPID and widen the trust boundary.
+  // Reject unknown hosts by returning an empty string so the caller
+  // surfaces a WebAuthn error instead of issuing credentials.
+  if (RPID_ALLOWLIST.has(host)) return host;
+  return "";
 };
 
 const getExpectedOrigin = (event) => {

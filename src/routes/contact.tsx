@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryNav from "@/components/GalleryNav";
+import { ContentSkeleton } from "@/components/ui/ContentSkeleton";
 import { useSEO } from "@/hooks/useSEO";
 
 const ContactSection = lazy(() => import("@/components/ContactSection"));
@@ -38,7 +39,10 @@ function ContactPage() {
     <div className="min-h-screen bg-background">
       <GalleryNav />
       <main id="main-content" className="pt-24 md:pt-28">
-        <Suspense fallback={null}>
+        {/* Show a content skeleton while the lazy `<ContactSection />`
+            chunk is loading so the page area doesn't collapse to 0px
+            during hydration / slow networks. */}
+        <Suspense fallback={<ContentSkeleton variant="article" />}>
           <ContactSection />
         </Suspense>
       </main>

@@ -682,6 +682,12 @@ export const handler = async (event) => {
         });
         return json(200, { passkey: summarizePasskey(stored) });
       } catch (err) {
+        // Keep the full reason in the audit log for ops debugging, but
+        // do NOT echo `err.message` back to the client — a WebAuthn
+        // verification failure can carry internal context (challenge
+        // ids, RPID mismatches, attestation parse errors) that helps an
+        // attacker iterate on a forgery. The client only needs to know
+        // registration didn't succeed.
         await appendAuditEvent(event, {
           type: "admin.passkey",
           outcome: "failure",
@@ -689,7 +695,7 @@ export const handler = async (event) => {
           detail: `Registration failed: ${err.message || "unknown"}`,
           ...meta,
         });
-        return json(400, { error: err.message || "Registration failed" });
+        return json(400, { error: "Registration failed" });
       }
     }
 

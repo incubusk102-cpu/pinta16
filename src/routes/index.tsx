@@ -198,6 +198,12 @@ function Index() {
         </Suspense>
       </SilentBoundary>
       {user && <GalleryNav />}
+      {/* `<main id="main-content">` is the skip-link target wired up by
+          `<__root />`'s "Skip to main content" link. The floating chrome
+          below (`<SectionDock />`, `<IdleNudgeToast />`, the cart /
+          checkout drawers, and the traveling-daily-painting effect)
+          lives as a sibling so it doesn't get focused by the skip link. */}
+      <main id="main-content">
       {/* Signed-out visitors see the full welcome (`HomeHero` 3D scene
           when no slides are configured, or the admin slider when they
           are). Signed-in customers skip the brand-welcome — they're
@@ -314,6 +320,7 @@ function Index() {
         </div>
         <ContactSection />
       </Suspense>
+      </main>
       <Suspense fallback={null}>
         <CartDrawer />
         <CheckoutForm />

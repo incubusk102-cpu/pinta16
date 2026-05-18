@@ -178,8 +178,113 @@ const attemptPaymongoRefund = async ({
 
 const STORE_NAME = "orders";
 const ORDERS_KEY = "all-orders";
+const PRODUCTS_STORE_NAME = "products";
+const PRODUCTS_KEY = "all-products";
 const CONFIG_STORE_NAME = "storefront-config";
 const CONFIG_KEY = "config";
+
+// Resolve the authoritative unit price for a catalog product. Mirrors
+// `getEffectivePrice()` in src/contexts/ProductContext.tsx: a sale is
+// "active" exactly when salePrice is a positive number strictly lower
+// than the listed price. Everything else (zero, null, equal to or
+// above price) falls back to the regular price.
+const resolveCatalogUnitPrice = (product) => {
+  const price = Number(product?.price);
+  if (!Number.isFinite(price) || price < 0) return null;
+  const sale = Number(product?.salePrice);
+  if (Number.isFinite(sale) && sale > 0 && sale < price) {
+    return sale;
+  }
+  return price;
+};
+
+// Tolerance for client-vs-catalog price comparison: ±0.01 PHP (one
+// centavo) absorbs float-rounding drift without giving a malicious
+// client room to discount themselves.
+const PRICE_VALIDATION_TOLERANCE = 0.01;
+
+// Server-authoritative price + total recomputation. Never trusts the
+// client-submitted subtotal/total/discount/price: every line item is
+// re-priced against the live PRODUCTS KV catalog, the subtotal is
+// rebuilt from `(catalogPrice * quantity)`, and the total is derived
+// from `(subtotal - validatedDiscount + shipping)`. Throws a tagged
+// Error so the handler can return a 4xx with a safe message.
+//
+// `validatedDiscount` is the server-validated discount from the promo
+// pipeline (already recomputed from the catalog subtotal). `shipping`
+// is the order's shipping fee — that fee is set by the courier
+// integration upstream, not by item math, so we accept the
+// client-submitted value as-is.
+const validateOrderPrices = async ({ event, items, shipping, discount }) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    const err = new Error("Order has no items");
+    err.statusCode = 400;
+    throw err;
+  }
+  connectLambda(event);
+  let productsStore;
+  try {
+    productsStore = getStore(PRODUCTS_STORE_NAME);
+  } catch (storeErr) {
+    logError("validateOrderPrices: PRODUCTS store unavailable", storeErr);
+    const err = new Error("Could not validate order pricing");
+    err.statusCode = 500;
+    throw err;
+  }
+  const catalog = await productsStore.get(PRODUCTS_KEY, { type: "json" });
+  const list = Array.isArray(catalog) ? catalog : [];
+  const byId = new Map(list.map((p) => [String(p.id), p]));
+
+  const validatedItems = [];
+  let subtotal = 0;
+  for (const item of items) {
+    const id = String(item?.id || "");
+    const quantity = Math.max(1, Math.floor(Number(item?.quantity) || 1));
+    const catalogProduct = id ? byId.get(id) : null;
+    if (!catalogProduct) {
+      const err = new Error(`Item is no longer available`);
+      err.statusCode = 400;
+      throw err;
+    }
+    const authoritativePrice = resolveCatalogUnitPrice(catalogProduct);
+    if (authoritativePrice == null) {
+      const err = new Error(`Item is no longer available`);
+      err.statusCode = 400;
+      throw err;
+    }
+    const clientPrice = Number(item?.price);
+    if (
+      !Number.isFinite(clientPrice) ||
+      Math.abs(clientPrice - authoritativePrice) > PRICE_VALIDATION_TOLERANCE
+    ) {
+      const err = new Error(
+        "Prices have changed since you started checkout. Please refresh your cart.",
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+    validatedItems.push({
+      ...item,
+      price: authoritativePrice,
+      quantity,
+    });
+    subtotal += authoritativePrice * quantity;
+  }
+
+  const safeShipping = Math.max(0, Number(shipping) || 0);
+  const safeDiscount = Math.min(
+    Math.max(0, Number(discount) || 0),
+    subtotal,
+  );
+  const total = Math.max(0, subtotal - safeDiscount + safeShipping);
+  return {
+    items: validatedItems,
+    subtotal,
+    shippingFee: safeShipping,
+    discount: safeDiscount,
+    total,
+  };
+};
 
 // Build the auto-rotating "daily feature" promo for the current UTC day.
 // Mirrors buildDailyToday() in storefront-config.js; kept inline here so
@@ -1340,6 +1445,31 @@ export const handler = async (event) => {
           return json(409, { error: "Order already exists" });
         }
         const safeItems = order.items.slice(0, 50).map(sanitizeOrderItem);
+        // Server-authoritative pricing: re-price each line item against
+        // the live PRODUCTS KV catalog and recompute the subtotal. The
+        // client's submitted subtotal/total/price values are ignored —
+        // a tampered cart would either fail validation or get billed
+        // the real catalog amount, never the discounted-by-the-client
+        // figure.
+        let pricedItems;
+        let serverSubtotal;
+        try {
+          const priced = await validateOrderPrices({
+            event,
+            items: safeItems,
+            shipping: order.shippingFee,
+            // Pass 0 here — the promo discount is validated separately
+            // below and re-applied to the server-computed subtotal.
+            discount: 0,
+          });
+          pricedItems = priced.items;
+          serverSubtotal = priced.subtotal;
+        } catch (priceErr) {
+          const status = Number(priceErr?.statusCode) || 400;
+          return json(status, {
+            error: priceErr?.message || "Could not validate order pricing",
+          });
+        }
         // Server-side promo validation: only honor a voucher if it's still
         // eligible AND the client-supplied discount matches what the code
         // would actually grant. Otherwise drop the code so a malicious client
@@ -1350,13 +1480,14 @@ export const handler = async (event) => {
           typeof order.voucherCode === "string"
             ? order.voucherCode.trim().toUpperCase().slice(0, 30)
             : "";
-        const clientSubtotal = Number(order.subtotal) || 0;
         const clientDiscount = Number(order.discount) || 0;
         if (clientVoucher) {
           const config = await readStorefrontConfigDirect(event);
           const promo = findEligiblePromo(config, clientVoucher);
           if (promo) {
-            const expected = computeExpectedDiscount(promo, clientSubtotal);
+            // Promo math uses the server-recomputed subtotal so a
+            // tampered client subtotal can't inflate the discount.
+            const expected = computeExpectedDiscount(promo, serverSubtotal);
             const grantsFreeShip = promoGrantsFreeShipping(promo);
             const discountMatches = Math.abs(expected - clientDiscount) <= 1;
             // Accept the code if the discount math checks out AND the code
@@ -1390,9 +1521,26 @@ export const handler = async (event) => {
           }
         }
 
+        // Derive the final money fields from the validated pricing
+        // pipeline. Shipping is intentionally accepted as-is from the
+        // client (the user-facing checklist scopes the server-side
+        // validation to line-item prices); we still clamp it
+        // non-negative + Number() so a malformed payload can't poison
+        // the math. `serverTotal` rebuilds the persisted total from
+        // the server-rebuilt subtotal so a tampered cart cannot
+        // dictate what it pays.
+        const safeShippingFee = Math.max(0, Number(order.shippingFee) || 0);
+        const serverTotal = Math.max(
+          0,
+          serverSubtotal - validatedDiscount + safeShippingFee,
+        );
+
         const safeOrder = {
           id: orderId,
-          items: safeItems,
+          // Persist the catalog-repriced line items so downstream
+          // receipts / analytics / admin views never carry an
+          // attacker-supplied per-unit price.
+          items: pricedItems,
           orderInfo: {
             fullName: String(info.fullName).slice(0, 200),
             email: String(info.email).slice(0, 200),
@@ -1446,13 +1594,15 @@ export const handler = async (event) => {
               ? { longitude: info.longitude }
               : {}),
           },
-          subtotal: clientSubtotal,
-          shippingFee: Number(order.shippingFee) || 0,
+          // Server-authoritative money fields. `pricedItems` /
+          // `serverSubtotal` come from validateOrderPrices() above and
+          // are rebuilt from the live PRODUCTS KV catalog. The client's
+          // submitted subtotal/total are intentionally ignored — a
+          // tampered cart can no longer dictate what it pays.
+          subtotal: serverSubtotal,
+          shippingFee: safeShippingFee,
           discount: validatedDiscount,
-          // client total = subtotal - clientDiscount + shipping; if we strip
-          // the discount, add back what we subtracted.
-          total:
-            (Number(order.total) || 0) + (clientDiscount - validatedDiscount),
+          total: serverTotal,
           estimatedCreationDays: String(
             order.estimatedCreationDays || "",
           ).slice(0, 100),

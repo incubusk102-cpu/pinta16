@@ -15,6 +15,7 @@ import { useCart, cartLineKey } from "@/contexts/CartContext";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { LALAMOVE_PAID_TO_RIDER } from "@/lib/shipment";
+import { formatPHP } from "@/lib/format";
 import AnimeCounter from "./motion/AnimeCounter";
 
 const prefersReducedMotion = () =>
@@ -22,10 +23,14 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// AnimeCounter feeds the running tween value through these formatters
+// frame-by-frame; both delegate to the shared `formatPHP()` helper so
+// the rendered string stays in lockstep with every other peso amount
+// on the site (currency-locale-aware, no fractional centavos).
 const pesoFormatter = (n: number): string =>
-  `\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+  formatPHP(Math.max(0, Math.round(n)));
 const pesoDiscountFormatter = (n: number): string =>
-  `-\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+  `-${formatPHP(Math.max(0, Math.round(n)))}`;
 
 const CartDrawer = () => {
   const {
@@ -177,9 +182,8 @@ const CartDrawer = () => {
                         <div className="flex items-center gap-2 mb-1">
                           <Truck className="w-3.5 h-3.5 text-muted-foreground" />
                           <p className="font-body text-[10px] text-muted-foreground">
-                            ₱{amountToFreeShipping.toLocaleString()} away from
-                            free shipping (₱
-                            {freeShippingThreshold.toLocaleString()})
+                            {formatPHP(amountToFreeShipping)} away from free
+                            shipping ({formatPHP(freeShippingThreshold)})
                           </p>
                         </div>
                         <div className="w-full h-1 bg-border/30 rounded-full overflow-hidden">
@@ -224,7 +228,7 @@ const CartDrawer = () => {
                           </p>
                         ) : null}
                         <p className="font-body text-sm text-foreground mt-1">
-                          ₱{(item.price * item.quantity).toLocaleString()}
+                          {formatPHP(item.price * item.quantity)}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <button
@@ -283,10 +287,10 @@ const CartDrawer = () => {
                             {voucher.type === "percent"
                               ? `${voucher.value}% off`
                               : voucher.type === "flat"
-                                ? `flat \u20b1${voucher.value.toLocaleString()}`
+                                ? `flat ${formatPHP(voucher.value)}`
                                 : voucher.type === "free_shipping"
                                   ? "free shipping"
-                                  : `\u20b1${voucher.value.toLocaleString()} off`}
+                                  : `${formatPHP(voucher.value)} off`}
                             {voucher.type !== "free_shipping" &&
                               voucher.freeShipping &&
                               " + free shipping"}
@@ -353,7 +357,7 @@ const CartDrawer = () => {
                       <span>
                         {shippingFeeOriginal > 0 && (
                           <span className="line-through mr-1">
-                            ₱{shippingFeeOriginal.toLocaleString()}
+                            {formatPHP(shippingFeeOriginal)}
                           </span>
                         )}
                         <span className="text-foreground">FREE</span>

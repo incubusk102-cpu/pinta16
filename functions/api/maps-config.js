@@ -19,6 +19,7 @@
 
 import { setCloudflareContext } from "./_lib/context.js";
 import { SECURITY_HEADERS } from "./_lib/security-headers.js";
+import { logError } from "./_lib/redact.js";
 
 const json = (status, body) =>
   new Response(JSON.stringify(body), {
@@ -30,17 +31,36 @@ const json = (status, body) =>
     },
   });
 
+// Generic 500 reply that never echoes the original error. The handler
+// body is wrapped in a try/catch so an unexpected throw (KV bind miss,
+// env panic, etc.) lands here instead of bubbling up a stack trace or
+// internal field names to the client.
+const internalError = () =>
+  new Response(JSON.stringify({ error: "Internal server error" }), {
+    status: 500,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...SECURITY_HEADERS,
+    },
+  });
+
 export const onRequest = async ({ request, env }) => {
-  setCloudflareContext(env);
-  if (request.method !== "GET") {
-    return json(405, { error: "Method not allowed" });
+  try {
+    setCloudflareContext(env);
+    if (request.method !== "GET") {
+      return json(405, { error: "Method not allowed" });
+    }
+    const apiKey =
+      (env &&
+        (env.MAPTILER_API_KEY ||
+          env.VITE_MAPTILER_API_KEY ||
+          env.MAPS_API_KEY)) ||
+      null;
+    const styleUrl = (env && env.MAPTILER_STYLE_URL) || null;
+    return json(200, { apiKey, styleUrl });
+  } catch (err) {
+    logError("maps-config handler failed:", err);
+    return internalError();
   }
-  const apiKey =
-    (env &&
-      (env.MAPTILER_API_KEY ||
-        env.VITE_MAPTILER_API_KEY ||
-        env.MAPS_API_KEY)) ||
-    null;
-  const styleUrl = (env && env.MAPTILER_STYLE_URL) || null;
-  return json(200, { apiKey, styleUrl });
 };

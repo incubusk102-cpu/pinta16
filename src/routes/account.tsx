@@ -38,6 +38,8 @@ import ProfileEditor from "@/components/account/ProfileEditor";
 import AddressBook from "@/components/account/AddressBook";
 import MyOrders from "@/components/account/MyOrders";
 import AppreciationSection from "@/components/account/AppreciationSection";
+import StorefrontErrorBoundary from "@/components/StorefrontErrorBoundary";
+import { formatDatePHT, formatPHP } from "@/lib/format";
 const OrderPushOptInPrompt = lazy(
   () => import("@/components/OrderPushOptInPrompt"),
 );
@@ -55,12 +57,15 @@ export const Route = createFileRoute("/account")({
   }),
 });
 
-const formatDate = (iso?: string) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString();
-};
+// Customer-visible timestamps across the account dashboard always
+// render in Philippine Time — the storefront is PH-only, so showing
+// dates in the visitor's machine-local timezone (e.g. when shipping
+// support is reading the dashboard from another region) creates
+// ambiguity around order cut-offs and journey-map milestones. The
+// shared `formatDatePHT()` helper in `@/lib/format` pins the
+// timezone to `Asia/Manila` and handles `undefined` / invalid ISO
+// strings the same way the original local implementation did.
+const formatDate = (iso?: string) => formatDatePHT(iso);
 
 // Sub-stage stepper rendered inline under the "Painting in progress" step
 // in the customer-facing journey map. Walks the artist's physical-studio
@@ -260,9 +265,7 @@ function OrderTracker() {
         <div className="space-y-3 pt-2">
           <div className="flex justify-between text-sm">
             <span className="font-medium">{order.id}</span>
-            <span className="font-semibold">
-              ₱{order.total.toLocaleString()}
-            </span>
+            <span className="font-semibold">{formatPHP(order.total)}</span>
           </div>
           <div className="text-xs text-muted-foreground space-y-0.5">
             {order.items.map((item) => (
@@ -365,7 +368,7 @@ function OrderTracker() {
                   <li key={`${n.sentAt}-${idx}`} className="text-xs">
                     <p className="text-foreground">{n.message}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {new Date(n.sentAt).toLocaleString()} · to {n.recipient}
+                      {formatDatePHT(n.sentAt)} · to {n.recipient}
                     </p>
                   </li>
                 ))}
@@ -523,7 +526,7 @@ function WishlistSection() {
                 </Link>
                 {entry.price !== undefined && (
                   <p className="text-xs text-muted-foreground">
-                    ₱{entry.price.toLocaleString()}
+                    {formatPHP(entry.price)}
                   </p>
                 )}
                 <p className="text-[10px] text-muted-foreground mt-auto">
@@ -595,7 +598,11 @@ function AccountPage() {
   return (
     <div className="min-h-screen bg-background">
       <GalleryNav />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-28 md:pt-32 pb-16 space-y-8 scroll-pt-28">
+      <main
+        id="main-content"
+        className="max-w-3xl mx-auto px-4 sm:px-6 pt-28 md:pt-32 pb-16 space-y-8 scroll-pt-28"
+      >
+        <StorefrontErrorBoundary surface="account">
         <div>
           <h1 className="font-display text-3xl">My account</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -662,6 +669,7 @@ function AccountPage() {
             {formatDate(user.lastSeenAt)}
           </p>
         </div>
+        </StorefrontErrorBoundary>
       </main>
     </div>
   );

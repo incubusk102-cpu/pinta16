@@ -77,15 +77,17 @@ import AnimeCounter from "./motion/AnimeCounter";
 import Turnstile, { isTurnstileEnabled } from "./Turnstile";
 import { createPayment } from "@/utils/payment.functions";
 import { jsonAuthHeaders } from "@/lib/api";
+import { formatPHP } from "@/lib/format";
 
 // Peso formatters reused by AnimeCounter so the rolling odometer
 // renders "₱1,200" rather than the bare integer the counter would
-// otherwise output. Centralised here so subtotal / shipping / total
-// share the exact same digit grouping + currency glyph.
+// otherwise output. Both delegate to the shared `formatPHP()` helper
+// so subtotal / shipping / total share the exact same digit grouping
+// + currency glyph as every other peso amount on the storefront.
 const pesoFormatter = (n: number): string =>
-  `\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+  formatPHP(Math.max(0, Math.round(n)));
 const pesoDiscountFormatter = (n: number): string =>
-  `-\u20b1${Math.max(0, Math.round(n)).toLocaleString()}`;
+  `-${formatPHP(Math.max(0, Math.round(n)))}`;
 // Static-string helper for places that aren't streaming through an
 // AnimeCounter — wraps the same `Intl.NumberFormat("en-PH")` /
 // `currency: "PHP"` shape the rest of the codebase uses for one-off
@@ -1292,7 +1294,7 @@ const CheckoutForm = () => {
                                 ) : null}
                               </span>
                               <span>
-                                ₱{(item.price * item.quantity).toLocaleString()}
+                                {formatPHP(item.price * item.quantity)}
                               </span>
                             </div>
                           ))}
@@ -1322,7 +1324,7 @@ const CheckoutForm = () => {
                                 <span>
                                   {shippingFeeOriginal > 0 && (
                                     <span className="line-through mr-1">
-                                      ₱{shippingFeeOriginal.toLocaleString()}
+                                      {formatPHP(shippingFeeOriginal)}
                                     </span>
                                   )}
                                   <span className="text-foreground">FREE</span>
@@ -1342,8 +1344,8 @@ const CheckoutForm = () => {
                                   {voucher.type === "percent"
                                     ? `${voucher.value}%`
                                     : voucher.type === "flat"
-                                      ? `flat \u20b1${voucher.value.toLocaleString()}`
-                                      : `\u20b1${voucher.value.toLocaleString()} off`}
+                                      ? `flat ${formatPHP(voucher.value)}`
+                                      : `${formatPHP(voucher.value)} off`}
                                   )
                                 </span>
                                 <AnimeCounter
