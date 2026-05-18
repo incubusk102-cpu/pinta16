@@ -272,10 +272,7 @@ const validateOrderPrices = async ({ event, items, shipping, discount }) => {
   }
 
   const safeShipping = Math.max(0, Number(shipping) || 0);
-  const safeDiscount = Math.min(
-    Math.max(0, Number(discount) || 0),
-    subtotal,
-  );
+  const safeDiscount = Math.min(Math.max(0, Number(discount) || 0), subtotal);
   const total = Math.max(0, subtotal - safeDiscount + safeShipping);
   return {
     items: validatedItems,
@@ -284,6 +281,29 @@ const validateOrderPrices = async ({ event, items, shipping, discount }) => {
     discount: safeDiscount,
     total,
   };
+};
+
+// Server-side shipping-fee lookup mirroring `getShippingFee()` in
+// `src/lib/shipment.ts`. Resolves the admin-configured per-courier ×
+// per-zone fee from the `shippingRates` table in storefront config.
+// Returns `null` when the table has no matching entry so the caller
+// can decide whether to reject or fall back.
+const SHIPPING_ZONE_KEYS_SET = new Set([
+  "metro_manila",
+  "luzon",
+  "visayas",
+  "mindanao",
+]);
+const lookupShippingFee = (rates, courierId, zone) => {
+  if (!Array.isArray(rates) || !courierId || !zone) return null;
+  if (!SHIPPING_ZONE_KEYS_SET.has(zone)) return null;
+  const norm = courierId.trim().toLowerCase();
+  const row = rates.find((r) => r.courierId?.toLowerCase() === norm);
+  if (!row || !row.fees) return null;
+  const fee = row.fees[zone];
+  return typeof fee === "number" && Number.isFinite(fee) && fee >= 0
+    ? Math.floor(fee)
+    : null;
 };
 
 // Build the auto-rotating "daily feature" promo for the current UTC day.
@@ -1470,6 +1490,10 @@ export const handler = async (event) => {
             error: priceErr?.message || "Could not validate order pricing",
           });
         }
+        // Read storefront config once — used by both the promo
+        // pipeline and the server-side shipping-fee lookup below.
+        const serverConfig = await readStorefrontConfigDirect(event);
+
         // Server-side promo validation: only honor a voucher if it's still
         // eligible AND the client-supplied discount matches what the code
         // would actually grant. Otherwise drop the code so a malicious client
@@ -1482,8 +1506,7 @@ export const handler = async (event) => {
             : "";
         const clientDiscount = Number(order.discount) || 0;
         if (clientVoucher) {
-          const config = await readStorefrontConfigDirect(event);
-          const promo = findEligiblePromo(config, clientVoucher);
+          const promo = findEligiblePromo(serverConfig, clientVoucher);
           if (promo) {
             // Promo math uses the server-recomputed subtotal so a
             // tampered client subtotal can't inflate the discount.
@@ -1521,15 +1544,50 @@ export const handler = async (event) => {
           }
         }
 
-        // Derive the final money fields from the validated pricing
-        // pipeline. Shipping is intentionally accepted as-is from the
-        // client (the user-facing checklist scopes the server-side
-        // validation to line-item prices); we still clamp it
-        // non-negative + Number() so a malformed payload can't poison
-        // the math. `serverTotal` rebuilds the persisted total from
-        // the server-rebuilt subtotal so a tampered cart cannot
-        // dictate what it pays.
-        const safeShippingFee = Math.max(0, Number(order.shippingFee) || 0);
+        // Server-authoritative shipping fee. When the storefront has
+        // per-courier × per-zone rates configured AND the order carries
+        // a valid courier + shippingZone, re-derive the fee from the
+        // config table so a tampered `shippingFee: 0` payload can't
+        // bypass courier charges. Falls back to the client-submitted
+        // fee only when the rates table has no match (legacy orders,
+        // Lalamove, or admin-created orders without a courier pick).
+        const serverShippingRates = Array.isArray(serverConfig?.shippingRates)
+          ? serverConfig.shippingRates
+          : [];
+        const orderCourier =
+          typeof info.courier === "string" ? info.courier.trim() : "";
+        const orderZone =
+          typeof info.shippingZone === "string" ? info.shippingZone.trim() : "";
+        let safeShippingFee;
+        if (orderCourier && orderZone && serverShippingRates.length > 0) {
+          const looked = lookupShippingFee(
+            serverShippingRates,
+            orderCourier,
+            orderZone,
+          );
+          safeShippingFee =
+            looked != null
+              ? looked
+              : Math.max(0, Number(order.shippingFee) || 0);
+        } else {
+          safeShippingFee = Math.max(0, Number(order.shippingFee) || 0);
+        }
+        // Free-shipping overrides: if the order qualified for free
+        // shipping (threshold-based or promo-granted), zero the fee.
+        const thresholdFreeShip =
+          serverConfig?.freeShipping?.enabled &&
+          typeof serverConfig.freeShipping.threshold === "number" &&
+          serverSubtotal >= serverConfig.freeShipping.threshold;
+        const validatedGrantsFreeShip =
+          validatedVoucherCode && clientVoucher
+            ? (() => {
+                const p = findEligiblePromo(serverConfig, clientVoucher);
+                return promoGrantsFreeShipping(p);
+              })()
+            : false;
+        if (thresholdFreeShip || validatedGrantsFreeShip) {
+          safeShippingFee = 0;
+        }
         const serverTotal = Math.max(
           0,
           serverSubtotal - validatedDiscount + safeShippingFee,
@@ -1601,6 +1659,7 @@ export const handler = async (event) => {
           // tampered cart can no longer dictate what it pays.
           subtotal: serverSubtotal,
           shippingFee: safeShippingFee,
+          freeShipping: thresholdFreeShip || validatedGrantsFreeShip,
           discount: validatedDiscount,
           total: serverTotal,
           estimatedCreationDays: String(
@@ -1677,7 +1736,7 @@ export const handler = async (event) => {
         } catch (e) {
           logWarn("D1 mirror failed (place):", e);
         }
-        if (safeOrder.voucherCode && safeOrder.discount > 0) {
+        if (safeOrder.voucherCode) {
           await incrementPromoUsage(event, safeOrder.voucherCode);
           // Mirror this redemption into D1 so the per-customer cap query
           // above stays accurate and the admin "top codes" report has

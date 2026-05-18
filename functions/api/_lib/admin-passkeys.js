@@ -93,6 +93,12 @@ const getRpid = (event) => {
   return "";
 };
 
+const requireRpid = (event) => {
+  const rpID = getRpid(event);
+  if (!rpID) throw new Error("Untrusted origin");
+  return rpID;
+};
+
 const getExpectedOrigin = (event) => {
   // Some clients (Safari) send a synthetic origin for installed PWAs
   // (e.g. `https://canvhub.com` even for a `localhost` deploy). Prefer
@@ -194,7 +200,7 @@ const consumeChallenge = async (store, nonce, expectedPurpose) => {
 const ADMIN_USER_HANDLE = new TextEncoder().encode("canvhub-admin");
 
 export const beginRegistration = async ({ store, event, existing }) => {
-  const rpID = getRpid(event);
+  const rpID = requireRpid(event);
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID,
@@ -228,7 +234,7 @@ export const finishRegistration = async ({
   response,
   name,
 }) => {
-  const rpID = getRpid(event);
+  const rpID = requireRpid(event);
   const expectedOrigin = getExpectedOrigin(event);
   const challenge = await consumeChallenge(store, challengeId, "register");
   if (!challenge) {
@@ -282,7 +288,7 @@ export const beginAuthentication = async ({
   event,
   allowCredentials,
 }) => {
-  const rpID = getRpid(event);
+  const rpID = requireRpid(event);
   const options = await generateAuthenticationOptions({
     rpID,
     allowCredentials: (allowCredentials || []).map((c) => ({
@@ -305,7 +311,7 @@ export const finishAuthentication = async ({
   challengeId,
   response,
 }) => {
-  const rpID = getRpid(event);
+  const rpID = requireRpid(event);
   const expectedOrigin = getExpectedOrigin(event);
   const challenge = await consumeChallenge(store, challengeId, "login");
   if (!challenge) {
