@@ -45,6 +45,12 @@ boot("router:created");
 
 installChunkReloadHandler();
 initObservability();
+// Fire-and-forget: `initAdSense` resolves to a no-op when
+// `VITE_ADSENSE_PUBLISHER_ID` is unset, so the loader stays silent on
+// local builds and on any deploy that hasn't been configured in
+// Cloudflare Pages env yet. The empty-string argument is the unused
+// fallback — `initAdSense` reads the env var first.
+void initAdSense("");
 registerPwa();
 boot("services:initialised");
 
