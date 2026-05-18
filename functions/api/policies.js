@@ -123,8 +123,8 @@ your order if the artwork:
 - Has a **material defect** that was not disclosed at checkout; or
 - Was **misrepresented** in the listing in any other significant way.
 
-Custom and made-to-order commissions are non-refundable once production has
-begun, except where any of the issues above apply.
+Made-to-order paintings are non-refundable once production has begun, except
+where any of the issues above apply.
 
 ## How to request
 1. Open your account at **/account → Orders** and click "Request Refund" on the
@@ -146,9 +146,9 @@ If you'd prefer an exchange instead of a refund, just say so in your request
 and we'll honour any difference in price or arrange replacement shipping.
 
 ## Cancellations
-You may cancel an order **before** we ship it (or, for commissions, before
-production begins) for a full refund. After that point, the eligibility rules
-above apply.
+You may cancel an order **before** we ship it (or before production begins
+on a made-to-order painting) for a full refund. After that point, the
+eligibility rules above apply.
 
 ## DTI complaint
 If we cannot reach a resolution you find satisfactory, you may contact the
@@ -177,7 +177,7 @@ and any duties.
   payment.
 - **Made-to-order paintings:** typically **7–14 business days** of cleared
   payment before dispatch.
-- **Large or commissioned works:** **3–4 weeks** or as agreed in writing.
+- **Large or oversized canvases:** **3–4 weeks** or as agreed in writing.
 
 We'll always confirm the expected timeline in your order confirmation. Delays
 caused by force majeure (typhoons, courier outages, customs inspections) are

@@ -381,7 +381,7 @@ const buildSystemPrompt = ({
 
   const guardrails = [
     "Ground every answer in the Shop FAQ and the active artworks list below.",
-    "If the customer asks about pricing, shipping, payment, returns, sizing, custom commissions, or stock, answer using the data provided — never invent numbers.",
+    "If the customer asks about pricing, shipping, payment, returns, sizing, or stock, answer using the data provided — never invent numbers.",
     "Never invent product titles, prices, promo codes, or shipping fees not present in the data.",
     "Never collect or echo back credit-card numbers, passwords, or OTPs.",
     "Currency is Philippine Peso (PHP). Format numbers as PHP 1,234.",

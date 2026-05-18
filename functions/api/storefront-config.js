@@ -92,13 +92,13 @@ const DEFAULT_CHAT_FAQS = [
     id: "sizing",
     question: "Sizing & dimensions",
     answer:
-      "Each artwork's detail page lists the exact width \u00d7 height in inches and centimeters. Need a custom size? Tap 'Custom orders' below or talk to a live agent.",
+      "Each artwork's detail page lists the exact width \u00d7 height in inches and centimeters. If you need help choosing a size for a specific wall, tap 'Talk to a live agent' and we'll walk through it with you.",
   },
   {
-    id: "custom",
-    question: "Custom orders",
+    id: "originals",
+    question: "Are these originals?",
     answer:
-      "Yes, we take commissioned pieces! Tap 'Talk to a live agent' and share the subject, preferred size, color palette, and deadline. We'll reply with a quote and timeline.",
+      "Every painting in the catalogue is an original, hand-painted canvas \u2014 no prints, no reproductions, no customisation. Each piece is one-of-a-kind and ships with a signed certificate of authenticity from the artist.",
   },
   {
     id: "authenticity",
@@ -1259,11 +1259,6 @@ const DEFAULT_CONFIG = {
       id: "awb",
       label: "Tracking number",
       body: "Quick update: your AWB is {AWB}. You can track it on the courier's website. Reach out if anything looks off.",
-    },
-    {
-      id: "commission",
-      label: "Custom commission acknowledged",
-      body: "Got your commission request — really excited to take this on. I'll be in touch with sketches in 5–7 days, and the finished piece usually takes 2–3 weeks from your sign-off. Thank you so much.",
     },
     {
       id: "delay",
