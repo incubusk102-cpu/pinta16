@@ -22,8 +22,8 @@ const LazyHumidity = lazy(
   () => import("@/components/resources/HumidityArticle"),
 );
 const LazyBuying = lazy(() => import("@/components/resources/BuyingArticle"));
-const LazyCommissioning = lazy(
-  () => import("@/components/resources/CommissioningArticle"),
+const LazyRoomPairing = lazy(
+  () => import("@/components/resources/RoomPairingArticle"),
 );
 
 const ARTICLE_SLUGS = [
@@ -32,7 +32,7 @@ const ARTICLE_SLUGS = [
   "hanging-art-gallery-style",
   "humidity-and-storage",
   "buying-art-as-investment",
-  "commissioning-custom-painting",
+  "choosing-art-for-every-room",
 ] as const;
 
 type ArticleSlug = (typeof ARTICLE_SLUGS)[number];
@@ -72,10 +72,10 @@ const ARTICLE_META: Record<
     description:
       "Primary-market provenance, certificates of authenticity, secondary-market liquidity, the Filipino auction landscape, and the case for buying what you love first.",
   },
-  "commissioning-custom-painting": {
-    title: "How to commission a custom painting — Canvas Hub",
+  "choosing-art-for-every-room": {
+    title: "Choosing the right painting for every room — Canvas Hub",
     description:
-      "A collector's playbook for commissioning original work: briefing the artist, milestones and deposits, scope changes, photographing reference material, and a sample contract you can adapt.",
+      "A room-by-room playbook for decorating with original, hand-painted canvas: how to size the piece, what subject and palette pair best with each space, and the small placement details that decide whether a painting feels like a focal point or background noise.",
   },
 };
 
@@ -137,8 +137,8 @@ function renderArticle(slug: ArticleSlug) {
       return <LazyHumidity />;
     case "buying-art-as-investment":
       return <LazyBuying />;
-    case "commissioning-custom-painting":
-      return <LazyCommissioning />;
+    case "choosing-art-for-every-room":
+      return <LazyRoomPairing />;
   }
 }
 

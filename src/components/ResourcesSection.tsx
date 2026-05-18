@@ -204,8 +204,8 @@ const ResourcesSection = () => {
           by the artist, a clear photograph of the back of the stretched canvas,
           and a sale receipt with the artist's full name and the title and year
           of the work are the minimum. Provenance — the chain of past owners —
-          matters less for a new commission but becomes important the moment a
-          piece enters the secondary market.
+          matters less for a piece bought new from the artist or gallery but
+          becomes important the moment a piece enters the secondary market.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           When buying directly from a working artist, ask about materials. A
