@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { CANVHUB_PUBLISHER_ID } from "@/lib/adsense";
 
 // Module-level type augmentation so `window.adsbygoogle.push({})` is
 // strictly typed (no `any`, no `as unknown as`). The AdSense loader
@@ -34,13 +35,18 @@ const MIN_HEIGHT_BY_FORMAT: Record<AdFormat, string> = {
 };
 
 // Publisher ID is sourced from the same Vite env var as the loader in
-// `src/lib/adsense.ts`. Reading it here (instead of threading it
-// through props) keeps `<AdUnit>` self-contained: the consumer only
-// needs to know the slot ID + desired format, not the publisher's
-// account identifier.
-const PUBLISHER_ID = import.meta.env.VITE_ADSENSE_PUBLISHER_ID as
+// `src/lib/adsense.ts`, falling back to the canvhub.com publisher ID
+// in production builds so `<ins data-ad-client>` stays valid even when
+// the env var isn't set in Cloudflare Pages. Reading it here (instead
+// of threading it through props) keeps `<AdUnit>` self-contained: the
+// consumer only needs to know the slot ID + desired format, not the
+// publisher's account identifier.
+const PUBLISHER_ID_FROM_ENV = import.meta.env.VITE_ADSENSE_PUBLISHER_ID as
   | string
   | undefined;
+const PUBLISHER_ID =
+  PUBLISHER_ID_FROM_ENV ||
+  (import.meta.env.PROD ? CANVHUB_PUBLISHER_ID : undefined);
 
 /**
  * Single AdSense placement.

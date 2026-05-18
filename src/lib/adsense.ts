@@ -28,6 +28,22 @@ const PUBLISHER_ID_FROM_ENV = import.meta.env.VITE_ADSENSE_PUBLISHER_ID as
   | string
   | undefined;
 
+/**
+ * Hardcoded canvhub.com AdSense publisher ID. Used as the production
+ * fallback when `VITE_ADSENSE_PUBLISHER_ID` isn't set in Cloudflare
+ * Pages env, so the loader still fires and AdSense's "AdSense code
+ * snippet" site-verification check succeeds. Mirrors the value in
+ * `public/ads.txt`. Public-by-design — every `adsbygoogle.js` request
+ * embeds it as `?client=...`, so committing it to the bundle is safe.
+ *
+ * Gated on `import.meta.env.PROD` so local dev still gets the no-op
+ * behaviour when the env var isn't set (no test creatives fetched from
+ * `localhost`, no invalid-traffic risk).
+ */
+export const CANVHUB_PUBLISHER_ID = "ca-pub-9515675511750447";
+
+const DEFAULT_PUBLISHER_ID = import.meta.env.PROD ? CANVHUB_PUBLISHER_ID : "";
+
 let inflight: Promise<void> | null = null;
 
 /**
@@ -51,7 +67,7 @@ let inflight: Promise<void> | null = null;
 export const initAdSense = (publisherId: string): Promise<void> => {
   if (typeof document === "undefined") return Promise.resolve();
 
-  const client = PUBLISHER_ID_FROM_ENV || publisherId;
+  const client = PUBLISHER_ID_FROM_ENV || publisherId || DEFAULT_PUBLISHER_ID;
   if (!client) return Promise.resolve();
 
   // Idempotent: if the script is already on the page (e.g. HMR, a
