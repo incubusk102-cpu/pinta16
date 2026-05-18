@@ -1,12 +1,35 @@
 import { Link } from "@tanstack/react-router";
-import {
-  Facebook,
-  Instagram,
-  Mail,
-  MapPin,
-  Package,
-  Phone,
-} from "lucide-react";
+import { Mail, MapPin, Package, Phone } from "lucide-react";
+
+// Brand glyphs are inline SVGs rather than `lucide-react` icons because
+// `lucide-react@^1` dropped all brand-trademarked icons (Facebook,
+// Instagram, TikTok, …). Matches the existing TikTok glyph pattern.
+const FacebookGlyph = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className="w-4 h-4"
+    aria-hidden="true"
+  >
+    <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z" />
+  </svg>
+);
+const InstagramGlyph = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="w-4 h-4"
+    aria-hidden="true"
+  >
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
 import { useLocale } from "@/contexts/LocaleContext";
 import {
   POLICY_SLUGS,
@@ -75,7 +98,7 @@ const SiteFooter = () => {
                 aria-label="Facebook"
                 className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
               >
-                <Facebook className="w-4 h-4" />
+                <FacebookGlyph />
               </a>
             )}
             {INSTAGRAM_URL && (
@@ -86,7 +109,7 @@ const SiteFooter = () => {
                 aria-label="Instagram"
                 className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
               >
-                <Instagram className="w-4 h-4" />
+                <InstagramGlyph />
               </a>
             )}
             {TIKTOK_URL && (
