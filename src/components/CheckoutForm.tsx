@@ -812,6 +812,17 @@ const CheckoutForm = () => {
   // between what PayMongo charged and what the order record carries.
   const formLocked = isCreatingPayment || showPayment;
 
+  // Warn users about losing payment progress when they try to close
+  // or navigate away from the tab during an active payment flow.
+  useEffect(() => {
+    if (!formLocked) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [formLocked]);
+
   const handlePaymentSuccess = () => {
     setShowPayment(false);
     // Cascading PSGC picker collects Province → City → Barangay as
@@ -1164,7 +1175,11 @@ const CheckoutForm = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowCheckout(false)}
+              onClick={() => {
+                if (!isCreatingPayment && !showPayment) {
+                  setShowCheckout(false);
+                }
+              }}
               className="fixed inset-0 z-[90] bg-background/60 backdrop-blur-sm"
               aria-hidden="true"
             />
@@ -1541,6 +1556,12 @@ const CheckoutForm = () => {
                                                 touched.province &&
                                                 !!errors.province
                                               }
+                                              aria-describedby={
+                                                touched.province &&
+                                                errors.province
+                                                  ? "checkout-province-error"
+                                                  : undefined
+                                              }
                                               className="h-10 bg-background border-foreground/25 hover:border-foreground/50 text-foreground font-body text-sm rounded-sm"
                                             >
                                               <SelectValue placeholder="Select your province" />
@@ -1601,6 +1622,11 @@ const CheckoutForm = () => {
                                               aria-invalid={
                                                 touched.city && !!errors.city
                                               }
+                                              aria-describedby={
+                                                touched.city && errors.city
+                                                  ? "checkout-city-error"
+                                                  : undefined
+                                              }
                                               className="h-10 bg-background border-foreground/25 hover:border-foreground/50 text-foreground font-body text-sm rounded-sm"
                                             >
                                               <SelectValue
@@ -1651,6 +1677,12 @@ const CheckoutForm = () => {
                                               aria-invalid={
                                                 touched.barangay &&
                                                 !!errors.barangay
+                                              }
+                                              aria-describedby={
+                                                touched.barangay &&
+                                                errors.barangay
+                                                  ? "checkout-barangay-error"
+                                                  : undefined
                                               }
                                               className="h-10 bg-background border-foreground/25 hover:border-foreground/50 text-foreground font-body text-sm rounded-sm"
                                             >
@@ -1709,6 +1741,11 @@ const CheckoutForm = () => {
                                               touched.address &&
                                               !!errors.address
                                             }
+                                            aria-describedby={
+                                              touched.address && errors.address
+                                                ? "checkout-address-error"
+                                                : undefined
+                                            }
                                             className="w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                                           />
                                         </div>
@@ -1744,6 +1781,12 @@ const CheckoutForm = () => {
                                               touched.postalCode &&
                                               !!errors.postalCode
                                             }
+                                            aria-describedby={
+                                              touched.postalCode &&
+                                              errors.postalCode
+                                                ? "checkout-postalCode-error"
+                                                : undefined
+                                            }
                                             className={`w-full px-3 py-2 bg-background border ${
                                               touched.postalCode &&
                                               errors.postalCode
@@ -1753,27 +1796,57 @@ const CheckoutForm = () => {
                                           />
                                           {touched.postalCode &&
                                             errors.postalCode && (
-                                              <p className="font-body text-[10px] text-destructive mt-1">
+                                              <p
+                                                id="checkout-postalCode-error"
+                                                className="font-body text-[10px] text-destructive mt-1"
+                                              >
                                                 {errors.postalCode}
                                               </p>
                                             )}
                                         </div>
                                       </div>
                                     </fieldset>
-                                    {[
-                                      touched.province && errors.province,
-                                      touched.city && errors.city,
-                                      touched.barangay && errors.barangay,
-                                      touched.address && errors.address,
-                                    ]
-                                      .filter(Boolean)
-                                      .slice(0, 1)
-                                      .map((msg, i) => (
+                                    {(
+                                      [
+                                        {
+                                          id: "checkout-province-error",
+                                          msg:
+                                            touched.province && errors.province,
+                                        },
+                                        {
+                                          id: "checkout-city-error",
+                                          msg: touched.city && errors.city,
+                                        },
+                                        {
+                                          id: "checkout-barangay-error",
+                                          msg:
+                                            touched.barangay && errors.barangay,
+                                        },
+                                        {
+                                          id: "checkout-address-error",
+                                          msg:
+                                            touched.address && errors.address,
+                                        },
+                                      ] as {
+                                        id: string;
+                                        msg: string | false | undefined;
+                                      }[]
+                                    )
+                                      .filter(
+                                        (
+                                          e,
+                                        ): e is {
+                                          id: string;
+                                          msg: string;
+                                        } => Boolean(e.msg),
+                                      )
+                                      .map((e) => (
                                         <p
-                                          key={i}
-                                          className="font-body text-[10px] text-destructive mt-2"
+                                          key={e.id}
+                                          id={e.id}
+                                          className="font-body text-[10px] text-destructive mt-1"
                                         >
-                                          {msg}
+                                          {e.msg}
                                         </p>
                                       ))}
                                   </div>
@@ -2001,6 +2074,11 @@ const CheckoutForm = () => {
                                   aria-invalid={
                                     touched[key] && Boolean(errors[key])
                                   }
+                                  aria-describedby={
+                                    touched[key] && errors[key]
+                                      ? `checkout-${String(key)}-error`
+                                      : undefined
+                                  }
                                   className={`w-full px-3 py-2 bg-background border ${
                                     touched[key] && errors[key]
                                       ? "border-destructive/60"
@@ -2009,7 +2087,10 @@ const CheckoutForm = () => {
                                 />
                               )}
                               {touched[key] && errors[key] && (
-                                <p className="font-body text-[10px] text-destructive mt-1">
+                                <p
+                                  id={`checkout-${String(key)}-error`}
+                                  className="font-body text-[10px] text-destructive mt-1"
+                                >
                                   {errors[key]}
                                 </p>
                               )}

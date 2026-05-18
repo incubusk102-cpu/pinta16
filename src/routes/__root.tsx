@@ -35,6 +35,7 @@ import { useGoogleAuthHash } from "@/hooks/useGoogleAuthHash";
 import { usePageEventBeacon } from "@/hooks/usePageEventBeacon";
 import { captureReferralFromUrl } from "@/lib/referral";
 import { Toaster } from "@/components/ui/sonner";
+import RootErrorBoundary from "@/components/RootErrorBoundary";
 
 // Conditional UI — each of these renders nothing until a trigger fires
 // (returning-visitor toast, first-visit modal, PWA install prompt,
@@ -229,65 +230,70 @@ function RootComponent() {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <LocaleProvider>
-          <AdminAuthProvider>
-            <UserAuthProvider>
-              <WishlistProvider>
-                <StorefrontConfigProvider>
-                  <PoliciesProvider>
-                    <HeroSlidesProvider>
-                      <ProductProvider>
-                        <CartProvider>
-                          <CompareProvider>
-                            <FlyToCartProvider>
-                              <CommandPaletteProvider>
-                                <QuickSpinProvider>
-                                  <SmoothScrollProvider>
-                                    <a
-                                      href="#main-content"
-                                      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
-                                    >
-                                      Skip to content
-                                    </a>
-                                    <BootMountMark />
-                                    <HeartbeatBridge />
-                                    <ReferralCaptureBridge />
-                                    <GoogleAuthHashBridge />
-                                    <ConditionalAmbientChrome />
-                                    <ConditionalAnnouncementBar />
-                                    <PageTransitions>
-                                      <Outlet />
-                                    </PageTransitions>
-                                    <RouteWipeOverlay />
-                                    <ConditionalSiteFooter />
-                                    <Suspense fallback={null}>
-                                      <ConditionalOrderConfirmation />
-                                      <ChatWidget />
-                                      <NewUserModal />
-                                      <PwaPrompts />
-                                      <CommandPalette />
-                                    </Suspense>
-                                    <ConditionalVisitorDelight />
-                                    <ConditionalKeyboardShortcuts />
-                                    <CompareDrawer />
-                                    <Toaster richColors position="top-right" />
-                                  </SmoothScrollProvider>
-                                </QuickSpinProvider>
-                              </CommandPaletteProvider>
-                            </FlyToCartProvider>
-                          </CompareProvider>
-                        </CartProvider>
-                      </ProductProvider>
-                    </HeroSlidesProvider>
-                  </PoliciesProvider>
-                </StorefrontConfigProvider>
-              </WishlistProvider>
-            </UserAuthProvider>
-          </AdminAuthProvider>
-        </LocaleProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <RootErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <LocaleProvider>
+            <AdminAuthProvider>
+              <UserAuthProvider>
+                <WishlistProvider>
+                  <StorefrontConfigProvider>
+                    <PoliciesProvider>
+                      <HeroSlidesProvider>
+                        <ProductProvider>
+                          <CartProvider>
+                            <CompareProvider>
+                              <FlyToCartProvider>
+                                <CommandPaletteProvider>
+                                  <QuickSpinProvider>
+                                    <SmoothScrollProvider>
+                                      <a
+                                        href="#main-content"
+                                        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
+                                      >
+                                        Skip to content
+                                      </a>
+                                      <BootMountMark />
+                                      <HeartbeatBridge />
+                                      <ReferralCaptureBridge />
+                                      <GoogleAuthHashBridge />
+                                      <ConditionalAmbientChrome />
+                                      <ConditionalAnnouncementBar />
+                                      <PageTransitions>
+                                        <Outlet />
+                                      </PageTransitions>
+                                      <RouteWipeOverlay />
+                                      <ConditionalSiteFooter />
+                                      <Suspense fallback={null}>
+                                        <ConditionalOrderConfirmation />
+                                        <ChatWidget />
+                                        <NewUserModal />
+                                        <PwaPrompts />
+                                        <CommandPalette />
+                                      </Suspense>
+                                      <ConditionalVisitorDelight />
+                                      <ConditionalKeyboardShortcuts />
+                                      <CompareDrawer />
+                                      <Toaster
+                                        richColors
+                                        position="top-right"
+                                      />
+                                    </SmoothScrollProvider>
+                                  </QuickSpinProvider>
+                                </CommandPaletteProvider>
+                              </FlyToCartProvider>
+                            </CompareProvider>
+                          </CartProvider>
+                        </ProductProvider>
+                      </HeroSlidesProvider>
+                    </PoliciesProvider>
+                  </StorefrontConfigProvider>
+                </WishlistProvider>
+              </UserAuthProvider>
+            </AdminAuthProvider>
+          </LocaleProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </RootErrorBoundary>
   );
 }
