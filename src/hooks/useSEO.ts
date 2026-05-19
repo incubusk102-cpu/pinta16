@@ -119,8 +119,15 @@ export function useSEO(options: UseSEOOptions): void {
       canonicalPath ??
       (typeof window !== "undefined" ? window.location.pathname : "/");
     const canonical = `${origin}${path}`;
+    // Default og:image: a 1200x630 branded preview baked from the
+    // "new collection" hero template, sized to the OG card aspect.
+    // The previous default was the 512x512 PWA icon which Facebook
+    // and Twitter pad with letterboxing because it doesn't meet the
+    // 1200x630 OG spec. Product pages still override with their own
+    // painting image; this only affects /collection, /about, /resources,
+    // / etc.
     const fullImage = (() => {
-      const src = image || "/icon-512.png";
+      const src = image || "/og-default.webp";
       return src.startsWith("http") ? src : `${origin}${src}`;
     })();
     const ogTitle = socialTitle || title;
@@ -157,9 +164,20 @@ export function useSEO(options: UseSEOOptions): void {
       options.imageAlt || description,
     );
     upsertMeta('meta[property="og:locale"]', "content", "en_PH");
+    // Surface the Filipino content alternate so Facebook unfurlers
+    // know the site also serves a fil-PH translation. The bundle in
+    // src/locales/ swaps client-side based on the saved locale; the
+    // URL is the same single-page origin for both variants today.
+    upsertMeta('meta[property="og:locale:alternate"]', "content", "fil_PH");
 
     upsertMeta('meta[name="twitter:card"]', "content", "summary_large_image");
     upsertMeta('meta[name="twitter:site"]', "content", "@canvashubph");
+    // Same brand handle for `twitter:creator` — Canvas Hub posts under
+    // a single canonical account, so the page author and the site
+    // attribution are the same X / Twitter user. Splitting them out
+    // is still useful for crawlers that special-case `creator` to
+    // attribute the post on a card preview.
+    upsertMeta('meta[name="twitter:creator"]', "content", "@canvashubph");
     upsertMeta('meta[name="twitter:title"]', "content", ogTitle);
     upsertMeta('meta[name="twitter:description"]', "content", ogDescription);
     upsertMeta('meta[name="twitter:image"]', "content", fullImage);

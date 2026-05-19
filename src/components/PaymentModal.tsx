@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { checkPaymentStatus as checkPaymentStatusFn } from "@/utils/payment.functions";
 import { formatPHP } from "@/lib/format";
+import { useInertBackground } from "@/hooks/useInertBackground";
 
 interface PaymentModalProps {
   paymentIntentId: string;
@@ -52,6 +53,14 @@ const PaymentModal = ({
 }: PaymentModalProps) => {
   const [status, setStatus] = useState<PaymentStatus>("awaiting_payment");
   const [statusMessage, setStatusMessage] = useState("");
+  // PaymentModal is only ever rendered inside the CheckoutForm drawer
+  // once a payment intent exists, so its mounted lifetime is exactly
+  // the modal's open window. Marking the main page content as `inert`
+  // hides it from assistive technology and keyboard focus while the
+  // QR / status UI is showing on top. Ref-counts with the
+  // CheckoutForm's own inert lock so the page only becomes
+  // interactive again once every overlay closes.
+  useInertBackground(true);
   // Latest status in a ref so the polling loop can read it without
   // having to re-create itself on every state change (which would
   // reset the interval and double-poll).
@@ -302,6 +311,9 @@ const PaymentModal = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
           className="bg-card border border-border/20 rounded-sm max-w-md w-full p-8 relative"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Complete payment"
         >
           <button
             onClick={() => {

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { Frame } from "lucide-react";
 import GsapStaggerRail from "@/components/motion/GsapStaggerRail";
 import {
   getDiscountPercent,
@@ -71,7 +72,34 @@ export default function RelatedProducts({
     return [...top.map((x) => x.p), ...filler];
   }, [current, products, currentId, limit]);
 
-  if (related.length === 0) return null;
+  // Empty state: instead of silently returning null (which leaves a
+  // dead-end on the product page once the rest of the gallery is
+  // sold-out / filtered out), surface a soft "Browse the collection"
+  // CTA with a small framed-painting icon. Keeps the rail's vertical
+  // rhythm consistent and gives the visitor an obvious next click.
+  if (related.length === 0) {
+    return (
+      <section className="mt-16 border-t border-border/40 pt-10">
+        <h2 className="font-display text-2xl text-foreground mb-6">{title}</h2>
+        <div className="text-center py-8 px-4 max-w-md mx-auto">
+          <Frame
+            className="mx-auto w-10 h-10 text-muted-foreground/60"
+            aria-hidden="true"
+          />
+          <p className="mt-4 font-body text-sm text-muted-foreground">
+            No close matches yet — the rest of the gallery has plenty of other
+            pieces to discover.
+          </p>
+          <Link
+            to="/collection"
+            className="mt-6 inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
+          >
+            Browse the collection
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mt-16 border-t border-border/40 pt-10">
