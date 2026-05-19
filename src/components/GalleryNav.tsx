@@ -33,6 +33,8 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useCompare } from "@/contexts/CompareContext";
 import { useFlyToCart } from "@/contexts/FlyToCartContext";
+import { useInertBackground } from "@/hooks/useInertBackground";
+import { formatPHP } from "@/lib/format";
 import MiniCartHover from "@/components/MiniCartHover";
 import ThemeLocaleToggle from "@/components/ThemeLocaleToggle";
 import GoogleNavSignIn from "@/components/GoogleNavSignIn";
@@ -269,6 +271,11 @@ const GalleryNav = () => {
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
+  // While the side drawer is open, mark the main page content as
+  // `inert` so screen readers stop announcing the static page beneath
+  // it and Tab focus stays trapped inside the drawer.
+  useInertBackground(menuOpen);
+
   // Hover-to-open support. We pre-mount the drawer (see below) so opening
   // is instant on every page — no first-mount cost, no "blank" frame.
   // The drawer intentionally does NOT auto-close on mouse leave: once the
@@ -348,9 +355,27 @@ const GalleryNav = () => {
           ref={navInnerRef}
           className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 py-4 md:py-5 flex items-center justify-between gap-3"
         >
-          {/* Logo (mark + wordmark) — always on the left */}
-          <button
-            onClick={() => scrollTo("hero")}
+          {/* Logo (mark + wordmark) — always on the left. Rendered as a
+              real `<Link to="/">` rather than a `<button>` so the
+              storefront's brand mark is announced by assistive
+              technology as a primary site-home link, gets the
+              browser's native middle-click / cmd-click open-in-new-tab
+              affordance, and is recognised by TanStack Router for
+              prefetching the home route. On the homepage we still want
+              tapping the mark to smooth-scroll to the hero rather than
+              navigate, so the click handler short-circuits when
+              already on `/` and falls back to the standard `<Link>`
+              navigation everywhere else. */}
+          <Link
+            to="/"
+            onClick={(e) => {
+              if (onIndex) {
+                e.preventDefault();
+                scrollTo("hero");
+              } else {
+                closeMenu();
+              }
+            }}
             className="flex items-center gap-2 sm:gap-3 group shrink-0"
             aria-label="Canvas Hub — home"
           >
@@ -378,7 +403,7 @@ const GalleryNav = () => {
                 </text>
               </svg>
             </span>
-          </button>
+          </Link>
 
           {/* Right cluster: cart + hamburger. The hamburger opens the
             full drawer — transparent, non-modal, page underneath stays
@@ -436,11 +461,17 @@ const GalleryNav = () => {
                         : "bg-background/40 supports-[backdrop-filter]:bg-background/30 backdrop-blur-md ring-1 ring-border/30 shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-background/60"
                     }`}
                     aria-label={t("nav.cart")}
+                    aria-haspopup="true"
                   >
                     <ShoppingCart className="w-5 h-5 text-foreground" />
                     {itemCount > 0 && (
+                      // Live region announcing the cart count. Previously we
+                      // remounted this span on every count change via `key={itemCount}`,
+                      // which forced screen readers to re-announce the static label and
+                      // also defeated the framer-motion `cartPulse` animation (a fresh
+                      // node never "animates" from its initial state). Keeping the same
+                      // node lets the polite live region fire once per real change.
                       <motion.span
-                        key={itemCount}
                         initial={false}
                         animate={
                           cartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }
@@ -448,6 +479,7 @@ const GalleryNav = () => {
                         transition={{ duration: 0.45, ease: "easeOut" }}
                         className="absolute -top-1 -right-1 w-5 h-5 bg-foreground text-background text-[10px] font-body font-semibold rounded-full flex items-center justify-center motion-reduce:animate-none"
                         aria-live="polite"
+                        aria-atomic="true"
                       >
                         {itemCount}
                       </motion.span>
@@ -485,6 +517,7 @@ const GalleryNav = () => {
               aria-label="Open menu"
               aria-expanded={menuOpen}
               aria-controls="mobile-nav-drawer"
+              aria-haspopup="dialog"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -673,7 +706,7 @@ const GalleryNav = () => {
                                   </p>
                                 </div>
                                 <span className="text-xs font-semibold whitespace-nowrap text-foreground/90">
-                                  ₱{o.total.toLocaleString()}
+                                  {formatPHP(o.total)}
                                 </span>
                               </button>
                             </li>

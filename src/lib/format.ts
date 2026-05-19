@@ -2,6 +2,13 @@
 // Every storefront price display should go through `formatPHP` so the
 // site renders a consistent "₱1,200" shape everywhere — no bare
 // integers, no mismatched locale grouping.
+//
+// IMPORTANT: do NOT reach for `value.toLocaleString()` (with or
+// without a locale argument) to render PHP currency. The visitor's
+// browser locale leaks the wrong grouping separator on non-Western
+// systems and the result drifts from the rest of the site. Always
+// pipe peso amounts through `formatPHP()` — see also AGENTS.md
+// "Domain knowledge" § Currency is PHP.
 
 const phpFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",

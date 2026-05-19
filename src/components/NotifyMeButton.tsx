@@ -6,9 +6,18 @@ import { jsonAuthHeaders } from "@/lib/api";
 
 interface NotifyMeButtonProps {
   productId: string;
+  // Optional override for the button copy. The default reads as
+  // "Notify me when available", which fits a sold painting well
+  // enough. Reserved paintings are still in someone else's cart
+  // today but may free up — the product page passes a more accurate
+  // "Notify me if released" copy in that case.
+  label?: string;
 }
 
-export function NotifyMeButton({ productId }: NotifyMeButtonProps) {
+export function NotifyMeButton({
+  productId,
+  label = "Notify me when available",
+}: NotifyMeButtonProps) {
   const { user } = useUserAuth();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,7 +71,7 @@ export function NotifyMeButton({ productId }: NotifyMeButtonProps) {
         className="inline-flex items-center gap-2 px-6 py-3 border border-primary/30 bg-primary/5 text-primary font-body text-xs tracking-[0.2em] uppercase rounded-sm hover:bg-primary/10 transition-colors disabled:opacity-60"
       >
         <Bell className="w-4 h-4" />
-        {loading ? "Registering\u2026" : "Notify me when available"}
+        {loading ? "Registering\u2026" : label}
       </button>
     );
   }
@@ -75,7 +84,7 @@ export function NotifyMeButton({ productId }: NotifyMeButtonProps) {
         className="inline-flex items-center gap-2 px-6 py-3 border border-primary/30 bg-primary/5 text-primary font-body text-xs tracking-[0.2em] uppercase rounded-sm hover:bg-primary/10 transition-colors"
       >
         <Bell className="w-4 h-4" />
-        Notify me when available
+        {label}
       </button>
     );
   }

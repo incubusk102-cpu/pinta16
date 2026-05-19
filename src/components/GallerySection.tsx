@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { animate, stagger } from "animejs";
 import SplitText from "@/components/motion/SplitText";
-import { Link } from "@tanstack/react-router";
-import { Loader2, Search, SlidersHorizontal, X } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Loader2, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import ArtworkCard from "./ArtworkCard";
+import { ContentSkeleton } from "@/components/ui/ContentSkeleton";
 import Lightbox from "./Lightbox";
 import {
   getEffectivePrice,
@@ -216,6 +217,58 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
   const { config } = useStorefrontConfig();
   const galleryCopy = config.siteCopy.gallery;
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+
+  // Sync the active filter state back to the URL so the page is shareable
+  // and the browser's back/forward buttons restore the previous filter
+  // combination. Debounced at 300ms so a typist doesn't fire one
+  // history entry per keystroke. We `replace` rather than `push` because
+  // each keystroke would otherwise pollute the back-stack — the visitor
+  // wants `Back` to return them to the page that linked here, not to
+  // every intermediate filter snapshot.
+  //
+  // The first render reads its initial state from `initialSearch`
+  // (which already came from the URL via the route's validateSearch),
+  // so we skip the navigate on mount to avoid an immediate, redundant
+  // history rewrite.
+  const initialUrlSyncRef = useRef(true);
+  useEffect(() => {
+    if (initialUrlSyncRef.current) {
+      initialUrlSyncRef.current = false;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      const trimmed = query.trim();
+      void navigate({
+        to: "/collection",
+        replace: true,
+        search: {
+          q: trimmed.length > 0 ? trimmed : undefined,
+          sort: sortBy !== "featured" ? sortBy : undefined,
+          categories:
+            filterCategories.length > 0
+              ? filterCategories.join(",")
+              : undefined,
+          availability:
+            filterAvailabilities.length > 0
+              ? filterAvailabilities.join(",")
+              : undefined,
+          price:
+            filterPriceBuckets.length > 0
+              ? filterPriceBuckets.join(",")
+              : undefined,
+        },
+      });
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [
+    query,
+    sortBy,
+    filterCategories,
+    filterAvailabilities,
+    filterPriceBuckets,
+    navigate,
+  ]);
 
   // Map the UI's dropdown vocabulary to the server's sort keys. The
   // server doesn't have a `featured` notion — it's a synonym for
@@ -723,16 +776,59 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
         </Sheet>
       </div>
 
-      {totalMatches === 0 && !isLoadingFirstPage ? (
-        <div className="py-20 text-center">
-          <p className="font-body text-sm text-muted-foreground">
+      {isLoadingFirstPage && sortedArtworks.length === 0 ? (
+        // First-load placeholder: the paginated API hasn't returned
+        // yet AND the small bundled `defaultArtworks` prefix didn't
+        // match the active filters either, so the grid would otherwise
+        // pop in from a 0px slot. Render a card-shaped skeleton grid
+        // matching the eventual product layout (2 cols mobile → 4 cols
+        // desktop) so the page doesn't reflow when the data arrives.
+        <ContentSkeleton
+          variant="grid"
+          rows={8}
+          className=""
+          label="Loading paintings"
+        />
+      ) : totalMatches === 0 && !isLoadingFirstPage ? (
+        <div className="py-20 text-center max-w-md mx-auto px-4">
+          {/* Illustration: a slashed magnifying glass keeps the empty
+              state visually grounded so it doesn't read as a broken
+              page. Decorative — aria-hidden so the heading + filter
+              chips are still the AT-announced content. */}
+          <SearchX
+            className="mx-auto w-12 h-12 text-muted-foreground/60"
+            aria-hidden="true"
+          />
+          <p className="mt-6 font-display text-xl text-foreground">
             No paintings match your filters yet.
           </p>
+          {activePills.length > 0 && (
+            <>
+              <p className="mt-2 font-body text-xs tracking-[0.2em] uppercase text-muted-foreground">
+                Try removing one of these to widen the search:
+              </p>
+              <ul className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                {activePills.map((pill) => (
+                  <li key={`empty-${pill.key}`}>
+                    <button
+                      type="button"
+                      onClick={pill.remove}
+                      className="inline-flex items-center gap-1.5 font-body text-[11px] tracking-[0.15em] uppercase text-foreground border border-border/60 rounded-full px-3 py-1.5 hover:bg-accent transition-colors"
+                      aria-label={`Remove filter ${pill.label}`}
+                    >
+                      {pill.label}
+                      <X className="w-3 h-3" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {hasAnyConstraint && (
             <button
               type="button"
               onClick={clearEverything}
-              className="mt-4 font-body text-xs tracking-[0.25em] uppercase text-foreground underline underline-offset-4"
+              className="mt-6 font-body text-xs tracking-[0.25em] uppercase text-foreground underline underline-offset-4"
             >
               Clear all
             </button>

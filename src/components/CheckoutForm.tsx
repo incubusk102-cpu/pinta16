@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import gsap from "gsap";
 import { toast } from "sonner";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { useInertBackground } from "@/hooks/useInertBackground";
 import {
   X,
   ArrowLeft,
@@ -242,6 +243,12 @@ const CheckoutForm = () => {
   // Body scroll lock + ESC-to-close so the page underneath doesn't
   // drift on mobile and keyboard users can dismiss the drawer.
   useBodyScrollLock(showCheckout);
+  // While the checkout drawer is open, mark the main page content as
+  // `inert` so assistive technology stops announcing the static page
+  // behind the overlay and keyboard focus stays trapped inside the
+  // drawer. Ref-counts with the nested PaymentModal so the page only
+  // becomes interactive again once every overlay closes.
+  useInertBackground(showCheckout);
   // Wrapper around the form body. When the side panel slides in, we
   // run a GSAP stagger across each `data-checkout-field` row so the
   // form reads as a brief cascade rather than an instant wall of

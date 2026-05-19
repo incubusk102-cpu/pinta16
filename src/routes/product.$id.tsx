@@ -25,7 +25,6 @@ import SimilarPaintingsRail from "@/components/SimilarPaintingsRail";
 import ReviewPhotoLightbox, {
   type ReviewPhotoView,
 } from "@/components/ReviewPhotoLightbox";
-import ZoomableImage from "@/components/ZoomableImage";
 import StickyMobileBuyBar from "@/components/StickyMobileBuyBar";
 import ImageWithFallback from "@/components/ImageWithFallback";
 import MagneticButton from "@/components/MagneticButton";
@@ -54,7 +53,15 @@ import {
 } from "@/lib/artworks";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
 import { useSEO } from "@/hooks/useSEO";
-import { formatPHP } from "@/lib/format";
+import { formatDatePHT, formatPHP } from "@/lib/format";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import StorefrontErrorBoundary from "@/components/StorefrontErrorBoundary";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -120,8 +127,7 @@ export const Route = createFileRoute("/product/$id")({
         { title },
         {
           name: "description",
-          content:
-            "View painting details, photos, and pricing on Canvas Hub.",
+          content: "View painting details, photos, and pricing on Canvas Hub.",
         },
         { name: "robots", content: "index, follow" },
         { property: "og:title", content: title },
@@ -430,6 +436,51 @@ function ProductPage() {
     return JSON.stringify(data).replace(/</g, "\\u003c");
   }, [artwork, ratingStats]);
 
+  // BreadcrumbList JSON-LD mirrors the visible <Breadcrumb> trail
+  // above so Google can render the structured "Home > Collection >
+  // [Category] > Title" path on the SERP card instead of the raw
+  // URL slug. The visible breadcrumb and this block always have to
+  // agree, so we derive both from the same `artwork.category`.
+  const breadcrumbJsonLd = useMemo(() => {
+    if (!artwork) return null;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const items: Array<Record<string, unknown>> = [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: `${origin}/`,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Collection",
+        item: `${origin}/collection`,
+      },
+    ];
+    if (artwork.category) {
+      items.push({
+        "@type": "ListItem",
+        position: items.length + 1,
+        name: artwork.category,
+        item: `${origin}/collection?categories=${encodeURIComponent(
+          artwork.category,
+        )}`,
+      });
+    }
+    items.push({
+      "@type": "ListItem",
+      position: items.length + 1,
+      name: artwork.title,
+    });
+    const data = {
+      "@context": "https://schema.org/",
+      "@type": "BreadcrumbList",
+      itemListElement: items,
+    };
+    return JSON.stringify(data).replace(/</g, "\\u003c");
+  }, [artwork]);
+
   if (!artwork) {
     // While the first /api/products fetch is still in flight (e.g. a
     // deep-linked product page on a phone with an empty local cache),
@@ -590,53 +641,112 @@ function ProductPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd }}
       />
+      {breadcrumbJsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: breadcrumbJsonLd }}
+        />
+      ) : null}
       <GalleryNav />
       <main
         id="main-content"
         className="flex-1 pt-24 md:pt-32 pb-20 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full"
       >
         <StorefrontErrorBoundary surface={`product-${id}`}>
-        <div className="mb-6">
-          <Link
-            to="/collection"
-            className="inline-flex items-center gap-2 font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to gallery
-          </Link>
-        </div>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="grid lg:grid-cols-[1.2fr_1fr] gap-8 md:gap-10 lg:gap-16"
-        >
-          <section className="space-y-4">
-            <div
-              ref={heroFrameRef}
-              className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame holo-frame"
-            >
-              {isVideoActive && productVideo ? (
-                <>
-                <div className="w-full bg-black flex items-center justify-center">
-                  <video
-                    key={productVideo.url}
-                    src={productVideo.url}
-                    poster={productVideo.posterUrl || currentImage.url}
-                    controls
-                    autoPlay
-                    playsInline
-                    preload="metadata"
-                    className="w-full h-auto max-h-[70vh]"
-                    aria-label={`${artwork.title} — studio video`}
+          {/* Breadcrumb trail: Home → Collection → [Category if present]
+            → Product title. Renders the structured trail visibly for
+            shoppers (especially on deep-linked landings where they
+            don't have a clean back stack) AND emits a
+            BreadcrumbList JSON-LD schema block below so Google can
+            show the trail on the SERP card instead of a bare URL. */}
+          <Breadcrumb className="mb-4">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link
+                    to="/"
+                    className="font-body text-xs tracking-[0.2em] uppercase"
                   >
-                    {productVideo.mimeType ? (
-                      <source
+                    Home
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link
+                    to="/collection"
+                    className="font-body text-xs tracking-[0.2em] uppercase"
+                  >
+                    Collection
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              {artwork.category ? (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbLink asChild>
+                      <Link
+                        to="/collection"
+                        search={{ categories: artwork.category }}
+                        className="font-body text-xs tracking-[0.2em] uppercase"
+                      >
+                        {artwork.category}
+                      </Link>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                </>
+              ) : null}
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage className="font-body text-xs tracking-[0.2em] uppercase line-clamp-1 max-w-[55vw] sm:max-w-none">
+                  {artwork.title}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="mb-6">
+            <Link
+              to="/collection"
+              className="inline-flex items-center gap-2 font-body text-xs tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to gallery
+            </Link>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="grid lg:grid-cols-[1.2fr_1fr] gap-8 md:gap-10 lg:gap-16"
+          >
+            <section className="space-y-4">
+              <div
+                ref={heroFrameRef}
+                className="relative bg-card/30 border border-border/40 rounded-xl overflow-hidden gallery-frame holo-frame"
+              >
+                {isVideoActive && productVideo ? (
+                  <>
+                    <div className="w-full bg-black flex items-center justify-center">
+                      <video
+                        key={productVideo.url}
                         src={productVideo.url}
-                        type={productVideo.mimeType}
-                      />
-                    ) : null}
-                    {/* Accessibility: studio videos are short, ambient
+                        poster={productVideo.posterUrl || currentImage.url}
+                        controls
+                        autoPlay
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-auto max-h-[70vh]"
+                        aria-label={`${artwork.title} — studio video`}
+                      >
+                        {productVideo.mimeType ? (
+                          <source
+                            src={productVideo.url}
+                            type={productVideo.mimeType}
+                          />
+                        ) : null}
+                        {/* Accessibility: studio videos are short, ambient
                         clips of the artist working on the piece — they
                         carry no spoken dialogue, so there is no
                         verbatim caption file to ship. We attach an
@@ -646,394 +756,412 @@ function ProductPage() {
                         the video so screen-reader and low-bandwidth
                         users get the same context as visual
                         viewers. */}
-                    <track
-                      kind="descriptions"
-                      srcLang="en"
-                      label="Studio video description"
-                      src="data:text/vtt;charset=utf-8,WEBVTT%0A%0A"
-                      default
-                    />
-                  </video>
-                </div>
-                <p
-                  className="sr-only"
-                  aria-label={`${artwork.title} studio video description`}
-                >
-                  Short studio clip of {artwork.title} — a hand-crafted
-                  painting from Canvas Hub. The video has no spoken
-                  dialogue; it shows the artist working on the piece in
-                  the studio.
-                </p>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={openZoom}
-                  className="block w-full"
-                  aria-label="Zoom image"
-                >
-                  {(() => {
-                    // LCP element on the product detail page. Hero slot
-                    // is roughly 60 vw on desktop / 100 vw on mobile, so
-                    // `md` (800 w) covers most phones at retina DPR and
-                    // `lg` (1600 w) handles desktop and high-DPR phones.
-                    const heroAttrs = imgAttrs(
-                      currentImage,
-                      "(min-width: 1024px) 60vw, 100vw",
-                      "lg",
-                    );
-                    return (
-                      <ImageWithFallback
-                        key={currentImage.url}
-                        src={heroAttrs.src || currentImage.url}
-                        srcSet={heroAttrs.srcSet}
-                        sizes={heroAttrs.sizes}
-                        width={heroAttrs.width}
-                        height={heroAttrs.height}
-                        alt={`${artwork.title} – photo ${activeImage + 1}`}
-                        className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
-                        fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
-                        // Tell the browser to prioritize the LCP image
-                        // over off-screen gallery images and deferred
-                        // chunks.
-                        loading="eager"
-                        // Cast to bypass the older React DOM types that
-                        // don't know about the modern `fetchpriority`
-                        // attribute yet.
-                        {...({ fetchpriority: "high" } as Record<
-                          string,
-                          string
-                        >)}
-                      />
-                    );
-                  })()}
-                </button>
-              )}
-              {showAvailabilityBadge && (
-                <span
-                  className={`absolute top-4 left-4 px-3 py-1 font-body text-[10px] tracking-[0.3em] uppercase rounded-sm ${availabilityBadgeClass[artwork.availability]}`}
-                >
-                  {AVAILABILITY_LABEL[artwork.availability]}
-                </span>
-              )}
-              {discount > 0 && artwork.availability === "available" && (
-                <span className="absolute top-4 right-4 px-3 py-1 bg-red-600 text-white font-body text-[10px] tracking-[0.2em] uppercase rounded-sm">
-                  {discount}% OFF
-                </span>
-              )}
-              {/* Hero overlay buttons (On your wall / View in 3D /
+                        <track
+                          kind="descriptions"
+                          srcLang="en"
+                          label="Studio video description"
+                          src="data:text/vtt;charset=utf-8,WEBVTT%0A%0A"
+                          default
+                        />
+                      </video>
+                    </div>
+                    <p
+                      className="sr-only"
+                      aria-label={`${artwork.title} studio video description`}
+                    >
+                      Short studio clip of {artwork.title} — a hand-crafted
+                      painting from Canvas Hub. The video has no spoken
+                      dialogue; it shows the artist working on the piece in the
+                      studio.
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openZoom}
+                    className="block w-full"
+                    aria-label="Zoom image"
+                  >
+                    {(() => {
+                      // LCP element on the product detail page. Hero slot
+                      // is roughly 60 vw on desktop / 100 vw on mobile, so
+                      // `md` (800 w) covers most phones at retina DPR and
+                      // `lg` (1600 w) handles desktop and high-DPR phones.
+                      const heroAttrs = imgAttrs(
+                        currentImage,
+                        "(min-width: 1024px) 60vw, 100vw",
+                        "lg",
+                      );
+                      return (
+                        <ImageWithFallback
+                          key={currentImage.url}
+                          src={heroAttrs.src || currentImage.url}
+                          srcSet={heroAttrs.srcSet}
+                          sizes={heroAttrs.sizes}
+                          width={heroAttrs.width}
+                          height={heroAttrs.height}
+                          alt={`${artwork.title} – photo ${activeImage + 1}`}
+                          className="w-full h-auto max-h-[70vh] object-contain bg-black/5 cursor-zoom-in"
+                          fallbackClassName="w-full max-h-[70vh] aspect-[4/3] flex items-center justify-center bg-muted/30 border border-border/20 rounded-sm"
+                          // Tell the browser to prioritize the LCP image
+                          // over off-screen gallery images and deferred
+                          // chunks.
+                          loading="eager"
+                          // Cast to bypass the older React DOM types that
+                          // don't know about the modern `fetchpriority`
+                          // attribute yet.
+                          {...({ fetchpriority: "high" } as Record<
+                            string,
+                            string
+                          >)}
+                        />
+                      );
+                    })()}
+                  </button>
+                )}
+                {showAvailabilityBadge && (
+                  <span
+                    className={`absolute top-4 left-4 px-3 py-1 font-body text-[10px] tracking-[0.3em] uppercase rounded-sm ${availabilityBadgeClass[artwork.availability]}`}
+                  >
+                    {AVAILABILITY_LABEL[artwork.availability]}
+                  </span>
+                )}
+                {discount > 0 && artwork.availability === "available" && (
+                  <span className="absolute top-4 right-4 px-3 py-1 bg-red-600 text-white font-body text-[10px] tracking-[0.2em] uppercase rounded-sm">
+                    {discount}% OFF
+                  </span>
+                )}
+                {/* Hero overlay buttons (On your wall / View in 3D /
                   Zoom) only appear on the 1st photo. Mockups, detail
                   shots, and the studio-video tile stay view-only so
                   customers can study the alternate angles without UI
                   competing with the artwork. */}
-              {!isVideoActive && imageIndexForTile(activeImage) === 0 && (
-                <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewOnWall(true)}
-                    aria-label="View painting on your wall"
-                    title="View on your wall"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
-                  >
-                    <Frame className="w-4 h-4" />
-                    <span className="hidden sm:inline">On your wall</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={open3D}
-                    aria-label="View painting in 3D"
-                    title="View in 3D"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
-                  >
-                    <Box className="w-4 h-4" />
-                    <span className="hidden sm:inline">View in 3D</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openZoom}
-                    aria-label="Zoom image"
-                    className="p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
-                  >
-                    <ZoomIn className="w-4 h-4 text-foreground" />
-                  </button>
-                </div>
-              )}
+                {!isVideoActive && imageIndexForTile(activeImage) === 0 && (
+                  <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setViewOnWall(true)}
+                      aria-label="View painting on your wall"
+                      title="View on your wall"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+                    >
+                      <Frame className="w-4 h-4" />
+                      <span className="hidden sm:inline">On your wall</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={open3D}
+                      aria-label="View painting in 3D"
+                      title="View in 3D"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
+                    >
+                      <Box className="w-4 h-4" />
+                      <span className="hidden sm:inline">View in 3D</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openZoom}
+                      aria-label="Zoom image"
+                      className="p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
+                    >
+                      <ZoomIn className="w-4 h-4 text-foreground" />
+                    </button>
+                  </div>
+                )}
+                {totalGalleryItems > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handlePrev}
+                      aria-label="Previous photo"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-foreground" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      aria-label="Next photo"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
+                    >
+                      <ChevronRight className="w-4 h-4 text-foreground" />
+                    </button>
+                  </>
+                )}
+              </div>
               {totalGalleryItems > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handlePrev}
-                    aria-label="Previous photo"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
-                  >
-                    <ChevronLeft className="w-4 h-4 text-foreground" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    aria-label="Next photo"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90"
-                  >
-                    <ChevronRight className="w-4 h-4 text-foreground" />
-                  </button>
-                </>
-              )}
-            </div>
-            {totalGalleryItems > 1 && (
-              <div
-                ref={thumbStripRef}
-                className="flex gap-2 overflow-x-auto pb-1"
-              >
-                {Array.from({ length: totalGalleryItems }, (_, tileIdx) => {
-                  if (hasVideo && productVideo && tileIdx === videoTileIndex) {
+                <div
+                  ref={thumbStripRef}
+                  className="flex gap-2 overflow-x-auto pb-1"
+                >
+                  {Array.from({ length: totalGalleryItems }, (_, tileIdx) => {
+                    if (
+                      hasVideo &&
+                      productVideo &&
+                      tileIdx === videoTileIndex
+                    ) {
+                      return (
+                        <button
+                          key="__video-tile"
+                          type="button"
+                          data-thumb-tile
+                          onClick={() => setActiveImage(videoTileIndex)}
+                          aria-label="Play studio video"
+                          aria-current={isVideoActive}
+                          className={`relative flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all bg-black ${
+                            isVideoActive
+                              ? "border-foreground"
+                              : "border-transparent opacity-80 hover:opacity-100"
+                          }`}
+                        >
+                          {productVideo.posterUrl ? (
+                            <ImageWithFallback
+                              src={productVideo.posterUrl}
+                              alt={`${artwork.title} — studio video poster`}
+                              className="w-full h-full object-cover"
+                              fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <ImageWithFallback
+                              src={variantSrc(galleryImages[0], "sm")}
+                              alt={`${artwork.title} — studio video poster`}
+                              className="w-full h-full object-cover opacity-60"
+                              fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          )}
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                            <Play className="w-6 h-6 text-white drop-shadow" />
+                          </span>
+                        </button>
+                      );
+                    }
+                    const imgIdx = imageIndexForTile(tileIdx);
+                    const img = galleryImages[imgIdx];
+                    if (!img) return null;
                     return (
                       <button
-                        key="__video-tile"
+                        key={`${img.url}-${imgIdx}`}
                         type="button"
                         data-thumb-tile
-                        onClick={() => setActiveImage(videoTileIndex)}
-                        aria-label="Play studio video"
-                        aria-current={isVideoActive}
-                        className={`relative flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all bg-black ${
-                          isVideoActive
+                        onClick={() => setActiveImage(tileIdx)}
+                        aria-label={`Show photo ${imgIdx + 1}`}
+                        aria-current={tileIdx === activeImage}
+                        className={`flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all ${
+                          tileIdx === activeImage
                             ? "border-foreground"
-                            : "border-transparent opacity-80 hover:opacity-100"
+                            : "border-transparent opacity-70 hover:opacity-100"
                         }`}
                       >
-                        {productVideo.posterUrl ? (
-                          <ImageWithFallback
-                            src={productVideo.posterUrl}
-                            alt={`${artwork.title} — studio video poster`}
-                            className="w-full h-full object-cover"
-                            fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          <ImageWithFallback
-                            src={variantSrc(galleryImages[0], "sm")}
-                            alt={`${artwork.title} — studio video poster`}
-                            className="w-full h-full object-cover opacity-60"
-                            fallbackClassName="w-full h-full flex items-center justify-center bg-black/80"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        )}
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <Play className="w-6 h-6 text-white drop-shadow" />
-                        </span>
+                        <ImageWithFallback
+                          // Thumbnails are 80×80 — `sm` (400 w) covers
+                          // 4x DPR phones with bytes to spare.
+                          src={variantSrc(img, "sm")}
+                          alt={`${artwork.title} thumbnail ${imgIdx + 1}`}
+                          className="w-full h-full object-cover"
+                          fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
+                          loading="lazy"
+                          decoding="async"
+                          width={img.dims?.w}
+                          height={img.dims?.h}
+                        />
                       </button>
                     );
-                  }
-                  const imgIdx = imageIndexForTile(tileIdx);
-                  const img = galleryImages[imgIdx];
-                  if (!img) return null;
-                  return (
-                    <button
-                      key={`${img.url}-${imgIdx}`}
-                      type="button"
-                      data-thumb-tile
-                      onClick={() => setActiveImage(tileIdx)}
-                      aria-label={`Show photo ${imgIdx + 1}`}
-                      aria-current={tileIdx === activeImage}
-                      className={`flex-shrink-0 w-20 h-20 rounded-sm overflow-hidden border-2 transition-all ${
-                        tileIdx === activeImage
-                          ? "border-foreground"
-                          : "border-transparent opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <ImageWithFallback
-                        // Thumbnails are 80×80 — `sm` (400 w) covers
-                        // 4x DPR phones with bytes to spare.
-                        src={variantSrc(img, "sm")}
-                        alt={`${artwork.title} thumbnail ${imgIdx + 1}`}
-                        className="w-full h-full object-cover"
-                        fallbackClassName="w-full h-full flex items-center justify-center bg-muted/30"
-                        loading="lazy"
-                        decoding="async"
-                        width={img.dims?.w}
-                        height={img.dims?.h}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-6 lg:sticky lg:top-28 lg:self-start">
-            <div>
-              <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
-                {artwork.medium} · {artwork.year}
-                {artwork.category ? ` · ${artwork.category}` : ""}
-              </p>
-              <SplitText
-                as="h1"
-                by="word"
-                stagger={0.06}
-                duration={0.85}
-                yFrom={28}
-                className="font-display text-3xl md:text-4xl text-foreground mb-3"
-              >
-                {artwork.title}
-              </SplitText>
-              {artwork.dimensions && (
-                <p className="font-body text-xs tracking-[0.2em] uppercase text-muted-foreground">
-                  Dimensions · {artwork.dimensions}
-                </p>
+                  })}
+                </div>
               )}
-            </div>
+            </section>
 
-            <div className="font-body text-2xl md:text-3xl text-foreground font-semibold">
-              {discount > 0 ? (
-                <>
-                  <span className="line-through text-muted-foreground text-base mr-2">
-                    {formatPHP(artwork.price)}
-                  </span>
-                  <span>{formatPHP(effectivePrice)}</span>
-                  <span className="ml-2 text-sm text-red-500 font-semibold">
-                    {discount}% OFF
-                  </span>
-                </>
-              ) : (
-                <>{formatPHP(artwork.price)}</>
-              )}
-            </div>
-
-            <CuratorsNoteTypewriter text={artwork.description} />
-
-            <DominantColorChips imageUrl={artwork.image} />
-
-            <PaintingNotes productId={artwork.id} title={artwork.title} />
-
-            {artwork.availability === "made-to-order" && (
-              <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
-                <p className="font-body text-[10px] tracking-[0.3em] uppercase text-blue-700 dark:text-blue-300 mb-1">
-                  {madeToOrderNotice.heading}
+            <section className="space-y-6 lg:sticky lg:top-28 lg:self-start">
+              <div>
+                <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
+                  {artwork.medium} · {artwork.year}
+                  {artwork.category ? ` · ${artwork.category}` : ""}
                 </p>
-                <p className="font-body text-xs md:text-sm text-muted-foreground whitespace-pre-line">
-                  {madeToOrderNotice.body}
-                </p>
+                <SplitText
+                  as="h1"
+                  by="word"
+                  stagger={0.06}
+                  duration={0.85}
+                  yFrom={28}
+                  className="font-display text-3xl md:text-4xl text-foreground mb-3"
+                >
+                  {artwork.title}
+                </SplitText>
+                {artwork.dimensions && (
+                  <p className="font-body text-xs tracking-[0.2em] uppercase text-muted-foreground">
+                    Dimensions · {artwork.dimensions}
+                  </p>
+                )}
               </div>
-            )}
 
-            <div className="flex flex-wrap items-center gap-3">
-              <MagneticButton
-                ref={addToCartButtonRef}
-                type="button"
-                onClick={() => handleAdd()}
-                disabled={!purchasable}
-                strength={purchasable ? 8 : 0}
-                className={`inline-flex items-center gap-2 px-8 py-3 font-body text-xs tracking-[0.2em] uppercase transition-colors duration-300 rounded-sm ${
-                  purchasable
-                    ? "bg-foreground text-background hover:bg-foreground/90"
-                    : "bg-muted text-muted-foreground cursor-not-allowed"
-                }`}
-              >
-                <ShoppingCart className="w-4 h-4" />
-                {purchasable
-                  ? artwork.availability === "made-to-order"
-                    ? "Order this piece"
-                    : "Add to cart"
-                  : `${AVAILABILITY_LABEL[artwork.availability]}`}
-              </MagneticButton>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!artwork) return;
-                  const added = wishlist.toggle({
-                    id,
-                    title: artwork.title,
-                    image: artwork.image,
-                    price: effectivePrice,
-                  });
-                  toast.success(
-                    added
-                      ? `Saved "${artwork.title}" to your wishlist`
-                      : `Removed "${artwork.title}" from your wishlist`,
-                  );
-                }}
-                aria-pressed={inWishlist}
-                className={`inline-flex items-center gap-2 px-6 py-3 border font-body text-xs tracking-[0.2em] uppercase rounded-sm transition-all ${
-                  inWishlist
-                    ? "border-red-500/40 bg-red-500/10 text-red-500"
-                    : "border-foreground/20 text-foreground hover:bg-accent"
-                }`}
-              >
-                <Heart
-                  className={`w-4 h-4 ${inWishlist ? "fill-red-500" : ""}`}
-                />
-                {inWishlist ? "Saved" : "Save"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const url =
-                    typeof window !== "undefined"
-                      ? `${window.location.origin}/product/${artwork.id}`
-                      : "";
-                  const data = {
-                    title: `${artwork.title} — Canvas Hub`,
-                    text: `Check out "${artwork.title}" on Canvas Hub.`,
-                    url,
-                  };
-                  const nav = navigator as Navigator & {
-                    share?: (d: ShareData) => Promise<void>;
-                  };
-                  if (nav.share) {
-                    nav.share(data).catch(() => {
-                      /* user cancelled */
+              <div className="font-body text-2xl md:text-3xl text-foreground font-semibold">
+                {discount > 0 ? (
+                  <>
+                    <span className="line-through text-muted-foreground text-base mr-2">
+                      {formatPHP(artwork.price)}
+                    </span>
+                    <span>{formatPHP(effectivePrice)}</span>
+                    <span className="ml-2 text-sm text-red-500 font-semibold">
+                      {discount}% OFF
+                    </span>
+                  </>
+                ) : (
+                  <>{formatPHP(artwork.price)}</>
+                )}
+              </div>
+
+              <CuratorsNoteTypewriter text={artwork.description} />
+
+              <DominantColorChips imageUrl={artwork.image} />
+
+              <PaintingNotes productId={artwork.id} title={artwork.title} />
+
+              {artwork.availability === "made-to-order" && (
+                <div className="rounded-sm border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-sm text-foreground">
+                  <p className="font-body text-[10px] tracking-[0.3em] uppercase text-blue-700 dark:text-blue-300 mb-1">
+                    {madeToOrderNotice.heading}
+                  </p>
+                  <p className="font-body text-xs md:text-sm text-muted-foreground whitespace-pre-line">
+                    {madeToOrderNotice.body}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <MagneticButton
+                  ref={addToCartButtonRef}
+                  type="button"
+                  onClick={() => handleAdd()}
+                  disabled={!purchasable}
+                  strength={purchasable ? 8 : 0}
+                  className={`inline-flex items-center gap-2 px-8 py-3 font-body text-xs tracking-[0.2em] uppercase transition-colors duration-300 rounded-sm ${
+                    purchasable
+                      ? "bg-foreground text-background hover:bg-foreground/90"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  }`}
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  {purchasable
+                    ? artwork.availability === "made-to-order"
+                      ? "Order this piece"
+                      : "Add to cart"
+                    : `${AVAILABILITY_LABEL[artwork.availability]}`}
+                </MagneticButton>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!artwork) return;
+                    const added = wishlist.toggle({
+                      id,
+                      title: artwork.title,
+                      image: artwork.image,
+                      price: effectivePrice,
                     });
-                  } else if (navigator.clipboard) {
-                    navigator.clipboard
-                      .writeText(url)
-                      .then(() => toast.success("Link copied to clipboard"))
-                      .catch(() => toast.error("Could not copy link"));
-                  } else {
-                    toast.message(url);
-                  }
-                }}
-                className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
-                aria-label="Share painting"
-              >
-                <Share2 className="w-4 h-4" />
-                Share
-              </button>
-              {artwork.availability === "sold" && (
-                <NotifyMeButton productId={artwork.id} />
-              )}
-              <Link
-                to="/collection"
-                className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
-              >
-                Continue browsing
-              </Link>
-            </div>
+                    toast.success(
+                      added
+                        ? `Saved "${artwork.title}" to your wishlist`
+                        : `Removed "${artwork.title}" from your wishlist`,
+                    );
+                  }}
+                  aria-pressed={inWishlist}
+                  className={`inline-flex items-center gap-2 px-6 py-3 border font-body text-xs tracking-[0.2em] uppercase rounded-sm transition-all ${
+                    inWishlist
+                      ? "border-red-500/40 bg-red-500/10 text-red-500"
+                      : "border-foreground/20 text-foreground hover:bg-accent"
+                  }`}
+                >
+                  <Heart
+                    className={`w-4 h-4 ${inWishlist ? "fill-red-500" : ""}`}
+                  />
+                  {inWishlist ? "Saved" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url =
+                      typeof window !== "undefined"
+                        ? `${window.location.origin}/product/${artwork.id}`
+                        : "";
+                    const data = {
+                      title: `${artwork.title} — Canvas Hub`,
+                      text: `Check out "${artwork.title}" on Canvas Hub.`,
+                      url,
+                    };
+                    const nav = navigator as Navigator & {
+                      share?: (d: ShareData) => Promise<void>;
+                    };
+                    if (nav.share) {
+                      nav.share(data).catch(() => {
+                        /* user cancelled */
+                      });
+                    } else if (navigator.clipboard) {
+                      navigator.clipboard
+                        .writeText(url)
+                        .then(() => toast.success("Link copied to clipboard"))
+                        .catch(() => toast.error("Could not copy link"));
+                    } else {
+                      toast.message(url);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
+                  aria-label="Share painting"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </button>
+                {(artwork.availability === "sold" ||
+                  artwork.availability === "reserved") && (
+                  <NotifyMeButton
+                    productId={artwork.id}
+                    // Different copy depending on why the piece is
+                    // unavailable: a sold-out painting is permanently gone
+                    // unless the artist commissions a recreation; a
+                    // reserved one is held by another shopper today but
+                    // may free up if the reservation lapses. Both can
+                    // notify the visitor the moment availability changes.
+                    label={
+                      artwork.availability === "reserved"
+                        ? "Notify me if released"
+                        : "Notify me when available"
+                    }
+                  />
+                )}
+                <Link
+                  to="/collection"
+                  className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
+                >
+                  Continue browsing
+                </Link>
+              </div>
 
-            <div className="border-t border-border/40 pt-6 space-y-2 font-body text-xs text-muted-foreground tracking-[0.05em]">
-              <p className="whitespace-pre-line">
-                <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  {productInfoCopy.shippingLabel}
-                </span>
-                {productInfoCopy.shippingBody}
-              </p>
-              <p className="whitespace-pre-line">
-                <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
-                  {productInfoCopy.careLabel}
-                </span>
-                {productInfoCopy.careBody}
-              </p>
-            </div>
-          </section>
-        </motion.div>
+              <div className="border-t border-border/40 pt-6 space-y-2 font-body text-xs text-muted-foreground tracking-[0.05em]">
+                <p className="whitespace-pre-line">
+                  <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
+                    {productInfoCopy.shippingLabel}
+                  </span>
+                  {productInfoCopy.shippingBody}
+                </p>
+                <p className="whitespace-pre-line">
+                  <span className="uppercase tracking-[0.25em] text-foreground/80 mr-2">
+                    {productInfoCopy.careLabel}
+                  </span>
+                  {productInfoCopy.careBody}
+                </p>
+              </div>
+            </section>
+          </motion.div>
 
-        <ProductReviews loading={reviewsLoading} reviews={reviews} />
+          <ProductReviews loading={reviewsLoading} reviews={reviews} />
 
-        <SimilarPaintingsRail currentId={artwork.id} />
-        <RelatedProducts currentId={artwork.id} />
-        <Suspense fallback={null}>
-          <RecentlyViewed excludeId={artwork.id} />
-        </Suspense>
+          <SimilarPaintingsRail currentId={artwork.id} />
+          <RelatedProducts currentId={artwork.id} />
+          <Suspense fallback={null}>
+            <RecentlyViewed excludeId={artwork.id} />
+          </Suspense>
         </StorefrontErrorBoundary>
       </main>
 
@@ -1252,7 +1380,13 @@ function ProductReviews({
                 ))}
               </div>
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                {new Date(r.submittedAt).toLocaleDateString(undefined, {
+                {/* Reviews are written by customers shopping in PHT;
+                    rendering the date in the visitor's browser locale
+                    leaks the wrong calendar shape on non-Western
+                    systems. `formatDatePHT` always renders Asia/Manila
+                    in the storefront's en-PH locale to match the rest
+                    of the site. */}
+                {formatDatePHT(r.submittedAt, {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
