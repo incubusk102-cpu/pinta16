@@ -721,6 +721,13 @@ const DEFAULT_ORDER_EMAIL = {
   // disables the alert. Falls back to the ADMIN_ORDER_RECIPIENT env var
   // when blank in config.
   adminRecipient: "",
+  // When true (default), the renderer overlays the Welcome email's
+  // branding chrome (logo, banner, palette, fonts, footer) onto every
+  // order status email so the full set of customer-facing emails reads
+  // as one identical template. Admins can flip this off to brand the
+  // order channel separately (e.g. a different logo for transactional
+  // mail). Per-stage subject / heading / intro copy is always per-channel.
+  inheritWelcomeBranding: true,
   primaryColor: "#1c1c1c",
   accentColor: "#7a7468",
   logoUrl: "",
@@ -806,6 +813,7 @@ const sanitizeOrderEmail = (raw) => {
       DEFAULT_ORDER_EMAIL.adminRecipient,
       ORDER_EMAIL_FIELD_MAX,
     ),
+    inheritWelcomeBranding: data.inheritWelcomeBranding !== false,
     primaryColor: sanitizeWelcomeEmailString(
       data.primaryColor,
       DEFAULT_ORDER_EMAIL.primaryColor,
@@ -2283,11 +2291,16 @@ const handle = async ({ request, env }) => {
                 },
               })
             : existing.orderEmail;
+        // The order email chrome can inherit from the welcome email's
+        // branding (logo/banner/palette/footer) when the admin leaves
+        // `inheritWelcomeBranding` on. Pass the saved welcome config so
+        // the test send renders identically to a real order email.
         const result = await sendOrderTestEmail({
           kind,
           to,
           name: String(body.name || "Test collector").slice(0, 80),
           orderEmail: draft,
+          welcomeEmail: existing.welcomeEmail || null,
         });
         if (result?.delivered) {
           return json(200, { ok: true, result });

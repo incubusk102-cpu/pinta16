@@ -31,6 +31,7 @@ import {
   type WelcomeButtonStyle,
   type WelcomeFooterLink,
   type WelcomeFooterLinkKind,
+  type WelcomeEmailConfig,
   renderDefaultBrandLogoHtml,
 } from "@/components/admin/WelcomeEmailSection";
 import { EmailImageHealthCard } from "@/components/admin/EmailImageHealthCard";
@@ -98,6 +99,10 @@ interface OrderEmailConfig {
   fromEmail: string;
   replyTo: string;
   adminRecipient: string;
+  // When true (default), the renderer overlays the Welcome email's
+  // logo / banner / palette / footer onto every order stage so the
+  // full set of customer-facing mails reads as one template.
+  inheritWelcomeBranding: boolean;
   primaryColor: string;
   accentColor: string;
   logoUrl: string;
@@ -178,6 +183,7 @@ const DEFAULTS: OrderEmailConfig = {
   fromEmail: "order@canvhub.com",
   replyTo: "order@canvhub.com",
   adminRecipient: "",
+  inheritWelcomeBranding: true,
   primaryColor: "#1c1c1c",
   accentColor: "#7a7468",
   logoUrl: "",
@@ -244,7 +250,58 @@ const mergeOrderConfig = (raw: unknown): OrderEmailConfig => {
     },
     {} as Record<OrderEmailKind, OrderKindConfig>,
   );
-  return { ...DEFAULTS, ...data, kinds };
+  return {
+    ...DEFAULTS,
+    ...data,
+    inheritWelcomeBranding: data.inheritWelcomeBranding !== false,
+    kinds,
+  };
+};
+
+// Branding chrome fields the order email inherits from the welcome
+// email when `inheritWelcomeBranding` is on. Mirrors
+// WELCOME_BRANDING_INHERIT_KEYS in functions/api/_lib/email.js so the
+// admin preview iframe and the server-rendered email stay byte-
+// identical for the chrome layer.
+const WELCOME_BRANDING_INHERIT_KEYS = [
+  "logoUrl",
+  "bannerUrl",
+  "showLogo",
+  "showBanner",
+  "primaryColor",
+  "accentColor",
+  "bodyFont",
+  "template",
+  "headerAlign",
+  "dividerStyle",
+  "buttonStyle",
+  "footerTagline",
+  "footerLinks",
+] as const satisfies readonly (keyof OrderEmailConfig &
+  keyof WelcomeEmailConfig)[];
+
+// Overlay the welcome email's branding fields onto the order email
+// config when the inherit toggle is on. Returns a new object so the
+// React `setConfig` state stays untouched. Pass-through when the
+// toggle is off or no welcome config has been loaded yet.
+const applyWelcomeBrandingMerge = (
+  order: OrderEmailConfig,
+  welcome: WelcomeEmailConfig | null,
+): OrderEmailConfig => {
+  if (!order.inheritWelcomeBranding) return order;
+  if (!welcome) return order;
+  const merged: OrderEmailConfig = { ...order };
+  for (const key of WELCOME_BRANDING_INHERIT_KEYS) {
+    const value = welcome[key];
+    if (value !== undefined) {
+      // Each key in WELCOME_BRANDING_INHERIT_KEYS is constrained to
+      // appear in both interfaces with compatible types, so the
+      // assignment is structurally safe — TS can't follow the
+      // mapped-key narrowing across two unrelated interfaces.
+      (merged[key] as WelcomeEmailConfig[typeof key]) = value;
+    }
+  }
+  return merged;
 };
 
 // Inline placeholder cheat-sheet shown above each per-kind form so admins
@@ -472,6 +529,13 @@ const compressEmailImage = async (file: File): Promise<string> => {
 export const OrderEmailSection = () => {
   const { token } = useAdminAuth();
   const [config, setConfig] = useState<OrderEmailConfig>(DEFAULTS);
+  // Cached welcome email config used to mirror server-side branding
+  // inheritance in the live preview iframe + "Send test" button. We
+  // only read the fields listed in WELCOME_BRANDING_INHERIT_KEYS so
+  // any future welcome-only additions don't affect this surface.
+  const [welcomeConfig, setWelcomeConfig] = useState<WelcomeEmailConfig | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeKind, setActiveKind] = useState<OrderEmailKind>("confirmed");
@@ -490,11 +554,19 @@ export const OrderEmailSection = () => {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json().catch(() => ({}))) as {
-          config?: { orderEmail?: unknown };
+          config?: {
+            orderEmail?: unknown;
+            welcomeEmail?: Partial<WelcomeEmailConfig>;
+          };
         };
         if (cancelled) return;
         if (data?.config?.orderEmail) {
           setConfig(mergeOrderConfig(data.config.orderEmail));
+        }
+        if (data?.config?.welcomeEmail) {
+          // Store the welcome subtree verbatim — we only read the
+          // branding fields out of it for the inheritance merge.
+          setWelcomeConfig(data.config.welcomeEmail as WelcomeEmailConfig);
         }
       } catch (e) {
         if (cancelled) return;
@@ -684,9 +756,19 @@ export const OrderEmailSection = () => {
     }
   };
 
+  // The preview iframe must show the EXACT chrome a recipient will
+  // see, which means applying the same welcome-email branding overlay
+  // the server-side renderer will apply at send time. Per-channel
+  // subject / heading / intro stay on `config` because those are
+  // never inherited from welcome.
+  const resolvedConfig = useMemo(
+    () => applyWelcomeBrandingMerge(config, welcomeConfig),
+    [config, welcomeConfig],
+  );
+
   const previewHtml = useMemo(
-    () => buildPreviewHtml(config, activeKind),
-    [config, activeKind],
+    () => buildPreviewHtml(resolvedConfig, activeKind),
+    [resolvedConfig, activeKind],
   );
 
   const previewSubject = useMemo(
@@ -697,6 +779,8 @@ export const OrderEmailSection = () => {
       ),
     [config, activeKind],
   );
+
+  const inheriting = config.inheritWelcomeBranding && Boolean(welcomeConfig);
 
   if (loading) {
     return (
@@ -754,6 +838,25 @@ export const OrderEmailSection = () => {
         <Switch
           checked={config.enabled}
           onCheckedChange={(v) => update("enabled", v)}
+        />
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-card/40 p-4 flex items-center justify-between gap-4">
+        <div className="space-y-1">
+          <p className="font-medium">
+            Use the Welcome email's logo, banner & palette
+          </p>
+          <p className="text-sm text-muted-foreground max-w-xl">
+            When on, every order stage (Confirmed, In progress, Out for
+            delivery, Delivered, Refund …) renders with the same header, banner,
+            colors, footer links and tagline as your Welcome email — so the
+            customer sees one continuous brand. Turn off to give the order
+            channel its own per-channel branding.
+          </p>
+        </div>
+        <Switch
+          checked={config.inheritWelcomeBranding}
+          onCheckedChange={(v) => update("inheritWelcomeBranding", v)}
         />
       </div>
 
@@ -915,6 +1018,13 @@ export const OrderEmailSection = () => {
             <h3 className="font-medium flex items-center gap-2">
               <ImageIcon className="w-4 h-4" /> Branding
             </h3>
+            {inheriting && (
+              <p className="text-xs rounded-md border border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300 px-3 py-2">
+                Currently inheriting logo, banner and palette from the Welcome
+                email. The values you set below are saved but only used once you
+                turn off the inherit toggle above.
+              </p>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -1066,6 +1176,12 @@ export const OrderEmailSection = () => {
 
           <section className="space-y-4 rounded-lg border border-border/60 bg-card/40 p-4">
             <h3 className="font-medium">Layout</h3>
+            {inheriting && (
+              <p className="text-xs rounded-md border border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300 px-3 py-2">
+                Layout (template, font, alignment, divider, button) is also
+                being inherited from the Welcome email right now.
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Template</Label>
               <div className="grid sm:grid-cols-2 gap-2">
