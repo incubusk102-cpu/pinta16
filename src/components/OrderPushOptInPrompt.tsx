@@ -10,6 +10,7 @@ import { Bell, BellOff, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   isOrderPushSupported,
+  isOrderPushServerConfigured,
   getOrderPushState,
   subscribeToOrderPush,
   unsubscribeFromOrderPush,
@@ -53,16 +54,25 @@ export default function OrderPushOptInPrompt({
   const [dismissed, setDismissed] = useState(
     forceShow ? false : wasRecentlyDismissed(),
   );
+  // `null` until the probe finishes so we can render nothing instead of
+  // briefly flashing the card on devices where VAPID isn't configured.
+  const [serverReady, setServerReady] = useState<boolean | null>(null);
 
   // Sync state with the browser/SW on mount and whenever the email changes.
+  // We also probe `/api/push/vapid-key` so the card hides cleanly when
+  // the server isn't configured for Web Push (no VAPID env vars).
   useEffect(() => {
     let cancelled = false;
     const sync = async () => {
-      const state = await getOrderPushState();
+      const [state, ready] = await Promise.all([
+        getOrderPushState(),
+        isOrderPushServerConfigured(),
+      ]);
       if (cancelled) return;
       setSupported(state.supported);
       setPermission(state.permission);
       setSubscribed(state.subscribed);
+      setServerReady(ready);
     };
     sync();
     return () => {
@@ -94,6 +104,15 @@ export default function OrderPushOptInPrompt({
       });
     } else if (res.reason === "unsupported") {
       toast.error("Not supported on this browser");
+    } else if (res.reason === "no-vapid-key") {
+      // The server hasn't been configured for Web Push (missing VAPID
+      // env vars). Hide the card and surface a clear message rather
+      // than a generic failure toast.
+      setServerReady(false);
+      toast.error("Order updates aren't available yet", {
+        description:
+          "This site hasn't been set up for push notifications. We'll still email you on every status change.",
+      });
     } else if (res.reason === "cf-challenge") {
       // Cloudflare Bot Fight Mode interstitial. A full reload picks up a
       // fresh challenge cookie which usually clears it; tell the user to
@@ -140,6 +159,9 @@ export default function OrderPushOptInPrompt({
   // that won't work.
   if (!supported && permission === "unsupported") return null;
   if (!isOrderPushSupported()) return null;
+  // Probe still in flight or the server returned 503 vapid-not-configured
+  // — render nothing rather than dangle a button that always errors out.
+  if (serverReady !== true) return null;
   // Hide if the user already explicitly hard-blocked notifications — there's
   // no UI we can show to recover from that beyond "fix it in browser
   // settings", and the toast above already says that on click.
