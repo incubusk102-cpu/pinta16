@@ -32,7 +32,7 @@ const readServerErrorReason = async (res: Response): Promise<string> => {
   if (cfMitigated.toLowerCase() === "challenge") {
     return "cf-challenge";
   }
-  let bodyText = "";
+  let bodyText: string;
   try {
     bodyText = await res.text();
   } catch {
@@ -102,6 +102,17 @@ const fetchVapidKey = async (): Promise<string | null> => {
   }
 };
 
+/**
+ * Lightweight probe of the server's Web Push readiness. Returns true
+ * iff `/api/push/vapid-key` answers with a usable public key. Lets the
+ * opt-in card hide itself cleanly when VAPID env vars aren't configured
+ * (server replies 503 `vapid-not-configured`) instead of dangling a
+ * button that always errors out.
+ */
+export const isOrderPushServerConfigured = async (): Promise<boolean> => {
+  return (await fetchVapidKey()) !== null;
+};
+
 const getRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
   if (!isOrderPushSupported()) return null;
   // The PWA registers /sw.js at scope "/" in src/lib/pwa.ts. We look it up
@@ -142,7 +153,7 @@ export const getOrderPushState = async (): Promise<OrderPushState> => {
       subscribed = false;
     }
   }
-  let email: string | null = null;
+  let email: string | null;
   try {
     email = window.localStorage.getItem(PUSH_LS_KEY);
   } catch {
@@ -183,7 +194,7 @@ export const subscribeToOrderPush = async (
   if (!reg) return { ok: false, reason: "no-service-worker" };
   if (!vapid) return { ok: false, reason: "no-vapid-key" };
   // 3. Subscribe (or reuse an existing subscription).
-  let sub: PushSubscription | null = null;
+  let sub: PushSubscription | null;
   try {
     sub = await reg.pushManager.getSubscription();
     if (!sub) {
@@ -239,7 +250,7 @@ export const unsubscribeFromOrderPush = async (
   }
   const reg = await getRegistration();
   if (!reg) return { ok: false, reason: "no-service-worker" };
-  let sub: PushSubscription | null = null;
+  let sub: PushSubscription | null;
   try {
     sub = await reg.pushManager.getSubscription();
   } catch {
@@ -401,7 +412,7 @@ export const handlePushSubscriptionChangeMessages = () => {
     ) {
       return;
     }
-    let email = "";
+    let email: string;
     try {
       email = window.localStorage.getItem(PUSH_LS_KEY) || "";
     } catch {

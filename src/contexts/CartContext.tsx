@@ -675,6 +675,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       ordersRef.current = next;
       setOrders(next);
       writeOrdersToStorage(userEmail, next);
+      // The confirmation modal renders straight from `lastOrder`, not
+      // from the `orders` array, so without this the amber "Payment
+      // received — finishing your order" banner stays stuck even after
+      // the POST has acknowledged. Use the functional setter so we
+      // don't have to depend on a fresh `lastOrder` closure.
+      setLastOrder((prev) =>
+        prev && prev.id === orderId ? { ...prev, serverSynced: true } : prev,
+      );
     };
   }, [userEmail]);
 
