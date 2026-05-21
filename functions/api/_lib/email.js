@@ -458,6 +458,12 @@ const formatPHP = (n) =>
 const DEFAULT_ORDER_CHROME = {
   fromName: "Canvas Hub",
   fromEmail: "order@canvhub.com",
+  // The order email defaults to inheriting the Welcome email's logo /
+  // banner / palette / footer chrome so every customer-facing email
+  // (welcome + the seven order stages) looks like one continuous
+  // template. Set to `false` in the admin to give the order channel
+  // its own per-channel branding.
+  inheritWelcomeBranding: true,
   primaryColor: "#1c1c1c",
   accentColor: "#7a7468",
   logoUrl: "",
@@ -473,6 +479,57 @@ const DEFAULT_ORDER_CHROME = {
   footerLinks: [],
   trackButtonText: "Track shipment",
   reviewButtonText: "Write a review",
+};
+
+// Branding chrome fields the order email inherits from the welcome
+// email when `inheritWelcomeBranding` is on. Everything else (fromName,
+// fromEmail, replyTo, adminRecipient, per-kind subject/heading/intro,
+// trackButtonText, reviewButtonText) stays per-channel because those
+// are semantically different between the welcome and the order flow.
+const WELCOME_BRANDING_INHERIT_KEYS = [
+  "logoUrl",
+  "bannerUrl",
+  "showLogo",
+  "showBanner",
+  "primaryColor",
+  "accentColor",
+  "bodyFont",
+  "template",
+  "headerAlign",
+  "dividerStyle",
+  "buttonStyle",
+  "footerTagline",
+  "footerLinks",
+];
+
+/**
+ * Overlay the welcome email's branding fields onto the order email
+ * config when `inheritWelcomeBranding` is on (the default). Returns a
+ * new object — input is untouched. Pass-through when the toggle is off
+ * or no welcome config has been saved yet.
+ *
+ * Exported so the admin preview iframe (OrderEmailSection) can apply
+ * the same merge client-side and stay byte-identical to what the
+ * server sends.
+ */
+export const mergeWelcomeBrandingIntoOrder = (orderEmail, welcomeEmail) => {
+  // Treat a missing orderEmail subtree the same as DEFAULT_ORDER_CHROME
+  // (which has `inheritWelcomeBranding: true`) so a fresh install with
+  // only the welcome email configured still gets identical chrome on
+  // every order stage.
+  const base =
+    orderEmail && typeof orderEmail === "object"
+      ? orderEmail
+      : { ...DEFAULT_ORDER_CHROME };
+  if (base.inheritWelcomeBranding === false) return base;
+  if (!welcomeEmail || typeof welcomeEmail !== "object") return base;
+  const merged = { ...base };
+  for (const key of WELCOME_BRANDING_INHERIT_KEYS) {
+    if (welcomeEmail[key] !== undefined) {
+      merged[key] = welcomeEmail[key];
+    }
+  }
+  return merged;
 };
 
 // Public site host for outbound deep links in transactional emails.
@@ -648,8 +705,14 @@ export const buildOrderEmail = async (
   order,
   extra = {},
   orderEmail = null,
+  welcomeEmail = null,
 ) => {
-  const effectiveConfig = orderEmail || DEFAULT_ORDER_CHROME;
+  // Order emails inherit the welcome email's branding chrome (logo,
+  // banner, palette, footer) by default so the full customer-facing
+  // sequence reads as one template. The admin can opt out per-channel
+  // by toggling `inheritWelcomeBranding` off in /admin → Order email.
+  const merged = mergeWelcomeBrandingIntoOrder(orderEmail, welcomeEmail);
+  const effectiveConfig = merged || DEFAULT_ORDER_CHROME;
   const config = prepareReactChromeConfig(effectiveConfig, "order");
   const rendered = await reactRenderOrderEmail({
     kind,
@@ -686,7 +749,13 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
   if (!recipient) {
     return { delivered: false, skipped: true, reason: "no recipient" };
   }
-  const orderEmail = await loadOrderEmailConfig();
+  // Load both subtrees in parallel so the order email can inherit
+  // branding chrome from the welcome email when `inheritWelcomeBranding`
+  // is on (the default).
+  const [orderEmail, welcomeEmail] = await Promise.all([
+    loadOrderEmailConfig(),
+    loadWelcomeEmailConfig(),
+  ]);
   // Master switch — admin can disable all order email globally.
   if (orderEmail && orderEmail.enabled === false) {
     return { delivered: false, skipped: true, reason: "disabled" };
@@ -697,7 +766,13 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
   if (kindCfg && kindCfg.enabled === false) {
     return { delivered: false, skipped: true, reason: "kind disabled" };
   }
-  const built = await buildOrderEmail(kind, order, extra || {}, orderEmail);
+  const built = await buildOrderEmail(
+    kind,
+    order,
+    extra || {},
+    orderEmail,
+    welcomeEmail,
+  );
   // Resolve the from address: storefront config → env var → fallback.
   // The orderEmail config (admin-editable) carries fromName + fromEmail
   // which we format as "Name <email>". This lets the admin set
@@ -744,7 +819,13 @@ export const sendOrderEmail = async ({ kind, order, extra }) => {
  * forces the master + kind switches on so the test send works even when
  * the channel is paused.
  */
-export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
+export const sendOrderTestEmail = async ({
+  kind,
+  to,
+  name,
+  orderEmail,
+  welcomeEmail,
+}) => {
   const recipient = String(to || "").trim();
   if (!recipient) {
     return { delivered: false, skipped: true, reason: "no recipient" };
@@ -796,6 +877,7 @@ export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
     fakeOrder,
     fakeExtra,
     previewOrderEmail,
+    welcomeEmail || null,
   );
   const cfgEmail = (orderEmail?.fromEmail || "order@canvhub.com").trim();
   const cfgName = (orderEmail?.fromName || "Canvas Hub").trim();
@@ -829,7 +911,12 @@ export const sendOrderTestEmail = async ({ kind, to, name, orderEmail }) => {
  * confirmation is the source of truth, this is purely operator nice-to-have.
  */
 export const sendNewOrderAdminAlert = async ({ order }) => {
-  const orderEmail = await loadOrderEmailConfig();
+  // Same parallel load as the customer-facing path so the admin alert
+  // picks up the welcome email's branding chrome too.
+  const [orderEmail, welcomeEmail] = await Promise.all([
+    loadOrderEmailConfig(),
+    loadWelcomeEmailConfig(),
+  ]);
   const recipient =
     String(orderEmail?.adminRecipient || "").trim() ||
     String(resolveEmailEnv("ADMIN_RECIPIENT", "order") || "").trim() ||
@@ -844,8 +931,13 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
   // admin alert lands in the inbox with matching logo / palette / fonts /
   // footer. Renders through the same React Email NewOrderAdminAlert
   // template so the alert and the customer copy that arrive seconds
-  // later are visually identical.
-  const effectiveConfig = orderEmail || DEFAULT_ORDER_CHROME;
+  // later are visually identical — including the welcome email's branding
+  // overlay when `inheritWelcomeBranding` is on.
+  const mergedOrderEmail = mergeWelcomeBrandingIntoOrder(
+    orderEmail,
+    welcomeEmail,
+  );
+  const effectiveConfig = mergedOrderEmail || DEFAULT_ORDER_CHROME;
   const config = prepareReactChromeConfig(effectiveConfig, "order");
   const built = await reactRenderNewOrderAdminAlert({ order, config });
 
