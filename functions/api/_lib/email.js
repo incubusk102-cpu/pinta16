@@ -700,6 +700,26 @@ const resolveOrderKindConfig = (orderEmail, kind) => {
  * Async because @react-email/render returns a Promise — callers must
  * `await buildOrderEmail(...)`.
  */
+// Order item thumbnails are persisted with whatever URL the cart was
+// holding — for stock pieces that's `/images/<n>.png`, for uploads it's
+// `/api/r/products/<hash>.webp`, both site-relative. Gmail / iCloud /
+// Outlook fetch <img src> via their proxy with the email body as base,
+// so a relative src never resolves and the thumbnail renders as a blank
+// placeholder. We rehost each item.image through the storefront origin
+// here so the React `ItemTable` receives absolute https:// URLs.
+const prepareReactOrderItems = (welcome, order) => {
+  if (!order || !Array.isArray(order.items)) return order;
+  return {
+    ...order,
+    items: order.items.map((item) => {
+      if (!item || typeof item.image !== "string") return item;
+      const rehosted = rehostEmailImage(welcome, "order-item", item.image);
+      if (rehosted === item.image) return item;
+      return { ...item, image: rehosted };
+    }),
+  };
+};
+
 export const buildOrderEmail = async (
   kind,
   order,
@@ -714,9 +734,10 @@ export const buildOrderEmail = async (
   const merged = mergeWelcomeBrandingIntoOrder(orderEmail, welcomeEmail);
   const effectiveConfig = merged || DEFAULT_ORDER_CHROME;
   const config = prepareReactChromeConfig(effectiveConfig, "order");
+  const renderOrder = prepareReactOrderItems(effectiveConfig, order);
   const rendered = await reactRenderOrderEmail({
     kind,
-    order,
+    order: renderOrder,
     extra: extra || {},
     config,
   });
@@ -939,7 +960,11 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
   );
   const effectiveConfig = mergedOrderEmail || DEFAULT_ORDER_CHROME;
   const config = prepareReactChromeConfig(effectiveConfig, "order");
-  const built = await reactRenderNewOrderAdminAlert({ order, config });
+  const renderOrder = prepareReactOrderItems(effectiveConfig, order);
+  const built = await reactRenderNewOrderAdminAlert({
+    order: renderOrder,
+    config,
+  });
 
   // Resolve the same from-address the customer copies use so admin
   // inbox threading groups them together (Gmail/Outlook collapse by
