@@ -700,24 +700,143 @@ const resolveOrderKindConfig = (orderEmail, kind) => {
  * Async because @react-email/render returns a Promise — callers must
  * `await buildOrderEmail(...)`.
  */
+// MIME types the R2 upload pipeline produces. Anything outside this
+// set is treated as untrusted bytes and not inlined into the email —
+// SVG in particular is excluded because it's XML and can carry inline
+// script payloads that would execute inside an email-client renderer.
+const INLINE_SAFE_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+]);
+
+// Hard cap on inlined-thumbnail size. The admin upload pipeline already
+// resizes to a few hundred KB at most, so 1.5 MB is well above the real
+// ceiling but small enough that base64-expansion (~2 MB) keeps a single
+// email body comfortably under Gmail's 102 KB clip threshold once the
+// transformInlineImagesToCidAttachments pass strips the inline URI back
+// out into a CID attachment.
+const INLINE_MAX_BYTES = 1_500_000;
+
+const guessImageTypeFromKey = (key) => {
+  const m = /\.([a-z0-9]+)$/i.exec(key);
+  if (!m) return "";
+  const ext = m[1].toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "avif") return "image/avif";
+  if (ext === "gif") return "image/gif";
+  return "";
+};
+
+// Workers don't ship Node's Buffer; build the base64 string in chunks
+// off the typed-array to avoid the "call stack size" trap that fires
+// when you spread a multi-MB Uint8Array into String.fromCharCode.
+const bytesToBase64 = (bytes) => {
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, i + CHUNK);
+    binary += String.fromCharCode.apply(null, slice);
+  }
+  return btoa(binary);
+};
+
+/**
+ * Read an R2 object stored under the UPLOADS_BUCKET binding and return
+ * it as a `data:image/...;base64,...` URI. Returns null when R2 isn't
+ * bound, the key is missing or path-traversal-shaped, the content type
+ * isn't a bitmap we trust to inline, or the object exceeds INLINE_MAX_BYTES.
+ *
+ * Why inline at all: Cloudflare Bot Fight Mode 403s the Gmail / iCloud /
+ * Outlook image proxies when they try to fetch /api/r/<key>, leaving
+ * the recipient with a broken-image icon. Shipping the bytes inline
+ * lets `transformInlineImagesToCidAttachments` turn them into a proper
+ * multipart/related CID attachment that every mainstream client renders.
+ */
+const readR2ImageAsDataUri = async (env, r2Path) => {
+  if (!env?.UPLOADS_BUCKET || typeof r2Path !== "string") return null;
+  const key = r2Path.replace(/^\/api\/r\//, "");
+  if (!key) return null;
+  // Same path-traversal guard as functions/api/r/[[path]].js — refuse
+  // anything that climbs out of the bucket or contains control bytes.
+  if (
+    key.includes("..") ||
+    key.startsWith("/") ||
+    key.includes("\\") ||
+    key.includes("%2e") ||
+    key.includes("%2E")
+  ) {
+    return null;
+  }
+  let obj;
+  try {
+    obj = await env.UPLOADS_BUCKET.get(key);
+  } catch {
+    return null;
+  }
+  if (!obj) return null;
+  const stored = (obj.httpMetadata?.contentType || "").toLowerCase();
+  const ct = INLINE_SAFE_IMAGE_TYPES.has(stored)
+    ? stored
+    : guessImageTypeFromKey(key);
+  if (!INLINE_SAFE_IMAGE_TYPES.has(ct)) return null;
+  let buf;
+  try {
+    buf = await obj.arrayBuffer();
+  } catch {
+    return null;
+  }
+  const bytes = new Uint8Array(buf);
+  if (!bytes.length || bytes.length > INLINE_MAX_BYTES) return null;
+  return `data:${ct === "image/jpg" ? "image/jpeg" : ct};base64,${bytesToBase64(bytes)}`;
+};
+
+/**
+ * Resolve a single order-item image URL into the form the email <img>
+ * tag should carry. R2-stored uploads (/api/r/<key>) get inlined as a
+ * data: URI; everything else falls through to the existing rehost-to-
+ * absolute path so externally-hosted images and the legacy /images/<n>.png
+ * stock thumbnails still render through Gmail's image proxy.
+ */
+const inlineOrderItemImage = async (welcome, value) => {
+  if (!value) return "";
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("data:image/")) return trimmed;
+  if (trimmed.startsWith("/api/r/")) {
+    const inlined = await readR2ImageAsDataUri(getCloudflareEnv(), trimmed);
+    if (inlined) return inlined;
+  }
+  return rehostEmailImage(welcome, "order-item", trimmed);
+};
+
 // Order item thumbnails are persisted with whatever URL the cart was
 // holding — for stock pieces that's `/images/<n>.png`, for uploads it's
 // `/api/r/products/<hash>.webp`, both site-relative. Gmail / iCloud /
 // Outlook fetch <img src> via their proxy with the email body as base,
 // so a relative src never resolves and the thumbnail renders as a blank
-// placeholder. We rehost each item.image through the storefront origin
-// here so the React `ItemTable` receives absolute https:// URLs.
-const prepareReactOrderItems = (welcome, order) => {
+// placeholder. Worse, for uploads the proxy can't reach /api/r/<key>
+// at all because Cloudflare Bot Fight Mode 403s its user-agent. We
+// pre-resolve each item.image here: uploads get inlined as data: URIs
+// (later CID-attached by `transformInlineImagesToCidAttachments`),
+// the rest are rehosted to absolute HTTPS so they at least pass the
+// `isSafeImageUrl` gate in ItemTable.
+const prepareReactOrderItems = async (welcome, order) => {
   if (!order || !Array.isArray(order.items)) return order;
-  return {
-    ...order,
-    items: order.items.map((item) => {
+  const items = await Promise.all(
+    order.items.map(async (item) => {
       if (!item || typeof item.image !== "string") return item;
-      const rehosted = rehostEmailImage(welcome, "order-item", item.image);
-      if (rehosted === item.image) return item;
-      return { ...item, image: rehosted };
+      const next = await inlineOrderItemImage(welcome, item.image);
+      if (next === item.image) return item;
+      return { ...item, image: next };
     }),
-  };
+  );
+  return { ...order, items };
 };
 
 export const buildOrderEmail = async (
@@ -734,7 +853,7 @@ export const buildOrderEmail = async (
   const merged = mergeWelcomeBrandingIntoOrder(orderEmail, welcomeEmail);
   const effectiveConfig = merged || DEFAULT_ORDER_CHROME;
   const config = prepareReactChromeConfig(effectiveConfig, "order");
-  const renderOrder = prepareReactOrderItems(effectiveConfig, order);
+  const renderOrder = await prepareReactOrderItems(effectiveConfig, order);
   const rendered = await reactRenderOrderEmail({
     kind,
     order: renderOrder,
@@ -960,7 +1079,7 @@ export const sendNewOrderAdminAlert = async ({ order }) => {
   );
   const effectiveConfig = mergedOrderEmail || DEFAULT_ORDER_CHROME;
   const config = prepareReactChromeConfig(effectiveConfig, "order");
-  const renderOrder = prepareReactOrderItems(effectiveConfig, order);
+  const renderOrder = await prepareReactOrderItems(effectiveConfig, order);
   const built = await reactRenderNewOrderAdminAlert({
     order: renderOrder,
     config,
