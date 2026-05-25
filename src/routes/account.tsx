@@ -26,7 +26,6 @@ import {
   Star,
   Trash2,
   Truck,
-  UserCircle,
 } from "lucide-react";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { buildTrackingUrl } from "@/lib/shipment";
@@ -603,36 +602,36 @@ function AccountPage() {
         className="max-w-3xl mx-auto px-4 sm:px-6 pt-28 md:pt-32 pb-16 space-y-8 scroll-pt-28"
       >
         <StorefrontErrorBoundary surface="account">
-        <div>
-          <h1 className="font-display text-3xl">My account</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Welcome back{user.name ? `, ${user.name}` : ""}.
-          </p>
-        </div>
+          <div>
+            <h1 className="font-display text-3xl">My account</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Welcome back{user.name ? `, ${user.name}` : ""}.
+            </p>
+          </div>
 
-        <div id="account-profile" className="scroll-mt-28">
-          <ProfileEditor />
-        </div>
+          <div id="account-profile" className="scroll-mt-28">
+            <ProfileEditor />
+          </div>
 
-        <AppreciationSection />
+          <AppreciationSection />
 
-        <div id="account-orders" className="scroll-mt-28">
-          <MyOrders />
-        </div>
+          <div id="account-orders" className="scroll-mt-28">
+            <MyOrders />
+          </div>
 
-        <div id="account-tracker" className="scroll-mt-28">
-          <OrderTracker />
-        </div>
+          <div id="account-tracker" className="scroll-mt-28">
+            <OrderTracker />
+          </div>
 
-        <div id="account-addresses" className="scroll-mt-28">
-          <AddressBook />
-        </div>
+          <div id="account-addresses" className="scroll-mt-28">
+            <AddressBook />
+          </div>
 
-        <div id="account-wishlist" className="scroll-mt-28">
-          <WishlistSection />
-        </div>
+          <div id="account-wishlist" className="scroll-mt-28">
+            <WishlistSection />
+          </div>
 
-        {/* Free Web Push opt-in / management. The customer's email is
+          {/* Free Web Push opt-in / management. The customer's email is
             already on hand from their authenticated session, so we can
             wire the subscription on the spot without re-asking for
             anything. forceShow=true so the card is always visible from
@@ -641,34 +640,34 @@ function AccountPage() {
             the device is actually subscribed (it polls the SW state
             itself), so guests / unsubscribed shoppers see the opt-in
             card and nothing else; once they enable, the toggles fade in. */}
-        <div id="account-notifications" className="scroll-mt-28 space-y-4">
-          <Suspense>
-            <OrderPushOptInPrompt
-              email={user.email}
-              variant="inline"
-              forceShow
-            />
-          </Suspense>
-          <Suspense>
-            <OrderPushTopicPrefs email={user.email} />
-          </Suspense>
-        </div>
-
-        <div className="bg-card/40 border border-border/60 rounded-xl p-5">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-            <Mail className="w-4 h-4" /> Inactivity
+          <div id="account-notifications" className="scroll-mt-28 space-y-4">
+            <Suspense>
+              <OrderPushOptInPrompt
+                email={user.email}
+                variant="inline"
+                forceShow
+              />
+            </Suspense>
+            <Suspense>
+              <OrderPushTopicPrefs email={user.email} />
+            </Suspense>
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Accounts that have been inactive for{" "}
-            <strong className="text-foreground">30 days</strong> are removed,
-            and we email you when this happens. Just visit your account any time
-            to keep it active.
-          </p>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Joined {formatDate(user.createdAt)} · Last seen{" "}
-            {formatDate(user.lastSeenAt)}
-          </p>
-        </div>
+
+          <div className="bg-card/40 border border-border/60 rounded-xl p-5">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+              <Mail className="w-4 h-4" /> Inactivity
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Accounts that have been inactive for{" "}
+              <strong className="text-foreground">30 days</strong> are removed,
+              and we email you when this happens. Just visit your account any
+              time to keep it active.
+            </p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Joined {formatDate(user.createdAt)} · Last seen{" "}
+              {formatDate(user.lastSeenAt)}
+            </p>
+          </div>
         </StorefrontErrorBoundary>
       </main>
     </div>

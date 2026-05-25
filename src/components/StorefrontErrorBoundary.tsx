@@ -39,9 +39,7 @@ export class StorefrontErrorBoundary extends Component<
 > {
   state: StorefrontErrorBoundaryState = { error: null };
 
-  static getDerivedStateFromError(
-    error: Error,
-  ): StorefrontErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): StorefrontErrorBoundaryState {
     return { error };
   }
 
@@ -88,9 +86,9 @@ export class StorefrontErrorBoundary extends Component<
           This page didn&apos;t quite load
         </h1>
         <p className="font-body text-sm text-muted-foreground max-w-md mx-auto mb-6">
-          Something went wrong while showing this page. Your cart and
-          account are safe — try refreshing or head back to the home
-          page and we&apos;ll get you to the right spot.
+          Something went wrong while showing this page. Your cart and account
+          are safe — try refreshing or head back to the home page and we&apos;ll
+          get you to the right spot.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Button type="button" variant="outline" onClick={this.reset}>

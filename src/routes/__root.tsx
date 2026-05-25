@@ -4,10 +4,10 @@ import {
   createRootRoute,
   useRouterState,
 } from "@tanstack/react-router";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
-import { CartProvider } from "@/contexts/CartContext";
+import { CartProvider, useCart } from "@/contexts/CartContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { StorefrontConfigProvider } from "@/contexts/StorefrontConfigContext";
 import { PoliciesProvider } from "@/contexts/PoliciesContext";
@@ -128,6 +128,87 @@ function ReferralCaptureBridge() {
   return null;
 }
 
+// Bundle of "storefront-only" providers that don't carry any
+// admin-relevant state — Compare drawer, fly-to-cart animation
+// channel, keyboard command palette, QuickSpin 3D preview. Combining
+// them into one helper unstacks the 15-level provider pyramid in
+// `RootComponent` below by four levels, without changing the
+// rendered React tree. See IMPROVEMENTS.md item 6.
+function StorefrontProviders({ children }: { children: ReactNode }) {
+  return (
+    <CompareProvider>
+      <FlyToCartProvider>
+        <CommandPaletteProvider>
+          <QuickSpinProvider>{children}</QuickSpinProvider>
+        </CommandPaletteProvider>
+      </FlyToCartProvider>
+    </CompareProvider>
+  );
+}
+
+// Bundle of provider layers that don't render anything but need to
+// exist for `useCart` / `useWishlist` / etc. to find their context.
+// Same readability rationale as `StorefrontProviders`.
+function GlobalAuthProviders({ children }: { children: ReactNode }) {
+  return (
+    <ThemeProvider>
+      <LocaleProvider>
+        <AdminAuthProvider>
+          <UserAuthProvider>
+            <WishlistProvider>{children}</WishlistProvider>
+          </UserAuthProvider>
+        </AdminAuthProvider>
+      </LocaleProvider>
+    </ThemeProvider>
+  );
+}
+
+// Bundle of KV-backed data providers (storefront config / policies /
+// hero slides / products). All four read from the same `/api/*`
+// endpoints and depend on the auth providers above, so grouping them
+// matches their lifecycle.
+function DataProviders({ children }: { children: ReactNode }) {
+  return (
+    <StorefrontConfigProvider>
+      <PoliciesProvider>
+        <HeroSlidesProvider>
+          <ProductProvider>{children}</ProductProvider>
+        </HeroSlidesProvider>
+      </PoliciesProvider>
+    </StorefrontConfigProvider>
+  );
+}
+
+// PWA manifest shortcuts point at `/?open=cart` (see
+// `public/manifest.webmanifest`) so launching the installed app's
+// "Cart" shortcut deep-links into the cart drawer — the cart is a
+// drawer rather than a route, so we can't just point the shortcut at
+// `/cart`. Lives inside <CartProvider /> below; reads the query
+// param on mount and triggers `openCart()` once. The query param is
+// scrubbed from the URL afterwards so re-mounts (e.g. soft
+// navigation back to "/") don't re-open the drawer.
+function PwaShortcutBridge() {
+  const { openCart } = useCart();
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("open") !== "cart") return;
+    openCart();
+    params.delete("open");
+    const next = params.toString();
+    const url =
+      window.location.pathname +
+      (next ? `?${next}` : "") +
+      window.location.hash;
+    try {
+      window.history.replaceState(null, "", url);
+    } catch {
+      /* history API unavailable — leave the URL as-is */
+    }
+  }, [openCart]);
+  return null;
+}
+
 // Parses `#auth=...` / `?error=...` that /api/google-callback redirects
 // back with. Mounted at root so Google's redirect can land on any
 // route (we send visitors to `/` now) instead of bouncing through
@@ -232,67 +313,45 @@ function RootComponent() {
   return (
     <RootErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <LocaleProvider>
-            <AdminAuthProvider>
-              <UserAuthProvider>
-                <WishlistProvider>
-                  <StorefrontConfigProvider>
-                    <PoliciesProvider>
-                      <HeroSlidesProvider>
-                        <ProductProvider>
-                          <CartProvider>
-                            <CompareProvider>
-                              <FlyToCartProvider>
-                                <CommandPaletteProvider>
-                                  <QuickSpinProvider>
-                                    <SmoothScrollProvider>
-                                      <a
-                                        href="#main-content"
-                                        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
-                                      >
-                                        Skip to content
-                                      </a>
-                                      <BootMountMark />
-                                      <HeartbeatBridge />
-                                      <ReferralCaptureBridge />
-                                      <GoogleAuthHashBridge />
-                                      <ConditionalAmbientChrome />
-                                      <ConditionalAnnouncementBar />
-                                      <PageTransitions>
-                                        <Outlet />
-                                      </PageTransitions>
-                                      <RouteWipeOverlay />
-                                      <ConditionalSiteFooter />
-                                      <Suspense fallback={null}>
-                                        <ConditionalOrderConfirmation />
-                                        <ChatWidget />
-                                        <NewUserModal />
-                                        <PwaPrompts />
-                                        <CommandPalette />
-                                      </Suspense>
-                                      <ConditionalVisitorDelight />
-                                      <ConditionalKeyboardShortcuts />
-                                      <CompareDrawer />
-                                      <Toaster
-                                        richColors
-                                        position="top-right"
-                                      />
-                                    </SmoothScrollProvider>
-                                  </QuickSpinProvider>
-                                </CommandPaletteProvider>
-                              </FlyToCartProvider>
-                            </CompareProvider>
-                          </CartProvider>
-                        </ProductProvider>
-                      </HeroSlidesProvider>
-                    </PoliciesProvider>
-                  </StorefrontConfigProvider>
-                </WishlistProvider>
-              </UserAuthProvider>
-            </AdminAuthProvider>
-          </LocaleProvider>
-        </ThemeProvider>
+        <GlobalAuthProviders>
+          <DataProviders>
+            <CartProvider>
+              <StorefrontProviders>
+                <SmoothScrollProvider>
+                  <a
+                    href="#main-content"
+                    className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-foreground focus:text-background focus:rounded-sm focus:text-sm focus:font-medium"
+                  >
+                    Skip to content
+                  </a>
+                  <BootMountMark />
+                  <HeartbeatBridge />
+                  <ReferralCaptureBridge />
+                  <PwaShortcutBridge />
+                  <GoogleAuthHashBridge />
+                  <ConditionalAmbientChrome />
+                  <ConditionalAnnouncementBar />
+                  <PageTransitions>
+                    <Outlet />
+                  </PageTransitions>
+                  <RouteWipeOverlay />
+                  <ConditionalSiteFooter />
+                  <Suspense fallback={null}>
+                    <ConditionalOrderConfirmation />
+                    <ChatWidget />
+                    <NewUserModal />
+                    <PwaPrompts />
+                    <CommandPalette />
+                  </Suspense>
+                  <ConditionalVisitorDelight />
+                  <ConditionalKeyboardShortcuts />
+                  <CompareDrawer />
+                  <Toaster richColors position="top-right" />
+                </SmoothScrollProvider>
+              </StorefrontProviders>
+            </CartProvider>
+          </DataProviders>
+        </GlobalAuthProviders>
       </QueryClientProvider>
     </RootErrorBoundary>
   );

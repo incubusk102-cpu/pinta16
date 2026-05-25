@@ -1,5 +1,4 @@
 import { Column, Img, Row, Section, Text } from "@react-email/components";
-import * as React from "react";
 import { palette } from "../lib/styles";
 import { formatPHP, isSafeImageUrl } from "../lib/template-vars";
 import type { OrderItem } from "../types";

@@ -78,16 +78,34 @@
 
     <!-- Google Fonts — preconnect to start the TLS handshake to
          fonts.gstatic.com in parallel with the HTML download, then
-         load the stylesheet. Previously imported via an @import inside
-         the Tailwind-built stylesheet, which serialises behind the CSS
-         download. `display=swap` keeps text legible while the woff2s
-         load. -->
+         load the stylesheets.
+         Split into two requests for FCP/LCP (see IMPROVEMENTS.md #3):
+           - Inter (body) is critical; loaded as a normal blocking
+             stylesheet so the first paint reads with the right font.
+           - Playfair Display + EB Garamond (display / logo) are
+             loaded with the deferred `print → all` pattern so they
+             don't block the critical path; the noscript fallback
+             keeps users with JS disabled covered.
+         `display=swap` keeps text legible while the woff2s load. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
     />
+    <link
+      id="deferred-fonts"
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+      media="print"
+    />
+    <script src="/font-defer.js" defer></script>
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+      />
+    </noscript>
 
     <!-- Structured data for Google. `<script type="application/ld+json">`
          is treated as data, not script, by browsers, so it is not

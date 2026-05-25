@@ -30,6 +30,27 @@
 # custom properties. Removing it would require migrating every
 # component that uses inline styles, which is out of scope here.
 #
+# Audit (IMPROVEMENTS.md item 14, 2026-05-25): The inline `style=…`
+# attributes are emitted at runtime by:
+#   - Radix UI primitives (Floating UI positioning): Popover, Tooltip,
+#     DropdownMenu, ContextMenu, HoverCard, Select, Menubar, Slider,
+#     ScrollArea — Floating UI sets `top`, `left`, `transform`,
+#     `--radix-*` custom properties via direct DOM `style` writes;
+#     they cannot be migrated to class-based positioning without
+#     forking the library. Radix UI does not yet expose a nonce
+#     mechanism for these inline styles (tracking
+#     https://github.com/radix-ui/primitives/discussions/3257).
+#   - framer-motion: animated `style.transform` / `style.opacity`
+#     mutations every frame; nonce-per-frame is not feasible.
+#   - Tailwind 4 utility runtime: emits `style="--tw-…"` custom
+#     properties for arbitrary values.
+#   - GSAP / lenis / animejs: ditto, all use direct style mutation.
+# Nonce-based CSP for style-src would require either forking all of
+# the above or accepting broken UI; both unacceptable.
+# Decision: keep `'unsafe-inline'` for `style-src`. Re-evaluate when
+# Radix UI ships a nonce API or when CSP3 style-attr nonces gain
+# baseline browser support. Next review: 2027-05.
+#
 # `worker-src 'self' blob:` is required by maplibre-gl, which spawns
 # its tile-decoder worker from a blob URL. Without this directive the
 # hybrid address picker (PR #163) silently fails to render the map.

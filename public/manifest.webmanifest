@@ -49,7 +49,7 @@
     },
     {
       "name": "Cart",
-      "url": "/cart?source=pwa-shortcut",
+      "url": "/?source=pwa-shortcut&open=cart",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]

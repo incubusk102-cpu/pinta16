@@ -1,5 +1,4 @@
 import { Button } from "@react-email/components";
-import * as React from "react";
 import type { ButtonStyle } from "../types";
 import { buildActionStyle, isSafeUrl } from "../lib/styles";
 
