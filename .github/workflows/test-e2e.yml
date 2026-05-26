@@ -67,8 +67,14 @@ jobs:
       - name: Run smoke tests
         run: npm run test:e2e
 
+      # Artifact uploads are best-effort: a transient `Artifact storage
+      # quota has been hit` failure from GitHub's billing system (which
+      # lags real storage by 6-12h) must not turn an otherwise-green
+      # Playwright run red. The actual smoke verdict lives in the
+      # 'Run smoke tests' step above.
       - name: Upload Playwright report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
@@ -77,6 +83,7 @@ jobs:
 
       - name: Upload trace + screenshots on failure
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: playwright-test-results
