@@ -52,7 +52,13 @@ import {
 } from "../_lib/tiktok.js";
 import { getStore } from "../_lib/kv-stores.js";
 import { makeStore } from "../_lib/kv-store.js";
-import { isD1Available, d1Run, d1All, d1First } from "../_lib/d1.js";
+import {
+  isD1Available,
+  isBenignSchemaError,
+  d1Run,
+  d1All,
+  d1First,
+} from "../_lib/d1.js";
 import { D1_SCHEMA_STATEMENTS } from "../_lib/d1-schema.js";
 
 const json = (status, body) =>
@@ -94,50 +100,17 @@ const isSchemaApplied = async () => {
   }
 };
 
-// SQLite's `ALTER TABLE ADD COLUMN` rejects duplicates with a
-// `duplicate column name: <col>` error. Since `D1_SCHEMA_STATEMENTS`
-// is the source-of-truth bootstrap path (admin re-runs it whenever
-// they hit "Apply schema"), tolerate that specific failure mode so
-// adding new columns to `tiktok_posts` in future migrations doesn't
-// hard-stop the rest of the bootstrap.
-const isBenignSchemaError = (err) => {
-  const msg = String(err?.message || err || "").toLowerCase();
-  return msg.includes("duplicate column");
-};
-
-// Bring an existing `tiktok_posts` table up to the latest column set
-// (`view_count` / `like_count` / `comment_count` / `share_count` /
-// `engagement_refreshed_at`). For brand-new D1 instances these come
-// in via the inline CREATE TABLE in `d1-schema.js`; this helper is
-// the runtime equivalent of the matching `migrations/0013_*.sql`.
-const TIKTOK_POSTS_ALTER_STATEMENTS = [
-  `ALTER TABLE tiktok_posts ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE tiktok_posts ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE tiktok_posts ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE tiktok_posts ADD COLUMN share_count INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE tiktok_posts ADD COLUMN engagement_refreshed_at TEXT`,
-];
-
+// `D1_SCHEMA_STATEMENTS` is generated from `migrations/*.sql` and
+// already includes the engagement-column `ALTER TABLE` statements
+// from `0013_tiktok_post_engagement.sql` — so replaying the whole
+// list against an existing D1 brings older `tiktok_posts` tables up
+// to the latest column set. SQLite has no `ALTER TABLE ADD COLUMN IF
+// NOT EXISTS`, so we tolerate the resulting `duplicate column name`
+// errors via the shared `isBenignSchemaError` helper.
 const applySchema = async () => {
   if (!isD1Available()) return { ok: false, error: "D1 not configured" };
   try {
     for (const sql of D1_SCHEMA_STATEMENTS) {
-      // Only run the tiktok_posts statements when bootstrapping
-      // through this endpoint. The other tables come along for the
-      // ride because they're idempotent (`IF NOT EXISTS`) — keeps
-      // schema parity if D1 was created fresh after the table
-      // already existed in main.
-      try {
-        await d1Run(sql);
-      } catch (err) {
-        if (!isBenignSchemaError(err)) throw err;
-      }
-    }
-    // Migrate older `tiktok_posts` tables that pre-date the
-    // engagement columns. New columns must be added explicitly —
-    // CREATE TABLE IF NOT EXISTS is a no-op against an existing
-    // table even if its schema is stale.
-    for (const sql of TIKTOK_POSTS_ALTER_STATEMENTS) {
       try {
         await d1Run(sql);
       } catch (err) {

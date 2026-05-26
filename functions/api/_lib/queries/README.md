@@ -78,12 +78,12 @@ modules MUST do the same so the surface stays uniform.
    the legacy `from "../_lib/d1.js"` imports keep working.
 4. If the query needs new schema, add a numbered migration in
    `migrations/` (see `migrations/README.md` for the numbering
-   convention — slot `0009` is permanently retired).
-5. Update `_lib/d1-schema.js` to match — until the schema generator
-   from `improvement.md` item B5 lands, the runtime bootstrap path
-   `POST /api/admin/d1?action=apply-schema` still reads from
-   `d1-schema.js`.
-6. Add a unit test under `tests/unit/_lib/` mirroring the existing
+   convention — slot `0009` is permanently retired). Then run
+   `npm run generate:d1-schema` and commit the regenerated
+   `_lib/d1-schema.js` — it's derived from `migrations/*.sql` by
+   `scripts/generate-d1-schema.mjs`, and `npm run build` will fail
+   if the committed file ever drifts.
+5. Add a unit test under `tests/unit/_lib/` mirroring the existing
    `stock-events.test.ts` / `hero-slide-events.test.ts` /
    `newuser-modal-events.test.ts` style.
 
@@ -96,7 +96,6 @@ all keep importing from `_lib/d1.js` (the barrel) and continue to pass
 unmodified.
 
 The follow-up roadmap items in `improvement.md` will extract the
-inline SQL into `.sql` files (B2 / B3), generate `d1-schema.js` from
-the migration files (B5), add TypeScript types (B6), expand unit-test
-coverage (B8), and pull in the analytics queries from `admin/d1.js`
-(B9) and `_lib/tiktok.js` (B10).
+inline SQL into `.sql` files (B2 / B3), add TypeScript types (B6),
+expand unit-test coverage (B8), and pull in the analytics queries
+from `admin/d1.js` (B9) and `_lib/tiktok.js` (B10).
