@@ -1,5 +1,4 @@
 import { Heading, Section, Text } from "@react-email/components";
-import * as React from "react";
 import BaseEmail from "../components/BaseEmail";
 import {
   DISPLAY_FONT_STACK,

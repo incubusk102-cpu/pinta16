@@ -38,10 +38,7 @@ export function ContentSkeleton({
         role="status"
         aria-live="polite"
         aria-label={label}
-        className={
-          className ??
-          "px-4 sm:px-6 md:px-12 max-w-7xl mx-auto py-10"
-        }
+        className={className ?? "px-4 sm:px-6 md:px-12 max-w-7xl mx-auto py-10"}
       >
         <Skeleton className="h-7 w-48 mb-6" />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">

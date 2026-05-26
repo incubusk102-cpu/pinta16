@@ -7,7 +7,6 @@ import {
   Section,
   Text,
 } from "@react-email/components";
-import * as React from "react";
 import ActionButton from "../components/ActionButton";
 import BaseEmail from "../components/BaseEmail";
 import Divider from "../components/Divider";

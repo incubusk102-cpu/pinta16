@@ -14,7 +14,14 @@
 
 name = "canvhub"
 pages_build_output_dir = "dist"
-compatibility_date = "2024-09-23"
+# Bumped from 2024-09-23 → 2025-05-01 (IMPROVEMENTS.md item 5). The
+# `nodejs_compat` flag stays explicit because Pages does not yet
+# auto-enable it on date alone. No new flag-gated runtime behaviour
+# between these dates affects this codebase (we don't touch tail
+# workers, Workers AI v2 binding, or the experimental fetch behaviour
+# changes). Reviewed against
+# https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+compatibility_date = "2025-05-01"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------------------------------------------------------------------------
@@ -156,6 +163,13 @@ preview_id = "67c757b425ee427b9c9bba0a16519ff7"
 #
 # Until the binding exists, the sync endpoint returns 503 and the cron
 # is a no-op — the storefront keeps working unchanged.
+#
+# TODO(2026-08): Decide whether to ship abandoned-cart recovery. The
+# server-side code (functions/api/abandoned-cart/*) and the cron worker
+# are in main but unbound. To enable, create the production + preview
+# namespaces in the Cloudflare dashboard, paste the IDs below, and
+# uncomment. If we drop the feature, delete the endpoints / cron and
+# this comment block. See IMPROVEMENTS.md item 13.
 #
 # [[kv_namespaces]]
 # binding = "ABANDONED_CARTS"

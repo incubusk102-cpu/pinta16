@@ -100,24 +100,13 @@ const MobileBackToCollection = lazy(
   () => import("@/components/MobileBackToCollection"),
 );
 
+// `head()` is a TanStack Start (SSR) primitive and is a no-op under the
+// plain TanStack Router runtime this app ships. Per-route document head
+// management is handled client-side by the `useSEO` hook in `Index()`
+// below, and server-side OG / JSON-LD enrichment for crawlers is done
+// by `functions/_middleware.js`. See IMPROVEMENTS.md item 11.
 export const Route = createFileRoute("/")({
   component: Index,
-  head: () => ({
-    meta: [
-      { title: "Canvas Hub — Affordable Art, Authentic Stories" },
-      {
-        name: "description",
-        content:
-          "Discover hand-crafted paintings that transform spaces. Each piece tells a story, crafted with passion and precision.",
-      },
-      { property: "og:title", content: "Canvas Hub — Affordable Art Gallery" },
-      {
-        property: "og:description",
-        content:
-          "Original paintings, hand-crafted upon order. Browse our collection of affordable art.",
-      },
-    ],
-  }),
 });
 
 interface HeroOrFallbackProps {
@@ -204,25 +193,25 @@ function Index() {
           checkout drawers, and the traveling-daily-painting effect)
           lives as a sibling so it doesn't get focused by the skip link. */}
       <main id="main-content">
-      {/* Signed-out visitors see the full welcome (`HomeHero` 3D scene
+        {/* Signed-out visitors see the full welcome (`HomeHero` 3D scene
           when no slides are configured, or the admin slider when they
           are). Signed-in customers skip the brand-welcome — they're
           already onboarded — but still see admin-configured promotional
           slides via `suppressFallback`, so a "Sale" / "New collection"
           banner reaches every shopper, not just first-time visitors. */}
-      <section id={HOME_SECTION_IDS.hero}>
-        <HeroOrFallback suppressFallback={Boolean(user)} />
-      </section>
-      {/* Scroll-depth wrappers below — each section drifts up + scales
+        <section id={HOME_SECTION_IDS.hero}>
+          <HeroOrFallback suppressFallback={Boolean(user)} />
+        </section>
+        {/* Scroll-depth wrappers below — each section drifts up + scales
           + brightens through its scroll window, pairing with the
           backdrop's camera dolly to give the homepage a coherent
           z-axis parallax. Honours `prefers-reduced-motion`. */}
-      <ScrollDepth id={HOME_SECTION_IDS.marquee}>
-        <PaintingMarquee />
-      </ScrollDepth>
-      <AnimeDivider />
-      <VisitorTicker />
-      {/* Painting of the Day — the actual card stays where it has
+        <ScrollDepth id={HOME_SECTION_IDS.marquee}>
+          <PaintingMarquee />
+        </ScrollDepth>
+        <AnimeDivider />
+        <VisitorTicker />
+        {/* Painting of the Day — the actual card stays where it has
           always been, but it's wrapped in a `[data-daily-card]`
           opacity shell that `<TravelingDailyPainting />` fades out as
           the visitor scrolls the painting itself down to the
@@ -230,56 +219,56 @@ function Index() {
           card fades back in and the painting returns to it. Mobile /
           reduced-motion visitors don't get the travel — the wrapper's
           opacity falls back to `1` and the card stays visible. */}
-      <ScrollDepth id={HOME_SECTION_IDS.daily}>
-        <div
-          data-daily-card
-          style={{
-            opacity: "var(--daily-card-opacity, 1)",
-            transition: "opacity 80ms linear",
-          }}
-        >
-          <DailyFeature />
-        </div>
-      </ScrollDepth>
-      <AnimeDivider />
-      {/* Optional studio reel — renders only when admin has set a
+        <ScrollDepth id={HOME_SECTION_IDS.daily}>
+          <div
+            data-daily-card
+            style={{
+              opacity: "var(--daily-card-opacity, 1)",
+              transition: "opacity 80ms linear",
+            }}
+          >
+            <DailyFeature />
+          </div>
+        </ScrollDepth>
+        <AnimeDivider />
+        {/* Optional studio reel — renders only when admin has set a
           videoUrl in /admin → Storefront → Studio reel; otherwise the
           page collapses straight from DailyFeature into the
           collection scene. */}
-      <HomepageVideoMontage />
-      <CinematicCollectionCTA />
-      <Suspense
-        fallback={
-          <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-8 py-8">
-            <ProductRailSkeleton />
-            <ProductRailSkeleton />
-          </section>
-        }
-      >
-        <section
-          id={HOME_SECTION_IDS.forYou}
-          className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto"
+        <HomepageVideoMontage />
+        <CinematicCollectionCTA />
+        <Suspense
+          fallback={
+            <section className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-8 py-8">
+              <ProductRailSkeleton />
+              <ProductRailSkeleton />
+            </section>
+          }
         >
-          <RecommendedRow />
-          <RecentlyViewed />
-          <InspiredByYouRail />
-        </section>
-        <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
-          <Ornament label="The studio" />
-        </div>
-        {/* Sentinel watched by MobileBackToCollection — when this scrolls
+          <section
+            id={HOME_SECTION_IDS.forYou}
+            className="px-4 sm:px-6 md:px-12 max-w-7xl mx-auto"
+          >
+            <RecommendedRow />
+            <RecentlyViewed />
+            <InspiredByYouRail />
+          </section>
+          <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+            <Ornament label="The studio" />
+          </div>
+          {/* Sentinel watched by MobileBackToCollection — when this scrolls
             above the viewport the floating "View Collection" pill is
             revealed. Sits just before the editorial block (About /
             ThankYou / Reviews / Contact) so the pill shows up only when
             the customer has drifted away from the dynamic shopping
             carousels into the studio story. Zero visual footprint. */}
-        <div
-          id="back-to-collection-sentinel"
-          aria-hidden="true"
-          className="h-px"
-        />
-      </Suspense>
-      {/* On the wall today — the dedicated wall scene where the
+          <div
+            id="back-to-collection-sentinel"
+            aria-hidden="true"
+            className="h-px"
+          />
+        </Suspense>
+        {/* On the wall today — the dedicated wall scene where the
           Painting of the Day lands after the visitor has scrolled
           past the Daily card and the carousels. `<TravelingDailyPainting />`
           (mounted at the bottom of the route) interpolates a fixed
@@ -305,21 +294,21 @@ function Index() {
           or a stale-chunk error after a deploy) never takes down the
           whole homepage — the wall is decorative and the page must
           keep working without it. */}
-      <SilentBoundary label="wall-scene">
-        <WallScene />
-      </SilentBoundary>
-      <Suspense fallback={null}>
-        <AboutSection />
-        <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
-          <Ornament label="Voices" />
-        </div>
-        <ThankYouWall />
-        <ReviewsSection />
-        <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
-          <Ornament label="Stay in touch" />
-        </div>
-        <ContactSection />
-      </Suspense>
+        <SilentBoundary label="wall-scene">
+          <WallScene />
+        </SilentBoundary>
+        <Suspense fallback={null}>
+          <AboutSection />
+          <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+            <Ornament label="Voices" />
+          </div>
+          <ThankYouWall />
+          <ReviewsSection />
+          <div className="px-4 sm:px-6 md:px-12 max-w-3xl mx-auto py-8">
+            <Ornament label="Stay in touch" />
+          </div>
+          <ContactSection />
+        </Suspense>
       </main>
       <Suspense fallback={null}>
         <CartDrawer />

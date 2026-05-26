@@ -1,5 +1,4 @@
 import { Hr, Section } from "@react-email/components";
-import * as React from "react";
 import type { DividerStyle } from "../types";
 import { buildDividerStyle } from "../lib/styles";
 
