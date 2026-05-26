@@ -54,9 +54,15 @@ const prefersCoarsePointer = () =>
  * see the painting in both the Daily card and on the wall in their
  * resting positions. The CSS variables stay unset, so the fallbacks
  * (`1`) make both copies visible without any scroll choreography.
- * Coarse-pointer visitors (mobile / tablet) DO get the travel
- * animation — the scrub time is just tightened so it tracks finger
- * scrolling without feeling laggy.
+ *
+ * Coarse-pointer / mobile visitors don't render this component
+ * either. `<WallScene />` itself is gated to desktop, so on mobile
+ * the destination `[data-wall-target]` doesn't exist and there's
+ * nothing for the proxy to travel toward — but more importantly,
+ * scrubbed-on-scroll motion on touch devices fights the OS's native
+ * scroll momentum and feels laggy regardless of how tight the scrub
+ * is. Mobile visitors see the painting once, in the Daily card at
+ * the top of the homepage, and that's it.
  */
 const TravelingDailyPainting = () => {
   const { config, loading } = useStorefrontConfig();
@@ -74,8 +80,13 @@ const TravelingDailyPainting = () => {
   useEffect(() => {
     if (!artwork) return;
     if (prefersReducedMotion()) return;
-
-    const isCoarsePointer = prefersCoarsePointer();
+    // `<WallScene />` only mounts on desktop / fine-pointer, so on
+    // mobile there's no destination rect for the proxy to fly into.
+    // Bail out early to avoid creating GSAP ScrollTriggers whose
+    // trigger selector resolves to `null`, and to skip writing the
+    // coordinating CSS variables on `:root` (their fallbacks of `1`
+    // already keep the Daily card visible).
+    if (prefersCoarsePointer()) return;
 
     const proxy = proxyRef.current;
     if (!proxy) return;
@@ -213,13 +224,12 @@ const TravelingDailyPainting = () => {
         trigger: "[data-wall-scene]",
         start: "top bottom",
         end: "top 30%",
-        // Touch scrolling has its own momentum / damping; a long
-        // scrub time on mobile makes the painting feel like it's
-        // dragging behind the finger. Tighten the smoothing so the
-        // travel tracks the actual scroll position closely on
-        // mobile, and keep the slightly smoothed value on desktop
-        // where wheel scrolling is more discrete.
-        scrub: isCoarsePointer ? 0.15 : 0.4,
+        // Slightly smoothed scrub so wheel scroll feels glassy
+        // rather than 1:1 jittery. Mobile / coarse-pointer never
+        // reaches this code path — the effect is gated to desktop
+        // by the `prefersCoarsePointer()` early-return above and by
+        // `<WallScene />` not mounting on mobile.
+        scrub: 0.4,
         onUpdate: (self) => {
           // Re-resolve rects each update — the page can grow / shrink
           // when admin-driven sections load in (`InspiredByYouRail`,
@@ -253,13 +263,12 @@ const TravelingDailyPainting = () => {
       // from the viewport top) so the wall painting is fully visible
       // at the boundary, and runs until the section's bottom passes
       // the viewport top ("bottom top" — section fully scrolled
-      // past). Mobile scroll smoothing is tightened the same way as
-      // the travel trigger so the fade tracks the finger position.
+      // past). Same scrub as the travel trigger; desktop-only.
       ScrollTrigger.create({
         trigger: "[data-wall-scene]",
         start: "top 30%",
         end: "bottom top",
-        scrub: isCoarsePointer ? 0.15 : 0.4,
+        scrub: 0.4,
         onUpdate: (self) => updateLeave(self.progress),
         // `self` is the ScrollTrigger instance — same TDZ-safe pattern
         // as the travel trigger above. GSAP calls `onRefresh`

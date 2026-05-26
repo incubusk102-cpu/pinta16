@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { findArtworkById } from "@/lib/artworks";
@@ -42,13 +42,51 @@ import { findArtworkById } from "@/lib/artworks";
  * — only the small WallScene shell ships in the initial homepage
  * bundle, then the 3D module loads in parallel with the rest of the
  * page.
+ *
+ * Mobile / coarse-pointer visitors don't render the section at all.
+ * The cinematic "painting flies down into a 3D frame on a wall"
+ * transition lives or dies by smooth wheel-scroll + a wide viewport,
+ * and on touch devices the scrubbed travel feels laggy and the 3D
+ * frame eats roughly a third of a small screen. Hiding the whole
+ * section on mobile both lightens the page (no Three.js chunk
+ * fetched, no GSAP ScrollTrigger created in
+ * `<TravelingDailyPainting />`) and removes the awkward in-between
+ * state where the painting just sits in a frame with no reveal
+ * choreography. The Daily card at the top of the homepage still
+ * shows the same artwork, so mobile visitors aren't missing it.
  */
 
 const WallPainting3D = lazy(() => import("./WallPainting3D"));
 
+// `null` until the media query resolves on the client. Returning
+// `null` from render in the meantime means mobile visitors never see
+// a flash of the heavy wall section, and the lazy `WallPainting3D`
+// chunk is never fetched on mobile because the `<Suspense>` boundary
+// below never mounts. The matcher tracks `(min-width: 768px)` (matches
+// the Tailwind `md` breakpoint already used across the homepage) and
+// `(pointer: fine)` so a tablet in landscape that happens to be 768px
+// wide still gets the lightweight mobile experience as long as it's
+// a touch device.
+const DESKTOP_MEDIA_QUERY = "(min-width: 768px) and (pointer: fine)";
+
 const WallScene = () => {
   const { config, loading } = useStorefrontConfig();
   const { products } = useProducts();
+
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const mql = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const update = () => setIsDesktop(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
 
   const today = config.dailyFeatureToday;
 
@@ -57,6 +95,7 @@ const WallScene = () => {
     return findArtworkById(today.productId, products);
   }, [today?.productId, products]);
 
+  if (isDesktop !== true) return null;
   if (loading) return null;
   if (!today || !artwork) return null;
 
