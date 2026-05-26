@@ -20,6 +20,9 @@ import {
   d1First,
   mirrorOrderToD1,
   mirrorProductToD1,
+  orderRevenueSummary,
+  topProductsByRevenue,
+  customersSummary,
 } from "../_lib/d1.js";
 import { D1_SCHEMA_STATEMENTS } from "../_lib/d1-schema.js";
 import { connectLambda, getStore } from "../_lib/kv-stores.js";
@@ -88,101 +91,20 @@ export const onRequestGet = async ({ request, env }) => {
 
   if (action === "revenue") {
     if (!isD1Available()) return json(200, { available: false });
-    const now = new Date();
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01T00:00:00`;
-    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthStart = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}-01T00:00:00`;
-    const lastMonthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01T00:00:00`;
-
-    const thisMonth = await d1First(
-      `SELECT COALESCE(SUM(total),0) as revenue, COUNT(*) as order_count
-       FROM orders WHERE created_at >= ? AND status NOT IN ('cancelled','refunded')`,
-      [monthStart],
-    );
-    const lastMonth = await d1First(
-      `SELECT COALESCE(SUM(total),0) as revenue, COUNT(*) as order_count
-       FROM orders WHERE created_at >= ? AND created_at < ? AND status NOT IN ('cancelled','refunded')`,
-      [lastMonthStart, lastMonthEnd],
-    );
-    const allTime = await d1First(
-      `SELECT COALESCE(SUM(total),0) as revenue, COUNT(*) as order_count
-       FROM orders WHERE status NOT IN ('cancelled','refunded')`,
-    );
-
-    // Pull a 6-month revenue history so the analytics card can render
-    // a path-draw sparkline beside the headline figure. Months with
-    // zero orders still emit a row (LEFT-joined against a generated
-    // calendar in JS) so the trendline doesn't visually skip gaps.
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    const sixMonthsAgoIso = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, "0")}-01T00:00:00`;
-    const monthlyRows = await d1All(
-      `SELECT
-         substr(created_at, 1, 7) as ym,
-         COALESCE(SUM(total),0) as revenue,
-         COUNT(*) as order_count
-       FROM orders
-       WHERE created_at >= ? AND status NOT IN ('cancelled','refunded')
-       GROUP BY ym
-       ORDER BY ym ASC`,
-      [sixMonthsAgoIso],
-    );
-    const monthlyByYm = new Map();
-    for (const row of monthlyRows?.results || []) {
-      monthlyByYm.set(row.ym, {
-        revenue: row.revenue || 0,
-        orders: row.order_count || 0,
-      });
-    }
-    const monthlyHistory = [];
-    for (let i = 0; i < 6; i += 1) {
-      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const cell = monthlyByYm.get(ym) || { revenue: 0, orders: 0 };
-      monthlyHistory.push({ ym, ...cell });
-    }
-
-    return json(200, {
-      available: true,
-      thisMonth: {
-        revenue: thisMonth?.revenue || 0,
-        orders: thisMonth?.order_count || 0,
-      },
-      lastMonth: {
-        revenue: lastMonth?.revenue || 0,
-        orders: lastMonth?.order_count || 0,
-      },
-      allTime: {
-        revenue: allTime?.revenue || 0,
-        orders: allTime?.order_count || 0,
-      },
-      monthlyHistory,
-    });
+    const summary = await orderRevenueSummary();
+    return json(200, { available: true, ...summary });
   }
 
   if (action === "top-products") {
     if (!isD1Available()) return json(200, { available: false });
-    const result = await d1All(
-      `SELECT product_id, product_title, SUM(subtotal) as total_revenue, SUM(quantity) as total_qty
-       FROM order_items WHERE product_id IS NOT NULL
-       GROUP BY product_id ORDER BY total_revenue DESC LIMIT 10`,
-    );
-    return json(200, { available: true, products: result?.results || [] });
+    const products = await topProductsByRevenue();
+    return json(200, { available: true, products });
   }
 
   if (action === "customers-summary") {
     if (!isD1Available()) return json(200, { available: false });
-    const totals = await d1First(
-      `SELECT COUNT(*) as total_customers, COALESCE(AVG(total_spent),0) as avg_ltv FROM customers`,
-    );
-    const repeat = await d1First(
-      `SELECT COUNT(*) as cnt FROM customers WHERE total_orders >= 2`,
-    );
-    return json(200, {
-      available: true,
-      totalCustomers: totals?.total_customers || 0,
-      avgLtv: Math.round(totals?.avg_ltv || 0),
-      repeatCustomers: repeat?.cnt || 0,
-    });
+    const summary = await customersSummary();
+    return json(200, { available: true, ...summary });
   }
 
   return json(400, { error: `Unknown action: ${action}` });

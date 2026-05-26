@@ -18,11 +18,12 @@ at review time.
 queries/
 ├── core.js               # getD1 / isD1Available / d1Run / d1All / d1First / d1Batch + shared helpers
 ├── index.js              # barrel re-export (every legacy symbol)
-├── orders/               # order + customer mirror
+├── orders/               # order + customer mirror, revenue analytics
+├── customers/            # customer summary aggregates
 ├── wishlists/            # WISHLISTS KV mirror
 ├── coupons/              # redemption ledger + per-customer caps + analytics
 ├── returns/              # RMA mirror + analytics
-├── products/             # PRODUCTS KV mirror so order_items can JOIN
+├── products/             # PRODUCTS KV mirror so order_items can JOIN, top-N analytics
 ├── page-events/          # /api/page-events beacon + funnel/top-paths/etc.
 ├── search-events/        # /api/search-events beacon + top/zero-result/recent
 ├── hero-slides/          # /api/hero-slide-events beacon + per-slide CTR
@@ -35,6 +36,13 @@ Each domain module is a single `index.js` that exports the public helpers
 for that domain. The grouping mirrors the migration filenames in
 `migrations/` so a query repository file maps to a single CREATE TABLE
 statement.
+
+When a domain accumulates analytics queries that aren't part of the
+KV-mirror write path (i.e. they only run against admin endpoints),
+they live in a sibling `analytics.js` file under the same directory
+(e.g. `orders/analytics.js`, `products/analytics.js`). This keeps the
+`index.js` files focused on the mirror contract and gives admin SQL
+its own discoverable home.
 
 ## Conventions
 
@@ -97,5 +105,7 @@ unmodified.
 
 The follow-up roadmap items in `improvement.md` will extract the
 inline SQL into `.sql` files (B2 / B3), add TypeScript types (B6),
-expand unit-test coverage (B8), and pull in the analytics queries
-from `admin/d1.js` (B9) and `_lib/tiktok.js` (B10).
+and pull in the analytics queries from `_lib/tiktok.js` (B10). B8
+(unit-test coverage) and B9 (admin analytics consolidation from
+`admin/d1.js`) have been completed — see `orders/analytics.js`,
+`products/analytics.js`, and `customers/index.js`.
