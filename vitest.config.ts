@@ -25,6 +25,12 @@ export default defineConfig({
     environment: "node",
     globals: false,
     reporters: ["default"],
+    // Sets `IS_REACT_ACT_ENVIRONMENT = true` so React 19's act()
+    // warning stays quiet for the component tests under
+    // `tests/unit/contexts/`. Node-environment tests under
+    // `tests/unit/_lib`, `tests/unit/lib`, and `tests/unit/middleware`
+    // don't render React so this is a no-op for them.
+    setupFiles: ["./tests/setup-react.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

@@ -14,12 +14,12 @@
 
 **Tasks:**
 
-- [ ] Add `/collection`, `/about`, `/contact`, `/resources`, and `/resources/*` to the `isHtmlPath` check
-- [ ] Build per-page meta payloads (title, description, OG tags) for each new path
-- [ ] Add JSON-LD `WebPage` or `CollectionPage` structured data for `/collection`
-- [ ] Add JSON-LD `AboutPage` structured data for `/about`
-- [ ] Add JSON-LD `ContactPage` structured data for `/contact`
-- [ ] Test with Facebook Sharing Debugger and Twitter Card Validator
+- [x] Add `/collection`, `/about`, `/contact`, `/resources`, and `/resources/*` to the `isHtmlPath` check
+- [x] Build per-page meta payloads (title, description, OG tags) for each new path
+- [x] Add JSON-LD `WebPage` or `CollectionPage` structured data for `/collection`
+- [x] Add JSON-LD `AboutPage` structured data for `/about`
+- [x] Add JSON-LD `ContactPage` structured data for `/contact`
+- [x] Test with Facebook Sharing Debugger and Twitter Card Validator — implemented as `tests/unit/middleware/seo-meta.test.js` (71 assertions over OG / Twitter / JSON-LD payloads injected by the rewriter; the pure builders were also extracted into `functions/api/_lib/seo-meta.js`)
 
 ---
 
@@ -29,12 +29,12 @@
 
 **Tasks:**
 
-- [ ] Create `tests/e2e/homepage.spec.ts` — verify homepage loads, has `<h1>`, renders painting marquee, navigation works
-- [ ] Create `tests/e2e/product.spec.ts` — verify product page renders title, price, and add-to-cart button
-- [ ] Create `tests/e2e/navigation.spec.ts` — verify `/collection`, `/about`, `/contact` load without errors
-- [ ] Create `tests/e2e/cart.spec.ts` — verify add-to-cart, quantity update, and cart drawer interaction
-- [ ] Add component tests for `CartProvider`, `UserAuthProvider`, `WishlistProvider`
-- [ ] Expand `vitest.config.ts` coverage `include` to add `src/hooks/**/*.ts` and `src/contexts/**/*.tsx`
+- [x] Create `tests/e2e/homepage.spec.ts` — verify homepage loads, has `<h1>`, renders painting marquee, navigation works
+- [x] Create `tests/e2e/product.spec.ts` — verify product page renders title, price, and add-to-cart button
+- [x] Create `tests/e2e/navigation.spec.ts` — verify `/collection`, `/about`, `/contact` load without errors
+- [x] Create `tests/e2e/cart.spec.ts` — verify add-to-cart, quantity update, and cart drawer interaction
+- [x] Add component tests for `CartProvider`, `UserAuthProvider`, `WishlistProvider` — `tests/unit/contexts/{CartContext,UserAuthContext,WishlistContext}.test.tsx` (happy-dom + React 19 `act`; 52 tests across the three providers)
+- [x] Expand `vitest.config.ts` coverage `include` to add `src/hooks/**/*.ts` and `src/contexts/**/*.tsx`
 
 ---
 
