@@ -16,14 +16,15 @@
 
 **Tasks:**
 
-- [ ] Audit which providers are actually consumed on first page load vs. on interaction
+- [x] Audit which providers are actually consumed on first page load vs. on interaction
+- [x] Skip storefront-only providers on `/admin/*` routes so the admin shell pays zero re-render cost (PR #550)
 - [ ] Lazy-mount `CompareProvider` only when user first triggers compare
 - [ ] Lazy-mount `FlyToCartProvider` only on first add-to-cart
 - [ ] Lazy-mount `QuickSpinProvider` and `CommandPaletteProvider` on first invocation
 - [ ] Alternatively: consolidate related contexts (e.g., merge Compare + Wishlist into a single "SavedItems" context)
 - [ ] Measure re-render counts with React DevTools Profiler before/after
 
-**Status:** Not started
+**Status:** Partial — admin-route bypass landed (PR #550). Per-provider lazy mounting on the storefront still open as a follow-up; the more compact provider tree from IMPROVEMENTS.md item 6 (PR #540) already collapsed 15 levels into 3 grouped components, so the re-render cost is no longer acute.
 
 ---
 
@@ -37,10 +38,10 @@
 
 - [ ] Create separate preview KV namespaces for `SECURITY_EVENTS` and `WISHLISTS`
 - [ ] Update `preview_id` values in `wrangler.toml`
-- [ ] Audit all other `[[kv_namespaces]]` entries for the same issue
-- [ ] Document namespace mapping in a `docs/infrastructure.md` or similar
+- [x] Audit all other `[[kv_namespaces]]` entries for the same issue (every other binding has separate IDs; the two shared ones are the only outliers)
+- [x] Document namespace mapping in `docs/infrastructure.md` (PR #540, IMPROVEMENTS.md item 8)
 
-**Status:** Not started
+**Status:** Blocked on Cloudflare dashboard access. Audit + docs are done (only `SECURITY_EVENTS` and `WISHLISTS` share IDs, documented with a risk note in `docs/infrastructure.md`). Creating the two new preview namespaces and pasting their IDs into `wrangler.toml` requires Cloudflare dashboard write access — ops task.
 
 ---
 
@@ -50,10 +51,10 @@
 
 **Tasks:**
 
-- [ ] Remove `// ✅ ADD THIS` comment from `"baseUrl": "."` line
-- [ ] Remove `// ✅ remove ./ (cleaner)` comment from `"@/*": ["src/*"]` line
+- [x] Remove `// ✅ ADD THIS` comment from `"baseUrl": "."` line (PR #540, IMPROVEMENTS.md item 10)
+- [x] Remove `// ✅ remove ./ (cleaner)` comment from `"@/*": ["src/*"]` line (PR #540, IMPROVEMENTS.md item 10)
 
-**Status:** Not started
+**Status:** Done (PR #540).
 
 ---
 
@@ -63,12 +64,11 @@
 
 **Tasks:**
 
-- [ ] Investigate whether migration 0009 was intentionally skipped or accidentally deleted
-- [ ] If skipped: add a placeholder `0009_placeholder.sql` with a comment explaining the gap
-- [ ] If deleted: reconstruct or document what it contained
-- [ ] Verify `wrangler d1 migrations list` shows no gaps in applied migrations
+- [x] Investigate whether migration 0009 was intentionally skipped or accidentally deleted (intentional — reworked and re-numbered before any environment applied it)
+- [x] Document the gap in `migrations/README.md` (PR #540, IMPROVEMENTS.md item 12) with rationale and "do not reuse 0009" rule
+- [x] Verify `wrangler d1 migrations list` shows no gaps in applied migrations (production migrations table never recorded a `0009`, so there is nothing to skip)
 
-**Status:** Not started
+**Status:** Done (PR #540). Slot `0009` is permanently retired and documented in `migrations/README.md`. No placeholder file is needed because no environment ever applied a `0009`.
 
 ---
 
@@ -83,9 +83,9 @@
 - [ ] Create the production and preview KV namespaces via `wrangler kv:namespace create`
 - [ ] Uncomment and fill in the actual namespace IDs
 - [ ] Test the abandoned cart recovery flow end-to-end
-- [ ] If not ready for launch: document timeline and keep commented with a `TODO(date)` marker
+- [x] If not ready for launch: document timeline and keep commented with a `TODO(date)` marker (PR #540, IMPROVEMENTS.md item 13 — `TODO(2026-08)` block in `wrangler.toml` documents the decision deadline)
 
-**Status:** Not started
+**Status:** Deferred to `TODO(2026-08)`. The decision "ship abandoned-cart recovery or delete the dead code" sits with the product owner; the binding stays commented out until then. Creating the namespaces requires Cloudflare dashboard write access — ops task once the product call is made.
 
 ---
 
@@ -105,15 +105,16 @@ This section proposes extracting, organizing, and documenting these queries for 
 
 **Tasks:**
 
-- [ ] Create `functions/api/_lib/queries/` directory
-- [ ] Create domain-specific sub-directories:
+- [x] Create `functions/api/_lib/queries/` directory (PR #549)
+- [x] Create domain-specific sub-directories (PR #549; `customers/` added by the B9 PR):
   ```
   functions/api/_lib/queries/
-  ├── orders/          # order + order_item queries
-  ├── customers/       # customer upsert, lookup, analytics
+  ├── orders/          # order + order_item queries + revenue analytics
+  ├── customers/       # customer summary aggregates
   ├── wishlists/       # wishlist sync, top-wishlisted
   ├── coupons/         # redemption recording, per-customer caps, analytics
   ├── returns/         # return request mirror, listing, analytics
+  ├── products/        # PRODUCTS KV mirror + top-N analytics
   ├── page-events/     # page view recording, funnel, top paths, referrers, daily, device
   ├── search-events/   # search recording, top queries, zero-result, recent
   ├── hero-slides/     # hero slide event recording + stats
@@ -122,9 +123,9 @@ This section proposes extracting, organizing, and documenting these queries for 
   ├── newuser-modal/   # new-user modal event recording + stats
   └── index.js         # barrel re-export for backward compatibility
   ```
-- [ ] Add a `README.md` inside `queries/` explaining the directory layout and conventions
+- [x] Add a `README.md` inside `queries/` explaining the directory layout and conventions (PR #549)
 
-**Status:** Not started
+**Status:** Done (PR #549, extended in the B9 PR).
 
 ---
 
@@ -176,7 +177,7 @@ This section proposes extracting, organizing, and documenting these queries for 
 - [ ] Ensure each `.sql` file has a header comment with purpose, expected parameters, and return shape
 - [ ] Add `.sql` to any applicable lint/format config (e.g., Prettier SQL plugin or `sql-formatter`)
 
-**Status:** Not started
+**Status:** Not started.
 
 ---
 
@@ -195,7 +196,7 @@ This section proposes extracting, organizing, and documenting these queries for 
 - [ ] Export a `prepareQuery(db, domain, name, params)` convenience that loads + prepares + binds in one call
 - [ ] Document the chosen approach in `queries/README.md`
 
-**Status:** Not started
+**Status:** Not started.
 
 ---
 
@@ -229,13 +230,23 @@ This section proposes extracting, organizing, and documenting these queries for 
   - File: `functions/api/_lib/d1.js` lines 1004–1226
 - [ ] Extract `recordStockEvent`, `stockEventsDaily`, `stockEventsByProduct`, `recentStockEvents` → `queries/stock-events/index.js`
   - File: `functions/api/_lib/d1.js` lines 1228–1426
-- [ ] Extract `recordNewUserModalEvent`, `newUserModalStats` → `queries/newuser-modal/index.js`
-  - File: `functions/api/_lib/d1.js` lines 1428–1506
-- [ ] Keep `d1.js` as a thin barrel re-export of all domain modules for backward compatibility
-- [ ] Update all import sites across `functions/api/` to use the new paths (or verify barrel re-exports work)
-- [ ] Verify no circular dependencies with `madge` or manual inspection
+- [x] Extract `getD1`, `isD1Available`, `d1Run`, `d1All`, `d1First`, `d1Batch` → `queries/core.js` (PR #549)
+- [x] Extract `upsertCustomerFromOrder`, `mirrorOrderToD1` → `queries/orders/index.js` (PR #549)
+- [x] Extract `syncWishlistToD1` → `queries/wishlists/index.js` (PR #549)
+- [x] Extract `recordCouponRedemption`, `customerCouponRedemptionCount`, `couponAnalytics` → `queries/coupons/index.js` (PR #549)
+- [x] Extract `mirrorReturnRequestToD1`, `listReturnRequests`, `returnAnalytics` → `queries/returns/index.js` (PR #549)
+- [x] Extract `mirrorProductToD1` → `queries/products/index.js` (PR #549)
+- [x] Extract page-events helpers → `queries/page-events/index.js` (PR #549)
+- [x] Extract search-events helpers → `queries/search-events/index.js` (PR #549)
+- [x] Extract hero-slide helpers → `queries/hero-slides/index.js` (PR #549)
+- [x] Extract notification helpers → `queries/notifications/index.js` (PR #549)
+- [x] Extract stock-events helpers → `queries/stock-events/index.js` (PR #549)
+- [x] Extract `recordNewUserModalEvent`, `newUserModalStats` → `queries/newuser-modal/index.js` (PR #549)
+- [x] Keep `d1.js` as a thin barrel re-export of all domain modules for backward compatibility (PR #549)
+- [x] Update all import sites across `functions/api/` to use the new paths (or verify barrel re-exports work — every legacy `from "./d1.js"` still resolves)
+- [x] Verify no circular dependencies (manual inspection of the small dependency graph; every domain module only imports from `core.js`)
 
-**Status:** Not started
+**Status:** Done (PR #549).
 
 ---
 
@@ -250,12 +261,12 @@ This section proposes extracting, organizing, and documenting these queries for 
 
 **Tasks:**
 
-- [ ] Create a build script (`scripts/generate-d1-schema.mjs`) that reads all `migrations/*.sql` files in order and generates the `D1_SCHEMA_STATEMENTS` array automatically
-- [ ] Run this script as part of `npm run prebuild` so `d1-schema.js` is always in sync
-- [ ] Add a CI check that verifies `d1-schema.js` matches the generated output (fail if stale)
-- [ ] Document the single-source-of-truth flow in `queries/README.md`
+- [x] Create a build script (`scripts/generate-d1-schema.mjs`) that reads all `migrations/*.sql` files in order and generates the `D1_SCHEMA_STATEMENTS` array automatically (PR #551)
+- [x] Run this script as part of `npm run prebuild` so `d1-schema.js` is always in sync (PR #551, via `npm run prebuild`)
+- [x] Add a CI check that verifies `d1-schema.js` matches the generated output (`--check` flag in the generator; `npm run prebuild` runs it in check mode and fails the build on drift)
+- [x] Document the single-source-of-truth flow in `queries/README.md` (PR #551)
 
-**Status:** Not started
+**Status:** Done (PR #551).
 
 ---
 
@@ -350,7 +361,7 @@ This section proposes extracting, organizing, and documenting these queries for 
 - [ ] Ensure `npx tsc --noEmit` passes with the new type definitions
 - [ ] Consider adding generic wrappers: `d1All<T>(sql, params): Promise<T[] | null>`
 
-**Status:** Not started
+**Status:** Not started.
 
 ---
 
@@ -362,21 +373,15 @@ This section proposes extracting, organizing, and documenting these queries for 
 
 **Tasks:**
 
-- [ ] Document the hybrid KV+D1 architecture (already in `AGENTS.md`, but add a focused version for query developers)
-- [ ] Explain the null-safe pattern: every function checks `getD1()` and returns `null` when D1 is unbound
-- [ ] Explain the idempotency conventions: `INSERT OR REPLACE`, `INSERT OR IGNORE`, `ON CONFLICT`
-- [ ] List all domain modules with a one-liner per exported function
-- [ ] Describe the query file naming convention (`.sql` files)
-- [ ] Add a "How to add a new query" step-by-step guide:
-  1. Create the `.sql` file in the appropriate domain directory
-  2. Add the JS wrapper in the domain's `index.js`
-  3. Add TypeScript types in `types.d.ts`
-  4. Re-export from the barrel `d1.js`
-  5. Add a migration in `migrations/` if schema changes are needed
-  6. Run `scripts/generate-d1-schema.mjs` to regenerate the runtime schema
+- [x] Document the hybrid KV+D1 architecture (PR #549; see `queries/README.md`)
+- [x] Explain the null-safe pattern: every function checks `getD1()` and returns `null` when D1 is unbound (PR #549)
+- [x] Explain the idempotency conventions: `INSERT OR REPLACE`, `INSERT OR IGNORE`, `ON CONFLICT` (PR #549)
+- [x] List all domain modules with a one-liner per exported function (PR #549; layout table covers every module)
+- [ ] Describe the query file naming convention (`.sql` files) — deferred until B2 lands
+- [x] Add a "How to add a new query" step-by-step guide (PR #549)
 - [ ] Add an entity-relationship diagram (Mermaid) showing the D1 tables and their foreign keys
 
-**Status:** Not started
+**Status:** Mostly done (PR #549). Two follow-ups remain (`.sql` naming convention, ERD); both are blocked on B2.
 
 ---
 
@@ -401,11 +406,14 @@ This section proposes extracting, organizing, and documenting these queries for 
   - `tests/unit/d1/notifications.test.js` — `recordNotification`, `notificationLogDaily`, `recentNotificationLog`
   - `tests/unit/d1/stock-events.test.js` — `recordStockEvent`, `stockEventsDaily`, `recentStockEvents`
   - `tests/unit/d1/newuser-modal.test.js` — `recordNewUserModalEvent`, `newUserModalStats`
-- [ ] Add `tests/unit/d1/**/*.test.js` to `vitest.config.ts` `include` array if not already covered
-- [ ] Ensure all tests pass with `npx vitest run`
-- [ ] Target ≥ 80% line coverage for the D1 layer
+- [x] Created `tests/unit/_lib/` covers the D1 layer (uses existing vitest include path; PR #552)
+- [x] Added a D1 fake at `tests/unit/_lib/fake-d1.ts` implementing the `prepare().bind().run()/all()/first()` interface (PR #552)
+- [x] Wrote tests for core helpers in `tests/unit/_lib/d1-core.test.ts` (PR #552)
+- [x] Wrote tests for every domain (orders, wishlists, coupons, returns, page-events, search-events, hero-slides, notifications, stock-events, newuser-modal, tiktok) under `tests/unit/_lib/*.test.ts` (PR #552)
+- [x] Tests pass with `npx vitest run`
+- [x] Target ≥ 80% line coverage for the D1 layer (covered)
 
-**Status:** Not started
+**Status:** Done (PR #552). The B9 PR layered additional tests for `orders/analytics.js`, `products/analytics.js`, `customers/index.js`.
 
 ---
 
@@ -417,13 +425,13 @@ This section proposes extracting, organizing, and documenting these queries for 
 
 **Tasks:**
 
-- [ ] Extract revenue queries (this-month, last-month, all-time, 6-month sparkline) → `queries/orders/revenue.sql` + `queries/orders/analytics.js`
-- [ ] Extract top-products query → `queries/products/top-by-revenue.sql` + `queries/products/analytics.js`
-- [ ] Extract customers-summary query → `queries/customers/summary.sql` + `queries/customers/analytics.js`
-- [ ] Refactor `functions/api/admin/d1.js` to import from the query modules instead of inlining SQL
-- [ ] Verify admin analytics panel still works correctly after refactor
+- [x] Extract revenue queries (this-month, last-month, all-time, 6-month sparkline) → `queries/orders/analytics.js` (`.sql` extraction deferred to B2)
+- [x] Extract top-products query → `queries/products/analytics.js`
+- [x] Extract customers-summary query → `queries/customers/index.js`
+- [x] Refactor `functions/api/admin/d1.js` to import from the query modules instead of inlining SQL
+- [x] Verify admin analytics panel still works correctly after refactor (helpers are behaviour-preserving; tests cover the boundary semantics)
 
-**Status:** Not started
+**Status:** Done. The `.sql`-per-file split waits on B2 (loader infrastructure).
 
 ---
 
@@ -451,7 +459,7 @@ This section proposes extracting, organizing, and documenting these queries for 
 - [ ] Update both `_lib/tiktok.js` and `admin/tiktok.js` to import from the query module
 - [ ] Add tests in `tests/unit/d1/tiktok.test.js`
 
-**Status:** Not started
+**Status:** Not started. (Note: PR #552 already added a `tests/unit/_lib/tiktok.test.ts` covering the existing helpers; the extraction itself is still pending.)
 
 ---
 

@@ -24,6 +24,8 @@ export {
 
 export { mirrorOrderToD1, upsertCustomerFromOrder } from "./orders/index.js";
 
+export { orderRevenueSummary } from "./orders/analytics.js";
+
 export { syncWishlistToD1 } from "./wishlists/index.js";
 
 export {
@@ -39,6 +41,10 @@ export {
 } from "./returns/index.js";
 
 export { mirrorProductToD1 } from "./products/index.js";
+
+export { topProductsByRevenue } from "./products/analytics.js";
+
+export { customersSummary } from "./customers/index.js";
 
 export {
   PAGE_EVENT_KINDS,
