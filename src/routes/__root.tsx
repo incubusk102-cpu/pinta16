@@ -134,6 +134,15 @@ function ReferralCaptureBridge() {
 // them into one helper unstacks the 15-level provider pyramid in
 // `RootComponent` below by four levels, without changing the
 // rendered React tree. See IMPROVEMENTS.md item 6.
+//
+// Audit (improvement.md A1): every consumer of `useCompare`,
+// `useFlyToCart`, `useQuickSpin`, and `useCommandPalette` lives in
+// the storefront tree — `ArtworkCard`, `GalleryNav`, `CompareDrawer`,
+// `CommandPalette`, and the product page — none of which mount under
+// the `/admin` route. `ConditionalStorefrontProviders` below skips
+// these four layers (plus their setup effects — a localStorage read
+// in Compare, a window keydown listener in CommandPalette) on admin
+// routes so the admin tree stays four providers thinner.
 function StorefrontProviders({ children }: { children: ReactNode }) {
   return (
     <CompareProvider>
@@ -144,6 +153,20 @@ function StorefrontProviders({ children }: { children: ReactNode }) {
       </FlyToCartProvider>
     </CompareProvider>
   );
+}
+
+// Route-aware gate around `StorefrontProviders`. Returns the bare
+// children on `/admin/*` so the admin tree doesn't pay for four
+// storefront-only context layers (and their setup effects —
+// CompareProvider reads from localStorage on mount, CommandPalette
+// attaches a global keydown listener). Storefront routes get the
+// original behaviour. See improvement.md A1.
+function ConditionalStorefrontProviders({ children }: { children: ReactNode }) {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return <>{children}</>;
+  return <StorefrontProviders>{children}</StorefrontProviders>;
 }
 
 // Bundle of provider layers that don't render anything but need to
@@ -261,6 +284,34 @@ function ConditionalOrderConfirmation() {
   return <OrderConfirmation />;
 }
 
+// Storefront command palette (Cmd+K / Ctrl+K / `/`). Gated to
+// storefront routes because the provider is now only mounted there
+// (see `ConditionalStorefrontProviders` above) — rendering the
+// component on admin would throw inside `useCommandPalette()`.
+function ConditionalCommandPalette() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return (
+    <Suspense fallback={null}>
+      <CommandPalette />
+    </Suspense>
+  );
+}
+
+// Storefront compare drawer. Gated for the same reason as
+// `ConditionalCommandPalette` — the underlying CompareProvider is no
+// longer mounted on `/admin`, so the drawer can only safely render
+// on storefront routes.
+function ConditionalCompareDrawer() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname.startsWith("/admin")) return null;
+  return <CompareDrawer />;
+}
+
 // Storefront-only `?` keyboard cheat-sheet — admin already has its
 // own command palette and shortcuts, and we don't want the dialog
 // blocking admin keystrokes.
@@ -316,7 +367,7 @@ function RootComponent() {
         <GlobalAuthProviders>
           <DataProviders>
             <CartProvider>
-              <StorefrontProviders>
+              <ConditionalStorefrontProviders>
                 <SmoothScrollProvider>
                   <a
                     href="#main-content"
@@ -341,14 +392,14 @@ function RootComponent() {
                     <ChatWidget />
                     <NewUserModal />
                     <PwaPrompts />
-                    <CommandPalette />
                   </Suspense>
+                  <ConditionalCommandPalette />
                   <ConditionalVisitorDelight />
                   <ConditionalKeyboardShortcuts />
-                  <CompareDrawer />
+                  <ConditionalCompareDrawer />
                   <Toaster richColors position="top-right" />
                 </SmoothScrollProvider>
-              </StorefrontProviders>
+              </ConditionalStorefrontProviders>
             </CartProvider>
           </DataProviders>
         </GlobalAuthProviders>
