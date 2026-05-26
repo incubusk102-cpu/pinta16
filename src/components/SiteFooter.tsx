@@ -2,18 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { Mail, MapPin, Package, Phone } from "lucide-react";
 
 // Brand glyphs are inline SVGs rather than `lucide-react` icons because
-// `lucide-react@^1` dropped all brand-trademarked icons (Facebook,
-// Instagram, TikTok, …). Matches the existing TikTok glyph pattern.
-const FacebookGlyph = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className="w-4 h-4"
-    aria-hidden="true"
-  >
-    <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z" />
-  </svg>
-);
+// `lucide-react@^1` dropped all brand-trademarked icons (Instagram,
+// TikTok, Pinterest, …). Matches the existing TikTok glyph pattern.
 const InstagramGlyph = () => (
   <svg
     viewBox="0 0 24 24"
@@ -39,10 +29,10 @@ import {
 
 // Set these to your actual Canvas Hub profile URLs to render the social
 // links. Left empty so we don't ship misleading aria-labels that point at
-// generic facebook.com / instagram.com homepages.
-const FACEBOOK_URL = "https://www.facebook.com/canvashubph";
+// generic instagram.com / tiktok.com / pinterest.com homepages.
 const INSTAGRAM_URL = "https://www.instagram.com/canvashubph";
-const TIKTOK_URL = "https://www.tiktok.com/@canvashubph";
+const TIKTOK_URL = "https://www.tiktok.com/@canvas9656";
+const PINTEREST_URL = "https://www.pinterest.com/canvashub2026";
 
 const SLUG_LABEL_KEYS: Record<
   PolicySlug,
@@ -88,19 +78,8 @@ const SiteFooter = () => {
               Brand wordmark moved out: 'Canvas Hub' now lives only on the
               homepage hero (and meta tab titles), not in the footer of
               every page. */}
-        {(FACEBOOK_URL || INSTAGRAM_URL || TIKTOK_URL) && (
+        {(INSTAGRAM_URL || TIKTOK_URL || PINTEREST_URL) && (
           <div className="sm:col-span-3 flex items-center gap-3">
-            {FACEBOOK_URL && (
-              <a
-                href={FACEBOOK_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Facebook"
-                className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
-              >
-                <FacebookGlyph />
-              </a>
-            )}
             {INSTAGRAM_URL && (
               <a
                 href={INSTAGRAM_URL}
@@ -127,6 +106,24 @@ const SiteFooter = () => {
                   aria-hidden="true"
                 >
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.73a8.19 8.19 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.16Z" />
+                </svg>
+              </a>
+            )}
+            {PINTEREST_URL && (
+              <a
+                href={PINTEREST_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Pinterest"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border/40 text-foreground/80 hover:text-foreground hover:border-foreground/60 transition-colors"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-4 h-4"
+                  aria-hidden="true"
+                >
+                  <path d="M12 2C6.48 2 2 6.48 2 12c0 4.24 2.65 7.86 6.39 9.31-.09-.79-.17-2 .04-2.86.19-.78 1.22-4.97 1.22-4.97s-.31-.62-.31-1.54c0-1.44.83-2.51 1.87-2.51.88 0 1.31.66 1.31 1.46 0 .89-.57 2.22-.86 3.46-.25 1.03.52 1.88 1.54 1.88 1.85 0 3.27-1.95 3.27-4.77 0-2.49-1.79-4.24-4.35-4.24-2.96 0-4.7 2.22-4.7 4.52 0 .9.34 1.86.78 2.39.09.1.1.2.07.3-.08.32-.26 1.03-.29 1.17-.05.19-.15.23-.34.14-1.25-.58-2.03-2.4-2.03-3.87 0-3.15 2.29-6.04 6.6-6.04 3.46 0 6.15 2.47 6.15 5.77 0 3.44-2.17 6.21-5.18 6.21-1.01 0-1.96-.52-2.29-1.14l-.62 2.37c-.22.87-.83 1.96-1.24 2.62.93.29 1.91.44 2.94.44 5.52 0 10-4.48 10-10S17.52 2 12 2z" />
                 </svg>
               </a>
             )}
