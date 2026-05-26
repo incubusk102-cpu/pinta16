@@ -35,7 +35,10 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
       // The eslint-plugin-react-hooks v7 (May 2026 dependabot bump)
       // turned on a handful of React Compiler-flavoured rules in its
       // recommended preset. They flag legitimate, pre-existing

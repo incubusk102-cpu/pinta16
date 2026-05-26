@@ -4,6 +4,27 @@
 
 ---
 
+## ✅ Status (as of 2026-05-26)
+
+Most roadmap items were implemented by PR #540 (`chore: execute IMPROVEMENTS.md roadmap`).
+PR #544 closes a follow-up gap (item #9's ESLint rule) and brings this tracker in line
+with the actual state of `main`.
+
+**Genuinely still pending:**
+
+- **#2 (partial)** — provider component tests (`CartProvider`, `UserAuthProvider`, `WishlistProvider`) were never added.
+- **#3 (partial)** — EB Garamond subsetting (whole face still loads).
+- **#6 (partial)** — providers were _grouped_ into named helpers for readability, but the **lazy-mount** sub-tasks and the "merge Compare + Wishlist into SavedItems" sub-task were not done.
+- **#8 (partial)** — `SECURITY_EVENTS` and `WISHLISTS` KV namespaces still share their `id` and `preview_id`. Only the documentation step was completed (see `docs/infrastructure.md`).
+
+Manual / operator-side sub-tasks (Lighthouse measurement, Facebook Sharing Debugger,
+device PWA install testing, live D1 + wrangler verification, React DevTools Profiler
+measurement) and the **Verification Checklist** at the bottom are intentionally left
+unchecked — they require an operator running tools against the deployed environment,
+not a code change.
+
+---
+
 ## 🔴 High Priority
 
 ### 1. Expand Middleware HTML Path Coverage (SEO)
@@ -14,11 +35,11 @@
 
 **Tasks:**
 
-- [ ] Add `/collection`, `/about`, `/contact`, `/resources`, and `/resources/*` to the `isHtmlPath` check
-- [ ] Build per-page meta payloads (title, description, OG tags) for each new path
-- [ ] Add JSON-LD `WebPage` or `CollectionPage` structured data for `/collection`
-- [ ] Add JSON-LD `AboutPage` structured data for `/about`
-- [ ] Add JSON-LD `ContactPage` structured data for `/contact`
+- [x] Add `/collection`, `/about`, `/contact`, `/resources`, and `/resources/*` to the `isHtmlPath` check
+- [x] Build per-page meta payloads (title, description, OG tags) for each new path
+- [x] Add JSON-LD `WebPage` or `CollectionPage` structured data for `/collection`
+- [x] Add JSON-LD `AboutPage` structured data for `/about`
+- [x] Add JSON-LD `ContactPage` structured data for `/contact`
 - [ ] Test with Facebook Sharing Debugger and Twitter Card Validator
 
 ---
@@ -29,12 +50,12 @@
 
 **Tasks:**
 
-- [ ] Create `tests/e2e/homepage.spec.ts` — verify homepage loads, has `<h1>`, renders painting marquee, navigation works
-- [ ] Create `tests/e2e/product.spec.ts` — verify product page renders title, price, and add-to-cart button
-- [ ] Create `tests/e2e/navigation.spec.ts` — verify `/collection`, `/about`, `/contact` load without errors
-- [ ] Create `tests/e2e/cart.spec.ts` — verify add-to-cart, quantity update, and cart drawer interaction
+- [x] Create `tests/e2e/homepage.spec.ts` — verify homepage loads, has `<h1>`, renders painting marquee, navigation works
+- [x] Create `tests/e2e/product.spec.ts` — verify product page renders title, price, and add-to-cart button
+- [x] Create `tests/e2e/navigation.spec.ts` — verify `/collection`, `/about`, `/contact` load without errors
+- [x] Create `tests/e2e/cart.spec.ts` — verify add-to-cart, quantity update, and cart drawer interaction
 - [ ] Add component tests for `CartProvider`, `UserAuthProvider`, `WishlistProvider`
-- [ ] Expand `vitest.config.ts` coverage `include` to add `src/hooks/**/*.ts` and `src/contexts/**/*.tsx`
+- [x] Expand `vitest.config.ts` coverage `include` to add `src/hooks/**/*.ts` and `src/contexts/**/*.tsx`
 
 ---
 
@@ -46,9 +67,9 @@
 
 **Tasks:**
 
-- [ ] Split into two `<link>` tags: one for Inter (critical body font) and one for Playfair Display + EB Garamond
-- [ ] Apply deferred loading pattern to non-critical fonts: `media="print" onload="this.media='all'"`
-- [ ] Add `<noscript>` fallback for the deferred fonts
+- [x] Split into two `<link>` tags: one for Inter (critical body font) and one for Playfair Display + EB Garamond
+- [x] Apply deferred loading pattern to non-critical fonts: `media="print" onload="this.media='all'"`
+- [x] Add `<noscript>` fallback for the deferred fonts
 - [ ] Consider subsetting EB Garamond (only used for `.font-logo`) to reduce payload
 - [ ] Measure FCP/LCP improvement with Lighthouse before/after
 
@@ -62,9 +83,9 @@
 
 **Tasks:**
 
-- [ ] Rename `"name": "tanstack_start_ts"` → `"name": "canvhub"` (line 2)
-- [ ] Move `"vite-tsconfig-paths": "^6.0.2"` from `dependencies` to `devDependencies` (line 104)
-- [ ] Remove `"path": "^0.12.7"` from `dependencies` (line 88) — Vite handles Node built-ins natively
+- [x] Rename `"name": "tanstack_start_ts"` → `"name": "canvhub"` (line 2)
+- [x] Move `"vite-tsconfig-paths": "^6.0.2"` from `dependencies` to `devDependencies` (line 104)
+- [x] Remove `"path": "^0.12.7"` from `dependencies` (line 88) — Vite handles Node built-ins natively
 - [ ] Run `npm ls path` to confirm nothing runtime-critical imports it
 
 ---
@@ -77,8 +98,8 @@
 
 **Tasks:**
 
-- [ ] Update to `compatibility_date = "2025-05-01"` (or latest stable)
-- [ ] Review [Cloudflare compatibility flags changelog](https://developers.cloudflare.com/workers/configuration/compatibility-dates/) for breaking changes between 2024-09-23 and new date
+- [x] Update to `compatibility_date = "2025-05-01"` (or latest stable)
+- [x] Review [Cloudflare compatibility flags changelog](https://developers.cloudflare.com/workers/configuration/compatibility-dates/) for breaking changes between 2024-09-23 and new date
 - [ ] Test all API functions (`functions/api/`) against the new date in preview
 - [ ] Verify middleware (`functions/_middleware.js`) still works correctly
 
@@ -109,8 +130,8 @@
 
 **Tasks:**
 
-- [ ] Change URL to `/?source=pwa-shortcut&open=cart` or `/collection?open=cart`
-- [ ] Ensure the app reads the `open=cart` query param on mount and opens the cart drawer
+- [x] Change URL to `/?source=pwa-shortcut&open=cart` or `/collection?open=cart`
+- [x] Ensure the app reads the `open=cart` query param on mount and opens the cart drawer
 - [ ] Test on Android (Chrome) and iOS (Safari) PWA installs
 
 ---
@@ -126,7 +147,7 @@
 - [ ] Create separate preview KV namespaces for `SECURITY_EVENTS` and `WISHLISTS`
 - [ ] Update `preview_id` values in `wrangler.toml`
 - [ ] Audit all other `[[kv_namespaces]]` entries for the same issue
-- [ ] Document namespace mapping in a `docs/infrastructure.md` or similar
+- [x] Document namespace mapping in a `docs/infrastructure.md` or similar
 
 ---
 
@@ -140,10 +161,10 @@
 
 **Tasks:**
 
-- [ ] Set `"noUnusedLocals": true` in `tsconfig.json`
-- [ ] Set `"noUnusedParameters": true` in `tsconfig.json`
-- [ ] Change ESLint rule to `"@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]`
-- [ ] Run `npx tsc --noEmit` and fix all new violations (prefix intentional unused params with `_`)
+- [x] Set `"noUnusedLocals": true` in `tsconfig.json`
+- [x] Set `"noUnusedParameters": true` in `tsconfig.json`
+- [x] Change ESLint rule to `"@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]`
+- [x] Run `npx tsc --noEmit` and fix all new violations (prefix intentional unused params with `_`)
 - [ ] Run `npm run lint -- --fix` and manually resolve remaining issues
 
 ---
@@ -154,8 +175,8 @@
 
 **Tasks:**
 
-- [ ] Remove `// ✅ ADD THIS` comment from `"baseUrl": "."` line
-- [ ] Remove `// ✅ remove ./ (cleaner)` comment from `"@/*": ["src/*"]` line
+- [x] Remove `// ✅ ADD THIS` comment from `"baseUrl": "."` line
+- [x] Remove `// ✅ remove ./ (cleaner)` comment from `"@/*": ["src/*"]` line
 
 ---
 
@@ -167,9 +188,9 @@
 
 **Tasks:**
 
-- [ ] Remove the `head: () => ({...})` block from the route config
-- [ ] Verify `useSEO` is correctly called in the `Index` component with equivalent meta
-- [ ] Check other route files for similar dead `head()` configs
+- [x] Remove the `head: () => ({...})` block from the route config
+- [x] Verify `useSEO` is correctly called in the `Index` component with equivalent meta
+- [x] Check other route files for similar dead `head()` configs
 
 ---
 
@@ -179,8 +200,8 @@
 
 **Tasks:**
 
-- [ ] Investigate whether migration 0009 was intentionally skipped or accidentally deleted
-- [ ] If skipped: add a placeholder `0009_placeholder.sql` with a comment explaining the gap
+- [x] Investigate whether migration 0009 was intentionally skipped or accidentally deleted
+- [x] If skipped: add a placeholder `0009_placeholder.sql` with a comment explaining the gap
 - [ ] If deleted: reconstruct or document what it contained
 - [ ] Verify `wrangler d1 migrations list` shows no gaps in applied migrations
 
@@ -197,7 +218,7 @@
 - [ ] Create the production and preview KV namespaces via `wrangler kv:namespace create`
 - [ ] Uncomment and fill in the actual namespace IDs
 - [ ] Test the abandoned cart recovery flow end-to-end
-- [ ] If not ready for launch: document timeline and keep commented with a `TODO(date)` marker
+- [x] If not ready for launch: document timeline and keep commented with a `TODO(date)` marker
 
 ---
 
@@ -209,9 +230,9 @@
 
 **Tasks:**
 
-- [ ] Audit which libraries inject inline styles (likely Radix UI, Framer Motion, Tailwind runtime)
+- [x] Audit which libraries inject inline styles (likely Radix UI, Framer Motion, Tailwind runtime)
 - [ ] Investigate CSP nonce support for Radix UI components
-- [ ] If nonces aren't feasible: document the accepted risk and set a re-evaluation date
+- [x] If nonces aren't feasible: document the accepted risk and set a re-evaluation date
 - [ ] If feasible: implement nonce generation in `_middleware.js` and inject into CSP header
 
 ---

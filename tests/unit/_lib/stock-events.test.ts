@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 // @ts-expect-error — Pages Functions are plain JS modules and have no .d.ts.
-import {
-  recordStockEvent,
-  STOCK_STATES,
-  STOCK_SOURCES,
-} from "../../../functions/api/_lib/d1.js";
+import { STOCK_STATES, STOCK_SOURCES } from "../../../functions/api/_lib/d1.js";
 
 interface PreparedStatement {
   bind: (...args: unknown[]) => PreparedStatement;
