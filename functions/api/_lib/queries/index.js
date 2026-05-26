@@ -17,6 +17,7 @@ export {
   d1First,
   d1Run,
   getD1,
+  isBenignSchemaError,
   isD1Available,
   sinceFromDays,
 } from "./core.js";

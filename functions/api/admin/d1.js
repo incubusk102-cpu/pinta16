@@ -15,6 +15,7 @@ import { isAuthenticated } from "../_lib/admin-auth.js";
 import {
   getD1,
   isD1Available,
+  isBenignSchemaError,
   d1All,
   d1First,
   mirrorOrderToD1,
@@ -217,20 +218,39 @@ export const onRequestPost = async ({ request, env }) => {
   }
 
   if (action === "apply-schema") {
-    // Idempotent: every statement is CREATE … IF NOT EXISTS, so re-running is a no-op.
+    // `D1_SCHEMA_STATEMENTS` is generated from `migrations/*.sql` so
+    // it replays the wrangler migration order verbatim. Most
+    // statements are `CREATE … IF NOT EXISTS` (idempotent), but older
+    // migrations include `ALTER TABLE ADD COLUMN` statements that
+    // SQLite has no `IF NOT EXISTS` variant for — re-running them
+    // against an already-bootstrapped D1 throws `duplicate column
+    // name`. We run statements sequentially and tolerate that
+    // specific failure mode (see `isBenignSchemaError`) so the
+    // bootstrap endpoint is replayable.
     const db = getD1();
-    const stmts = D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql));
-    try {
-      await db.batch(stmts);
-    } catch (err) {
-      return json(500, {
-        error: "Failed to apply schema",
-        detail: err?.message || String(err),
-      });
+    let statementsExecuted = 0;
+    let statementsSkipped = 0;
+    for (const sql of D1_SCHEMA_STATEMENTS) {
+      try {
+        await db.prepare(sql).run();
+        statementsExecuted += 1;
+      } catch (err) {
+        if (isBenignSchemaError(err)) {
+          statementsSkipped += 1;
+          continue;
+        }
+        return json(500, {
+          error: "Failed to apply schema",
+          detail: err?.message || String(err),
+          failedStatement: sql,
+        });
+      }
     }
     return json(200, {
       success: true,
-      statementsExecuted: D1_SCHEMA_STATEMENTS.length,
+      statementsExecuted,
+      statementsSkipped,
+      statementsTotal: D1_SCHEMA_STATEMENTS.length,
     });
   }
 

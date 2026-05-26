@@ -74,3 +74,16 @@ export const sinceFromDays = (days) =>
   new Date(
     Date.now() - Math.max(1, Math.floor(Number(days) || 30)) * 86400_000,
   ).toISOString();
+
+// SQLite's `ALTER TABLE ADD COLUMN` rejects duplicates with a
+// `duplicate column name: <col>` error and there's no `IF NOT EXISTS`
+// variant. The runtime schema bootstrap (`POST
+// /api/admin/d1?action=apply-schema`) replays every statement from
+// `D1_SCHEMA_STATEMENTS` (which is generated from `migrations/*.sql`
+// and therefore includes the non-idempotent ALTER TABLE statements),
+// so we tolerate that specific failure mode and let the rest of the
+// bootstrap continue.
+export const isBenignSchemaError = (err) => {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("duplicate column");
+};
