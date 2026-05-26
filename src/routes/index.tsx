@@ -321,9 +321,13 @@ function Index() {
           Daily card down to `<WallScene />` on scroll. Lives at the
           end of the tree so its `position: fixed` element sits above
           the page content but below modals / drawers (z-40 vs the
-          drawers' z-50). Reduced-motion / coarse-pointer visitors get
-          a `return null` from inside the component and see the
-          painting in both the Daily card and on the wall instead.
+          drawers' z-50). Reduced-motion visitors get a `return null`
+          from inside the component and see the painting in both the
+          Daily card and on the wall instead. Mobile / coarse-pointer
+          visitors don't see the travel either — `<WallScene />`
+          itself is desktop-only (see its module comment), so the
+          destination rect doesn't exist and the proxy bails out
+          early.
 
           Wrapped in a SilentBoundary because the inner ScrollTrigger
           setup talks to GSAP through a `useEffect` and runs through a
