@@ -210,14 +210,6 @@ const SiteFooter = () => {
                 {t("footer.contactSupport")}
               </a>
             </li>
-            <li>
-              <a
-                href="/sitemap.xml"
-                className="text-foreground/80 hover:text-foreground transition-colors"
-              >
-                Sitemap
-              </a>
-            </li>
           </ul>
         </nav>
 

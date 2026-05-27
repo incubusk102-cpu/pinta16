@@ -41,9 +41,33 @@ type EditMode =
   | { kind: "update"; product: Product }
   | { kind: "create-override"; draft: Product; defaultId: string };
 
-type StatusFilter = "all" | "available" | "hidden" | "customized";
+type StatusFilter = "all" | "available" | "hidden" | "customized" | "uploads";
 type SortMode = "default" | "title-asc" | "price-asc" | "price-desc";
 type CategoryFilter = "all" | ProductCategory;
+
+// Each row in the unified listing is either a built-in stock entry
+// (optionally overridden by a custom Product via `replacesDefaultId`) or
+// a brand-new custom upload that doesn't replace any default.
+type DefaultRow = {
+  kind: "default";
+  id: string;
+  def: DisplayArtwork;
+  override: Product | undefined;
+  display: DisplayArtwork;
+  effectivePrice: number;
+  sortIndex: number;
+};
+
+type CustomRow = {
+  kind: "custom";
+  id: string;
+  product: Product;
+  display: DisplayArtwork;
+  effectivePrice: number;
+  sortIndex: number;
+};
+
+type Row = DefaultRow | CustomRow;
 
 const buildDraftFromDefault = (def: DisplayArtwork): Product => {
   const now = new Date().toISOString();
@@ -70,6 +94,25 @@ const effectivePriceFor = (d: DisplayArtwork): number =>
     ? d.salePrice
     : d.price;
 
+// Treat a custom-upload Product as a DisplayArtwork so the row UI can
+// share the same render branch as built-in stock entries.
+const customProductToDisplay = (p: Product): DisplayArtwork => ({
+  id: p.id,
+  image: p.image,
+  mockup: p.mockup,
+  title: p.title,
+  medium: p.medium,
+  year: p.year,
+  price: p.price,
+  salePrice: p.salePrice,
+  description: p.description,
+  category: p.category,
+  dimensions: p.dimensions,
+  images: p.images && p.images.length > 0 ? p.images : [{ url: p.image }],
+  availability: getAvailability(p),
+  isCustom: true,
+});
+
 const MAX_THUMB_BYTES = 5 * 1024 * 1024;
 
 const fileToDataUrl = (file: File): Promise<string> =>
@@ -93,10 +136,12 @@ export function StockListingsSection() {
   const thumbInputRef = useRef<HTMLInputElement>(null);
   // Inline thumbnail uploads route through a single hidden file input. We
   // stash the row that triggered the picker so the change handler knows
-  // which override to write.
-  const thumbTargetRef = useRef<{ defaultId: string; title: string } | null>(
-    null,
-  );
+  // which override to write — or which custom upload to update in place.
+  const thumbTargetRef = useRef<
+    | { kind: "default"; defaultId: string; title: string }
+    | { kind: "custom"; productId: string; title: string }
+    | null
+  >(null);
 
   const overridesByDefaultId = useMemo(() => {
     const m = new Map<string, Product>();
@@ -135,21 +180,43 @@ export function StockListingsSection() {
     [overridesByDefaultId],
   );
 
-  const allRows = useMemo(
-    () =>
-      defaultArtworks.map((def, index) => {
-        const override = overridesByDefaultId.get(def.id);
-        const display = toDisplay(def);
-        return {
-          def,
-          override,
-          display,
-          effectivePrice: effectivePriceFor(display),
-          defaultIndex: index,
-        };
-      }),
-    [toDisplay, overridesByDefaultId],
+  // Custom uploads (products that are NOT overrides of a stock entry)
+  // appear in the unified listing alongside the stock catalog so the
+  // operator never has to bounce between two product views.
+  const customUploads = useMemo(
+    () => products.filter((p) => !p.replacesDefaultId),
+    [products],
   );
+
+  const allRows = useMemo<Row[]>(() => {
+    const defaultRows: DefaultRow[] = defaultArtworks.map((def, index) => {
+      const override = overridesByDefaultId.get(def.id);
+      const display = toDisplay(def);
+      return {
+        kind: "default",
+        id: def.id,
+        def,
+        override,
+        display,
+        effectivePrice: effectivePriceFor(display),
+        sortIndex: index,
+      };
+    });
+    const customRows: CustomRow[] = customUploads.map((p, index) => {
+      const display = customProductToDisplay(p);
+      return {
+        kind: "custom",
+        id: p.id,
+        product: p,
+        display,
+        effectivePrice: effectivePriceFor(display),
+        // Newest uploads first within the custom group; offset so they
+        // appear after the stock catalog in the default sort order.
+        sortIndex: defaultArtworks.length + index,
+      };
+    });
+    return [...defaultRows, ...customRows];
+  }, [toDisplay, overridesByDefaultId, customUploads]);
 
   const listings = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -163,7 +230,9 @@ export function StockListingsSection() {
       } else if (statusFilter === "hidden") {
         if (row.display.availability !== "draft") return false;
       } else if (statusFilter === "customized") {
-        if (!row.override) return false;
+        if (row.kind !== "default" || !row.override) return false;
+      } else if (statusFilter === "uploads") {
+        if (row.kind !== "custom") return false;
       }
       // Category filter
       if (categoryFilter !== "all") {
@@ -177,7 +246,7 @@ export function StockListingsSection() {
           row.display.year,
           row.display.category,
           row.display.description,
-          row.def.id,
+          row.id,
         ]
           .filter(Boolean)
           .join(" ")
@@ -198,17 +267,20 @@ export function StockListingsSection() {
         filtered.sort((a, b) => b.effectivePrice - a.effectivePrice);
         break;
       default:
-        filtered.sort((a, b) => a.defaultIndex - b.defaultIndex);
+        filtered.sort((a, b) => a.sortIndex - b.sortIndex);
     }
     return filtered;
   }, [allRows, searchQuery, statusFilter, categoryFilter, sortMode]);
 
-  const customizedCount = allRows.filter((r) => r.override).length;
+  const customizedCount = allRows.filter(
+    (r) => r.kind === "default" && Boolean(r.override),
+  ).length;
+  const uploadsCount = allRows.filter((r) => r.kind === "custom").length;
   const hiddenCount = allRows.filter(
     (r) => r.display.availability === "draft",
   ).length;
 
-  const visibleIds = useMemo(() => listings.map((r) => r.def.id), [listings]);
+  const visibleIds = useMemo(() => listings.map((r) => r.id), [listings]);
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
   const hasSelection = selectedIds.size > 0;
@@ -247,6 +319,33 @@ export function StockListingsSection() {
         draft: buildDraftFromDefault(def),
         defaultId: def.id,
       });
+    }
+  };
+
+  // Editing a custom upload bypasses the override flow — there's no
+  // stock default to fall back to, just an in-place product update.
+  const handleEditCustom = (product: Product) => {
+    setEdit({ kind: "update", product });
+  };
+
+  const handleDeleteCustom = async (product: Product) => {
+    if (
+      !window.confirm(
+        `Delete "${product.title}"? This removes the product from the storefront and cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(product.id);
+    try {
+      await deleteProduct(product.id);
+      toast.success(`Removed "${product.title}"`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not remove product",
+      );
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -306,6 +405,24 @@ export function StockListingsSection() {
     }
   };
 
+  // Flip availability for a row regardless of whether it's a stock
+  // default (which goes through the override flow) or a custom upload
+  // (which is a direct product update).
+  const applyAvailabilityRow = async (
+    row: Row,
+    availability: ProductAvailability,
+  ): Promise<boolean> => {
+    if (row.kind === "custom") {
+      try {
+        await updateProduct(row.product.id, { availability });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return applyAvailability(row.display, availability);
+  };
+
   const setAvailabilityFor = async (
     def: DisplayArtwork,
     availability: ProductAvailability,
@@ -327,9 +444,25 @@ export function StockListingsSection() {
     }
   };
 
-  const handleInlineThumbClick = (def: DisplayArtwork) => {
+  const handleInlineThumbClick = (
+    target:
+      | { kind: "default"; def: DisplayArtwork }
+      | { kind: "custom"; product: Product },
+  ) => {
     if (!thumbInputRef.current) return;
-    thumbTargetRef.current = { defaultId: def.id, title: def.title };
+    if (target.kind === "default") {
+      thumbTargetRef.current = {
+        kind: "default",
+        defaultId: target.def.id,
+        title: target.def.title,
+      };
+    } else {
+      thumbTargetRef.current = {
+        kind: "custom",
+        productId: target.product.id,
+        title: target.product.title,
+      };
+    }
     // Reset value so picking the same file twice still fires onChange.
     thumbInputRef.current.value = "";
     thumbInputRef.current.click();
@@ -347,9 +480,6 @@ export function StockListingsSection() {
       toast.error("Image must be under 5MB");
       return;
     }
-    const def = defaultArtworks.find((d) => d.id === target.defaultId);
-    if (!def) return;
-    setBusyId(def.id);
     try {
       const url = await fileToDataUrl(file);
       const newPrimary: ProductImage = {
@@ -357,6 +487,27 @@ export function StockListingsSection() {
         fileName: file.name,
         bytes: file.size,
       };
+      if (target.kind === "custom") {
+        const product = products.find((p) => p.id === target.productId);
+        if (!product) return;
+        setBusyId(product.id);
+        const existingImages =
+          product.images && product.images.length > 0
+            ? product.images
+            : product.image
+              ? [{ url: product.image }]
+              : [];
+        const nextImages: ProductImage[] = [
+          newPrimary,
+          ...existingImages.slice(1),
+        ];
+        await updateProduct(product.id, buildImageFields(nextImages));
+        toast.success(`Updated thumbnail for "${target.title}"`);
+        return;
+      }
+      const def = defaultArtworks.find((d) => d.id === target.defaultId);
+      if (!def) return;
+      setBusyId(def.id);
       const override = overridesByDefaultId.get(def.id);
       const display = toDisplay(def);
       const existingImages =
@@ -415,10 +566,12 @@ export function StockListingsSection() {
   };
 
   const runBulk = async (kind: "hide" | "show" | "revert"): Promise<void> => {
-    const targets = allRows.filter((r) => selectedIds.has(r.def.id));
+    const targets = allRows.filter((r) => selectedIds.has(r.id));
     if (targets.length === 0) return;
     if (kind === "revert") {
-      const withOverride = targets.filter((r) => r.override);
+      const withOverride = targets.filter(
+        (r): r is DefaultRow => r.kind === "default" && Boolean(r.override),
+      );
       if (withOverride.length === 0) {
         toast.info("None of the selected listings have customizations.");
         return;
@@ -438,13 +591,13 @@ export function StockListingsSection() {
     try {
       for (const row of targets) {
         if (kind === "hide") {
-          if (await applyAvailability(row.display, "draft")) ok++;
+          if (await applyAvailabilityRow(row, "draft")) ok++;
           else fail++;
         } else if (kind === "show") {
-          if (await applyAvailability(row.display, "available")) ok++;
+          if (await applyAvailabilityRow(row, "available")) ok++;
           else fail++;
         } else if (kind === "revert") {
-          if (!row.override) continue;
+          if (row.kind !== "default" || !row.override) continue;
           try {
             await deleteProduct(row.override.id);
             ok++;
@@ -558,6 +711,7 @@ export function StockListingsSection() {
     },
     { value: "hidden", label: "Hidden", count: hiddenCount },
     { value: "customized", label: "Customized", count: customizedCount },
+    { value: "uploads", label: "Your uploads", count: uploadsCount },
   ];
 
   return (
@@ -566,19 +720,19 @@ export function StockListingsSection() {
         <div>
           <h2 className="font-display text-lg flex items-center gap-2">
             <Star className="w-4 h-4 text-primary" />
-            Stock catalog ({listings.length}
+            All products ({listings.length}
             {listings.length !== allRows.length ? ` of ${allRows.length}` : ""})
           </h2>
           <p className="text-xs text-muted-foreground">
-            The built-in artworks shown to every visitor. Edit, hide, or revert
-            any of them below.
+            Built-in stock entries and your own uploads in one place. Edit,
+            hide, or revert any of them below.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search stock catalog…"
+            placeholder="Search products…"
             className="h-9 w-56"
           />
           {customizedCount > 0 && (
@@ -718,18 +872,20 @@ export function StockListingsSection() {
 
       {listings.length === 0 ? (
         <div className="rounded-md border border-dashed border-border/50 bg-card/20 px-4 py-8 text-center text-xs text-muted-foreground">
-          No stock listings match the current filters.
+          No products match the current filters.
         </div>
       ) : (
         <ul className="space-y-3">
-          {listings.map(({ def, override, display, effectivePrice }) => {
+          {listings.map((row) => {
+            const { display, effectivePrice, id: rowId, kind } = row;
             const isHidden = display.availability === "draft";
-            const busy = busyId === def.id || bulkBusy;
-            const hasOverride = Boolean(override);
-            const selected = selectedIds.has(def.id);
+            const busy = busyId === rowId || bulkBusy;
+            const hasOverride = row.kind === "default" && Boolean(row.override);
+            const isCustom = kind === "custom";
+            const selected = selectedIds.has(rowId);
             return (
               <li
-                key={def.id}
+                key={rowId}
                 className={`flex gap-4 bg-card/40 border rounded-lg p-3 ${
                   isHidden ? "border-border/40 opacity-70" : "border-border/50"
                 } ${selected ? "ring-1 ring-primary/60" : ""}`}
@@ -737,7 +893,7 @@ export function StockListingsSection() {
                 <div className="flex flex-col items-center gap-2 pt-1">
                   <Checkbox
                     checked={selected}
-                    onCheckedChange={() => toggleSelect(def.id)}
+                    onCheckedChange={() => toggleSelect(rowId)}
                     aria-label={`Select ${display.title}`}
                   />
                 </div>
@@ -751,7 +907,17 @@ export function StockListingsSection() {
                   />
                   <button
                     type="button"
-                    onClick={() => handleInlineThumbClick(display)}
+                    onClick={() =>
+                      row.kind === "custom"
+                        ? handleInlineThumbClick({
+                            kind: "custom",
+                            product: row.product,
+                          })
+                        : handleInlineThumbClick({
+                            kind: "default",
+                            def: row.display,
+                          })
+                    }
                     disabled={busy}
                     className="absolute inset-0 flex items-center justify-center rounded-md bg-black/0 group-hover/thumb:bg-black/40 focus-visible:bg-black/40 transition opacity-0 group-hover/thumb:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed text-white"
                     aria-label={`Replace thumbnail for ${display.title}`}
@@ -766,6 +932,11 @@ export function StockListingsSection() {
                     {hasOverride && (
                       <span className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded bg-primary/15 text-primary">
                         Customized
+                      </span>
+                    )}
+                    {isCustom && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded bg-accent/40 text-foreground">
+                        Your upload
                       </span>
                     )}
                     <span
@@ -821,7 +992,11 @@ export function StockListingsSection() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleEdit(display)}
+                    onClick={() =>
+                      row.kind === "custom"
+                        ? handleEditCustom(row.product)
+                        : handleEdit(display)
+                    }
                     disabled={busy}
                     aria-label={`Edit ${display.title}`}
                     title="Edit"
@@ -833,7 +1008,11 @@ export function StockListingsSection() {
                       variant="ghost"
                       size="icon"
                       onClick={() =>
-                        void setAvailabilityFor(display, "available")
+                        void (row.kind === "custom"
+                          ? updateProduct(row.product.id, {
+                              availability: "available",
+                            })
+                          : setAvailabilityFor(display, "available"))
                       }
                       disabled={busy}
                       aria-label={`Show ${display.title}`}
@@ -845,7 +1024,13 @@ export function StockListingsSection() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => void setAvailabilityFor(display, "draft")}
+                      onClick={() =>
+                        void (row.kind === "custom"
+                          ? updateProduct(row.product.id, {
+                              availability: "draft",
+                            })
+                          : setAvailabilityFor(display, "draft"))
+                      }
                       disabled={busy}
                       aria-label={`Hide ${display.title}`}
                       title="Hide from storefront"
@@ -853,7 +1038,7 @@ export function StockListingsSection() {
                       <EyeOff className="w-4 h-4" />
                     </Button>
                   )}
-                  {hasOverride && (
+                  {row.kind === "default" && hasOverride && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -863,6 +1048,18 @@ export function StockListingsSection() {
                       title="Revert to default"
                     >
                       <RotateCcw className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                  )}
+                  {row.kind === "custom" && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void handleDeleteCustom(row.product)}
+                      disabled={busy}
+                      aria-label={`Delete ${display.title}`}
+                      title="Delete upload"
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   )}
                 </div>
