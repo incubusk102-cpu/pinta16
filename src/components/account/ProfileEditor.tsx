@@ -5,7 +5,6 @@ import {
   Camera,
   KeyRound,
   Loader2,
-  LogOut,
   Save,
   ShieldOff,
   UserCircle,
@@ -47,7 +46,7 @@ const downscaleImage = async (file: File): Promise<string> => {
 };
 
 export default function ProfileEditor() {
-  const { user, updateProfile, changePassword, logout, disconnectGoogle } =
+  const { user, updateProfile, changePassword, disconnectGoogle } =
     useUserAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name || "");
@@ -121,12 +120,6 @@ export default function ProfileEditor() {
     }
   };
 
-  const onSignOut = () => {
-    logout();
-    toast.success("Signed out");
-    void navigate({ to: "/" });
-  };
-
   const onDisconnect = async () => {
     if (confirmText !== "CONFIRM") return;
     setDisconnecting(true);
@@ -172,10 +165,6 @@ export default function ProfileEditor() {
 
   return (
     <section className="bg-card/40 border border-border/60 rounded-xl p-5 space-y-5">
-      <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-        <UserCircle className="w-4 h-4" /> Profile
-      </div>
-
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">
           {user.picture ? (
@@ -310,23 +299,52 @@ export default function ProfileEditor() {
         </div>
       )}
 
-      <div className="space-y-3 pt-4 border-t border-border/30">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-          <AlertTriangle className="w-3.5 h-3.5" /> Account
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={onSignOut}
-          className="w-full sm:w-auto"
-        >
-          <LogOut className="w-4 h-4 mr-1.5" />
-          Sign out
-        </Button>
+      {isSocial && (
+        <div className="space-y-3 pt-4 border-t border-border/30">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <AlertTriangle className="w-3.5 h-3.5" /> Account
+          </div>
 
-        {isSocial &&
-          (showDisconnect ? (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Allow Google sign-in</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Keep Google connected to sign in instantly. Choose No to
+                disconnect and remove this account.
+              </p>
+            </div>
+            <div
+              className="flex items-center gap-1 shrink-0"
+              role="group"
+              aria-label="Google sign-in permission"
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={showDisconnect ? "outline" : "default"}
+                onClick={() => {
+                  setShowDisconnect(false);
+                  setConfirmText("");
+                }}
+                aria-pressed={!showDisconnect}
+                disabled={disconnecting}
+              >
+                Yes
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={showDisconnect ? "destructive" : "outline"}
+                onClick={() => setShowDisconnect(true)}
+                aria-pressed={showDisconnect}
+                disabled={disconnecting}
+              >
+                No
+              </Button>
+            </div>
+          </div>
+
+          {showDisconnect && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-3">
               <p className="text-xs text-foreground/85 leading-relaxed">
                 Disconnecting Google removes your account. Your saved addresses,
@@ -371,19 +389,9 @@ export default function ProfileEditor() {
                 </Button>
               </div>
             </div>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowDisconnect(true)}
-              className="w-full sm:w-auto text-destructive hover:text-destructive"
-            >
-              <ShieldOff className="w-4 h-4 mr-1.5" />
-              Disconnect Google
-            </Button>
-          ))}
-      </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
