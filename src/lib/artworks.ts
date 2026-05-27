@@ -274,24 +274,35 @@ export const productToDisplay = (product: Product): DisplayArtwork => {
 };
 
 export const getAllArtworks = (products: Product[]): DisplayArtwork[] => {
+  // Soft-deleted overrides suppress both themselves AND their bundled
+  // stock default — the operator's intent is "this listing should be
+  // gone", not "fall back to the original stock copy". The bundled
+  // default only resurfaces if the override is permanently deleted
+  // from the Trash tab (which hard-removes the row from KV).
   const overrideMap = new Map<string, Product>();
+  const trashedDefaultIds = new Set<string>();
   for (const p of products) {
-    if (p.replacesDefaultId) {
-      overrideMap.set(p.replacesDefaultId, p);
+    if (!p.replacesDefaultId) continue;
+    if (p.trashed) {
+      trashedDefaultIds.add(p.replacesDefaultId);
+      continue;
     }
+    overrideMap.set(p.replacesDefaultId, p);
   }
-  const mergedDefaults: DisplayArtwork[] = defaultArtworks.map((def) => {
-    const override = overrideMap.get(def.id);
-    if (!override) return def;
-    // Present the override's fields as the stock artwork, preserving the
-    // default id so deep links continue to resolve.
-    return {
-      ...productToDisplay(override),
-      id: def.id,
-      isCustom: false,
-    };
-  });
-  const extras = products.filter((p) => !p.replacesDefaultId);
+  const mergedDefaults: DisplayArtwork[] = defaultArtworks
+    .filter((def) => !trashedDefaultIds.has(def.id))
+    .map((def) => {
+      const override = overrideMap.get(def.id);
+      if (!override) return def;
+      // Present the override's fields as the stock artwork, preserving the
+      // default id so deep links continue to resolve.
+      return {
+        ...productToDisplay(override),
+        id: def.id,
+        isCustom: false,
+      };
+    });
+  const extras = products.filter((p) => !p.replacesDefaultId && !p.trashed);
   return [...mergedDefaults, ...extras.map(productToDisplay)];
 };
 
@@ -334,7 +345,7 @@ export const findArtworkById = (
   // default so deep-links into customized stock items keep working.
   const rawId = id.startsWith("product-") ? id.slice("product-".length) : id;
   const override = products.find(
-    (p) => p.id === rawId && Boolean(p.replacesDefaultId),
+    (p) => p.id === rawId && Boolean(p.replacesDefaultId) && !p.trashed,
   );
   if (override?.replacesDefaultId) {
     return all.find((art) => art.id === override.replacesDefaultId);

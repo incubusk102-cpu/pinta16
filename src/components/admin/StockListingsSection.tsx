@@ -8,6 +8,8 @@ import {
   Star,
   ArrowUpDown,
   Trash2,
+  Undo2,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +43,13 @@ type EditMode =
   | { kind: "update"; product: Product }
   | { kind: "create-override"; draft: Product; defaultId: string };
 
-type StatusFilter = "all" | "available" | "hidden" | "customized" | "uploads";
+type StatusFilter =
+  | "all"
+  | "available"
+  | "hidden"
+  | "customized"
+  | "uploads"
+  | "trash";
 type SortMode = "default" | "title-asc" | "price-asc" | "price-desc";
 type CategoryFilter = "all" | ProductCategory;
 
@@ -67,7 +75,23 @@ type CustomRow = {
   sortIndex: number;
 };
 
-type Row = DefaultRow | CustomRow;
+// Trashed overrides surface in a dedicated Trash sub-tab. They share
+// the row layout with the default/custom rows but carry their own
+// action buttons (Restore + Permanently delete) instead of the
+// hide/edit/move-to-trash trio.
+type TrashRow = {
+  kind: "trash";
+  id: string;
+  product: Product;
+  // The bundled default this override customizes — used to label the row
+  // ("Customization of <title>") and to preserve image fallbacks.
+  def: DisplayArtwork | undefined;
+  display: DisplayArtwork;
+  effectivePrice: number;
+  sortIndex: number;
+};
+
+type Row = DefaultRow | CustomRow | TrashRow;
 
 const buildDraftFromDefault = (def: DisplayArtwork): Product => {
   const now = new Date().toISOString();
@@ -143,13 +167,33 @@ export function StockListingsSection() {
     | null
   >(null);
 
+  // Trashed overrides live in the Trash sub-tab; they're excluded from
+  // the active override map so the merged-default row doesn't render
+  // its customized price/image while the listing is supposed to be gone.
   const overridesByDefaultId = useMemo(() => {
     const m = new Map<string, Product>();
     for (const p of products) {
-      if (p.replacesDefaultId) m.set(p.replacesDefaultId, p);
+      if (p.replacesDefaultId && !p.trashed) m.set(p.replacesDefaultId, p);
     }
     return m;
   }, [products]);
+
+  // Bundled defaults whose override is in the trash. We hide the
+  // entire row from the main listing (so the operator doesn't see the
+  // stock copy resurface while the listing is supposed to be gone),
+  // and surface it instead inside the Trash sub-tab.
+  const trashedDefaultIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of products) {
+      if (p.replacesDefaultId && p.trashed) s.add(p.replacesDefaultId);
+    }
+    return s;
+  }, [products]);
+
+  const trashedOverrides = useMemo(
+    () => products.filter((p) => Boolean(p.replacesDefaultId) && p.trashed),
+    [products],
+  );
 
   const toDisplay = useMemo(
     () =>
@@ -182,26 +226,30 @@ export function StockListingsSection() {
 
   // Custom uploads (products that are NOT overrides of a stock entry)
   // appear in the unified listing alongside the stock catalog so the
-  // operator never has to bounce between two product views.
+  // operator never has to bounce between two product views. Soft-deleted
+  // custom uploads would also live in Trash if any existed (today the
+  // UI hard-deletes custom uploads, but the filter is defensive).
   const customUploads = useMemo(
-    () => products.filter((p) => !p.replacesDefaultId),
+    () => products.filter((p) => !p.replacesDefaultId && !p.trashed),
     [products],
   );
 
   const allRows = useMemo<Row[]>(() => {
-    const defaultRows: DefaultRow[] = defaultArtworks.map((def, index) => {
-      const override = overridesByDefaultId.get(def.id);
-      const display = toDisplay(def);
-      return {
-        kind: "default",
-        id: def.id,
-        def,
-        override,
-        display,
-        effectivePrice: effectivePriceFor(display),
-        sortIndex: index,
-      };
-    });
+    const defaultRows: DefaultRow[] = defaultArtworks
+      .filter((def) => !trashedDefaultIds.has(def.id))
+      .map((def, index) => {
+        const override = overridesByDefaultId.get(def.id);
+        const display = toDisplay(def);
+        return {
+          kind: "default",
+          id: def.id,
+          def,
+          override,
+          display,
+          effectivePrice: effectivePriceFor(display),
+          sortIndex: index,
+        };
+      });
     const customRows: CustomRow[] = customUploads.map((p, index) => {
       const display = customProductToDisplay(p);
       return {
@@ -215,17 +263,47 @@ export function StockListingsSection() {
         sortIndex: defaultArtworks.length + index,
       };
     });
-    return [...defaultRows, ...customRows];
-  }, [toDisplay, overridesByDefaultId, customUploads]);
+    const trashRows: TrashRow[] = trashedOverrides.map((p, index) => {
+      const def = p.replacesDefaultId
+        ? defaultArtworks.find((d) => d.id === p.replacesDefaultId)
+        : undefined;
+      const display = customProductToDisplay(p);
+      return {
+        kind: "trash",
+        id: p.id,
+        product: p,
+        def,
+        display,
+        effectivePrice: effectivePriceFor(display),
+        // Render trashed rows at the bottom of the default sort order so
+        // a "Sort: default" view in the Trash tab is stable.
+        sortIndex: defaultArtworks.length + customUploads.length + index,
+      };
+    });
+    return [...defaultRows, ...customRows, ...trashRows];
+  }, [
+    toDisplay,
+    overridesByDefaultId,
+    trashedDefaultIds,
+    customUploads,
+    trashedOverrides,
+  ]);
 
   const listings = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const filtered = allRows.filter((row) => {
-      // Status filter. "On storefront" is defined as anything visible to
-      // shoppers — so available, reserved, and sold all pass. Only "draft"
-      // (explicitly hidden) is excluded, which mirrors the chip count and
-      // matches how `getStorefrontArtworks` filters.
-      if (statusFilter === "available") {
+      // Trash rows are surfaced only when the Trash sub-tab is active.
+      // Every other view drops them on the floor so the operator never
+      // sees a trashed listing while browsing live products.
+      if (statusFilter === "trash") {
+        if (row.kind !== "trash") return false;
+      } else if (row.kind === "trash") {
+        return false;
+      } else if (statusFilter === "available") {
+        // "On storefront" is defined as anything visible to shoppers — so
+        // available, reserved, and sold all pass. Only "draft" (explicitly
+        // hidden) is excluded, which mirrors the chip count and matches
+        // how `getStorefrontArtworks` filters.
         if (row.display.availability === "draft") return false;
       } else if (statusFilter === "hidden") {
         if (row.display.availability !== "draft") return false;
@@ -277,8 +355,12 @@ export function StockListingsSection() {
   ).length;
   const uploadsCount = allRows.filter((r) => r.kind === "custom").length;
   const hiddenCount = allRows.filter(
-    (r) => r.display.availability === "draft",
+    (r) => r.kind !== "trash" && r.display.availability === "draft",
   ).length;
+  const trashCount = allRows.filter((r) => r.kind === "trash").length;
+  // The "All" chip should reflect the live catalog only — trashed
+  // rows have their own chip so adding them here would double-count.
+  const liveRowsCount = allRows.length - trashCount;
 
   const visibleIds = useMemo(() => listings.map((r) => r.id), [listings]);
   const allVisibleSelected =
@@ -331,7 +413,7 @@ export function StockListingsSection() {
   const handleDeleteCustom = async (product: Product) => {
     if (
       !window.confirm(
-        `Delete "${product.title}"? This removes the product from the storefront and cannot be undone.`,
+        `Permanently delete "${product.title}"? This removes the product from the storefront forever. This cannot be undone.`,
       )
     ) {
       return;
@@ -339,7 +421,7 @@ export function StockListingsSection() {
     setBusyId(product.id);
     try {
       await deleteProduct(product.id);
-      toast.success(`Removed "${product.title}"`);
+      toast.success(`Permanently deleted "${product.title}"`);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Could not remove product",
@@ -542,30 +624,74 @@ export function StockListingsSection() {
     }
   };
 
-  const handleRestoreDefault = async (def: DisplayArtwork) => {
+  // Move a customized stock row into the Trash. We flip the override's
+  // `trashed` flag rather than hard-deleting it so the operator can
+  // restore the listing later — and so the bundled default doesn't
+  // resurface in the meantime. Permanent removal lives in the Trash
+  // tab's "Permanently delete" action.
+  const handleMoveToTrash = async (def: DisplayArtwork) => {
     const override = overridesByDefaultId.get(def.id);
     if (!override) return;
     if (
       !window.confirm(
-        `Delete your customization of "${def.title}"? The stock default (image, price, copy) will be restored on the storefront. This cannot be undone.`,
+        `Move "${def.title}" to Trash? The listing will be hidden from the storefront. You can restore it from Stock → Trash.`,
       )
     ) {
       return;
     }
     setBusyId(def.id);
     try {
-      await deleteProduct(override.id);
-      toast.success(`Deleted your customization of "${def.title}"`);
+      await updateProduct(override.id, { trashed: true });
+      toast.success(`Moved "${def.title}" to Trash`);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not delete customization",
+        err instanceof Error ? err.message : "Could not move to trash",
       );
     } finally {
       setBusyId(null);
     }
   };
 
-  const runBulk = async (kind: "hide" | "show" | "revert"): Promise<void> => {
+  const handleRestoreFromTrash = async (product: Product) => {
+    setBusyId(product.id);
+    try {
+      await updateProduct(product.id, { trashed: false });
+      toast.success(`Restored "${product.title}"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not restore");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Hard-remove a trashed override from KV. The bundled stock default
+  // (which the override was customizing) will resurface on the
+  // storefront after this — that's the documented tradeoff for the
+  // "bundled defaults are untouchable" rule.
+  const handlePermanentDelete = async (product: Product) => {
+    if (
+      !window.confirm(
+        `Permanently delete "${product.title}"? This removes the customization from the storefront forever and restores the bundled stock default. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(product.id);
+    try {
+      await deleteProduct(product.id);
+      toast.success(`Permanently deleted "${product.title}"`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not permanently delete",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const runBulk = async (
+    kind: "hide" | "show" | "revert" | "restore" | "permdelete",
+  ): Promise<void> => {
     const targets = allRows.filter((r) => selectedIds.has(r.id));
     if (targets.length === 0) return;
     if (kind === "revert") {
@@ -585,15 +711,36 @@ export function StockListingsSection() {
       )
         return;
     }
+    if (kind === "permdelete") {
+      const trashTargets = targets.filter(
+        (r): r is TrashRow => r.kind === "trash",
+      );
+      if (trashTargets.length === 0) {
+        toast.info("Select trashed listings to permanently delete.");
+        return;
+      }
+      if (
+        !window.confirm(
+          `Permanently delete ${trashTargets.length} trashed listing${
+            trashTargets.length === 1 ? "" : "s"
+          }? This restores the bundled stock default${
+            trashTargets.length === 1 ? "" : "s"
+          } and cannot be undone.`,
+        )
+      )
+        return;
+    }
     setBulkBusy(true);
     let ok = 0;
     let fail = 0;
     try {
       for (const row of targets) {
         if (kind === "hide") {
+          if (row.kind === "trash") continue;
           if (await applyAvailabilityRow(row, "draft")) ok++;
           else fail++;
         } else if (kind === "show") {
+          if (row.kind === "trash") continue;
           if (await applyAvailabilityRow(row, "available")) ok++;
           else fail++;
         } else if (kind === "revert") {
@@ -604,11 +751,35 @@ export function StockListingsSection() {
           } catch {
             fail++;
           }
+        } else if (kind === "restore") {
+          if (row.kind !== "trash") continue;
+          try {
+            await updateProduct(row.product.id, { trashed: false });
+            ok++;
+          } catch {
+            fail++;
+          }
+        } else if (kind === "permdelete") {
+          if (row.kind !== "trash") continue;
+          try {
+            await deleteProduct(row.product.id);
+            ok++;
+          } catch {
+            fail++;
+          }
         }
       }
       if (ok > 0) {
         const verb =
-          kind === "hide" ? "Hid" : kind === "show" ? "Restored" : "Reverted";
+          kind === "hide"
+            ? "Hid"
+            : kind === "show"
+              ? "Restored"
+              : kind === "revert"
+                ? "Reverted"
+                : kind === "restore"
+                  ? "Restored"
+                  : "Permanently deleted";
         toast.success(`${verb} ${ok} listing${ok === 1 ? "" : "s"}`);
       }
       if (fail > 0) {
@@ -703,16 +874,19 @@ export function StockListingsSection() {
     edit?.kind === "update" ? edit.product : (edit?.draft ?? null);
 
   const statusChips: { value: StatusFilter; label: string; count: number }[] = [
-    { value: "all", label: "All", count: allRows.length },
+    { value: "all", label: "All", count: liveRowsCount },
     {
       value: "available",
       label: "On storefront",
-      count: allRows.length - hiddenCount,
+      count: liveRowsCount - hiddenCount,
     },
     { value: "hidden", label: "Hidden", count: hiddenCount },
     { value: "customized", label: "Customized", count: customizedCount },
     { value: "uploads", label: "Your uploads", count: uploadsCount },
+    { value: "trash", label: "Trash", count: trashCount },
   ];
+
+  const showingTrash = statusFilter === "trash";
 
   return (
     <section>
@@ -720,12 +894,16 @@ export function StockListingsSection() {
         <div>
           <h2 className="font-display text-lg flex items-center gap-2">
             <Star className="w-4 h-4 text-primary" />
-            All products ({listings.length}
-            {listings.length !== allRows.length ? ` of ${allRows.length}` : ""})
+            {showingTrash ? "Trash" : "All products"} ({listings.length}
+            {listings.length !== (showingTrash ? trashCount : liveRowsCount)
+              ? ` of ${showingTrash ? trashCount : liveRowsCount}`
+              : ""}
+            )
           </h2>
           <p className="text-xs text-muted-foreground">
-            Built-in stock entries and your own uploads in one place. Edit,
-            hide, or revert any of them below.
+            {showingTrash
+              ? "Deleted customizations live here. Restore brings the listing back to the storefront; Permanently delete removes it from KV and restores the bundled stock default."
+              : "Built-in stock entries and your own uploads in one place. Edit, hide, or move customized listings to Trash from below."}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -828,36 +1006,63 @@ export function StockListingsSection() {
           </label>
           {hasSelection && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void runBulk("hide")}
-                disabled={bulkBusy}
-                className="gap-1.5"
-              >
-                <EyeOff className="w-3.5 h-3.5" />
-                Hide
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void runBulk("show")}
-                disabled={bulkBusy}
-                className="gap-1.5"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                Show
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void runBulk("revert")}
-                disabled={bulkBusy}
-                className="gap-1.5"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Revert
-              </Button>
+              {showingTrash ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("restore")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    Restore
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("permdelete")}
+                    disabled={bulkBusy}
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Permanently delete
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("hide")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Hide
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("show")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Show
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("revert")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Revert
+                  </Button>
+                </>
+              )}
               <button
                 type="button"
                 onClick={clearSelection}
@@ -872,13 +1077,16 @@ export function StockListingsSection() {
 
       {listings.length === 0 ? (
         <div className="rounded-md border border-dashed border-border/50 bg-card/20 px-4 py-8 text-center text-xs text-muted-foreground">
-          No products match the current filters.
+          {showingTrash
+            ? "Trash is empty. Move a customized stock listing here to hide it from the storefront without losing your customization."
+            : "No products match the current filters."}
         </div>
       ) : (
         <ul className="space-y-3">
           {listings.map((row) => {
             const { display, effectivePrice, id: rowId, kind } = row;
             const isHidden = display.availability === "draft";
+            const isTrash = kind === "trash";
             const busy = busyId === rowId || bulkBusy;
             const hasOverride = row.kind === "default" && Boolean(row.override);
             const isCustom = kind === "custom";
@@ -887,7 +1095,11 @@ export function StockListingsSection() {
               <li
                 key={rowId}
                 className={`flex gap-4 bg-card/40 border rounded-lg p-3 ${
-                  isHidden ? "border-border/40 opacity-70" : "border-border/50"
+                  isTrash
+                    ? "border-destructive/30 bg-destructive/5"
+                    : isHidden
+                      ? "border-border/40 opacity-70"
+                      : "border-border/50"
                 } ${selected ? "ring-1 ring-primary/60" : ""}`}
               >
                 <div className="flex flex-col items-center gap-2 pt-1">
@@ -905,26 +1117,28 @@ export function StockListingsSection() {
                     loading="lazy"
                     decoding="async"
                   />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      row.kind === "custom"
-                        ? handleInlineThumbClick({
-                            kind: "custom",
-                            product: row.product,
-                          })
-                        : handleInlineThumbClick({
-                            kind: "default",
-                            def: row.display,
-                          })
-                    }
-                    disabled={busy}
-                    className="absolute inset-0 flex items-center justify-center rounded-md bg-black/0 group-hover/thumb:bg-black/40 focus-visible:bg-black/40 transition opacity-0 group-hover/thumb:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed text-white"
-                    aria-label={`Replace thumbnail for ${display.title}`}
-                    title="Replace thumbnail"
-                  >
-                    <Camera className="w-5 h-5" />
-                  </button>
+                  {!isTrash && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        row.kind === "custom"
+                          ? handleInlineThumbClick({
+                              kind: "custom",
+                              product: row.product,
+                            })
+                          : handleInlineThumbClick({
+                              kind: "default",
+                              def: row.display,
+                            })
+                      }
+                      disabled={busy}
+                      className="absolute inset-0 flex items-center justify-center rounded-md bg-black/0 group-hover/thumb:bg-black/40 focus-visible:bg-black/40 transition opacity-0 group-hover/thumb:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed text-white"
+                      aria-label={`Replace thumbnail for ${display.title}`}
+                      title="Replace thumbnail"
+                    >
+                      <Camera className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -939,21 +1153,28 @@ export function StockListingsSection() {
                         Your upload
                       </span>
                     )}
-                    <span
-                      className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded ${
-                        display.availability === "available"
-                          ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                          : display.availability === "made-to-order"
-                            ? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
-                            : display.availability === "reserved"
-                              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                              : display.availability === "sold"
-                                ? "bg-slate-700 text-white"
-                                : "bg-muted text-foreground"
-                      }`}
-                    >
-                      {AVAILABILITY_LABEL[display.availability]}
-                    </span>
+                    {isTrash && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded bg-destructive/15 text-destructive">
+                        In Trash
+                      </span>
+                    )}
+                    {!isTrash && (
+                      <span
+                        className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded ${
+                          display.availability === "available"
+                            ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                            : display.availability === "made-to-order"
+                              ? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                              : display.availability === "reserved"
+                                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                                : display.availability === "sold"
+                                  ? "bg-slate-700 text-white"
+                                  : "bg-muted text-foreground"
+                        }`}
+                      >
+                        {AVAILABILITY_LABEL[display.availability]}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {display.medium} · {display.year}
@@ -982,85 +1203,119 @@ export function StockListingsSection() {
                       <>₱{display.price.toLocaleString()}</>
                     )}
                   </p>
-                  {display.description && (
+                  {isTrash && row.def && (
+                    <p className="text-[11px] text-muted-foreground mt-1 italic">
+                      Customization of stock default &ldquo;{row.def.title}
+                      &rdquo;. Permanently deleting will restore the bundled
+                      stock entry on the storefront.
+                    </p>
+                  )}
+                  {!isTrash && display.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                       {display.description}
                     </p>
                   )}
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      row.kind === "custom"
-                        ? handleEditCustom(row.product)
-                        : handleEdit(display)
-                    }
-                    disabled={busy}
-                    aria-label={`Edit ${display.title}`}
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                  {isHidden ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        void (row.kind === "custom"
-                          ? updateProduct(row.product.id, {
-                              availability: "available",
-                            })
-                          : setAvailabilityFor(display, "available"))
-                      }
-                      disabled={busy}
-                      aria-label={`Show ${display.title}`}
-                      title="Show on storefront"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                  {isTrash ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void handleRestoreFromTrash(row.product)}
+                        disabled={busy}
+                        aria-label={`Restore ${display.title}`}
+                        title="Restore to storefront"
+                      >
+                        <Undo2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void handlePermanentDelete(row.product)}
+                        disabled={busy}
+                        aria-label={`Permanently delete ${display.title}`}
+                        title="Permanently delete"
+                      >
+                        <XCircle className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </>
                   ) : (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        void (row.kind === "custom"
-                          ? updateProduct(row.product.id, {
-                              availability: "draft",
-                            })
-                          : setAvailabilityFor(display, "draft"))
-                      }
-                      disabled={busy}
-                      aria-label={`Hide ${display.title}`}
-                      title="Hide from storefront"
-                    >
-                      <EyeOff className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {row.kind === "default" && hasOverride && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => void handleRestoreDefault(display)}
-                      disabled={busy}
-                      aria-label={`Delete customization of ${display.title}`}
-                      title="Delete customization (restore stock default)"
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  )}
-                  {row.kind === "custom" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => void handleDeleteCustom(row.product)}
-                      disabled={busy}
-                      aria-label={`Delete ${display.title}`}
-                      title="Delete upload"
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          row.kind === "custom"
+                            ? handleEditCustom(row.product)
+                            : handleEdit(display)
+                        }
+                        disabled={busy}
+                        aria-label={`Edit ${display.title}`}
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      {isHidden ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void (row.kind === "custom"
+                              ? updateProduct(row.product.id, {
+                                  availability: "available",
+                                })
+                              : setAvailabilityFor(display, "available"))
+                          }
+                          disabled={busy}
+                          aria-label={`Show ${display.title}`}
+                          title="Show on storefront"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void (row.kind === "custom"
+                              ? updateProduct(row.product.id, {
+                                  availability: "draft",
+                                })
+                              : setAvailabilityFor(display, "draft"))
+                          }
+                          disabled={busy}
+                          aria-label={`Hide ${display.title}`}
+                          title="Hide from storefront"
+                        >
+                          <EyeOff className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {row.kind === "default" && hasOverride && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void handleMoveToTrash(display)}
+                          disabled={busy}
+                          aria-label={`Move ${display.title} to Trash`}
+                          title="Move to Trash"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      )}
+                      {row.kind === "custom" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void handleDeleteCustom(row.product)}
+                          disabled={busy}
+                          aria-label={`Delete ${display.title}`}
+                          title="Permanently delete upload"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
               </li>

@@ -317,13 +317,14 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
 
   // Belt-and-braces: the public /api/products endpoint now drops
   // products whose `replacesDefaultId` is set (they surface as the
-  // merged stock card, not as a second standalone product), but we
-  // still filter here so a stale client-side TanStack Query cache
-  // can't render the duplicate card whose deep-link would 404.
+  // merged stock card, not as a second standalone product) and any
+  // soft-deleted (trashed) row, but we still filter here so a stale
+  // client-side TanStack Query cache can't render a card whose
+  // deep-link would 404.
   const customArtworks = useMemo(
     () =>
       serverProducts
-        .filter((p) => !p.replacesDefaultId)
+        .filter((p) => !p.replacesDefaultId && !p.trashed)
         .map((p) => productToDisplay(p)),
     [serverProducts],
   );
@@ -332,14 +333,24 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
   // override mapping for the bundled stock catalog. We need it here
   // so a customized default (different price, sale, image, or
   // availability) actually surfaces those edits to shoppers instead
-  // of silently rendering the un-customized stock copy.
+  // of silently rendering the un-customized stock copy. A trashed
+  // override suppresses both itself AND its bundled default — the
+  // bundled default only resurfaces if the operator permanently
+  // deletes the override from the admin Trash tab.
   const { products: allProducts } = useProducts();
   const overridesByDefaultId = useMemo(() => {
     const m = new Map<string, (typeof allProducts)[number]>();
     for (const p of allProducts) {
-      if (p.replacesDefaultId) m.set(p.replacesDefaultId, p);
+      if (p.replacesDefaultId && !p.trashed) m.set(p.replacesDefaultId, p);
     }
     return m;
+  }, [allProducts]);
+  const trashedDefaultIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of allProducts) {
+      if (p.replacesDefaultId && p.trashed) s.add(p.replacesDefaultId);
+    }
+    return s;
   }, [allProducts]);
 
   // The 15 stock paintings are bundled into the SPA, not stored in
@@ -353,18 +364,20 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
   // VIP early access still works because the embargo flag only
   // exists on uploaded products, never on defaults.
   const defaultsFiltered = useMemo(() => {
-    const merged: DisplayArtwork[] = defaultArtworks.map((def) => {
-      const override = overridesByDefaultId.get(def.id);
-      if (!override) return def;
-      return {
-        ...productToDisplay(override),
-        // Preserve the merged-default id so deep links continue to
-        // resolve through `findArtworkById` without the override's
-        // bare uuid showing up in the URL.
-        id: def.id,
-        isCustom: false,
-      };
-    });
+    const merged: DisplayArtwork[] = defaultArtworks
+      .filter((def) => !trashedDefaultIds.has(def.id))
+      .map((def) => {
+        const override = overridesByDefaultId.get(def.id);
+        if (!override) return def;
+        return {
+          ...productToDisplay(override),
+          // Preserve the merged-default id so deep links continue to
+          // resolve through `findArtworkById` without the override's
+          // bare uuid showing up in the URL.
+          id: def.id,
+          isCustom: false,
+        };
+      });
     const list = merged.filter(
       (art) =>
         art.availability !== "draft" &&
@@ -380,6 +393,7 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
     return sortDisplayArtworks(list, sortBy);
   }, [
     overridesByDefaultId,
+    trashedDefaultIds,
     query,
     filterCategories,
     filterAvailabilities,
