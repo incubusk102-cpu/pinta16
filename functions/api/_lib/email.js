@@ -1441,12 +1441,11 @@ const buildFooterLinksHtml = (welcome, accent) => {
 };
 
 /**
- * Render the baked-in brand identity for the email header — just the
- * gold "C" medallion sitting on the warm-black rounded square that
- * matches the storefront's icon.svg / icon-512.png. We do NOT render
- * the "Canvas Hub" wordmark or the EST. 2026 tagline anymore: the
- * brand is the C, full stop, identical to the storefront favicon /
- * PWA icon. Used everywhere a custom logoUrl hasn't been uploaded.
+ * Render the baked-in brand identity for the email header — a clean
+ * transparent gold italic "C", sourced from
+ * `public/email-brand-c-logo.png`. Used everywhere a custom `logoUrl`
+ * hasn't been uploaded. Admins can swap this default by replacing
+ * that file and re-running `npm run generate:email-assets`.
  *
  * Implementation: the PNG is inlined as a base64 data: URI by
  * scripts/generate-email-assets.mjs at build time. Inlining avoids a
@@ -1470,7 +1469,7 @@ const defaultBrandLogoHtml = (_fromName, _tpl, headerAlign) => {
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
           <tr>
             <td style="padding:0;line-height:0;font-size:0;">
-              <img src="${DEFAULT_BRAND_LOGO_DATA_URI}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
+              <img src="${DEFAULT_BRAND_LOGO_DATA_URI}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
             </td>
           </tr>
         </table>`;

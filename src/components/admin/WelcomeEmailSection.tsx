@@ -600,21 +600,22 @@ const isSafeColor = (value: string): boolean =>
 // directly; the SENT email renderer in
 // functions/api/_lib/email.js inlines the same PNG as a base64 data:
 // URI to bypass Cloudflare's bot challenge for email image proxies.
-// Both surfaces resolve to the same `public/icon-512.png` on disk so
-// the rendered logo is byte-identical regardless of where the admin
-// is previewing.
-const DEFAULT_BRAND_LOGO_URL = "/icon-512.png";
+// Both surfaces resolve to the same `public/email-brand-c-logo.png`
+// on disk so the rendered logo is byte-identical regardless of where
+// the admin is previewing. This is a clean transparent gold "C" and
+// is intentionally separate from `public/icon-512.png` (which still
+// ships the rounded-square favicon/PWA variant) so admins can swap
+// the email default without touching the storefront favicon.
+const DEFAULT_BRAND_LOGO_URL = "/email-brand-c-logo.png";
 
 // Mirrors `defaultBrandLogoHtml` in functions/api/_lib/email.js. We
-// render only the brand C-logo PNG (warm-black rounded square + gold
-// medallion + italic-C cut-out, identical to the storefront favicon /
-// PWA icon at public/icon-512.png) — no "Canvas Hub" wordmark, no
-// "EST. 2026" tagline. `fromName` and `tpl` are accepted for back-
-// compat with the previous renderer; both are intentionally unused
-// because the brand mark is template-agnostic and the configurable
-// from-name is never displayed as a wordmark in the header. Keep this
-// byte-identical to the server renderer or the admin preview will
-// drift from the sent email.
+// render only the brand C-logo PNG (transparent gold italic "C") —
+// no "Canvas Hub" wordmark, no "EST. 2026" tagline. `fromName` and
+// `tpl` are accepted for back-compat with the previous renderer;
+// both are intentionally unused because the brand mark is template-
+// agnostic and the configurable from-name is never displayed as a
+// wordmark in the header. Keep this byte-identical to the server
+// renderer or the admin preview will drift from the sent email.
 export const renderDefaultBrandLogoHtml = (
   _fromName: string,
   _tpl: { pageBg: string; cardBg: string },
@@ -626,7 +627,7 @@ export const renderDefaultBrandLogoHtml = (
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${tableAlign}" style="border-collapse:collapse;margin:${tableMargin};">
           <tr>
             <td style="padding:0;line-height:0;font-size:0;">
-              <img src="${DEFAULT_BRAND_LOGO_URL}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
+              <img src="${DEFAULT_BRAND_LOGO_URL}" alt="C" width="56" height="56" style="display:block;width:56px;height:56px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
             </td>
           </tr>
         </table>`;
