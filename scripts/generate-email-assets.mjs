@@ -39,18 +39,27 @@ const OUT_FILE = path.join(
 // 2× retina without inflating the email body.
 const BRAND_LOGO_EMAIL_WIDTH = 128;
 
+// Email-specific brand mark: a clean transparent gold "C" (no rounded
+// black square background). Kept separate from `public/icon-512.png`
+// — which still ships the PWA/favicon variant with the dark square —
+// so updating the email default doesn't change the storefront favicon.
+// Admins can still upload a custom logo per template; this file is
+// only used when no custom upload is set.
+const BRAND_LOGO_SOURCE = "email-brand-c-logo.png";
+
 const dataUri = (mime, bytes) =>
   `data:${mime};base64,${bytes.toString("base64")}`;
 
 const generateBrandLogo = async () => {
-  const src = path.join(PUBLIC_DIR, "icon-512.png");
+  const src = path.join(PUBLIC_DIR, BRAND_LOGO_SOURCE);
   const buf = await sharp(src)
     .resize({
       width: BRAND_LOGO_EMAIL_WIDTH,
       height: BRAND_LOGO_EMAIL_WIDTH,
-      fit: "cover",
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
     })
-    .png({ compressionLevel: 9, palette: true })
+    .png({ compressionLevel: 9 })
     .toBuffer();
   return dataUri("image/png", buf);
 };
