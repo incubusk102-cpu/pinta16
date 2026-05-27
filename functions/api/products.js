@@ -194,12 +194,18 @@ const handle = async ({ request, env, waitUntil }) => {
 
       // Public paginated responses always hide drafts and live
       // embargoes so the storefront doesn't have to filter them
-      // after the fact (which would break the page-count math). The
-      // admin `?all=true` path above leaves the array untouched so
+      // after the fact (which would break the page-count math).
+      // Products with `replacesDefaultId` set are *customizations* of
+      // the bundled stock catalog — they should surface as the merged
+      // stock card in the storefront, not as a second, standalone
+      // product whose `product-<uuid>` deep link can't be resolved
+      // against the merged default's `default-<slug>` id. The admin
+      // `?all=true` path above leaves the array untouched so
       // dashboards / bulk edit still see the full set.
       const now = Date.now();
       const visible = all.filter((p) => {
         if ((p.availability || "available") === "draft") return false;
+        if (p.replacesDefaultId) return false;
         if (p.embargoUntil) {
           const t = new Date(p.embargoUntil).getTime();
           if (!Number.isNaN(t) && t > now) return false;

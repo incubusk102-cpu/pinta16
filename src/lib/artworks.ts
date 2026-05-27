@@ -324,5 +324,20 @@ export const findArtworkById = (
   // Back-compat: older code paths (and any deep-links / shared URLs from
   // before the display-id rename) sometimes use the raw product uuid.
   // Map that to the corresponding `product-<uuid>` artwork.
-  return all.find((art) => art.id === `product-${id}`);
+  const byPrefixed = all.find((art) => art.id === `product-${id}`);
+  if (byPrefixed) return byPrefixed;
+  // Overrides of stock defaults are merged under the `default-<slug>` id
+  // in `getAllArtworks`, so a link built against the override's raw uuid
+  // (e.g. an old "/product/product-<uuid>" pin, a Turso-fed similar-rail
+  // result, or any pre-fix cached link) would otherwise 404. Resolve
+  // either `product-<uuid>` or the bare `<uuid>` back to the merged
+  // default so deep-links into customized stock items keep working.
+  const rawId = id.startsWith("product-") ? id.slice("product-".length) : id;
+  const override = products.find(
+    (p) => p.id === rawId && Boolean(p.replacesDefaultId),
+  );
+  if (override?.replacesDefaultId) {
+    return all.find((art) => art.id === override.replacesDefaultId);
+  }
+  return undefined;
 };

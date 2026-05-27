@@ -547,7 +547,7 @@ export function StockListingsSection() {
     if (!override) return;
     if (
       !window.confirm(
-        `Revert "${def.title}" to its original stock details? Your customizations will be removed.`,
+        `Delete your customization of "${def.title}"? The stock default (image, price, copy) will be restored on the storefront. This cannot be undone.`,
       )
     ) {
       return;
@@ -555,10 +555,10 @@ export function StockListingsSection() {
     setBusyId(def.id);
     try {
       await deleteProduct(override.id);
-      toast.success(`Reverted "${def.title}" to the default`);
+      toast.success(`Deleted your customization of "${def.title}"`);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not revert listing",
+        err instanceof Error ? err.message : "Could not delete customization",
       );
     } finally {
       setBusyId(null);
@@ -1044,10 +1044,10 @@ export function StockListingsSection() {
                       size="icon"
                       onClick={() => void handleRestoreDefault(display)}
                       disabled={busy}
-                      aria-label={`Revert ${display.title} to default`}
-                      title="Revert to default"
+                      aria-label={`Delete customization of ${display.title}`}
+                      title="Delete customization (restore stock default)"
                     >
-                      <RotateCcw className="w-4 h-4 text-muted-foreground" />
+                      <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   )}
                   {row.kind === "custom" && (
