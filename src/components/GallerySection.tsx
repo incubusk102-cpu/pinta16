@@ -10,6 +10,7 @@ import Lightbox from "./Lightbox";
 import {
   getEffectivePrice,
   PRODUCT_CATEGORIES,
+  useProducts,
 } from "@/contexts/ProductContext";
 import {
   usePaginatedProducts,
@@ -314,20 +315,57 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
     limit: 24,
   });
 
+  // Belt-and-braces: the public /api/products endpoint now drops
+  // products whose `replacesDefaultId` is set (they surface as the
+  // merged stock card, not as a second standalone product), but we
+  // still filter here so a stale client-side TanStack Query cache
+  // can't render the duplicate card whose deep-link would 404.
   const customArtworks = useMemo(
-    () => serverProducts.map((p) => productToDisplay(p)),
+    () =>
+      serverProducts
+        .filter((p) => !p.replacesDefaultId)
+        .map((p) => productToDisplay(p)),
     [serverProducts],
   );
+
+  // The full product list (admin `?all=true` shape) gives us the
+  // override mapping for the bundled stock catalog. We need it here
+  // so a customized default (different price, sale, image, or
+  // availability) actually surfaces those edits to shoppers instead
+  // of silently rendering the un-customized stock copy.
+  const { products: allProducts } = useProducts();
+  const overridesByDefaultId = useMemo(() => {
+    const m = new Map<string, (typeof allProducts)[number]>();
+    for (const p of allProducts) {
+      if (p.replacesDefaultId) m.set(p.replacesDefaultId, p);
+    }
+    return m;
+  }, [allProducts]);
 
   // The 15 stock paintings are bundled into the SPA, not stored in
   // KV, so they live outside the paginated API. We always render
   // them and we apply the same filter/sort the server is doing —
   // otherwise a shopper who searches for "Mayon" would see only the
   // server-side matches and miss the stock "Mayon Village Path".
+  // Customizations from admin (`replacesDefaultId`) are merged in
+  // here so the storefront reflects the operator's edits while the
+  // deep-link still resolves under the merged `default-<slug>` id.
   // VIP early access still works because the embargo flag only
   // exists on uploaded products, never on defaults.
   const defaultsFiltered = useMemo(() => {
-    const list = defaultArtworks.filter(
+    const merged: DisplayArtwork[] = defaultArtworks.map((def) => {
+      const override = overridesByDefaultId.get(def.id);
+      if (!override) return def;
+      return {
+        ...productToDisplay(override),
+        // Preserve the merged-default id so deep links continue to
+        // resolve through `findArtworkById` without the override's
+        // bare uuid showing up in the URL.
+        id: def.id,
+        isCustom: false,
+      };
+    });
+    const list = merged.filter(
       (art) =>
         art.availability !== "draft" &&
         (user?.vipEarlyAccess === true || !isEmbargoed(art)) &&
@@ -341,6 +379,7 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
     );
     return sortDisplayArtworks(list, sortBy);
   }, [
+    overridesByDefaultId,
     query,
     filterCategories,
     filterAvailabilities,
