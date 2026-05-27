@@ -576,33 +576,54 @@ const GalleryNav = () => {
             <>
               {/* Profile card — pinned to the top of the drawer so the
                     visitor's identity is the first thing they see.
-                    Signed-in users get a display-only card (tapping it
-                    doesn't navigate; the My account rows below open
-                    inline slide-over sheets). Signed-out non-homepage
-                    visitors get the Google sign-in button instead. */}
+                    For signed-in users the card itself is the Profile
+                    dropdown trigger: tapping it expands the full
+                    ProfileEditor inline (photo, display name, password,
+                    Google permission). The separate "Profile" row in
+                    My account is removed since it would be a duplicate.
+                    Signed-out non-homepage visitors get the Google
+                    sign-in button instead. */}
               <div className="px-5 pt-3 pb-3 border-b border-border/30">
                 {user ? (
-                  <div className="flex items-center gap-3">
-                    {user.picture ? (
-                      <img
-                        src={user.picture}
-                        alt=""
-                        className="w-9 h-9 rounded-full object-cover border border-border/40"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
-                        <UserCircle className="w-5 h-5" />
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => toggleAccountDropdown("profile")}
+                      aria-expanded={accountDropdowns.profile}
+                      aria-controls="drawer-profile-panel"
+                      className="w-full flex items-center gap-3 text-left rounded-md hover:bg-accent/40 active:bg-accent/60 transition-colors px-1 -mx-1 py-1"
+                    >
+                      {user.picture ? (
+                        <img
+                          src={user.picture}
+                          alt=""
+                          className="w-9 h-9 rounded-full object-cover border border-border/40"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-foreground/70">
+                          <UserCircle className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {user.name || t("nav.account")}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {user.email}
+                        </p>
                       </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {user.name || t("nav.account")}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {user.email}
-                      </p>
-                    </div>
-                  </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
+                          accountDropdowns.profile ? "rotate-0" : "-rotate-90"
+                        }`}
+                      />
+                    </button>
+                    {accountDropdowns.profile ? (
+                      <div id="drawer-profile-panel" className="pt-3">
+                        <ProfileEditor />
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <div className="flex justify-center">
                     <GoogleNavSignIn active={menuOpen} />
@@ -728,26 +749,17 @@ const GalleryNav = () => {
                 </button>
               </div>
 
-              {/* My account — Profile, Track order, Wishlist, Saved
-                    addresses. Each row is now an inline dropdown that
-                    expands the matching account view directly inside
-                    the drawer (no slide-over, no separate page). My
-                    orders sits in the primary nav above with its own
-                    inline dropdown, so it isn't repeated here. */}
+              {/* My account — Track order, Wishlist, Saved addresses.
+                    Profile lives in the pinned identity card at the top
+                    of the drawer (tap it to expand the editor inline)
+                    so it isn't repeated here. My orders sits in the
+                    primary nav above with its own inline dropdown. */}
               {user && (
                 <DrawerSection
                   label="My account"
                   storageKey="account"
                   defaultOpen={true}
                 >
-                  <DrawerCollapsible
-                    icon={UserCircle}
-                    label="Profile"
-                    open={accountDropdowns.profile}
-                    onToggle={() => toggleAccountDropdown("profile")}
-                  >
-                    <ProfileEditor />
-                  </DrawerCollapsible>
                   <DrawerCollapsible
                     icon={Truck}
                     label="Track order"
