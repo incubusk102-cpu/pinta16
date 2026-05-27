@@ -507,7 +507,7 @@ export function StockListingsSection() {
       !window.confirm(
         `Reset ALL ${overrides.length} stock customization${
           overrides.length === 1 ? "" : "s"
-        }? Every painting in the stock catalog will revert to its original details.`,
+        }? Every product in the stock catalog will revert to its original details.`,
       )
     )
       return;

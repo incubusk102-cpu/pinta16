@@ -43,7 +43,7 @@ const RoomPairingArticle = () => {
         variants={fadeInUp}
         className="font-display text-3xl md:text-4xl text-gradient-elegant mb-6"
       >
-        Choosing the right painting for every room
+        Choosing the right piece for every room
       </motion.h1>
       <motion.p
         variants={fadeInUp}
@@ -51,8 +51,8 @@ const RoomPairingArticle = () => {
       >
         A room-by-room playbook for decorating with original, hand-painted
         canvas: how to size the piece, what subject and palette pair best with
-        each space, and the small placement details that decide whether a
-        painting feels like a focal point or background noise.
+        each space, and the small placement details that decide whether a piece
+        feels like a focal point or background noise.
       </motion.p>
 
       {/* Hero ad — first impression for readers landing from organic search. */}
@@ -76,18 +76,18 @@ const RoomPairingArticle = () => {
           often seen? A bedroom-facing wall is mostly viewed in low light; a
           dining-room wall hosts both daytime brunches and candlelit dinners; an
           office wall lives under overhead fluorescents from 9 to 6. Lighting
-          changes how every pigment reads, and the wrong painting under the
-          wrong light reads as muddy or flat.
+          changes how every pigment reads, and the wrong piece under the wrong
+          light reads as muddy or flat.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Once those two answers are clear, sizing usually solves itself. The
           rule of thumb that has held up across decades of interior practice:
           the artwork should span roughly two-thirds the width of the furniture
-          piece it sits above, hung so the centre of the painting is at the eye
+          piece it sits above, hung so the centre of the piece is at the eye
           level of a standing adult (around 57 inches from the floor) or a few
-          inches above the back of a sofa or headboard. Smaller paintings
-          floating alone on a large wall almost always look like an afterthought
-          — they need either a frame that adds visual weight, or a grouping of
+          inches above the back of a sofa or headboard. Smaller pieces floating
+          alone on a large wall almost always look like an afterthought — they
+          need either a frame that adds visual weight, or a grouping of
           two-to-five companion pieces to hold the wall together.
         </p>
       </motion.section>
@@ -99,8 +99,8 @@ const RoomPairingArticle = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           The most common interior-design mistake is treating the living room
           wall as the subject and the sofa as an accessory underneath. It's the
-          other way around. The painting's job is to anchor the seating zone —
-          to give the eye somewhere to land when you sit down — which means the
+          other way around. The piece's job is to anchor the seating zone — to
+          give the eye somewhere to land when you sit down — which means the
           piece should relate to the sofa in scale and palette, not to the wall
           as a whole.
         </p>
@@ -108,15 +108,15 @@ const RoomPairingArticle = () => {
           For a standard three-seater (around 84 inches wide), look for an
           artwork between 48 and 60 inches across. A single horizontal canvas is
           the safest choice; a diptych or triptych works if the panels read as
-          one composition rather than three separate paintings. Hang the piece
-          so the bottom edge sits 6 to 10 inches above the back of the sofa —
-          closer to 6 if the painting is busy, closer to 10 if it's calm. Any
-          higher and the painting floats; any lower and it crowds the backs of
+          one composition rather than three separate pieces. Hang the piece so
+          the bottom edge sits 6 to 10 inches above the back of the sofa —
+          closer to 6 if the piece is busy, closer to 10 if it's calm. Any
+          higher and the piece floats; any lower and it crowds the backs of
           anyone sitting down.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           On subject and palette: the living room is where most households host
-          guests, so the painting carries a social role too. Abstract pieces and
+          guests, so the piece carries a social role too. Abstract pieces and
           landscape compositions both work well because they invite conversation
           without demanding a specific reading. Vibrant tropical florals, palm
           and monstera studies, and warm-toned seascapes are all natural fits
@@ -128,10 +128,10 @@ const RoomPairingArticle = () => {
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           If your living room opens onto a kitchen or dining area (common in
-          condo layouts), check that the painting reads well from both rooms.
-          Walk to the kitchen, look back at the wall, and ask whether the piece
-          still anchors the space from that angle. A painting that disappears
-          from the secondary viewing angle is one you'll regret within a year.
+          condo layouts), check that the piece reads well from both rooms. Walk
+          to the kitchen, look back at the wall, and ask whether the piece still
+          anchors the space from that angle. A piece that disappears from the
+          secondary viewing angle is one you'll regret within a year.
         </p>
       </motion.section>
 
@@ -140,19 +140,19 @@ const RoomPairingArticle = () => {
           Dining room: a focal point that survives every meal
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The dining wall is unique because the painting will be looked at for
+          The dining wall is unique because the piece will be looked at for
           long, uninterrupted stretches — every dinner, every birthday, every
           long Sunday lunch. That changes the calculus. A piece that's
           immediately striking but loses interest after the third viewing will
-          quietly drag the room down for years. Pick a painting with at least
-          three layers of detail: a strong overall composition, a mid-range
-          rhythm in colour or brushwork, and small surface details that reward a
-          closer look across the table.
+          quietly drag the room down for years. Pick a piece with at least three
+          layers of detail: a strong overall composition, a mid-range rhythm in
+          colour or brushwork, and small surface details that reward a closer
+          look across the table.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Scale here is dictated by the table, not the wall. For a six-seater
-          dining table (around 72 inches long), the painting wants to be between
-          40 and 54 inches wide and hung with its centre roughly 28 inches above
+          dining table (around 72 inches long), the piece wants to be between 40
+          and 54 inches wide and hung with its centre roughly 28 inches above
           the tabletop — close enough that diners read it as part of the table's
           environment, not as a separate "art wall" behind the room. A single
           statement piece is almost always stronger than a gallery wall here;
@@ -163,17 +163,17 @@ const RoomPairingArticle = () => {
           Lighting matters more in the dining room than anywhere else in the
           house. Most dining rooms run a pendant or chandelier over the table,
           which throws downward light onto the table and leaves the back wall in
-          relative shadow. A painting hung under those conditions wants either
+          relative shadow. A piece hung under those conditions wants either
           bolder pigments to compensate, or a dedicated picture light mounted
           above the frame. A 2700K to 3000K LED picture light is the safe choice
-          — it warms the painting under candlelit dinners and stays true to the
+          — it warms the piece under candlelit dinners and stays true to the
           artist's intended palette during the day.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           On subject: food, still life, market scenes, and abstract pieces with
           warm undertones all sit naturally in the dining room. Skip anything
           unsettling or aggressively conceptual — the dining table is not the
-          place for a painting that needs a wall text to make sense.
+          place for a piece that needs a wall text to make sense.
         </p>
       </motion.section>
 
@@ -196,19 +196,19 @@ const RoomPairingArticle = () => {
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Scale follows the headboard, not the bed frame. For a queen headboard
-          (around 60 inches wide), pick a painting between 36 and 48 inches
-          across; for a king headboard (76 inches), aim for 48 to 60 inches.
-          Hang the piece so the bottom edge sits 4 to 8 inches above the
-          headboard. If you don't have a headboard, the wall behind the pillows
-          takes over the headboard's role and the same rules apply.
+          (around 60 inches wide), pick a piece between 36 and 48 inches across;
+          for a king headboard (76 inches), aim for 48 to 60 inches. Hang the
+          piece so the bottom edge sits 4 to 8 inches above the headboard. If
+          you don't have a headboard, the wall behind the pillows takes over the
+          headboard's role and the same rules apply.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           A trick that almost no one uses but should: put a small accent piece
           on the wall opposite the bed too. That's the wall your eye lands on
-          first thing in the morning, before you stand up, and the right
-          painting there does more for the mood of the room than the larger
-          piece behind your head. It can be small — even 12 by 16 inches — but
-          it should be deliberate.
+          first thing in the morning, before you stand up, and the right piece
+          there does more for the mood of the room than the larger piece behind
+          your head. It can be small — even 12 by 16 inches — but it should be
+          deliberate.
         </p>
       </motion.section>
 
@@ -218,20 +218,20 @@ const RoomPairingArticle = () => {
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
           The entry foyer and hallway are spaces you walk through, not sit in,
-          so the painting needs to land in a single glance. That favours bold
+          so the piece needs to land in a single glance. That favours bold
           single-subject work — a striking portrait, a high-contrast abstract, a
           saturated landscape — over quieter compositions that reward long
-          looking. The painting also sets first impressions for guests, so this
-          is where many homes place their statement piece.
+          looking. The piece also sets first impressions for guests, so this is
+          where many homes place their statement piece.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Hallways are also the natural home for a gallery wall — a grid of
           three to seven smaller pieces that the eye reads sequentially as you
           walk past. The rules for a successful gallery wall are simple: keep
           one variable consistent (frames, palette, or subject) and vary the
-          others. A grid of seven different paintings in mismatched frames with
+          others. A grid of seven different pieces in mismatched frames with
           mismatched palettes and mismatched subjects reads as clutter; a grid
-          of seven different paintings in matching black float frames reads as a
+          of seven different pieces in matching black float frames reads as a
           curated collection.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
@@ -250,7 +250,7 @@ const RoomPairingArticle = () => {
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
           The home office is the room people most often under-decorate, and it's
-          the room a painting can change the most. The right piece in the
+          the room a piece can change the most. The right piece in the
           peripheral vision of your desk lowers the felt monotony of a long
           workday in a way that's hard to measure but easy to feel. Pick
           something that doesn't directly compete with screen time — soft
@@ -260,13 +260,13 @@ const RoomPairingArticle = () => {
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           For kid-friendly rooms (nurseries, play areas, the wall between two
-          kids' bedrooms), pick original paintings rather than mass-produced
-          prints — children form attachments to original art the same way adults
-          do, and the painting can travel with them across moves and life
-          stages. Stick to warmer palettes and friendly subjects (animals,
-          weather, simplified landscapes), and hang the piece slightly lower
-          than gallery height — 48 to 52 inches off the floor instead of 57 — so
-          it sits at a child's eye level rather than an adult's.
+          kids' bedrooms), pick original pieces rather than mass-produced prints
+          — children form attachments to original art the same way adults do,
+          and the piece can travel with them across moves and life stages. Stick
+          to warmer palettes and friendly subjects (animals, weather, simplified
+          landscapes), and hang the piece slightly lower than gallery height —
+          48 to 52 inches off the floor instead of 57 — so it sits at a child's
+          eye level rather than an adult's.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           One practical caveat: don't hang an unframed canvas or a piece with
@@ -279,25 +279,25 @@ const RoomPairingArticle = () => {
 
       <motion.section variants={fadeInUp} className="space-y-4 mb-12">
         <h2 className="font-display text-2xl md:text-3xl text-foreground">
-          One painting, many rooms: the case for moving art around
+          One piece, many rooms: the case for moving art around
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
           A point most decorating guides quietly ignore: the right room for a
-          painting changes over time. A piece that anchored the living room of a
+          piece changes over time. A piece that anchored the living room of a
           one-bedroom condo at age twenty-eight will not necessarily anchor the
           living room of a four-bedroom house at age thirty-eight — and that's
-          fine. Original paintings are easier to move between rooms than most
-          furniture, and a painting that's outgrown its first home almost always
+          fine. Original pieces are easier to move between rooms than most
+          furniture, and a piece that's outgrown its first home almost always
           finds a strong second one elsewhere in the house.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           When you do move a piece, walk through the sizing and lighting
-          checklist again from scratch. The painting that was perfectly sized
-          above a three-seater sofa is going to look small above a five-seater;
-          the lighting that flattered it in a north-facing bedroom may wash it
-          out in a south-facing dining room. Treat each move as a
-          re-introduction, not just a relocation, and the painting will keep
-          paying dividends across the life of the home.
+          checklist again from scratch. The piece that was perfectly sized above
+          a three-seater sofa is going to look small above a five-seater; the
+          lighting that flattered it in a north-facing bedroom may wash it out
+          in a south-facing dining room. Treat each move as a re-introduction,
+          not just a relocation, and the piece will keep paying dividends across
+          the life of the home.
         </p>
       </motion.section>
 

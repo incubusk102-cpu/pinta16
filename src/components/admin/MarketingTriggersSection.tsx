@@ -46,7 +46,7 @@ const DEFAULTS: MarketingTriggersConfig = {
   reviewFollowUp: {
     enabled: true,
     delayDays: 3,
-    subject: "How are you enjoying your painting?",
+    subject: "How are you enjoying your order?",
     heading: "We\u2019d love your feedback",
   },
   winback: {
@@ -224,7 +224,7 @@ const TRIGGER_META: {
     key: "postPurchaseUpsell",
     label: "Post-purchase upsell",
     icon: Gift,
-    hint: "Suggest three curated paintings X days after an order is marked received \u2014 prefers the same category as the customer\u2019s purchase.",
+    hint: "Suggest three curated products X days after an order is marked received \u2014 prefers the same category as the customer\u2019s purchase.",
     hasDelay: true,
     delayLabel: "Days after delivery",
   },

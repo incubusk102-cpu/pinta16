@@ -81,7 +81,7 @@ const SAMPLE_ORDER_CHROME: OrderEmailConfig = {
   buttonStyle: "filled",
   showLogo: true,
   showBanner: false,
-  footerTagline: "original Filipino paintings",
+  footerTagline: "original Filipino products",
   footerLinks: [
     {
       id: "ig",
@@ -109,7 +109,7 @@ const SAMPLE_ORDER_CHROME: OrderEmailConfig = {
 const SAMPLE_WELCOME: WelcomeEmailConfig = {
   fromName: "Canvas Hub",
   subject: "Welcome to Canvas Hub, {{firstName}}",
-  body: "Thanks for joining the Canvas Hub community — a small studio in the Philippines that ships original paintings to collectors around the country.\n\nWe handpicked a few new pieces for you below, and there's a small welcome gift to mark the occasion. We're glad you're here.",
+  body: "Thanks for joining the Canvas Hub community — a small studio in the Philippines that ships original products to collectors around the country.\n\nWe handpicked a few new pieces for you below, and there's a small welcome gift to mark the occasion. We're glad you're here.",
   signature: "— Sam, Curator at Canvas Hub",
   primaryColor: "#1c1c1c",
   accentColor: "#7a7468",
@@ -124,7 +124,7 @@ const SAMPLE_WELCOME: WelcomeEmailConfig = {
   avatarName: "Sam",
   ctaLabel: "Browse the gallery",
   ctaUrl: "https://canvhub.com",
-  footerTagline: "original Filipino paintings",
+  footerTagline: "original Filipino products",
   footerLinks: [
     {
       id: "ig",
@@ -175,7 +175,7 @@ const SAMPLE_PRODUCTS = [
 
 const SAMPLE_DISCOUNT = {
   headline: "Welcome gift",
-  description: "Take 10% off your first painting.",
+  description: "Take 10% off your first product.",
   code: "WELCOME10",
   expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
 };

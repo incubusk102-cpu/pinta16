@@ -434,7 +434,7 @@ const DEFAULTS: WelcomeEmailConfig = {
   body:
     "Hi {{firstName}},\n\n" +
     "Thanks for joining Canvas Hub — we're glad to have you. " +
-    "Every painting on the storefront is original, hand-painted, and shipped from the artist's studio.\n\n" +
+    "Every product on the storefront is original, hand-crafted, and shipped from the maker's studio.\n\n" +
     "Take your time exploring the collection. If a piece speaks to you, just tap it to see the full details and sizes.\n\n" +
     "If you have any questions, reply to this email and the team will get back to you.\n\n" +
     "— The Canvas Hub team",
@@ -455,7 +455,7 @@ const DEFAULTS: WelcomeEmailConfig = {
   headerAlign: "left",
   dividerStyle: "line",
   buttonStyle: "filled",
-  footerTagline: "original Filipino paintings",
+  footerTagline: "original Filipino products",
   footerLinks: [],
   products: {
     enabled: true,
@@ -472,7 +472,7 @@ const DEFAULTS: WelcomeEmailConfig = {
     linkedCode: "",
     inlineHeadline: "Your welcome gift",
     inlineCode: "WELCOME10",
-    inlineDescription: "10% off your first painting.",
+    inlineDescription: "10% off your first product.",
     inlineExpiresAt: "",
   },
 };
@@ -502,7 +502,7 @@ const SUGGESTED_TEMPLATES: SuggestedTemplate[] = [
       subject: "Welcome to Canvas Hub, {{firstName}}!",
       body:
         "Hi {{firstName}},\n\n" +
-        "Thanks for joining Canvas Hub. Every painting on the storefront is original, hand-painted, and shipped from the artist's studio.\n\n" +
+        "Thanks for joining Canvas Hub. Every product on the storefront is original, hand-crafted, and shipped from the maker's studio.\n\n" +
         "Take your time exploring — if a piece speaks to you, tap it for full details and sizes.\n\n" +
         "If you have questions, just reply to this email.\n\n" +
         "— The Canvas Hub team",
@@ -530,7 +530,7 @@ const SUGGESTED_TEMPLATES: SuggestedTemplate[] = [
         "Anything we can help with? Just reply to this email — a real human (us!) will write back.\n\n" +
         "Maraming salamat,\nThe Canvas Hub team",
       signature: "Maraming salamat,\nThe Canvas Hub team",
-      ctaLabel: "Find your painting",
+      ctaLabel: "Find your piece",
       ctaUrl: "https://canvhub.com",
       primaryColor: "#3a2e1f",
       accentColor: "#a08b6a",
@@ -544,11 +544,11 @@ const SUGGESTED_TEMPLATES: SuggestedTemplate[] = [
     description:
       "Leads with a welcome discount. Pair with a real promo code in /admin → Storefront.",
     patch: {
-      subject: "Welcome, {{firstName}} — here's 10% off your first painting",
+      subject: "Welcome, {{firstName}} — here's 10% off your first product",
       body:
         "Hi {{firstName}},\n\n" +
         "Thanks for signing up to Canvas Hub! As a thank-you, here's 10% off your first piece — just use code WELCOME10 at checkout.\n\n" +
-        "All our paintings are original, hand-finished, and shipped from the artist directly. Take your time browsing.\n\n" +
+        "All our products are original, hand-finished, and shipped from the maker directly. Take your time browsing.\n\n" +
         "— The Canvas Hub team",
       signature: "— The Canvas Hub team",
       ctaLabel: "Shop the collection",
@@ -1383,7 +1383,7 @@ export const WelcomeEmailSection = () => {
                         opacity: 0.9,
                       }}
                     >
-                      Welcome to the gallery — original Filipino paintings.
+                      Welcome to the gallery — original Filipino products.
                     </span>
                   </div>
                 </div>
@@ -1679,7 +1679,7 @@ export const WelcomeEmailSection = () => {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Drops a small grid of paintings into the email so the customer sees
+          Drops a small grid of products into the email so the customer sees
           something they can click straight from their inbox. Draft products are
           skipped automatically.
         </p>
@@ -1755,7 +1755,7 @@ export const WelcomeEmailSection = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>
-                    Pick paintings ({config.products.manualIds.length}/
+                    Pick products ({config.products.manualIds.length}/
                     {config.products.count} chosen)
                   </Label>
                   {config.products.manualIds.length > 0 && (
@@ -1823,13 +1823,13 @@ export const WelcomeEmailSection = () => {
             {config.products.mode === "custom" && (
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <Label>Email-only paintings</Label>
+                  <Label>Email-only products</Label>
                   <p className="text-[11px] text-muted-foreground">
                     These don't appear on the public storefront. Each card links
                     to a preview page (
                     <code className="text-[10px]">/preview/&lt;id&gt;</code>)
-                    that shows the painting larger so customers can browse
-                    before deciding to visit the full collection.
+                    that shows the product larger so customers can browse before
+                    deciding to visit the full collection.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1906,7 +1906,7 @@ export const WelcomeEmailSection = () => {
                             onChange={(e) =>
                               updateCustomItem(i, { title: e.target.value })
                             }
-                            placeholder="Untitled painting"
+                            placeholder="Untitled product"
                           />
                         </div>
                         <div className="space-y-1">
@@ -2065,7 +2065,7 @@ export const WelcomeEmailSection = () => {
                     onChange={(e) =>
                       updateDiscount("inlineDescription", e.target.value)
                     }
-                    placeholder="10% off your first painting."
+                    placeholder="10% off your first product."
                   />
                 </div>
                 <div className="space-y-1">
@@ -2120,7 +2120,7 @@ export const WelcomeEmailSection = () => {
           />
           <p className="text-[11px] text-muted-foreground">
             Appears after the wordmark, e.g. &ldquo;
-            <em>Canvas Hub — original Filipino paintings.</em>&rdquo;
+            <em>Canvas Hub — original Filipino products.</em>&rdquo;
           </p>
         </div>
 

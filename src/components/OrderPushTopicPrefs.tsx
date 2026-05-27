@@ -52,8 +52,8 @@ const TOPIC_GROUPS: TopicGroup[] = [
       },
       {
         kind: "in_progress",
-        label: "Painting in progress",
-        description: "The artist has started working on your canvas.",
+        label: "In production",
+        description: "The maker has started working on your product.",
       },
       {
         kind: "out_for_delivery",
@@ -64,7 +64,7 @@ const TOPIC_GROUPS: TopicGroup[] = [
       {
         kind: "received",
         label: "Delivered",
-        description: "The painting has arrived at your address.",
+        description: "Your product has arrived at your address.",
       },
     ],
   },

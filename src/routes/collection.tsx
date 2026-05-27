@@ -18,7 +18,7 @@ interface CollectionSearch {
 // hero + dynamic carousels (marquee, daily feature, recommended,
 // recently viewed) so the landing experience reads like a curated
 // website rather than a product-catalogue dump. Customers who want to
-// see every painting + filter / search / sort it land here instead.
+// see every product + filter / search / sort it land here instead.
 //
 // The CartDrawer / CheckoutForm are lazy-loaded the same way the
 // homepage does it: they're conditional UI that listens for cart-open
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/collection")({
       {
         name: "description",
         content:
-          "Every Canvas Hub painting in one place. Search, filter by category, price, or availability — each piece hand-crafted to order.",
+          "Every Canvas Hub product in one place. Search, filter by category, price, or availability — each piece hand-crafted to order.",
       },
       {
         property: "og:title",
@@ -53,7 +53,7 @@ export const Route = createFileRoute("/collection")({
       {
         property: "og:description",
         content:
-          "Browse every Canvas Hub painting. Original Filipino works on canvas, hand-crafted upon order.",
+          "Browse every Canvas Hub product. Original Filipino works hand-crafted upon order.",
       },
     ],
   }),
@@ -64,7 +64,7 @@ function CollectionPage() {
   useSEO({
     title: "The Collection — Canvas Hub",
     description:
-      "Every Canvas Hub painting in one place. Filter by category, price, and availability — each piece hand-crafted to order by Filipino artists.",
+      "Every Canvas Hub product in one place. Filter by category, price, and availability — each piece hand-crafted to order by Filipino artists.",
     canonicalPath: "/collection",
   });
   return (

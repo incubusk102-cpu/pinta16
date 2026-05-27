@@ -132,7 +132,7 @@ export function TursoVectorPanel() {
         const embedded = data.embedded ?? 0;
         const failed = data.failed ?? 0;
         setResultMsg(
-          `Embedded ${embedded} of ${total} painting(s)${failed ? `, ${failed} failed` : ""}.`,
+          `Embedded ${embedded} of ${total} product(s)${failed ? `, ${failed} failed` : ""}.`,
         );
         void fetchStatus();
       } else {
@@ -304,7 +304,7 @@ export function TursoVectorPanel() {
             title={
               !status.workersAi
                 ? "Workers AI binding (env.AI) not configured. See wrangler.toml."
-                : "Re-embed every painting in PRODUCTS KV."
+                : "Re-embed every product in PRODUCTS KV."
             }
           >
             {embedding
@@ -366,7 +366,7 @@ export function TursoVectorPanel() {
 
       {embedded === 0 && total === 0 && status.workersAi && (
         <p className="text-xs text-muted-foreground">
-          No paintings embedded yet. Click <strong>Generate embeddings</strong>{" "}
+          No products embedded yet. Click <strong>Generate embeddings</strong>{" "}
           to populate the index from <code>PRODUCTS</code> KV.
         </p>
       )}

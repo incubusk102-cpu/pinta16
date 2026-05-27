@@ -87,10 +87,10 @@ const BuyingArticle = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           The honest pitch we give first-time collectors: buy what you love. If
           the piece appreciates, you have an asset; if it doesn't, you still
-          have a painting you love on your wall. This single reframing removes
-          most of the failure modes of art collecting — the painting you bought
-          because someone said it would appreciate, that you don't actually
-          like, that underperforms, and that you can't sell.
+          have a piece you love on your wall. This single reframing removes most
+          of the failure modes of art collecting — the piece you bought because
+          someone said it would appreciate, that you don't actually like, that
+          underperforms, and that you can't sell.
         </p>
       </motion.section>
 
@@ -121,10 +121,10 @@ const BuyingArticle = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           The general rule: buy at primary, sell at secondary. Primary purchases
           have the longest runway for appreciation and the strongest provenance
-          (you know exactly where the painting came from). Secondary purchases
-          are where you find specific pieces by artists you missed earlier in
-          their career, but the price already reflects the artist's current
-          market position.
+          (you know exactly where the piece came from). Secondary purchases are
+          where you find specific pieces by artists you missed earlier in their
+          career, but the price already reflects the artist's current market
+          position.
         </p>
       </motion.section>
 
@@ -135,7 +135,7 @@ const BuyingArticle = () => {
           Provenance, COA, and the paper trail
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          A painting's value is inseparable from its provenance — the documented
+          A piece's value is inseparable from its provenance — the documented
           chain of ownership from the artist's studio to your home. Forgeries
           are a real and growing problem in the Filipino secondary market,
           especially for early-career work by now- established names. The single
@@ -152,13 +152,13 @@ const BuyingArticle = () => {
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           For secondary-market purchases, look for: the original gallery's
-          invoice or COA from when the painting first sold, any catalogue
-          raisonné entry if the artist has one (Filipino contemporary artists
-          generally don't, but mid-century masters increasingly do), and
-          exhibition history (a painting that appeared in a documented
-          exhibition is far easier to authenticate later). Keep all paperwork in
-          a fireproof safe or at minimum a watertight document box; a forged
-          painting is much harder to detect than missing provenance.
+          invoice or COA from when the piece first sold, any catalogue raisonné
+          entry if the artist has one (Filipino contemporary artists generally
+          don't, but mid-century masters increasingly do), and exhibition
+          history (a piece that appeared in a documented exhibition is far
+          easier to authenticate later). Keep all paperwork in a fireproof safe
+          or at minimum a watertight document box; a forged piece is much harder
+          to detect than missing provenance.
         </p>
       </motion.section>
 

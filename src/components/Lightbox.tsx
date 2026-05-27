@@ -170,7 +170,7 @@ const Lightbox = ({
               handlePrev();
             }}
             className="absolute left-2 md:left-8 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
-            aria-label="Previous painting"
+            aria-label="Previous product"
           >
             <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
           </button>
@@ -180,7 +180,7 @@ const Lightbox = ({
               handleNext();
             }}
             className="absolute right-2 md:right-8 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
-            aria-label="Next painting"
+            aria-label="Next product"
           >
             <ChevronRight
               className="w-5 h-5 md:w-6 md:h-6"

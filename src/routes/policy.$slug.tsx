@@ -263,7 +263,7 @@ const POLICY_SEO: Record<
   terms: {
     displayTitle: "Terms & Conditions",
     description:
-      "Canvas Hub terms & conditions — your rights and ours when buying original paintings from our Filipino gallery.",
+      "Canvas Hub terms & conditions — your rights and ours when buying original products from our Filipino gallery.",
   },
   refund: {
     displayTitle: "Refund & Return Policy",
@@ -273,7 +273,7 @@ const POLICY_SEO: Record<
   shipping: {
     displayTitle: "Shipping Policy",
     description:
-      "Canvas Hub shipping policy — delivery timelines, fees, and tracking for original paintings shipped from the Philippines.",
+      "Canvas Hub shipping policy — delivery timelines, fees, and tracking for original products shipped from the Philippines.",
   },
   privacy: {
     displayTitle: "Privacy Policy",

@@ -274,7 +274,7 @@ export default function WelcomeEmail({
                             {showImg ? (
                               <Img
                                 src={p.imageUrl as string}
-                                alt={p.title || "Painting"}
+                                alt={p.title || "Product"}
                                 className="email-thumbnail"
                                 style={{
                                   width: "100%",

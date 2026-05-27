@@ -263,7 +263,7 @@ export default function Hero3D() {
   return (
     <section
       ref={sectionRef}
-      aria-label="Canvas Hub — featured painting"
+      aria-label="Canvas Hub — featured product"
       className="relative w-full h-[80vh] sm:h-[85vh] min-h-[520px] overflow-hidden bg-background"
     >
       {/* Soft radial gradient backdrop. Keeps the canvas readable
@@ -302,7 +302,7 @@ export default function Hero3D() {
           Canvas Hub
         </h1>
         <p className="mt-3 max-w-xl font-body text-[11px] sm:text-xs tracking-[0.3em] uppercase text-muted-foreground">
-          Hand-crafted paintings, framed and ready to hang
+          Hand-crafted products, ready for your space
         </p>
         <Link
           to="/collection"

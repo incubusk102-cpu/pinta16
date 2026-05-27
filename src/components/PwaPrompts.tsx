@@ -96,7 +96,7 @@ export default function PwaPrompts() {
               A new version is ready
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Reload to pick up the latest paintings and fixes.
+              Reload to pick up the latest products and fixes.
             </p>
             <div className="flex gap-2 mt-2">
               <button
@@ -129,7 +129,7 @@ export default function PwaPrompts() {
               <p className="text-sm font-medium text-foreground">Install app</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Add to your home screen for one-tap access and offline browsing
-                of saved paintings.
+                of saved products.
               </p>
               <div className="flex gap-2 mt-2">
                 <button

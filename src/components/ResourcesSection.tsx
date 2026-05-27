@@ -40,9 +40,9 @@ const ResourcesSection = () => {
         variants={fadeInUp}
         className="font-body text-base text-muted-foreground leading-relaxed max-w-2xl mx-auto mb-12 text-center"
       >
-        Practical guides for living with original canvas paintings — how to
-        hang, light, clean, and frame the pieces you collect so they keep
-        looking the way the artist intended for decades to come.
+        Practical guides for living with original canvas pieces — how to hang,
+        light, clean, and frame the pieces you collect so they keep looking the
+        way the artist intended for decades to come.
       </motion.p>
 
       {/* Ad placement 1 — directly under the hero so the visitor sees a
@@ -57,10 +57,10 @@ const ResourcesSection = () => {
       {/* Section 1 — Care */}
       <motion.section variants={fadeInUp} className="space-y-4 mb-12">
         <h2 className="font-display text-2xl md:text-3xl text-foreground">
-          Caring for an original canvas painting
+          Caring for an original canvas piece
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Original acrylic and oil paintings on stretched canvas are far more
+          Original acrylic and oil pieces on stretched canvas are far more
           forgiving than people often assume, but a few small habits make the
           difference between a piece that ages gracefully and one that yellows,
           cracks, or sags within a decade. Treat the canvas like a piece of fine
@@ -91,24 +91,24 @@ const ResourcesSection = () => {
           Hanging height and gallery lighting
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The single most common mistake in home installation is hanging
-          paintings too high. The gallery convention is to centre the piece at
-          57 inches (≈ 145 cm) from the floor — eye level for an average
-          standing adult. In a room where most viewing happens seated (over a
-          sofa, in a dining room) you can drop that centre line by 4–6 inches
-          and the painting will feel better integrated with the furniture.
+          The single most common mistake in home installation is hanging pieces
+          too high. The gallery convention is to centre the piece at 57 inches
+          (≈ 145 cm) from the floor — eye level for an average standing adult.
+          In a room where most viewing happens seated (over a sofa, in a dining
+          room) you can drop that centre line by 4–6 inches and the piece will
+          feel better integrated with the furniture.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           When pairing multiple pieces, treat the cluster as a single rectangle
           and centre the whole shape at 57 inches rather than centring each
-          painting individually. Keep 2–3 inches between frames in a tight grid,
-          or 4–5 inches when the works are deliberately different sizes.
+          piece individually. Keep 2–3 inches between frames in a tight grid, or
+          4–5 inches when the works are deliberately different sizes.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Lighting is where most living rooms underdeliver. Direct sunlight will
           bleach pigments over a decade; halogen and incandescent picture lights
           run hot enough to dry out the paint film. Aim instead for a low-UV,
-          2700 K – 3000 K LED fixture mounted on the wall above the painting,
+          2700 K – 3000 K LED fixture mounted on the wall above the piece,
           angled down at 30°. Battery-operated cordless picture lights with a
           soft warm-white temperature are now inexpensive and avoid the
           renter-unfriendly hardwiring problem.
@@ -127,7 +127,7 @@ const ResourcesSection = () => {
           A short guide to framing
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Canvas paintings have a choice that works on paper doesn't: stretched
+          Canvas pieces have a choice that works on paper doesn't: stretched
           canvas with painted edges can be hung directly, unframed, and reads as
           deliberately contemporary. A floater frame — a thin moulding that
           surrounds the canvas with a consistent 6–10 mm gap — preserves that
@@ -137,7 +137,7 @@ const ResourcesSection = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           Traditional moulding frames (rabbeted, with the canvas inserted from
           behind) suit representational, classical, and impressionist work but
-          visually shorten the painting by covering 8–12 mm of its outer edge.
+          visually shorten the piece by covering 8–12 mm of its outer edge.
           Always have an experienced framer fit the canvas — pressure-fitting a
           stretched canvas into too tight a rabbet can crack the gesso layer
           along the edge, and the damage isn't visible until you remove the
@@ -146,9 +146,9 @@ const ResourcesSection = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           For oil and heavy-impasto pieces, leave at least a 3 mm air gap
           between the canvas surface and the inner lip of the frame. Trapping a
-          still-curing oil painting flush against the rabbet creates a sealed
-          pocket where solvents cannot escape, and the painting will yellow
-          visibly within a few years.
+          still-curing oil piece flush against the rabbet creates a sealed
+          pocket where solvents cannot escape, and the piece will yellow visibly
+          within a few years.
         </p>
       </motion.section>
 
@@ -158,7 +158,7 @@ const ResourcesSection = () => {
           Humidity, climate, and long-term storage
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The Philippines' tropical climate is more forgiving for paintings than
+          The Philippines' tropical climate is more forgiving for pieces than
           colder, drier environments — Manila's average relative humidity hovers
           comfortably between 70 % and 85 %, which sits within the
           conservation-recommended 45 %–75 % envelope for most of the year. The
@@ -168,7 +168,7 @@ const ResourcesSection = () => {
           encourages mould bloom along the cotton-canvas weave.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          If you need to store a painting for more than a few weeks, stand it on
+          If you need to store a piece for more than a few weeks, stand it on
           its longer edge with the painted face inward, separated from the next
           piece by a sheet of glassine or acid- free tissue. Never lay it flat —
           dust collects in the textured paint surface and is difficult to remove
@@ -177,11 +177,11 @@ const ResourcesSection = () => {
           and leave a permanent matte ring once peeled away.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          For longer storage (six months or more) wrap the painting face-side-in
+          For longer storage (six months or more) wrap the piece face-side-in
           with glassine, then in unbleached cotton sheeting, and place it in a
           wooden crate or a sturdy cardboard box with a few silica gel packets
           to buffer humidity spikes. Label the outside of the package with the
-          painting's orientation so whoever unpacks it knows which way is up.
+          piece's orientation so whoever unpacks it knows which way is up.
         </p>
       </motion.section>
 
@@ -193,7 +193,7 @@ const ResourcesSection = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           The most reliable way to build a collection that holds its appeal
           long-term is to buy pieces you respond to viscerally, not pieces you
-          think will appreciate. A painting you love looking at every morning is
+          think will appreciate. A piece you love looking at every morning is
           worth more, year after year, than one chosen for resale speculation.
           Trust the room test: ask to see the piece against a neutral wall in
           natural light, and if you can, request a photo of it in your own room

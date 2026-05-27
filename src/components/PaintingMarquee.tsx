@@ -126,7 +126,7 @@ const PaintingMarquee = () => {
   return (
     <div
       className="painting-marquee-rail relative overflow-hidden border-y border-border/40 bg-background/60 py-3 sm:py-4"
-      aria-label="Painting collection ticker"
+      aria-label="Product collection ticker"
     >
       {/* Soft fade-out gutters so thumbnails dissolve at the edges
           rather than pop in/out, matching the editorial feel of luxury

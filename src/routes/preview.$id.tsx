@@ -9,16 +9,15 @@ export const Route = createFileRoute("/preview/$id")({
   component: PreviewPage,
   head: ({ params }) => ({
     meta: [
-      { title: `Painting preview — Canvas Hub` },
+      { title: `Product preview — Canvas Hub` },
       {
         name: "description",
-        content:
-          "Preview a painting featured in your Canvas Hub welcome email.",
+        content: "Preview a product featured in your Canvas Hub welcome email.",
       },
       // Email-only teaser pages aren't part of the storefront catalogue, so
       // we don't want them indexed.
       { name: "robots", content: "noindex, nofollow" },
-      { property: "og:title", content: `Painting preview — Canvas Hub` },
+      { property: "og:title", content: `Product preview — Canvas Hub` },
       {
         property: "og:url",
         content: `/preview/${params.id}`,
@@ -48,9 +47,8 @@ const formatPHP = (n: number): string =>
 function PreviewPage() {
   const { id } = Route.useParams();
   useSEO({
-    title: "Painting preview — Canvas Hub",
-    description:
-      "Preview a painting featured in your Canvas Hub welcome email.",
+    title: "Product preview — Canvas Hub",
+    description: "Preview a product featured in your Canvas Hub welcome email.",
     canonicalPath: `/preview/${id}`,
     noindex: true,
   });
@@ -122,7 +120,7 @@ function PreviewPage() {
             </div>
             <h1 className="font-display text-2xl mb-2">Preview unavailable</h1>
             <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-              This painting may have been removed from the welcome email or the
+              This product may have been removed from the welcome email or the
               link may be out of date. Browse the collection to see what's
               currently available.
             </p>
@@ -139,7 +137,7 @@ function PreviewPage() {
               {item.imageUrl ? (
                 <img
                   src={item.imageUrl}
-                  alt={item.title || "Painting"}
+                  alt={item.title || "Product"}
                   className="w-full h-auto block"
                 />
               ) : (

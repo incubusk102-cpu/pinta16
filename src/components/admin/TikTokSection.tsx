@@ -667,7 +667,7 @@ export function TikTokSection() {
       <header>
         <h2 className="text-2xl font-semibold">TikTok auto-posting</h2>
         <p className="text-sm text-stone-600 mt-1">
-          Publish a painting to the connected TikTok account as a photo post.
+          Publish a product to the connected TikTok account as a photo post.
           Captions, image URLs and post mode are all editable before sending.
           Every publish attempt is logged below.
         </p>
@@ -1005,22 +1005,22 @@ export function TikTokSection() {
       {!statusLoading && status?.connected && status?.schemaApplied && (
         <Card>
           <CardHeader>
-            <CardTitle>Post a painting</CardTitle>
+            <CardTitle>Post a product</CardTitle>
             <CardDescription>
-              Pick a painting and review the caption. Confirmation modal before
+              Pick a product and review the caption. Confirmation modal before
               posting. UPLOAD mode sends it to your TikTok inbox for one-tap
               publish; DIRECT_POST requires production audit.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Painting</Label>
+              <Label>Product</Label>
               <Select
                 value={selectedProductId || ""}
                 onValueChange={(v) => void onPickProduct(v)}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Choose a painting…" />
+                  <SelectValue placeholder="Choose a product…" />
                 </SelectTrigger>
                 <SelectContent>
                   {allProducts.map((p) => (

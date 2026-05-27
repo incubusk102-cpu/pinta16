@@ -491,7 +491,7 @@ function WishlistSection() {
       </div>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Tap the heart on any painting to save it for later.
+          Tap the heart on any product to save it for later.
         </p>
       ) : (
         <ul className="grid sm:grid-cols-2 gap-3">

@@ -49,7 +49,7 @@ const FramingArticle = () => {
         variants={fadeInUp}
         className="font-body text-base text-muted-foreground leading-relaxed mb-12"
       >
-        Frame choice changes a painting twice — once for the buyer in the living
+        Frame choice changes a piece twice — once for the buyer in the living
         room, and again for the conservator in fifty years. This is the long
         version of the conversation we have with collectors when they ask "do I
         really need to frame this?"
@@ -69,25 +69,25 @@ const FramingArticle = () => {
           The first decision is structural: do the edges of the canvas show or
           not? A float frame (sometimes called a tray or shadow-box frame)
           leaves a small reveal between the canvas edge and the inner face of
-          the frame, so the painting appears to float inside a deep dark border.
-          A moulding frame (traditional rabbeted frame) covers the canvas edges
+          the frame, so the piece appears to float inside a deep dark border. A
+          moulding frame (traditional rabbeted frame) covers the canvas edges
           with a moulding profile, which can be ornate (gilt, gesso,
           Spanish-colonial-style carving) or quiet (flat black ash, oiled
           walnut).
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          For most contemporary canvas paintings — especially Filipino
-          contemporary work, where the artist often paints the canvas edges as
-          part of the composition — a float frame is the correct choice. It
-          preserves the artist's intent (visible edges) while still giving the
-          painting the visual gravitas of a frame. For older or more classical
-          work where the painting "stops" at the canvas edge, a moulding frame
-          can be the better fit, especially in a traditional interior.
+          For most contemporary canvas pieces — especially Filipino contemporary
+          work, where the artist often paints the canvas edges as part of the
+          composition — a float frame is the correct choice. It preserves the
+          artist's intent (visible edges) while still giving the piece the
+          visual gravitas of a frame. For older or more classical work where the
+          piece "stops" at the canvas edge, a moulding frame can be the better
+          fit, especially in a traditional interior.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           The reveal gap on a float frame is a matter of taste. A 6–8 mm reveal
           reads as quiet and respectful of the artwork; a 12–15 mm reveal reads
-          as gallery-grand and gives the painting more breathing room. Avoid
+          as gallery-grand and gives the piece more breathing room. Avoid
           reveals wider than 20 mm — the canvas starts to feel adrift from the
           frame rather than held by it.
         </p>
@@ -95,7 +95,7 @@ const FramingArticle = () => {
 
       <motion.section variants={fadeInUp} className="space-y-4 mb-12">
         <h2 className="font-display text-2xl md:text-3xl text-foreground">
-          Rabbet depth, oil paintings, and the air gap
+          Rabbet depth, oil pieces, and the air gap
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
           A frame's rabbet is the L-shaped recess on its inner edge that holds
@@ -103,11 +103,11 @@ const FramingArticle = () => {
           rabbet needs to be at least 22 mm deep so the canvas sits comfortably
           with a small gap behind it. Too shallow and the canvas protrudes from
           the back of the frame; too deep and the frame visually dwarfs the
-          painting.
+          piece.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          For oil paintings specifically, leave 3–5 mm of air between the back
-          face of the canvas and the back face of the frame's rabbet. Oil paint
+          For oil pieces specifically, leave 3–5 mm of air between the back face
+          of the canvas and the back face of the frame's rabbet. Oil paint
           releases volatile organic compounds for years after it appears dry —
           the air gap lets these gases escape rather than accumulate against the
           back of the canvas, where they can cause yellowing or mould bloom on
@@ -119,7 +119,7 @@ const FramingArticle = () => {
           tropical humidity swings, the wooden stretcher bars expand and
           contract by 1–2 mm per metre. A canvas that's tight against the frame
           in February can buckle the frame's mitres by July, or worse, transmit
-          the pressure into the painting itself, causing the canvas to lift away
+          the pressure into the piece itself, causing the canvas to lift away
           from the stretcher edges. Aim for 2 mm of clearance on all four sides
           — the canvas should drop into the rabbet with a slight wiggle, not be
           wedged in.
@@ -133,12 +133,12 @@ const FramingArticle = () => {
           Backing, mounting hardware, and dust seals
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The back of a framed painting is where the conservation lives or dies.
+          The back of a framed piece is where the conservation lives or dies.
           Ask the framer to install a backing board of acid-free foam-core or
           archival corrugated polyethylene, mounted with stainless or brass
           screws (never staples, which rust in months in Philippine humidity).
           The backing board protects the canvas from dust, insect damage, and
-          accidental punctures when the painting is moved.
+          accidental punctures when the piece is moved.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Above the backing, a dust seal of archival paper tape sealed around
@@ -151,7 +151,7 @@ const FramingArticle = () => {
           For mounting hardware, D-rings rated for at least three times the
           weight of the framed piece are the standard. Sawtooth hangers are fine
           for small works under five kilos; above that, they tend to slip under
-          the painting's weight and end with the piece on the floor. The wire
+          the piece's weight and end with the piece on the floor. The wire
           connecting the D-rings should be braided stainless steel; coated
           picture wire frays and rusts within a decade.
         </p>
@@ -162,13 +162,13 @@ const FramingArticle = () => {
           UV glazing — when (and when not) to use it
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Original oil and acrylic paintings on canvas are almost never glazed.
-          The varnish layer acts as the painting's protective barrier, and
-          putting glass over a varnished oil painting actually accelerates
-          moisture buildup behind the glass, which causes the varnish to bloom
-          (turn cloudy) within a few years. Glass also changes the way the
-          painting reads optically — light bounces off the glazing rather than
-          penetrating into the paint film.
+          Original oil and acrylic pieces on canvas are almost never glazed. The
+          varnish layer acts as the piece's protective barrier, and putting
+          glass over a varnished oil piece actually accelerates moisture buildup
+          behind the glass, which causes the varnish to bloom (turn cloudy)
+          within a few years. Glass also changes the way the piece reads
+          optically — light bounces off the glazing rather than penetrating into
+          the paint film.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           The exception is works on paper that are also framed as canvas-
@@ -177,7 +177,7 @@ const FramingArticle = () => {
           Museum Acrylic or equivalent) is the gold standard. Plain glass is
           acceptable but heavier and more fragile. Never use a UV-filtering
           polyester sheet for canvas work; the film off-gasses for years and can
-          damage the painting underneath.
+          damage the piece underneath.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           For exceptionally light-sensitive contemporary work (some natural

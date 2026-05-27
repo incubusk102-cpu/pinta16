@@ -22,7 +22,7 @@ import type { PolicySlug } from "@/contexts/PoliciesContext";
 const TERMS = `## Welcome to Canvas Hub
 
 Canvas Hub ("Canvas Hub", "we", "us", "our") is an online gallery of
-hand-crafted paintings operated from the Republic of the Philippines.
+hand-crafted products operated from the Republic of the Philippines.
 By browsing [canvhub.com](https://canvhub.com/), placing an order, or
 creating an account you agree to these Terms & Conditions, our
 [Privacy Policy](/policy/privacy), our [Refund & Return Policy](/policy/refund),
@@ -39,7 +39,7 @@ belongs to you.
 ## Made-to-order artwork
 
 Each piece is hand-painted upon order. Because we begin work as soon
-as your payment clears, paintings are produced specifically for you
+as your payment clears, products are produced specifically for you
 and minor variations from the catalogue photo (brushstroke texture,
 canvas grain, tonal balance) are part of the original-art
 experience and are not defects. The estimated production window
@@ -71,11 +71,11 @@ we reasonably believe these terms have been violated.
 
 ## Intellectual property
 
-All paintings, photographs, written copy, illustrations, and the
+All products, photographs, written copy, illustrations, and the
 design of canvhub.com are the property of Canvas Hub or its artists
 and are protected by Philippine and international copyright. You may
 not reproduce, redistribute, or use any of it commercially without
-prior written permission. The physical painting you purchase is
+prior written permission. The physical product you purchase is
 yours; the underlying copyright in the image stays with the artist.
 
 ## Pricing, payment, and taxes
@@ -126,7 +126,7 @@ Questions about these Terms? Email
 
 const REFUND = `## Our promise
 
-We want you to love the painting that arrives at your door. If
+We want you to love the product that arrives at your door. If
 something is wrong, we will make it right. This policy explains
 when you can request a refund or replacement, how to do it, and
 what to expect.
@@ -137,17 +137,17 @@ You may request a refund or replacement within **7 days** of
 delivery (consistent with DTI Memorandum Circular 22-05 on
 e-commerce returns) for any of the following reasons:
 
-- the painting arrived **damaged in transit** (cracked frame, torn
+- the product arrived **damaged in transit** (cracked frame, torn
   canvas, water damage);
-- the painting is **materially different** from the product page
+- the product is **materially different** from the product page
   (wrong subject, wrong size, wrong colours beyond normal variation);
-- the painting is **defective** (paint flaking, structural issue
+- the product is **defective** (paint flaking, structural issue
   with the stretcher, etc.);
 - you received the **wrong order**.
 
-Because every painting is hand-made to order, we are unable to
+Because every product is hand-made to order, we are unable to
 accept returns purely for change of mind once production has
-started. If you want to cancel before we have started painting,
+started. If you want to cancel before we have started production,
 email us within 24 hours of placing the order and we will refund in
 full.
 
@@ -167,7 +167,7 @@ damaged or wrong items) or arrange a replacement, at your choice.
 
 ## Returns and pickup
 
-If we ask you to return the painting, we will arrange and pay for
+If we ask you to return the product, we will arrange and pay for
 the courier pickup. Please keep the original packaging until the
 issue is resolved.
 
@@ -180,7 +180,7 @@ faster. The exact timing depends on your bank or wallet provider.
 
 ## What's not eligible
 
-- Damage caused by handling after delivery (e.g. the painting
+- Damage caused by handling after delivery (e.g. the product
   fell from a hook).
 - Variations in colour caused by your monitor, lighting, or
   framing choices made after delivery.
@@ -210,11 +210,11 @@ order and we will quote a courier and a fee.
 
 ## Lead times
 
-Each painting is hand-made after you order, so the total time you
+Each product is hand-made after you order, so the total time you
 should expect is:
 
 - **Production:** 7–14 business days, depending on canvas size and
-  complexity. The estimated window for your specific painting is
+  complexity. The estimated window for your specific product is
   shown on the product page and again at checkout.
 - **Dispatch:** same-day once production is complete and the
   Lalamove rider accepts the booking. Orders confirmed before noon
@@ -256,7 +256,7 @@ an alternative carrier before you place the order.
 
 ## Packaging
 
-Paintings ship rolled in a kraft tube for unframed canvases or
+Products ship rolled in a kraft tube for unframed canvases or
 flat-packed in a corrugated carton with foam corner-protection for
 framed pieces. We photograph every shipment before pickup as proof
 of condition.
@@ -275,7 +275,7 @@ we are usually unable to redirect on your behalf.
 ## Lost or damaged in transit
 
 See our [Refund & Return Policy](/policy/refund) for the process if
-your painting arrives damaged or never arrives.
+your product arrives damaged or never arrives.
 
 ## Contact
 
@@ -324,7 +324,7 @@ rules issued by the National Privacy Commission (NPC).
 
 ## Why we use it
 
-- **Fulfilling your order**: producing the painting, shipping it,
+- **Fulfilling your order**: producing the product, shipping it,
   responding to your questions, and processing returns.
 - **Account security and fraud prevention**: rate-limiting,
   Cloudflare Turnstile challenges on signup and newsletter
@@ -337,7 +337,7 @@ rules issued by the National Privacy Commission (NPC).
   one click from any marketing email or by emailing
   [support@canvhub.com](mailto:support@canvhub.com).
 - **Site improvement**: aggregated analytics on which pages and
-  paintings are popular.
+  products are popular.
 
 ## Who we share it with
 

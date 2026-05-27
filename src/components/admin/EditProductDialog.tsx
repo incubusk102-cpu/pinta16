@@ -102,7 +102,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
     e.preventDefault();
     if (!product || saving) return;
     if (images.length === 0)
-      return toast.error("Please keep at least one painting photo");
+      return toast.error("Please keep at least one product photo");
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
@@ -398,7 +398,7 @@ export function EditProductDialog({ product, open, onClose, onSave }: Props) {
               </SelectContent>
             </Select>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Draft hides the painting from the public storefront.
+              Draft hides the product from the public storefront.
             </p>
           </div>
 

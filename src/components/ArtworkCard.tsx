@@ -224,7 +224,7 @@ const ArtworkCard = ({
     });
     if (result.rejected) {
       toast.error(
-        `Compare list is full (max ${compare.limit}). Remove a painting to add another.`,
+        `Compare list is full (max ${compare.limit}). Remove a product to add another.`,
       );
       return;
     }

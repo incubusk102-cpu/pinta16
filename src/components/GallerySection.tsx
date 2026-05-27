@@ -545,8 +545,8 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search paintings, mediums, or styles…"
-            aria-label="Search paintings"
+            placeholder="Search products, categories, or styles…"
+            aria-label="Search products"
             className="pl-9 pr-9 h-11 font-body text-sm"
           />
           {query && (
@@ -642,7 +642,7 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
           ) : (
             <>
               Showing {sortedArtworks.length} of {totalMatches}{" "}
-              {totalMatches === 1 ? "artwork" : "artworks"}
+              {totalMatches === 1 ? "product" : "products"}
             </>
           )}
         </p>
@@ -787,7 +787,7 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
           variant="grid"
           rows={8}
           className=""
-          label="Loading paintings"
+          label="Loading products"
         />
       ) : totalMatches === 0 && !isLoadingFirstPage ? (
         <div className="py-20 text-center max-w-md mx-auto px-4">
@@ -800,7 +800,7 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
             aria-hidden="true"
           />
           <p className="mt-6 font-display text-xl text-foreground">
-            No paintings match your filters yet.
+            No products match your filters yet.
           </p>
           {activePills.length > 0 && (
             <>
@@ -869,7 +869,7 @@ const GallerySection = ({ initialSearch }: GallerySectionProps = {}) => {
 
       {sortedArtworks.length > 0 && (
         <p className="mt-10 text-center font-body text-xs tracking-[0.25em] uppercase text-muted-foreground">
-          Click any painting for details, or{" "}
+          Click any product for details, or{" "}
           <Link
             to="/"
             hash="gallery"
