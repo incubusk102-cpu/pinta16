@@ -112,6 +112,17 @@ export interface Product {
    */
   replacesDefaultId?: string;
   /**
+   * Soft-delete flag. When `true`, the product is hidden from the public
+   * storefront (paginated `/api/products` and merged-default gallery), is
+   * unreachable via `/product/<id>`, and lives in `/admin → Stock → Trash`
+   * where the operator can either `Restore` (clear the flag) or
+   * `Permanently delete` (hard-remove from KV). For overrides of bundled
+   * stock defaults, trashing also suppresses the bundled default — so the
+   * listing fully disappears until restored. Bundled defaults themselves
+   * cannot be trashed; only customizations and custom uploads can.
+   */
+  trashed?: boolean;
+  /**
    * VIP-only embargo: ISO timestamp until which only customers with
    * `vipEarlyAccess` see this product. After the deadline the artwork
    * is visible to everyone like a normal listing.
