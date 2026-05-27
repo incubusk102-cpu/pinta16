@@ -48,14 +48,14 @@ const ARTICLE_META: Record<
   { title: string; description: string }
 > = {
   "canvas-care": {
-    title: "Caring for original canvas paintings — Canvas Hub",
+    title: "Caring for original hand-crafted pieces — Canvas Hub",
     description:
-      "A long-form care guide for original canvas paintings: dusting routines, cleaning mistakes to avoid, when to call a conservator, and how Philippine humidity affects the paint film.",
+      "A long-form care guide for hand-crafted pieces: dusting routines, cleaning mistakes to avoid, when to call a conservator, and how Philippine humidity affects the materials.",
   },
   "framing-original-paintings": {
-    title: "A framer's guide to original canvas — Canvas Hub",
+    title: "A framer's guide to original pieces — Canvas Hub",
     description:
-      "Float frames vs. moulding frames, oil-painting air gaps, rabbet depth, archival backing, and why pressure-fitting a stretched canvas is a decade-delayed disaster.",
+      "Float frames vs. moulding frames, air gaps, rabbet depth, archival backing, and why pressure-fitting a stretched piece is a decade-delayed disaster.",
   },
   "hanging-art-gallery-style": {
     title: "Hanging art at gallery height — Canvas Hub",
@@ -65,7 +65,7 @@ const ARTICLE_META: Record<
   "humidity-and-storage": {
     title: "Humidity, climate, and long-term storage — Canvas Hub",
     description:
-      "Tropical-climate storage techniques for original paintings: glassine wrapping, the typhoon-season exterior-wall rule, and how to crate a painting for a six-month move.",
+      "Tropical-climate storage techniques for original pieces: glassine wrapping, the typhoon-season exterior-wall rule, and how to crate a piece for a six-month move.",
   },
   "buying-art-as-investment": {
     title: "Buying original art as investment — Canvas Hub",
@@ -73,9 +73,9 @@ const ARTICLE_META: Record<
       "Primary-market provenance, certificates of authenticity, secondary-market liquidity, the Filipino auction landscape, and the case for buying what you love first.",
   },
   "choosing-art-for-every-room": {
-    title: "Choosing the right painting for every room — Canvas Hub",
+    title: "Choosing the right piece for every room — Canvas Hub",
     description:
-      "A room-by-room playbook for decorating with original, hand-painted canvas: how to size the piece, what subject and palette pair best with each space, and the small placement details that decide whether a painting feels like a focal point or background noise.",
+      "A room-by-room playbook for decorating with original, hand-crafted pieces: how to size the piece, what subject and palette pair best with each space, and the small placement details that decide whether a piece feels like a focal point or background noise.",
   },
 };
 
@@ -114,7 +114,7 @@ export const Route = createFileRoute("/resources/$slug")({
         {
           name: "description",
           content:
-            "Long-form guides on caring for, framing, hanging, and collecting original canvas paintings.",
+            "Long-form guides on caring for, framing, hanging, and collecting original hand-crafted pieces.",
         },
       ],
     };

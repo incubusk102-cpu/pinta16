@@ -499,7 +499,7 @@ export function HeroSlidesSection() {
                 {/* Optional mobile-only crop. Leaving this blank serves
                     the landscape image to every viewport (today's
                     behaviour). Filling it in swaps to this image when
-                    the viewport is < 640px so portrait paintings don't
+                    the viewport is < 640px so portrait products don't
                     crop awkwardly on phones. */}
                 <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-2 space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -581,7 +581,7 @@ export function HeroSlidesSection() {
                     }
                     rows={2}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Describe the painting for screen readers and image search…"
+                    placeholder="Describe the product for screen readers and image search…"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
                     Leave blank to fall back to the headline. Filling this in

@@ -125,7 +125,7 @@ export const DEFAULT_SITE_COPY: SiteCopy = {
   about: {
     eyebrow: "Our Story",
     title: "About Canvas Hub",
-    body: "Every painting has a soul — a story waiting to be told. We bring affordable, hand-crafted art to homes and spaces that deserve beauty. Each piece is made to order, ensuring that what you receive is as unique as your vision.",
+    body: "Every product has a soul — a story waiting to be told. We bring affordable, hand-crafted goods to homes and spaces that deserve beauty. Each piece is made to order, ensuring that what you receive is as unique as your vision.",
   },
   reviews: {
     eyebrow: "What customers say",
@@ -142,7 +142,7 @@ export const DEFAULT_SITE_COPY: SiteCopy = {
   },
   madeToOrderNotice: {
     heading: "Made to order",
-    body: "This piece is painted to order. Place your order today and the artist will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
+    body: "This piece is made to order. Place your order today and the maker will start once payment is confirmed — typical turnaround is 2–4 weeks before it ships.",
   },
   productInfo: {
     shippingLabel: "Shipping",
@@ -353,7 +353,7 @@ export const DEFAULT_LANDING_VIDEO: LandingVideoConfig = {
   eyebrow: "Behind the brush",
   headline: "Watch the studio in motion.",
   description:
-    "A short montage of every painting coming to life — from blank canvas to the wall it was made for.",
+    "A short montage of every piece coming to life — from raw materials to the home it was made for.",
   ctaLabel: "Browse the collection",
   ctaHref: "/collection",
 };

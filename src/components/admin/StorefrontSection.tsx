@@ -223,7 +223,7 @@ const DEFAULTS: AdminConfig = {
     eyebrow: "Behind the brush",
     headline: "Watch the studio in motion.",
     description:
-      "A short montage of every painting coming to life \u2014 from blank canvas to the wall it was made for.",
+      "A short montage of every piece coming to life \u2014 from raw materials to the home it was made for.",
     ctaLabel: "Browse the collection",
     ctaHref: "/collection",
   },

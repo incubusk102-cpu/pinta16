@@ -16,13 +16,13 @@ export const Route = createFileRoute("/about")({
       {
         name: "description",
         content:
-          "Meet the artists behind Canvas Hub. Hand-crafted Filipino paintings made to order from our studio in Bagong Silang, Caloocan.",
+          "Meet the makers behind Canvas Hub. Hand-crafted Filipino products made to order from our studio in Bagong Silang, Caloocan.",
       },
       { property: "og:title", content: "About — Canvas Hub" },
       {
         property: "og:description",
         content:
-          "Meet the artists behind Canvas Hub. Hand-crafted Filipino paintings made to order.",
+          "Meet the makers behind Canvas Hub. Hand-crafted Filipino products made to order.",
       },
     ],
   }),
@@ -32,7 +32,7 @@ function AboutPage() {
   useSEO({
     title: "About — Canvas Hub",
     description:
-      "Meet the artists behind Canvas Hub. Hand-crafted Filipino paintings made to order from our studio in Bagong Silang, Caloocan.",
+      "Meet the makers behind Canvas Hub. Hand-crafted Filipino products made to order from our studio in Bagong Silang, Caloocan.",
     canonicalPath: "/about",
   });
   return (

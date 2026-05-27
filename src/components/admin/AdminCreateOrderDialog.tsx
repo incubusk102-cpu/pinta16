@@ -479,9 +479,7 @@ export function AdminCreateOrderDialog({ open, onClose, onCreated }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="in_progress">
-                  Painting in progress
-                </SelectItem>
+                <SelectItem value="in_progress">In production</SelectItem>
                 <SelectItem value="out_for_delivery">
                   Out for delivery
                 </SelectItem>

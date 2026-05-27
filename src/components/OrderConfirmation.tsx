@@ -619,11 +619,11 @@ const OrderConfirmation = () => {
                       <span className="text-foreground">order@canvhub.com</span>
                     </li>
                     <li>
-                      The artist will begin working on your painting — you can
+                      The maker will begin working on your product — you can
                       track the status using your Order ID
                     </li>
                     <li>
-                      Once completed, your painting will be carefully packed and
+                      Once completed, your product will be carefully packed and
                       shipped to your address
                     </li>
                     <li>

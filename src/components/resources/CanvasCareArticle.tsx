@@ -43,15 +43,15 @@ const CanvasCareArticle = () => {
         variants={fadeInUp}
         className="font-display text-3xl md:text-4xl text-gradient-elegant mb-6"
       >
-        Caring for original canvas paintings
+        Caring for original canvas pieces
       </motion.h1>
       <motion.p
         variants={fadeInUp}
         className="font-body text-base text-muted-foreground leading-relaxed mb-12"
       >
-        A practical, paint-film-first guide to keeping an original canvas
-        painting in showroom condition for decades. Written for collectors who
-        love their pieces but don't want to think about them every week.
+        A practical, paint-film-first guide to keeping an original canvas piece
+        in showroom condition for decades. Written for collectors who love their
+        pieces but don't want to think about them every week.
       </motion.p>
 
       {/* Hero ad — first impression for readers landing from organic search. */}
@@ -66,38 +66,37 @@ const CanvasCareArticle = () => {
           The five rules that matter
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Most "what happened to my painting" emails we receive trace back to
-          one of five mistakes: direct sunlight, a damp cloth, a too-tight
-          frame, a too-dry room, or a well-meaning house cleaner with a
-          microfiber spray. Internalise these five rules and a contemporary
-          acrylic or oil painting will outlive you with no further intervention
-          beyond a feather duster.
+          Most "what happened to my piece" emails we receive trace back to one
+          of five mistakes: direct sunlight, a damp cloth, a too-tight frame, a
+          too-dry room, or a well-meaning house cleaner with a microfiber spray.
+          Internalise these five rules and a contemporary acrylic or oil piece
+          will outlive you with no further intervention beyond a feather duster.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The first rule: keep the painting out of direct sunlight. UV rays
-          break the chemical bonds in modern pigments at a measurable rate —
-          cadmium reds and ultramarines lose 5–15% of their chroma per decade
-          when exposed to four or more hours of unfiltered sun daily. If the
-          wall you love gets afternoon light, hang a UV-filtering window film or
-          pick a different wall. The painting cannot be "moved off the sunny
-          wall when nobody's home"; the damage is cumulative.
+          The first rule: keep the piece out of direct sunlight. UV rays break
+          the chemical bonds in modern pigments at a measurable rate — cadmium
+          reds and ultramarines lose 5–15% of their chroma per decade when
+          exposed to four or more hours of unfiltered sun daily. If the wall you
+          love gets afternoon light, hang a UV-filtering window film or pick a
+          different wall. The piece cannot be "moved off the sunny wall when
+          nobody's home"; the damage is cumulative.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           The second rule: never use a damp cloth on a painted surface. Most
           modern paints are water-soluble until fully cured (six to twelve
           months for oil, two to four weeks for acrylic), and even fully cured
-          paintings can have their final varnish layer lifted by a wet wipe. The
+          pieces can have their final varnish layer lifted by a wet wipe. The
           same applies to commercial spray cleaners — Windex, Pledge, and their
           cousins all contain solvents that will dissolve a varnish layer on
           contact.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           The third rule: leave at least 3 mm of air between the back of the
-          canvas and the wall. Hanging a painting flush against a tropical
-          concrete wall traps moisture, encouraging mould bloom along the
-          cotton-canvas weave. Most picture-hanging hardware (D-rings, sawtooth
-          hangers) creates this gap automatically; some flush-mount designer
-          brackets do not.
+          canvas and the wall. Hanging a piece flush against a tropical concrete
+          wall traps moisture, encouraging mould bloom along the cotton-canvas
+          weave. Most picture-hanging hardware (D-rings, sawtooth hangers)
+          creates this gap automatically; some flush-mount designer brackets do
+          not.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           The fourth rule: keep the room's relative humidity between 45% and
@@ -111,11 +110,11 @@ const CanvasCareArticle = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           The fifth rule: brief whoever cleans your home, including the monthly
           deep-cleaning service. A single pass with a feather duster along the
-          painting's lower edge is fine; anything more aggressive requires
-          explicit permission. Tape a small printed note to the back of the
-          canvas listing the painting's title, year, and "do not clean with
-          cloth or spray" so a fill-in cleaner doesn't make a costly decision in
-          the moment.
+          piece's lower edge is fine; anything more aggressive requires explicit
+          permission. Tape a small printed note to the back of the canvas
+          listing the piece's title, year, and "do not clean with cloth or
+          spray" so a fill-in cleaner doesn't make a costly decision in the
+          moment.
         </p>
       </motion.section>
 
@@ -128,20 +127,20 @@ const CanvasCareArticle = () => {
           for the first year. Use a real ostrich-feather duster (around ₱400 on
           the secondary market) rather than a synthetic microfiber wand; the
           synthetic bristles carry static charge that pulls dust toward the
-          painting before lifting it away. Sweep from the top edge down, always
-          in one direction, applying no pressure. The goal is to wipe the
-          airborne dust off the highest points of the impasto before it bonds to
-          the paint film.
+          piece before lifting it away. Sweep from the top edge down, always in
+          one direction, applying no pressure. The goal is to wipe the airborne
+          dust off the highest points of the impasto before it bonds to the
+          paint film.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Once a quarter, switch to a clean, dry, lint-free microfiber cloth and
           repeat the same top-to-bottom motion. This catches the fine dust the
-          feather duster missed. If the painting has heavy impasto or texture,
-          fold the cloth into a small pad and dab — never drag — across the
-          textured areas.
+          feather duster missed. If the piece has heavy impasto or texture, fold
+          the cloth into a small pad and dab — never drag — across the textured
+          areas.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Twice a year, inspect the painting under a strong raking light (a lamp
+          Twice a year, inspect the piece under a strong raking light (a lamp
           held at a 30° angle to the surface, in an otherwise dark room). This
           makes any new cracks, lifting paint, or stretcher-bar warpage
           immediately visible. Photograph anything you find — even a phone photo
@@ -159,8 +158,8 @@ const CanvasCareArticle = () => {
           When to call a conservator (and how much it costs)
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Manila has a small but capable community of paintings conservators —
-          most affiliated with the National Museum, the Cultural Center of the
+          Manila has a small but capable community of conservators — most
+          affiliated with the National Museum, the Cultural Center of the
           Philippines, or one of the larger commercial galleries. A conservation
           consult is far cheaper than people assume: ₱2,000 to ₱4,000 for an
           in-studio visual assessment, plus the cost of the treatment itself if
@@ -170,17 +169,16 @@ const CanvasCareArticle = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           Call a conservator if you see any of: lifting paint that doesn't lie
           flat under a gentle dry-brush sweep, a visible bloom or haze
-          (especially on a varnished oil painting), a tear in the canvas
-          regardless of size, a section of stretched canvas that feels spongy
-          when pressed from behind, or any insect damage along the stretcher
-          bars. Do not attempt any of these repairs yourself; even a
-          well-meaning attempt at re-adhering lifting paint with PVA glue can
-          cause permanent damage that's far more expensive to reverse than the
-          original problem.
+          (especially on a varnished oil piece), a tear in the canvas regardless
+          of size, a section of stretched canvas that feels spongy when pressed
+          from behind, or any insect damage along the stretcher bars. Do not
+          attempt any of these repairs yourself; even a well-meaning attempt at
+          re-adhering lifting paint with PVA glue can cause permanent damage
+          that's far more expensive to reverse than the original problem.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Get a written estimate before any work begins, and ask the conservator
-          to photograph the painting before, during, and after treatment. A good
+          to photograph the piece before, during, and after treatment. A good
           conservator will offer this proactively; a conservator who pushes back
           on documentation requests is one to avoid. For high-value pieces, get
           a second opinion before authorising anything irreversible (varnish
@@ -193,25 +191,25 @@ const CanvasCareArticle = () => {
           Tropical climate considerations
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The Philippines' humidity is mostly forgiving for paintings — the
-          average relative humidity hovers between 70% and 85%, comfortably
-          inside the 45–75% conservation envelope for most of the year. The real
-          risks are abrupt swings (turning aircon off overnight when the day was
-          conditioned, leaving the painting in an enclosed car) and the
+          The Philippines' humidity is mostly forgiving for pieces — the average
+          relative humidity hovers between 70% and 85%, comfortably inside the
+          45–75% conservation envelope for most of the year. The real risks are
+          abrupt swings (turning aircon off overnight when the day was
+          conditioned, leaving the piece in an enclosed car) and the
           rainy-season tail where indoor humidity can stay above 85% for weeks
           at a time.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           For homes that air-condition aggressively (BGC condos, Makati
-          high-rises), keep a small hygrometer near the painting and run a
+          high-rises), keep a small hygrometer near the piece and run a
           humidifier if the reading drops below 45%. A ₱2,500 ultrasonic
           humidifier with a built-in hygrometer is more than enough for a single
           room. For homes that don't air-condition, the bigger risk is the
           August–October rainy season — keep a dehumidifier or a few silica-gel
-          packets near the painting and ventilate the room daily.
+          packets near the piece and ventilate the room daily.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Never hang an original painting on an exterior wall during typhoon
+          Never hang an original piece on an exterior wall during typhoon
           season. Even a well-insulated wall transmits enough condensation
           during a heavy rain to leave the back of the canvas damp for days.
           Move the piece to an interior wall, or store it in a sealed container

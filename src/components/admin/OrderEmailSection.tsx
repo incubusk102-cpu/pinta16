@@ -131,28 +131,28 @@ const DEFAULT_KIND: Record<OrderEmailKind, OrderKindConfig> = {
     subject: "Order {{orderId}} confirmed",
     heading: "Thanks — your order is confirmed",
     intro:
-      "Hi {{name}},\n\nThanks for your order at Canvas Hub. We've recorded your payment of {{total}} and the team is getting your painting{{itemPlural}} ready. We'll send another note the moment the artist starts on it.",
+      "Hi {{name}},\n\nThanks for your order at Canvas Hub. We've recorded your payment of {{total}} and the team is getting your product{{itemPlural}} ready. We'll send another note the moment the maker starts on it.",
   },
   in_progress: {
     enabled: true,
     subject: "Order {{orderId}}: in progress",
-    heading: "Painting in progress",
+    heading: "Order in progress",
     intro:
-      "Hi {{name}},\n\nGood news — the artist has started working on your order. We'll send another note the moment it ships.",
+      "Hi {{name}},\n\nGood news — the maker has started working on your order. We'll send another note the moment it ships.",
   },
   out_for_delivery: {
     enabled: true,
     subject: "Order {{orderId}}: shipped",
     heading: "Out for delivery",
     intro:
-      "Hi {{name}},\n\nYour painting is on its way! Tracking details are below — keep them handy in case you'd like to follow the parcel's journey.",
+      "Hi {{name}},\n\nYour order is on its way! Tracking details are below — keep them handy in case you'd like to follow the parcel's journey.",
   },
   received: {
     enabled: true,
     subject: "Order {{orderId}}: delivered",
     heading: "Order delivered — thank you",
     intro:
-      "Hi {{name}},\n\nWe've marked your order as received. We hope your painting feels right at home — we'd love to hear what you think.",
+      "Hi {{name}},\n\nWe've marked your order as received. We hope your product feels right at home — we'd love to hear what you think.",
   },
   refund_requested: {
     enabled: true,
@@ -195,7 +195,7 @@ const DEFAULTS: OrderEmailConfig = {
   headerAlign: "left",
   dividerStyle: "line",
   buttonStyle: "filled",
-  footerTagline: "original Filipino paintings",
+  footerTagline: "original Filipino products",
   footerLinks: [],
   trackButtonText: "Track shipment",
   reviewButtonText: "Write a review",
@@ -1427,8 +1427,8 @@ export const OrderEmailSection = () => {
           </div>
           <p className="text-xs text-muted-foreground">
             Preview uses placeholder order data (TEST-1234, ₱11,250 total, two
-            paintings). Actual emails substitute the real customer + order
-            values at send time.
+            products). Actual emails substitute the real customer + order values
+            at send time.
           </p>
         </div>
       </div>

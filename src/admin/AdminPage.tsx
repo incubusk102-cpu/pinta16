@@ -87,7 +87,6 @@ import {
   ArrowLeft,
   Activity,
   Bell,
-  Boxes,
   Brush,
   CheckCircle2,
   ChevronLeft,
@@ -561,11 +560,6 @@ const NAV_GROUPS: {
       },
       { key: "products", icon: <Upload className="w-4 h-4" /> },
       {
-        key: "stockEvents",
-        icon: <Boxes className="w-4 h-4" />,
-        hint: "Inventory & low-stock alerts",
-      },
-      {
         key: "orders",
         icon: <Package className="w-4 h-4" />,
         hint: "Track & update",
@@ -669,7 +663,7 @@ const NAV_GROUPS: {
       {
         key: "tiktok",
         icon: <Music2 className="w-4 h-4" />,
-        hint: "Auto-post paintings to TikTok",
+        hint: "Auto-post products to TikTok",
       },
       { key: "policies", icon: <FileText className="w-4 h-4" /> },
     ],
@@ -902,9 +896,15 @@ function AdminDashboard() {
   const [section, setSection] = useState<AdminSection>(() => {
     if (typeof window === "undefined") return "dashboard";
     const fromUrl = new URLSearchParams(window.location.search).get("section");
+    // Back-compat: "stockEvents" used to be a top-level sidebar entry.
+    // It now lives inside the Products page, so redirect any legacy
+    // `?section=stockEvents` deep links there. The anchor jump is
+    // handled by `STOCK_EVENTS_ANCHOR` below once the page mounts.
+    if (fromUrl === "stockEvents") return "products";
     if (isAdminSection(fromUrl)) return fromUrl;
     try {
       const fromStorage = window.localStorage.getItem(SECTION_STORAGE_KEY);
+      if (fromStorage === "stockEvents") return "products";
       if (isAdminSection(fromStorage)) return fromStorage;
     } catch {
       // localStorage may be disabled — fall through to default.
@@ -963,10 +963,42 @@ function AdminDashboard() {
       const fromUrl = new URLSearchParams(window.location.search).get(
         "section",
       );
+      if (fromUrl === "stockEvents") {
+        setSection("products");
+        return;
+      }
       setSection(isAdminSection(fromUrl) ? fromUrl : "dashboard");
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  // If the operator deep-linked to the legacy `?section=stockEvents`
+  // (or has it stored in localStorage), scroll the merged Stock events
+  // block into view once the Products page has rendered.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (section !== "products") return;
+    const fromUrl = new URLSearchParams(window.location.search).get("section");
+    let fromStorage: string | null = null;
+    try {
+      fromStorage = window.localStorage.getItem(SECTION_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    if (fromUrl !== "stockEvents" && fromStorage !== "stockEvents") return;
+    const tryScroll = () => {
+      const anchor = document.getElementById("stock-events");
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    const timer = window.setTimeout(tryScroll, 150);
+    return () => window.clearTimeout(timer);
+    // We only want this on first mount per session — the section sync
+    // effect above will already rewrite the URL to ?section=products
+    // so re-renders won't re-trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist sidebar preference.
@@ -1282,7 +1314,6 @@ function AdminDashboard() {
             {section === "searchInsights" && <SearchInsightsSection />}
             {section === "funnel" && <FunnelInsightsSection />}
             {section === "notificationLog" && <NotificationLogSection />}
-            {section === "stockEvents" && <StockEventsSection />}
             {section === "users" && <UsersSection />}
             {section === "customers" && <CustomersSection />}
             {section === "marketing" && <MarketingSection />}
@@ -1469,7 +1500,7 @@ function ProductsSection() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (images.length === 0)
-      return toast.error("Please upload at least one painting image");
+      return toast.error("Please upload at least one product image");
     if (!title.trim()) return toast.error("Title is required");
     const priceNum = Number(price);
     if (!priceNum || priceNum <= 0) return toast.error("Enter a valid price");
@@ -1813,7 +1844,7 @@ function ProductsSection() {
                 </SelectContent>
               </Select>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Draft hides the painting from the public storefront.
+                Draft hides the product from the public storefront.
               </p>
             </div>
 
@@ -1853,7 +1884,7 @@ function ProductsSection() {
                 onClick={reset}
                 disabled={submitting}
               >
-                Reset painting form
+                Reset product form
               </Button>
             </div>
           </form>
@@ -2021,7 +2052,7 @@ function ProductsSection() {
           )}
           {pureCustomProducts.length === 0 ? (
             <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
-              No uploaded products yet. Add your first painting on the left, or
+              No uploaded products yet. Add your first product on the left, or
               customize a stock listing below.
             </div>
           ) : filteredProducts.length === 0 ? (
@@ -2170,6 +2201,13 @@ function ProductsSection() {
 
       <div className="mt-10 pt-8 border-t border-border/50">
         <StockListingsSection />
+      </div>
+
+      <div
+        id="stock-events"
+        className="mt-10 pt-8 border-t border-border/50 scroll-mt-24"
+      >
+        <StockEventsSection />
       </div>
 
       <EditProductDialog
@@ -2719,7 +2757,7 @@ function AnalyticsPanel({
           {analytics?.topProducts && analytics.topProducts.length > 0 && (
             <div className="pt-2 border-t border-border/40">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                Top paintings (all-time)
+                Top products (all-time)
               </div>
               <ul className="space-y-2">
                 {analytics.topProducts.map((p, i) => (

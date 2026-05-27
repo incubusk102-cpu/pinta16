@@ -98,18 +98,18 @@ const DEFAULT_KINDS: Record<OrderPushKind, PushKindConfig> = {
   },
   in_progress: {
     enabled: true,
-    title: "Your painting is in progress",
-    body: "The artist has started working on order {{orderId}}. You'll get another nudge when it ships.",
+    title: "Your order is in progress",
+    body: "The maker has started working on order {{orderId}}. You'll get another nudge when it ships.",
   },
   out_for_delivery: {
     enabled: true,
     title: "Order {{orderId}} is on the way",
-    body: "{{courier}} has your painting. Track it anytime from your Canvas Hub account.",
+    body: "{{courier}} has your order. Track it anytime from your Canvas Hub account.",
   },
   received: {
     enabled: true,
     title: "Order {{orderId}} delivered",
-    body: "Welcome home, painting. We'd love a quick review when you've had a chance to live with it.",
+    body: "Welcome home. We'd love a quick review when you've had a chance to live with it.",
   },
   refund_requested: {
     enabled: true,

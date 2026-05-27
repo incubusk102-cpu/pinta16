@@ -16,13 +16,13 @@ import { formatPHP } from "@/lib/format";
 /**
  * Public, read-only wishlist view. Visitors generate this link from
  * the in-drawer "Share wishlist" button — the recipient lands here
- * without needing an account and sees exactly the same paintings the
+ * without needing an account and sees exactly the same products the
  * sender saved.
  *
  *   /wishlist/share?ids=ID1,ID2,ID3
  *   /wishlist/share?ids=...&from=Marie
  *
- * Painting metadata is hydrated from the live `useProducts()`
+ * Product metadata is hydrated from the live `useProducts()`
  * collection so prices / availability always match what the rest of
  * the storefront shows. Missing ids (deleted products) fall back to
  * `findArtworkById` to cover the built-in default artworks, and any
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/wishlist/share")({
       {
         name: "description",
         content:
-          "A friend shared their hand-picked Canvas Hub wishlist with you. Browse the paintings they saved.",
+          "A friend shared their hand-picked Canvas Hub wishlist with you. Browse the products they saved.",
       },
       // Don't index a per-recipient URL — wishlist shares aren't
       // canonical and we'd rather the catalogue pages rank.
@@ -69,7 +69,7 @@ function WishlistSharePage() {
   useSEO({
     title: "A wishlist from Canvas Hub",
     description:
-      "A friend shared their hand-picked Canvas Hub wishlist with you. Browse the paintings they saved.",
+      "A friend shared their hand-picked Canvas Hub wishlist with you. Browse the products they saved.",
     canonicalPath: "/wishlist/share",
     noindex: true,
   });
@@ -153,7 +153,7 @@ function WishlistSharePage() {
               : "A shared Canvas Hub wishlist"}
           </h1>
           <p className="font-body text-sm text-muted-foreground mt-3 max-w-xl">
-            These are the paintings your friend has been eyeing. Each piece is
+            These are the products your friend has been eyeing. Each piece is
             one of one — never reprinted. Tap any card to view the full story.
           </p>
           <div className="mt-5 flex items-center gap-3">
@@ -165,7 +165,7 @@ function WishlistSharePage() {
               {copied ? "Link copied" : "Copy share link"}
             </button>
             <span className="text-xs text-muted-foreground">
-              {resolvedCount} painting{resolvedCount === 1 ? "" : "s"}
+              {resolvedCount} product{resolvedCount === 1 ? "" : "s"}
             </span>
           </div>
         </header>
@@ -173,14 +173,14 @@ function WishlistSharePage() {
         {params.ids.length === 0 ? (
           <div className="border border-dashed border-border/60 rounded-xl p-10 text-center bg-card/30">
             <p className="text-sm text-muted-foreground">
-              This share link doesn't include any paintings. Ask your friend to
+              This share link doesn't include any products. Ask your friend to
               resend it from their wishlist.
             </p>
           </div>
         ) : !productsLoaded ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground gap-2 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Loading paintings…
+            Loading products…
           </div>
         ) : (
           <>
@@ -240,7 +240,7 @@ function WishlistSharePage() {
             </ul>
             {missingCount > 0 && (
               <p className="text-xs text-muted-foreground mt-6">
-                {missingCount} painting{missingCount === 1 ? " is" : "s are"} no
+                {missingCount} product{missingCount === 1 ? " is" : "s are"} no
                 longer available and couldn't be shown.
               </p>
             )}
@@ -255,7 +255,7 @@ function WishlistSharePage() {
           >
             Start browsing
           </Link>{" "}
-          and tap the heart on any painting.
+          and tap the heart on any product.
         </p>
       </main>
       <SiteFooter />

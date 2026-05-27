@@ -250,7 +250,7 @@ export function StockEventsSection() {
       <p className="text-sm text-muted-foreground">
         Ledger of every product availability transition. KV stays the source of
         truth for the current snapshot below; the D1 timeline answers
-        &ldquo;when did this painting sell?&rdquo; and &ldquo;how often did I
+        &ldquo;when did this product sell?&rdquo; and &ldquo;how often did I
         toggle this draft this week?&rdquo;.
       </p>
 
@@ -266,7 +266,7 @@ export function StockEventsSection() {
               <span className="font-mono tabular-nums">
                 {current.byState?.available ?? 0}
               </span>{" "}
-              available painting
+              available product
               {(current.byState?.available ?? 0) === 1 ? "" : "s"} remaining
               (threshold:{" "}
               <span className="font-mono">{current.threshold ?? 0}</span>).
@@ -324,7 +324,7 @@ export function StockEventsSection() {
             {current?.byState?.sold ?? "—"}
           </div>
           <div className="text-xs text-muted-foreground">
-            paintings currently marked sold
+            products currently marked sold
           </div>
         </div>
       </div>

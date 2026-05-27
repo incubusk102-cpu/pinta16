@@ -253,7 +253,7 @@ export function SearchInsightsSection() {
           </div>
           {zero.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
-              Every search has matched at least one painting. Nice.
+              Every search has matched at least one product. Nice.
             </div>
           ) : (
             <table className="w-full text-sm">

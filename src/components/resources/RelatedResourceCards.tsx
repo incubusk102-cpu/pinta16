@@ -19,16 +19,16 @@ export const RESOURCE_ARTICLES = [
   {
     slug: "canvas-care",
     eyebrow: "Care & conservation",
-    title: "Caring for original canvas paintings",
+    title: "Caring for original hand-crafted pieces",
     blurb:
-      "Dusting routines, cleaning mistakes to avoid, when to call a conservator, and how Philippine humidity affects the paint film.",
+      "Dusting routines, cleaning mistakes to avoid, when to call a conservator, and how Philippine humidity affects hand-crafted materials.",
   },
   {
     slug: "framing-original-paintings",
     eyebrow: "Framing",
-    title: "A framer's guide to original canvas",
+    title: "A framer's guide to original pieces",
     blurb:
-      "Float frames vs. moulding frames, oil-painting air gaps, rabbet depth, and why pressure-fitting a stretched canvas is a decade-delayed disaster.",
+      "Float frames vs. moulding frames, air gaps, rabbet depth, and why pressure-fitting a stretched piece is a decade-delayed disaster.",
   },
   {
     slug: "hanging-art-gallery-style",
@@ -42,7 +42,7 @@ export const RESOURCE_ARTICLES = [
     eyebrow: "Long-term storage",
     title: "Humidity, climate, and long-term storage",
     blurb:
-      "Tropical-climate storage techniques, glassine wrapping, the typhoon-season exterior-wall rule, and how to crate a painting for a six-month move.",
+      "Tropical-climate storage techniques, glassine wrapping, the typhoon-season exterior-wall rule, and how to crate a piece for a six-month move.",
   },
   {
     slug: "buying-art-as-investment",
@@ -54,9 +54,9 @@ export const RESOURCE_ARTICLES = [
   {
     slug: "choosing-art-for-every-room",
     eyebrow: "Home decor",
-    title: "Choosing the right painting for every room",
+    title: "Choosing the right piece for every room",
     blurb:
-      "A room-by-room playbook: how to size the piece, what palette and subject pair best with each space, and the small placement details that decide whether a painting feels like a focal point or background noise.",
+      "A room-by-room playbook: how to size the piece, what palette and subject pair best with each space, and the small placement details that decide whether a piece feels like a focal point or background noise.",
   },
 ] as const;
 

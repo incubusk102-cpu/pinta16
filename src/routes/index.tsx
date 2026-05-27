@@ -153,9 +153,9 @@ function HeroOrFallback({ suppressFallback = false }: HeroOrFallbackProps) {
 
 function Index() {
   useSEO({
-    title: "Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order",
+    title: "Canvas Hub — Original Filipino Products, Hand-Crafted to Order",
     description:
-      "Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide.",
+      "Discover hand-crafted original products from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino makers, shipped nationwide.",
     canonicalPath: "/",
   });
   const { user } = useUserAuth();

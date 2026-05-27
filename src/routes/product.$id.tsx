@@ -110,24 +110,24 @@ interface ProductReview {
 
 export const Route = createFileRoute("/product/$id")({
   component: ProductPage,
-  // Static SSR head: we don't have the artwork loaded server-side at
+  // Static SSR head: we don't have the product loaded server-side at
   // this point (products live in client-fetched KV via
   // `useProducts()`), so the SSR-emitted title / og:title fall back
-  // to a `Painting #<id>` shape that still beats a generic
-  // "Painting — Canvas Hub" for both crawlers and link previews.
+  // to a `Product #<id>` shape that still beats a generic
+  // "Product — Canvas Hub" for both crawlers and link previews.
   // Once the route mounts on the client, `useSEO()` inside
-  // <ProductPage /> swaps in the resolved artwork title /
+  // <ProductPage /> swaps in the resolved product title /
   // description / canonical, so social shares and search engines
   // that execute JS see the enriched copy.
   head: ({ params }) => {
-    const title = `Painting #${params.id} — Canvas Hub`;
+    const title = `Product #${params.id} — Canvas Hub`;
     const ogImage = `/api/r/products/${params.id}/main.jpg`;
     return {
       meta: [
         { title },
         {
           name: "description",
-          content: "View painting details, photos, and pricing on Canvas Hub.",
+          content: "View product details, photos, and pricing on Canvas Hub.",
         },
         { name: "robots", content: "index, follow" },
         { property: "og:title", content: title },
@@ -320,16 +320,16 @@ function ProductPage() {
     return { count: reviews.length, average: sum / reviews.length };
   }, [reviews]);
 
-  // Compute SEO copy from the loaded artwork. Falls back to a generic
-  // "Painting — Canvas Hub" title while products are still loading, so a
+  // Compute SEO copy from the loaded product. Falls back to a generic
+  // "Product — Canvas Hub" title while products are still loading, so a
   // deep-linked product page never inherits the homepage's static title.
   const productDescription = artwork
     ? artwork.description ||
-      `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`
-    : "View painting details, photos, and pricing on Canvas Hub.";
+      `${artwork.title} — ${artwork.medium}, ${artwork.year}.`
+    : "View product details, photos, and pricing on Canvas Hub.";
   const productImage = artwork ? artwork.image : undefined;
   useSEO({
-    title: artwork ? `${artwork.title} — Canvas Hub` : "Painting — Canvas Hub",
+    title: artwork ? `${artwork.title} — Canvas Hub` : "Product — Canvas Hub",
     description: productDescription,
     canonicalPath: `/product/${id}`,
     ogType: "product",
@@ -372,7 +372,7 @@ function ProductPage() {
       name: artwork.title,
       description:
         artwork.description ||
-        `${artwork.title} — original painting on ${artwork.medium}, ${artwork.year}.`,
+        `${artwork.title} — ${artwork.medium}, ${artwork.year}.`,
       image: imageUrls,
       sku: artwork.id,
       mpn: artwork.id,
@@ -498,7 +498,7 @@ function ProductPage() {
             <div className="max-w-md text-center">
               <Loader2 className="mx-auto mb-4 h-6 w-6 animate-spin text-muted-foreground" />
               <p className="font-body text-xs tracking-[0.3em] uppercase text-muted-foreground">
-                Loading painting…
+                Loading product…
               </p>
             </div>
           </div>
@@ -514,10 +514,10 @@ function ProductPage() {
               404
             </p>
             <h1 className="font-display text-3xl text-foreground mb-4">
-              Painting not found
+              Product not found
             </h1>
             <p className="font-body text-sm text-muted-foreground mb-6">
-              The painting you're looking for is no longer in our collection.
+              The product you're looking for is no longer in our collection.
             </p>
             <Link
               to="/collection"
@@ -539,7 +539,7 @@ function ProductPage() {
         <div className="flex-1 flex items-center justify-center px-6 py-32">
           <div className="max-w-md text-center">
             <h1 className="font-display text-3xl text-foreground mb-4">
-              This painting isn't available yet
+              This product isn't available yet
             </h1>
             <p className="font-body text-sm text-muted-foreground mb-6">
               It's still being prepared. Please check back soon.
@@ -770,9 +770,8 @@ function ProductPage() {
                       aria-label={`${artwork.title} studio video description`}
                     >
                       Short studio clip of {artwork.title} — a hand-crafted
-                      painting from Canvas Hub. The video has no spoken
-                      dialogue; it shows the artist working on the piece in the
-                      studio.
+                      product from Canvas Hub. The video has no spoken dialogue;
+                      it shows the artist working on the piece in the studio.
                     </p>
                   </>
                 ) : (
@@ -841,7 +840,7 @@ function ProductPage() {
                     <button
                       type="button"
                       onClick={() => setViewOnWall(true)}
-                      aria-label="View painting on your wall"
+                      aria-label="View product on your wall"
                       title="View on your wall"
                       className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
                     >
@@ -851,7 +850,7 @@ function ProductPage() {
                     <button
                       type="button"
                       onClick={open3D}
-                      aria-label="View painting in 3D"
+                      aria-label="View product in 3D"
                       title="View in 3D"
                       className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-background/70 backdrop-blur-sm rounded-sm hover:bg-background/90 font-body text-[10px] tracking-[0.25em] uppercase text-foreground"
                     >
@@ -1108,7 +1107,7 @@ function ProductPage() {
                     }
                   }}
                   className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all rounded-sm"
-                  aria-label="Share painting"
+                  aria-label="Share product"
                 >
                   <Share2 className="w-4 h-4" />
                   Share
@@ -1314,7 +1313,7 @@ function ProductReviews({
       <section className="mt-16 border-t border-border/40 pt-10">
         <h2 className="font-display text-2xl text-foreground mb-3">Reviews</h2>
         <p className="font-body text-sm text-muted-foreground">
-          No reviews yet for this painting. Be the first collector to share your
+          No reviews yet for this product. Be the first collector to share your
           experience after delivery.
         </p>
       </section>

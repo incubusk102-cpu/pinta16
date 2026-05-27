@@ -127,7 +127,7 @@ const OrderReviewForm = ({
     return (
       <div className="p-4 bg-muted/30 border border-border/10 rounded-sm">
         <p className="font-body text-xs text-muted-foreground">
-          You've reviewed every painting in this order — thank you!
+          You've reviewed every product in this order — thank you!
         </p>
       </div>
     );
@@ -153,7 +153,7 @@ const OrderReviewForm = ({
           htmlFor={`review-product-${orderId}`}
           className="font-body text-[10px] tracking-[0.2em] uppercase text-muted-foreground"
         >
-          Painting being reviewed
+          Product being reviewed
         </label>
         {reviewableItems.length === 1 ? (
           <div className="mt-1 flex items-center gap-3 px-3 py-2 border border-border/30 rounded-sm">
@@ -232,7 +232,7 @@ const OrderReviewForm = ({
           value={text}
           onChange={(e) => setText(e.target.value.slice(0, 5000))}
           rows={3}
-          placeholder="Share your thoughts about the painting, packaging, delivery..."
+          placeholder="Share your thoughts about the product, packaging, delivery..."
           className="mt-1 w-full px-3 py-2 bg-background border border-border/30 text-foreground font-body text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-colors rounded-sm resize-none"
         />
       </div>
@@ -300,7 +300,7 @@ const OrderReviewForm = ({
             <Loader2 className="w-4 h-4 animate-spin" /> Submitting...
           </>
         ) : (
-          `Submit rating${reviewableItems.length > 1 ? " for this painting" : ""}`
+          `Submit rating${reviewableItems.length > 1 ? " for this product" : ""}`
         )}
       </button>
     </div>

@@ -305,8 +305,8 @@ export const ORDER_STEPS: {
   },
   {
     key: "in_progress",
-    label: "Painting In Progress",
-    description: "The artist is working on your painting",
+    label: "In Production",
+    description: "The maker is working on your product",
   },
   {
     key: "out_for_delivery",
@@ -338,32 +338,32 @@ export const PRODUCTION_STAGES: {
 }[] = [
   {
     key: "cut",
-    label: "Canvas cut",
-    description: "Raw canvas trimmed and prepped for stretching",
-    pushBody: "We've cut the canvas for your painting and started prep.",
+    label: "Materials cut",
+    description: "Raw materials trimmed and prepped",
+    pushBody: "We've cut the materials for your product and started prep.",
   },
   {
     key: "frame",
-    label: "Stretcher framed",
-    description: "Canvas stretched onto the wooden frame",
-    pushBody: "Your canvas is on the frame and ready for paint.",
+    label: "Frame assembled",
+    description: "Materials assembled onto the frame",
+    pushBody: "Your materials are on the frame and ready for crafting.",
   },
   {
     key: "paint",
-    label: "Painting",
-    description: "Artist is laying down the painting",
-    pushBody: "Brushes are out — your painting is being made right now.",
+    label: "In progress",
+    description: "Maker is actively crafting the piece",
+    pushBody: "Tools are out — your product is being made right now.",
   },
   {
     key: "varnish",
-    label: "Varnishing",
-    description: "Final varnish layer being applied and cured",
-    pushBody: "Final varnish is on. We're letting it cure before packing.",
+    label: "Finishing",
+    description: "Final finish being applied and cured",
+    pushBody: "Final finish is on. We're letting it cure before packing.",
   },
   {
     key: "packed",
     label: "Packed",
-    description: "Painting is wrapped and waiting for the courier",
+    description: "Product is wrapped and waiting for the courier",
     pushBody: "Packed and ready to ship — we'll add tracking shortly.",
   },
 ];

@@ -49,12 +49,12 @@ const HumidityArticle = () => {
         variants={fadeInUp}
         className="font-body text-base text-muted-foreground leading-relaxed mb-12"
       >
-        Living in the Philippines means your paintings live with you in 85%
+        Living in the Philippines means your pieces live with you in 85%
         humidity for nine months of the year. Most of the time that's fine; in a
         handful of edge cases — moving house, renovating, leaving for an
-        extended trip — knowing how to store a painting properly is the
-        difference between a painting that lasts a lifetime and one that returns
-        with mould bloom.
+        extended trip — knowing how to store a piece properly is the difference
+        between a piece that lasts a lifetime and one that returns with mould
+        bloom.
       </motion.p>
 
       <AdUnit
@@ -65,16 +65,16 @@ const HumidityArticle = () => {
 
       <motion.section variants={fadeInUp} className="space-y-4 mb-12">
         <h2 className="font-display text-2xl md:text-3xl text-foreground">
-          The Philippine humidity profile, painting-by-painting
+          The Philippine humidity profile, piece-by-piece
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
           The Philippines hovers around 70–85% relative humidity for most of the
           year, with the rainy season (June through October) pushing
-          consistently above 85% indoors. For paintings, the conservation
-          envelope is 45–75% RH, with relatively stable conditions being more
-          important than the exact number. A painting kept steady at 80% for
-          years is usually fine; a painting that swings between 50% and 90%
-          within a single week of typhoon weather is the one that fails.
+          consistently above 85% indoors. For pieces, the conservation envelope
+          is 45–75% RH, with relatively stable conditions being more important
+          than the exact number. A piece kept steady at 80% for years is usually
+          fine; a piece that swings between 50% and 90% within a single week of
+          typhoon weather is the one that fails.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           The two failure modes are equally serious. Below 45% RH (common in
@@ -87,12 +87,12 @@ const HumidityArticle = () => {
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           A ₱2,500 indoor hygrometer with min/max recall is the single most
-          useful tool in a collector's kit. Place one near any major painting
-          and check it weekly for the first month after install; you'll learn
-          the room's profile, which often turns out to be quite different from
-          the rest of the house. A bedroom that's aircon'd overnight and then
-          sealed during the day routinely swings 25 RH points in 24 hours — and
-          the painting wears that cycle like a calendar.
+          useful tool in a collector's kit. Place one near any major piece and
+          check it weekly for the first month after install; you'll learn the
+          room's profile, which often turns out to be quite different from the
+          rest of the house. A bedroom that's aircon'd overnight and then sealed
+          during the day routinely swings 25 RH points in 24 hours — and the
+          piece wears that cycle like a calendar.
         </p>
       </motion.section>
 
@@ -106,8 +106,8 @@ const HumidityArticle = () => {
           overnight aircon cycles. A ₱2,500–4,000 ultrasonic humidifier with a
           built-in hygrometer and a 4–6 hour tank is sized correctly for a
           single bedroom or living area. Position it at least 1.5 metres from
-          the painting so no direct mist lands on the canvas; pointing it away
-          from the painting is better than pointing it toward.
+          the piece so no direct mist lands on the canvas; pointing it away from
+          the piece is better than pointing it toward.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           For non-aircon homes during the rainy season, a dehumidifier serves
@@ -119,11 +119,11 @@ const HumidityArticle = () => {
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           For homes with neither aircon nor a dehumidifier, the simplest and
-          cheapest intervention is to keep the rooms with paintings
-          well-ventilated — at least one window or door open during daylight
-          hours, and a small fan moving air gently across the back of the
-          painting. Stagnant humid air is the single most dangerous condition
-          for an original canvas; flowing humid air is much more forgiving.
+          cheapest intervention is to keep the rooms with pieces well-ventilated
+          — at least one window or door open during daylight hours, and a small
+          fan moving air gently across the back of the piece. Stagnant humid air
+          is the single most dangerous condition for an original canvas; flowing
+          humid air is much more forgiving.
         </p>
       </motion.section>
 
@@ -131,16 +131,16 @@ const HumidityArticle = () => {
 
       <motion.section variants={fadeInUp} className="space-y-4 mb-12">
         <h2 className="font-display text-2xl md:text-3xl text-foreground">
-          Wrapping a painting for short-term storage
+          Wrapping a piece for short-term storage
         </h2>
         <p className="font-body text-muted-foreground leading-relaxed">
           For storage of a few days to a few weeks — moving house, renovation, a
-          trip away — wrap the painting in glassine paper, face-out, with the
-          paper covering the painted surface and the back of the stretcher.
-          Glassine is a smooth, archival, acid-free paper that doesn't react
-          with the paint film and lets the painting breathe slightly under the
-          wrap. A standard 60 × 80 cm painting takes about two metres of 80 gsm
-          glassine, available from any framer for around ₱100–200 per metre.
+          trip away — wrap the piece in glassine paper, face-out, with the paper
+          covering the painted surface and the back of the stretcher. Glassine
+          is a smooth, archival, acid-free paper that doesn't react with the
+          paint film and lets the piece breathe slightly under the wrap. A
+          standard 60 × 80 cm piece takes about two metres of 80 gsm glassine,
+          available from any framer for around ₱100–200 per metre.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
           Over the glassine, add a layer of bubble wrap with the bubbles facing
@@ -152,11 +152,11 @@ const HumidityArticle = () => {
           imprints — that's the entire point of the glassine layer.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          Never wrap an original painting in plastic sheeting alone. Plastic
-          traps moisture against the canvas and creates a microclimate of
-          trapped condensation that's perfect for mould growth. Some movers will
-          offer to "tarp" a painting for protection during transport; ask them
-          to use glassine and archival corrugated board instead.
+          Never wrap an original piece in plastic sheeting alone. Plastic traps
+          moisture against the canvas and creates a microclimate of trapped
+          condensation that's perfect for mould growth. Some movers will offer
+          to "tarp" a piece for protection during transport; ask them to use
+          glassine and archival corrugated board instead.
         </p>
       </motion.section>
 
@@ -168,15 +168,15 @@ const HumidityArticle = () => {
           For storage longer than a month, or for any inter-island transport, a
           custom crate is the right answer. A proper art crate is built from
           kiln-dried marine plywood, lined with acid-free foam padding cut to
-          the exact dimensions of the painting, and includes a
-          moisture-absorbing silica gel sachet (renewable, around ₱500 for 250
-          g) inside the sealed crate. Manila has a half-dozen art handlers who
-          build crates to museum standard; expect to pay ₱4,000–8,000 for a
-          crate sized for a medium painting (under 100 × 120 cm).
+          the exact dimensions of the piece, and includes a moisture-absorbing
+          silica gel sachet (renewable, around ₱500 for 250 g) inside the sealed
+          crate. Manila has a half-dozen art handlers who build crates to museum
+          standard; expect to pay ₱4,000–8,000 for a crate sized for a medium
+          piece (under 100 × 120 cm).
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The crate should have at least 25 mm of foam padding between the
-          painting and every interior wall, and the foam must be archival-grade
+          The crate should have at least 25 mm of foam padding between the piece
+          and every interior wall, and the foam must be archival-grade
           closed-cell polyethylene rather than open-cell polyurethane (which
           off-gasses for years). The crate's lid is fastened with screws (never
           nails), and the interior is sealed with archival tape rather than
@@ -200,25 +200,25 @@ const HumidityArticle = () => {
         <p className="font-body text-muted-foreground leading-relaxed">
           Filipino construction varies wildly in wall quality. A typical
           concrete-hollow-block (CHB) exterior wall transmits enough
-          condensation during a heavy typhoon to leave the back of any painting
+          condensation during a heavy typhoon to leave the back of any piece
           hanging against it damp for days. Even well-finished plaster walls in
           newer condos can show condensation during the most intense rain
           events.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          The rule, learned from talking to conservators who have rescued
-          paintings after Yolanda and Ondoy: during typhoon warnings of signal 3
-          or higher, move any original painting on an exterior wall to an
-          interior wall, or wrap it in glassine and bubble wrap and store flat
-          in a closet on an interior wall. The hour spent moving paintings
-          before a major storm is the cheapest insurance in collecting.
+          The rule, learned from talking to conservators who have rescued pieces
+          after Yolanda and Ondoy: during typhoon warnings of signal 3 or
+          higher, move any original piece on an exterior wall to an interior
+          wall, or wrap it in glassine and bubble wrap and store flat in a
+          closet on an interior wall. The hour spent moving pieces before a
+          major storm is the cheapest insurance in collecting.
         </p>
         <p className="font-body text-muted-foreground leading-relaxed">
-          After any major storm, run a hygrometer near each painting for a week
-          to confirm the room's humidity is settling back to normal. If RH stays
+          After any major storm, run a hygrometer near each piece for a week to
+          confirm the room's humidity is settling back to normal. If RH stays
           above 85% for more than a few days, ventilate aggressively or
-          temporarily move the painting to a drier room — even a closet with a
-          small dehumidifier is better than leaving the painting in a saturated
+          temporarily move the piece to a drier room — even a closet with a
+          small dehumidifier is better than leaving the piece in a saturated
           room.
         </p>
       </motion.section>

@@ -88,7 +88,7 @@ export const HERO_TEMPLATES: HeroTemplate[] = [
     image: "/hero-templates/sale-promo.webp",
     fields: {
       eyebrow: "Limited offer",
-      headline: "10% off your first painting",
+      headline: "10% off your first product",
       subtext: "Use code WELCOME10 on your first order.",
       ctaLabel: "Shop now",
       ctaHref: "/collection",
@@ -102,9 +102,9 @@ export const HERO_TEMPLATES: HeroTemplate[] = [
     image: "/hero-templates/free-shipping.webp",
     fields: {
       eyebrow: "Free shipping",
-      headline: "Every painting ships free across PH",
+      headline: "Every product ships free across PH",
       subtext: "Packed, insured, and delivered with care.",
-      ctaLabel: "Explore paintings",
+      ctaLabel: "Explore products",
       ctaHref: "/collection",
       align: "center",
     },
@@ -112,10 +112,10 @@ export const HERO_TEMPLATES: HeroTemplate[] = [
   {
     id: "gift",
     label: "Gift",
-    hint: "Holiday / occasion slot — pairs well with a wrapped-painting photo.",
+    hint: "Holiday / occasion slot — pairs well with a wrapped-product photo.",
     fields: {
       eyebrow: "Give the gift",
-      headline: "A painting they'll keep for life",
+      headline: "A piece they'll keep for life",
       subtext: "Gift cards available — printable or emailed instantly.",
       ctaLabel: "Browse gifts",
       ctaHref: "/collection",

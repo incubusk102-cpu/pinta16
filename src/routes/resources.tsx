@@ -15,13 +15,13 @@ export const Route = createFileRoute("/resources")({
       {
         name: "description",
         content:
-          "Practical guides for living with original canvas paintings: how to hang, light, clean, frame, and store hand-crafted Filipino art so it lasts a lifetime.",
+          "Practical guides for living with hand-crafted pieces: how to hang, light, clean, frame, and store original goods so they last a lifetime.",
       },
       { property: "og:title", content: "Resources — Canvas Hub" },
       {
         property: "og:description",
         content:
-          "Care, framing, lighting, and storage guides for collectors of original canvas paintings.",
+          "Care, framing, lighting, and storage guides for collectors of original hand-crafted pieces.",
       },
     ],
   }),
@@ -31,7 +31,7 @@ function ResourcesPage() {
   useSEO({
     title: "Resources — Canvas Hub",
     description:
-      "Practical guides for living with original canvas paintings: how to hang, light, clean, frame, and store hand-crafted Filipino art so it lasts a lifetime.",
+      "Practical guides for living with hand-crafted pieces: how to hang, light, clean, frame, and store original goods so they last a lifetime.",
     canonicalPath: "/resources",
   });
   return (

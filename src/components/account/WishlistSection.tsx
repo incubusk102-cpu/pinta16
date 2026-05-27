@@ -14,7 +14,7 @@ export default function WishlistSection() {
 
   const handleShare = async () => {
     if (items.length === 0) {
-      toast.info("Save a painting first, then share the list.");
+      toast.info("Save a product first, then share the list.");
       return;
     }
     if (typeof window === "undefined") return;
@@ -27,7 +27,7 @@ export default function WishlistSection() {
     const shareUrl = `${window.location.origin}/wishlist/share?${params.toString()}`;
     const shareData: ShareData = {
       title: "My Canvas Hub wishlist",
-      text: "Here are the paintings I'm eyeing on Canvas Hub.",
+      text: "Here are the products I'm eyeing on Canvas Hub.",
       url: shareUrl,
     };
     // Prefer the native share sheet on phones — it opens iMessage,
@@ -78,7 +78,7 @@ export default function WishlistSection() {
       </div>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Tap the heart on any painting to save it for later.
+          Tap the heart on any product to save it for later.
         </p>
       ) : (
         <ul className="grid sm:grid-cols-2 gap-3">

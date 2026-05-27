@@ -16,7 +16,7 @@ function SignupRedirect() {
   useSEO({
     title: "Sign up — Canvas Hub",
     description:
-      "Create a Canvas Hub account to save favourite paintings, track orders, and unlock member perks.",
+      "Create a Canvas Hub account to save favourite products, track orders, and unlock member perks.",
     canonicalPath: "/signup",
     noindex: true,
   });

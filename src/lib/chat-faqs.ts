@@ -22,7 +22,7 @@ export const DEFAULT_CHAT_FAQS: ChatFaqItem[] = [
     id: "returns",
     question: "Returns & refunds",
     answer:
-      "Because each piece is an original hand-painted artwork, we only accept returns if the painting arrives damaged. Email us within 48 hours of delivery with a clear photo and we'll arrange a refund or replacement right away.",
+      "Because each piece is an original hand-crafted product, we only accept returns if it arrives damaged. Email us within 48 hours of delivery with a clear photo and we'll arrange a refund or replacement right away.",
   },
   {
     id: "payment",
@@ -40,13 +40,13 @@ export const DEFAULT_CHAT_FAQS: ChatFaqItem[] = [
     id: "originals",
     question: "Are these originals?",
     answer:
-      "Every painting in the catalogue is an original, hand-painted canvas — no prints, no reproductions, no customisation. Each piece is one-of-a-kind and ships with a signed certificate of authenticity from the artist.",
+      "Every product in the catalogue is an original, hand-crafted piece — no prints, no reproductions, no customisation. Each piece is one-of-a-kind and ships with a signed certificate of authenticity from the maker.",
   },
   {
     id: "authenticity",
     question: "Authenticity",
     answer:
-      "Every painting ships with a signed certificate of authenticity from the artist. All works are original — no prints, no reproductions.",
+      "Every product ships with a signed certificate of authenticity from the maker. All works are original — no prints, no reproductions.",
   },
 ];
 

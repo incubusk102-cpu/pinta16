@@ -8,7 +8,7 @@ const AdminPage = lazy(() => import("@/admin/AdminPage"));
 function AdminPageWithSuspense() {
   useSEO({
     title: "Admin — Canvas Hub",
-    description: "Upload and manage paintings in your gallery.",
+    description: "Upload and manage products in your gallery.",
     canonicalPath: "/admin",
     noindex: true,
   });
@@ -32,7 +32,7 @@ export const Route = createFileRoute("/admin")({
       { title: "Admin — Canvas Hub" },
       {
         name: "description",
-        content: "Upload and manage paintings in your gallery.",
+        content: "Upload and manage products in your gallery.",
       },
       { name: "robots", content: "noindex, nofollow" },
     ],
