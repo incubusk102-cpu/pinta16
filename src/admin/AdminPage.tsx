@@ -5,22 +5,14 @@ import Turnstile, { isTurnstileEnabled } from "@/components/Turnstile";
 import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
 import {
   useProducts,
-  getDiscountPercent,
-  getProductImages,
   buildImageFields,
   PRODUCT_CATEGORIES,
   PRODUCT_MAX_IMAGES,
-  type Product,
   type ProductAvailability,
   type ProductImage,
   type ProductVideo,
 } from "@/contexts/ProductContext";
-import {
-  AVAILABILITY_LABEL,
-  AVAILABILITY_OPTIONS,
-  defaultArtworks,
-  getAvailability,
-} from "@/lib/artworks";
+import { AVAILABILITY_OPTIONS, defaultArtworks } from "@/lib/artworks";
 import { findUploadDuplicate } from "@/lib/imageHash";
 import { formatSize } from "@/lib/painting-sizes";
 import { Button } from "@/components/ui/button";
@@ -46,7 +38,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { EditProductDialog } from "@/components/admin/EditProductDialog";
 import { AdminCreateOrderDialog } from "@/components/admin/AdminCreateOrderDialog";
 import { D1AnalyticsPanel } from "@/components/admin/D1AnalyticsPanel";
 import { TursoVectorPanel } from "@/components/admin/TursoVectorPanel";
@@ -1420,22 +1411,13 @@ function NavLink({
 }
 
 function ProductsSection() {
-  const {
-    products,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    bulkUpdateProducts,
-  } = useProducts();
+  const { products, addProduct } = useProducts();
   const [images, setImages] = useState<ProductImage[]>([]);
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Acrylic on Canvas");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [category, setCategory] = useState<string>(PRODUCT_CATEGORIES[0]);
   const [dimensions, setDimensions] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [filterAvailability, setFilterAvailability] = useState<string>("all");
   const [price, setPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -1444,12 +1426,6 @@ function ProductsSection() {
     useState<ProductAvailability>("available");
   const [video, setVideo] = useState<ProductVideo | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editTarget, setEditTarget] = useState<Product | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState<string>("");
-  const [bulkValue, setBulkValue] = useState<string>("");
-  const [bulkApplying, setBulkApplying] = useState(false);
 
   const reset = () => {
     setImages([]);
@@ -1561,377 +1537,67 @@ function ProductsSection() {
     }
   };
 
-  // "Your uploads" only shows products that are brand-new additions, not
-  // customizations of stock artworks (those are managed in the Stock catalog
-  // panel below to avoid a confusing duplicate listing).
-  const pureCustomProducts = products.filter((p) => !p.replacesDefaultId);
-
-  const filteredProducts = pureCustomProducts.filter((p) => {
-    if (filterCategory === "__uncategorized__") {
-      if (p.category && p.category.trim()) return false;
-    } else if (filterCategory !== "all") {
-      if ((p.category || "") !== filterCategory) return false;
-    }
-    if (filterAvailability !== "all") {
-      if (getAvailability(p) !== filterAvailability) return false;
-    }
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return true;
-    const haystack = [
-      p.title,
-      p.medium,
-      p.year,
-      p.category,
-      p.dimensions,
-      p.description,
-      p.imageFileName,
-      p.mockupFileName,
-      p.id,
-      AVAILABILITY_LABEL[getAvailability(p)],
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    return haystack.includes(q);
-  });
-
-  const handleDelete = async (productId: string, productTitle: string) => {
-    setDeletingId(productId);
-
-    try {
-      await deleteProduct(productId);
-      toast.success(`Removed "${productTitle}"`);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not remove product",
-      );
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const toggleSelected = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleSelectAll = useCallback(() => {
-    setSelectedIds((prev) =>
-      prev.size === filteredProducts.length
-        ? new Set()
-        : new Set(filteredProducts.map((p) => p.id)),
-    );
-  }, [filteredProducts]);
-
-  const handleBulkApply = async () => {
-    if (!bulkAction || !selectedIds.size) return;
-    setBulkApplying(true);
-    try {
-      const ids = [...selectedIds];
-      if (bulkAction === "availability") {
-        const val = bulkValue as ProductAvailability;
-        if (
-          !["available", "made-to-order", "reserved", "sold", "draft"].includes(
-            val,
-          )
-        ) {
-          toast.error("Pick a valid availability");
-          return;
-        }
-        await bulkUpdateProducts(ids, { availability: val });
-        toast.success(
-          `${ids.length} product(s) set to ${AVAILABILITY_LABEL[val]}`,
-        );
-      } else if (bulkAction === "price") {
-        const p = Number(bulkValue);
-        if (!p || p <= 0) {
-          toast.error("Enter a valid price");
-          return;
-        }
-        await bulkUpdateProducts(ids, { price: p });
-        toast.success(
-          `Price set to ₱${p.toLocaleString()} for ${ids.length} product(s)`,
-        );
-      } else if (bulkAction === "salePrice") {
-        const s = Number(bulkValue);
-        if (bulkValue.trim() === "" || bulkValue.trim() === "0") {
-          await bulkUpdateProducts(ids, { salePrice: undefined });
-          toast.success(`Sale price cleared for ${ids.length} product(s)`);
-        } else if (s > 0) {
-          await bulkUpdateProducts(ids, { salePrice: s });
-          toast.success(
-            `Sale price set to ₱${s.toLocaleString()} for ${ids.length} product(s)`,
-          );
-        } else {
-          toast.error("Enter a valid sale price (or 0 to clear)");
-          return;
-        }
-      } else if (bulkAction === "category") {
-        await bulkUpdateProducts(ids, { category: bulkValue });
-        toast.success(
-          `Category set to "${bulkValue}" for ${ids.length} product(s)`,
-        );
-      }
-      setSelectedIds(new Set());
-      setBulkAction("");
-      setBulkValue("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Bulk update failed");
-    } finally {
-      setBulkApplying(false);
-    }
-  };
-
   return (
     <>
-      <div className="grid lg:grid-cols-[1fr_1.2fr] gap-8">
-        <section
-          id="upload-product-form"
-          className="bg-card/40 border border-border/60 rounded-xl p-6 h-fit lg:sticky lg:top-24 scroll-mt-24"
-        >
-          <div className="flex items-center gap-2 mb-6">
-            <Plus className="w-5 h-5 text-primary" />
-            <h2 className="font-display text-lg">Upload product</h2>
+      <section
+        id="upload-product-form"
+        className="bg-card/40 border border-border/60 rounded-xl p-6 h-fit scroll-mt-24 max-w-3xl mx-auto w-full"
+      >
+        <div className="flex items-center gap-2 mb-6">
+          <Plus className="w-5 h-5 text-primary" />
+          <h2 className="font-display text-lg">Upload product</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="mb-2 block">
+              Photos{" "}
+              <span className="text-muted-foreground font-normal">
+                (up to {PRODUCT_MAX_IMAGES})
+              </span>
+            </Label>
+            <ProductImageGallery images={images} onChange={setImages} />
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label className="mb-2 block">
-                Photos{" "}
-                <span className="text-muted-foreground font-normal">
-                  (up to {PRODUCT_MAX_IMAGES})
-                </span>
-              </Label>
-              <ProductImageGallery images={images} onChange={setImages} />
-            </div>
 
+          <div>
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={100}
+              placeholder="e.g. Mayon at Sunrise"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="title">Title</Label>
+              <Label htmlFor="medium">Medium</Label>
               <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={100}
-                placeholder="e.g. Mayon at Sunrise"
+                id="medium"
+                value={medium}
+                onChange={(e) => setMedium(e.target.value)}
+                maxLength={60}
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="medium">Medium</Label>
-                <Input
-                  id="medium"
-                  value={medium}
-                  onChange={(e) => setMedium(e.target.value)}
-                  maxLength={60}
-                />
-              </div>
-              <div>
-                <Label htmlFor="year">Year</Label>
-                <Input
-                  id="year"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  maxLength={10}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="category">Category</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger id="category">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRODUCT_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="dimensions">
-                  Dimensions{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="dimensions"
-                  value={dimensions}
-                  onChange={(e) => setDimensions(e.target.value)}
-                  maxLength={60}
-                  placeholder="24 × 30 in"
-                />
-              </div>
-            </div>
-
             <div>
-              <Label htmlFor="price">Price (₱)</Label>
+              <Label htmlFor="year">Year</Label>
               <Input
-                id="price"
-                type="number"
-                min="0"
-                step="1"
-                value={price}
-                onChange={(e) => handlePriceChange(e.target.value)}
-                placeholder="3499"
+                id="year"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                maxLength={10}
               />
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="salePrice">
-                  Sale price (₱){" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="salePrice"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={salePrice}
-                  onChange={(e) => handleSalePriceChange(e.target.value)}
-                  placeholder="2799"
-                />
-              </div>
-              <div>
-                <Label htmlFor="discountPercent">
-                  Discount %{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="discountPercent"
-                  type="number"
-                  min="0"
-                  max="99"
-                  step="1"
-                  value={discountPercent}
-                  onChange={(e) => handleDiscountPercentChange(e.target.value)}
-                  placeholder="20"
-                />
-              </div>
-            </div>
-
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="availability">Availability</Label>
-              <Select
-                value={availability}
-                onValueChange={(value) =>
-                  setAvailability(value as ProductAvailability)
-                }
-              >
-                <SelectTrigger id="availability">
+              <Label htmlFor="category">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger id="category">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABILITY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Draft hides the product from the public storefront.
-              </p>
-            </div>
-
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={500}
-                rows={4}
-                placeholder="A short story about the piece..."
-              />
-            </div>
-
-            <div>
-              <Label className="mb-2 block">
-                Studio video{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
-              </Label>
-              <ProductVideoUpload value={video} onChange={setVideo} />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Adds a "play" tile to the photo gallery on this product&rsquo;s
-                page. Visitors click it to watch the video inline.
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={submitting} className="flex-1">
-                {submitting ? "Adding..." : "Add to gallery"}
-              </Button>
-              <Button
-                type="button"
-                variant="warning"
-                onClick={reset}
-                disabled={submitting}
-              >
-                Reset product form
-              </Button>
-            </div>
-          </form>
-        </section>
-
-        <section>
-          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              {filteredProducts.length > 0 && (
-                <button
-                  type="button"
-                  onClick={toggleSelectAll}
-                  className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={
-                    selectedIds.size === filteredProducts.length
-                      ? "Deselect all"
-                      : "Select all"
-                  }
-                >
-                  {selectedIds.size === filteredProducts.length &&
-                  filteredProducts.length > 0 ? (
-                    <CheckSquare className="w-4 h-4" />
-                  ) : (
-                    <Square className="w-4 h-4" />
-                  )}
-                </button>
-              )}
-              <h2 className="font-display text-lg">
-                Your uploads ({filteredProducts.length})
-              </h2>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search title, category, dimensions…"
-                className="h-9 w-56"
-              />
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger className="h-9 w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  <SelectItem value="__uncategorized__">
-                    Uncategorized
-                  </SelectItem>
                   {PRODUCT_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
@@ -1939,265 +1605,140 @@ function ProductsSection() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select
-                value={filterAvailability}
-                onValueChange={setFilterAvailability}
-              >
-                <SelectTrigger className="h-9 w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any availability</SelectItem>
-                  {AVAILABILITY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            </div>
+            <div>
+              <Label htmlFor="dimensions">
+                Dimensions{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="dimensions"
+                value={dimensions}
+                onChange={(e) => setDimensions(e.target.value)}
+                maxLength={60}
+                placeholder="24 × 30 in"
+              />
             </div>
           </div>
-          {selectedIds.size > 0 && (
-            <div className="mb-4 flex items-center gap-2 flex-wrap bg-primary/5 border border-primary/20 rounded-lg p-3">
-              <span className="text-sm font-medium">
-                {selectedIds.size} selected
-              </span>
-              <Select
-                value={bulkAction}
-                onValueChange={(v) => {
-                  setBulkAction(v);
-                  setBulkValue("");
-                }}
-              >
-                <SelectTrigger className="h-8 w-40">
-                  <SelectValue placeholder="Bulk action…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="availability">Set availability</SelectItem>
-                  <SelectItem value="price">Set price</SelectItem>
-                  <SelectItem value="salePrice">Set sale price</SelectItem>
-                  <SelectItem value="category">Set category</SelectItem>
-                </SelectContent>
-              </Select>
-              {bulkAction === "availability" && (
-                <Select value={bulkValue} onValueChange={setBulkValue}>
-                  <SelectTrigger className="h-8 w-36">
-                    <SelectValue placeholder="Pick…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AVAILABILITY_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {bulkAction === "price" && (
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="₱ new price"
-                  value={bulkValue}
-                  onChange={(e) => setBulkValue(e.target.value)}
-                  className="h-8 w-32"
-                />
-              )}
-              {bulkAction === "salePrice" && (
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="₱ sale price (0 = clear)"
-                  value={bulkValue}
-                  onChange={(e) => setBulkValue(e.target.value)}
-                  className="h-8 w-44"
-                />
-              )}
-              {bulkAction === "category" && (
-                <Select value={bulkValue} onValueChange={setBulkValue}>
-                  <SelectTrigger className="h-8 w-36">
-                    <SelectValue placeholder="Pick…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRODUCT_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Button
-                size="sm"
-                variant="success"
-                disabled={!bulkAction || !bulkValue || bulkApplying}
-                onClick={() => void handleBulkApply()}
-              >
-                {bulkApplying ? "Applying…" : "Apply bulk update"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setSelectedIds(new Set());
-                  setBulkAction("");
-                  setBulkValue("");
-                }}
-              >
-                Clear product selection
-              </Button>
-            </div>
-          )}
-          {pureCustomProducts.length === 0 ? (
-            <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
-              No uploaded products yet. Add your first product on the left, or
-              customize a stock listing below.
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="border border-dashed border-border rounded-xl p-10 text-center text-muted-foreground">
-              No products match your search.
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {filteredProducts.map((product) => {
-                const isDeleting = deletingId === product.id;
-                const photos = getProductImages(product);
-                const main = photos[0];
-                const extras = photos.slice(1);
-                const isSelected = selectedIds.has(product.id);
 
-                return (
-                  <li
-                    key={product.id}
-                    className={`flex gap-4 bg-card/40 border rounded-lg p-3 ${isSelected ? "border-primary/60 bg-primary/5" : "border-border/50"}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => toggleSelected(product.id)}
-                      className="flex-shrink-0 self-center p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label={
-                        isSelected
-                          ? `Deselect ${product.title}`
-                          : `Select ${product.title}`
-                      }
-                    >
-                      {isSelected ? (
-                        <CheckSquare className="w-4 h-4 text-primary" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
-                    <div className="flex-shrink-0 space-y-1.5">
-                      {main && (
-                        <div className="relative">
-                          <img
-                            src={main.url}
-                            alt={product.title}
-                            className="w-24 h-24 object-cover rounded-md"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                          {photos.length > 1 && (
-                            <span className="absolute bottom-1 right-1 px-1.5 py-0.5 text-[10px] font-medium bg-background/90 backdrop-blur rounded">
-                              {photos.length} photos
-                            </span>
-                          )}
-                          {product.category && (
-                            <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-medium bg-primary/90 text-primary-foreground rounded">
-                              {product.category}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {extras.length > 0 && (
-                        <div className="flex gap-1">
-                          {extras.slice(0, 4).map((img, i) => (
-                            <img
-                              key={i}
-                              src={img.url}
-                              alt={`${product.title} photo ${i + 2}`}
-                              className="w-[22px] h-[22px] object-cover rounded-sm border border-border/40"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium truncate">
-                          {product.title}
-                        </h3>
-                        <span
-                          className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded ${
-                            getAvailability(product) === "available"
-                              ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                              : getAvailability(product) === "reserved"
-                                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                                : getAvailability(product) === "sold"
-                                  ? "bg-slate-700 text-white"
-                                  : "bg-muted text-foreground"
-                          }`}
-                        >
-                          {AVAILABILITY_LABEL[getAvailability(product)]}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {product.medium} · {product.year}
-                        {product.dimensions ? ` · ${product.dimensions}` : ""}
-                      </p>
-                      <p className="text-sm font-semibold mt-1">
-                        {getDiscountPercent(product) > 0 ? (
-                          <>
-                            <span className="line-through text-muted-foreground font-normal mr-1">
-                              ₱{product.price.toLocaleString()}
-                            </span>
-                            <span>₱{product.salePrice!.toLocaleString()}</span>
-                            <span className="ml-1 text-xs text-red-500 font-semibold">
-                              {getDiscountPercent(product)}% OFF
-                            </span>
-                          </>
-                        ) : (
-                          <>₱{product.price.toLocaleString()}</>
-                        )}
-                      </p>
-                      {product.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                          {product.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEditTarget(product)}
-                        aria-label={`Edit ${product.title}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={isDeleting}
-                        onClick={() =>
-                          void handleDelete(product.id, product.title)
-                        }
-                        aria-label={`Delete ${product.title}`}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
+          <div>
+            <Label htmlFor="price">Price (₱)</Label>
+            <Input
+              id="price"
+              type="number"
+              min="0"
+              step="1"
+              value={price}
+              onChange={(e) => handlePriceChange(e.target.value)}
+              placeholder="3499"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="salePrice">
+                Sale price (₱){" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="salePrice"
+                type="number"
+                min="0"
+                step="1"
+                value={salePrice}
+                onChange={(e) => handleSalePriceChange(e.target.value)}
+                placeholder="2799"
+              />
+            </div>
+            <div>
+              <Label htmlFor="discountPercent">
+                Discount %{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="discountPercent"
+                type="number"
+                min="0"
+                max="99"
+                step="1"
+                value={discountPercent}
+                onChange={(e) => handleDiscountPercentChange(e.target.value)}
+                placeholder="20"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="availability">Availability</Label>
+            <Select
+              value={availability}
+              onValueChange={(value) =>
+                setAvailability(value as ProductAvailability)
+              }
+            >
+              <SelectTrigger id="availability">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AVAILABILITY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Draft hides the product from the public storefront.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={500}
+              rows={4}
+              placeholder="A short story about the piece..."
+            />
+          </div>
+
+          <div>
+            <Label className="mb-2 block">
+              Studio video{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <ProductVideoUpload value={video} onChange={setVideo} />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Adds a "play" tile to the photo gallery on this product&rsquo;s
+              page. Visitors click it to watch the video inline.
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" disabled={submitting} className="flex-1">
+              {submitting ? "Adding..." : "Add to gallery"}
+            </Button>
+            <Button
+              type="button"
+              variant="warning"
+              onClick={reset}
+              disabled={submitting}
+            >
+              Reset product form
+            </Button>
+          </div>
+        </form>
+      </section>
 
       <div className="mt-10 pt-8 border-t border-border/50">
         <StockListingsSection />
@@ -2209,13 +1750,6 @@ function ProductsSection() {
       >
         <StockEventsSection />
       </div>
-
-      <EditProductDialog
-        product={editTarget}
-        open={Boolean(editTarget)}
-        onClose={() => setEditTarget(null)}
-        onSave={updateProduct}
-      />
     </>
   );
 }
