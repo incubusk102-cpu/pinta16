@@ -115,6 +115,7 @@ export default function WelcomeEmail({
       preview={subject || `Welcome to ${cfg.fromName || "Canvas Hub"}`}
       logoSlot="welcome-logo"
       bannerSlot="welcome-banner"
+      compactHeaderSpacing
     >
       <Heading
         as="h1"

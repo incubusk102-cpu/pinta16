@@ -516,12 +516,19 @@ const buildPreviewHtml = (
 `.trim();
 };
 
-const compressEmailImage = async (file: File): Promise<string> => {
+const compressEmailImage = async (
+  file: File,
+  opts: { preserveAlpha?: boolean } = {},
+): Promise<string> => {
   // 1200px long-edge cap so logos / banners stay under Cloudflare KV's
-  // value ceiling once base64-inflated.
+  // value ceiling once base64-inflated. Logos pass `preserveAlpha: true`
+  // so a PNG with transparency stays transparent (encoded as PNG, no
+  // white-flatten); banners stay JPEG since they're typically full-bleed
+  // photos with no alpha channel to preserve.
   const result = await compressImage(file, {
     maxDim: 1200,
     initialQuality: 0.85,
+    preserveAlpha: opts.preserveAlpha,
   });
   return result.url;
 };
@@ -620,7 +627,7 @@ export const OrderEmailSection = () => {
   const handleLogoFile = async (file: File | null) => {
     if (!file) return;
     try {
-      const dataUrl = await compressEmailImage(file);
+      const dataUrl = await compressEmailImage(file, { preserveAlpha: true });
       update("logoUrl", dataUrl);
       toast.success("Logo uploaded");
     } catch (e) {
