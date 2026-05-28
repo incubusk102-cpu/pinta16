@@ -260,14 +260,38 @@ function CarouselMockupPage() {
     [index, total],
   );
 
+  // The storefront ships in dark mode by default (see styles.css —
+  // `--foreground` resolves to near-white), so the route can't reuse
+  // the global `text-foreground` token without disappearing into the
+  // cream paper background. The mock-up declares its own light-on-
+  // dark palette as inline CSS variables and the rest of the tree
+  // reads them via `var(--ink)` / `var(--ink-mute)` arbitrary classes.
+  // This keeps the mock-up legible regardless of the user's theme.
+  const inkPalette: React.CSSProperties = {
+    // ~ oklch(0.18 0 0): the same value light mode uses for
+    // `--foreground`. Strong dark for headlines / primary copy.
+    "--ink": "oklch(0.18 0 0)",
+    "--ink-mute": "oklch(0.18 0 0 / 0.72)",
+    "--ink-soft": "oklch(0.18 0 0 / 0.5)",
+    "--ink-faint": "oklch(0.18 0 0 / 0.25)",
+    "--ink-hairline": "oklch(0.18 0 0 / 0.1)",
+    // Warm bronze used for the chapter / medium label + the accent
+    // rule under the title. Sits between the cream paper and the
+    // brand gold without competing with the painting.
+    "--bronze": "oklch(0.55 0.08 70)",
+  } as React.CSSProperties;
+
   return (
-    <div className="min-h-screen bg-[oklch(0.97_0.012_85)] text-foreground antialiased">
+    <div
+      className="min-h-screen bg-[oklch(0.97_0.012_85)] antialiased"
+      style={{ ...inkPalette, color: "var(--ink)" }}
+    >
       {/* Discreet "this is a mock-up" ribbon so anyone landing here
           directly knows the page isn't live storefront chrome. */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-foreground/60 bg-[oklch(0.97_0.012_85)]/85 backdrop-blur-sm border-b border-foreground/5">
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 py-2 text-[11px] uppercase tracking-[0.2em] bg-[oklch(0.97_0.012_85)]/85 backdrop-blur-sm border-b border-[var(--ink-hairline)] text-[color:var(--ink-soft)]">
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 hover:text-[color:var(--ink)] transition-colors"
         >
           <ArrowLeft className="w-3 h-3" /> Canvas Hub
         </Link>
@@ -376,7 +400,7 @@ function CarouselMockupPage() {
                 under the painting like the index card next to a hung
                 piece. Updates with each slide via the same AnimatePresence
                 key so it crossfades, not jumps. */}
-            <div className="pointer-events-none absolute -bottom-8 left-0 right-0 flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-foreground/55">
+            <div className="pointer-events-none absolute -bottom-8 left-0 right-0 flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[color:var(--ink-soft)]">
               <span className="font-mono">{positionLabel}</span>
               <AnimatePresence mode="wait">
                 <motion.span
@@ -414,7 +438,7 @@ function CarouselMockupPage() {
                   initial="hidden"
                   animate="visible"
                   transition={{ delay: 0.1, duration: 0.5 }}
-                  className="text-[11px] uppercase tracking-[0.32em] text-[oklch(0.55_0.08_70)]"
+                  className="text-[11px] uppercase tracking-[0.32em] text-[color:var(--bronze)]"
                 >
                   {current.medium} · {current.year}
                 </motion.span>
@@ -424,7 +448,7 @@ function CarouselMockupPage() {
                   initial="hidden"
                   animate="visible"
                   transition={{ delay: 0.18, duration: 0.55 }}
-                  className="font-display text-4xl leading-[1.05] sm:text-5xl lg:text-6xl text-foreground"
+                  className="font-display text-4xl leading-[1.05] sm:text-5xl lg:text-6xl text-[color:var(--ink)]"
                   style={{ fontWeight: 500 }}
                 >
                   {current.title}
@@ -449,7 +473,7 @@ function CarouselMockupPage() {
                   initial="hidden"
                   animate="visible"
                   transition={{ delay: 0.32, duration: 0.5 }}
-                  className="max-w-[44ch] text-[15px] leading-[1.7] text-foreground/75"
+                  className="max-w-[44ch] text-[15px] leading-[1.7] text-[color:var(--ink-mute)]"
                 >
                   {current.description}
                 </motion.p>
@@ -461,10 +485,10 @@ function CarouselMockupPage() {
                   transition={{ delay: 0.42, duration: 0.5 }}
                   className="flex flex-wrap items-baseline gap-x-6 gap-y-2 pt-1"
                 >
-                  <span className="font-display italic text-2xl text-foreground/90">
+                  <span className="font-display italic text-2xl text-[color:var(--ink)]">
                     {formatPHP(current.price)}
                   </span>
-                  <span className="text-[12px] uppercase tracking-[0.22em] text-foreground/50">
+                  <span className="text-[12px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
                     Made to order · ships in 2 weeks
                   </span>
                 </motion.div>
@@ -478,12 +502,12 @@ function CarouselMockupPage() {
                 >
                   <button
                     type="button"
-                    className="group inline-flex items-center gap-3 rounded-full border border-foreground/25 px-6 py-3 text-[12px] uppercase tracking-[0.28em] text-foreground/85 transition-colors hover:border-foreground/60 hover:bg-foreground/5"
+                    className="group inline-flex items-center gap-3 rounded-full border border-[var(--ink-faint)] px-6 py-3 text-[12px] uppercase tracking-[0.28em] text-[color:var(--ink-mute)] transition-colors hover:border-[var(--ink)] hover:bg-[oklch(0.18_0_0_/_0.04)]"
                   >
                     View this piece
                     <span
                       aria-hidden
-                      className="inline-block h-px w-6 translate-x-0 bg-foreground/40 transition-transform duration-300 group-hover:translate-x-1 group-hover:bg-foreground/80"
+                      className="inline-block h-px w-6 translate-x-0 bg-[color:var(--ink-soft)] transition-transform duration-300 group-hover:translate-x-1 group-hover:bg-[color:var(--ink)]"
                     />
                   </button>
                 </motion.div>
@@ -509,8 +533,8 @@ function CarouselMockupPage() {
                 <span
                   className={`block h-[2px] rounded-full transition-all duration-500 ${
                     i === index
-                      ? "w-6 bg-foreground/80"
-                      : "w-3 bg-foreground/25 group-hover:bg-foreground/55"
+                      ? "w-6 bg-[color:var(--ink)]"
+                      : "w-3 bg-[color:var(--ink-faint)] group-hover:bg-[color:var(--ink-soft)]"
                   }`}
                 />
               </button>
@@ -522,7 +546,7 @@ function CarouselMockupPage() {
               type="button"
               onClick={() => advance(-1)}
               aria-label="Previous painting"
-              className="grid h-12 w-12 place-items-center rounded-full border border-foreground/25 text-foreground/75 transition-colors hover:border-foreground/60 hover:bg-foreground/5 hover:text-foreground"
+              className="grid h-12 w-12 place-items-center rounded-full border border-[var(--ink-faint)] text-[color:var(--ink-mute)] transition-colors hover:border-[var(--ink)] hover:bg-[oklch(0.18_0_0_/_0.04)] hover:text-[color:var(--ink)]"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -530,14 +554,14 @@ function CarouselMockupPage() {
               type="button"
               onClick={() => advance(1)}
               aria-label="Next painting"
-              className="group relative grid h-16 w-16 place-items-center rounded-full border border-foreground/30 text-foreground transition-all hover:border-foreground/80"
+              className="group relative grid h-16 w-16 place-items-center rounded-full border border-[var(--ink-faint)] text-[color:var(--ink)] transition-all hover:border-[var(--ink)]"
               style={{
                 background:
                   "radial-gradient(60% 60% at 50% 40%, oklch(0.93 0.04 75 / 0.6) 0%, transparent 70%)",
               }}
             >
-              <span className="absolute inset-0 rounded-full border border-foreground/10 transition-transform duration-700 group-hover:scale-105" />
-              <span className="text-[10px] uppercase tracking-[0.28em] absolute -bottom-6 left-1/2 -translate-x-1/2 text-foreground/50">
+              <span className="absolute inset-0 rounded-full border border-[var(--ink-hairline)] transition-transform duration-700 group-hover:scale-105" />
+              <span className="text-[10px] uppercase tracking-[0.28em] absolute -bottom-6 left-1/2 -translate-x-1/2 text-[color:var(--ink-soft)]">
                 Next
               </span>
               <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-0.5" />
@@ -549,30 +573,32 @@ function CarouselMockupPage() {
       {/* Designer's notes block under the hero. Lives only on the
           mock-up route — strip before promoting to production. */}
       <section className="mx-auto max-w-3xl px-6 py-16 lg:py-24">
-        <h2 className="font-display text-2xl text-foreground/85 mb-4">
+        <h2 className="font-display text-2xl text-[color:var(--ink)] mb-4">
           Designer's notes
         </h2>
-        <ul className="space-y-3 text-[14px] leading-[1.7] text-foreground/70 list-none">
+        <ul className="space-y-3 text-[14px] leading-[1.7] text-[color:var(--ink-mute)] list-none">
           <li>
-            <strong className="text-foreground/85">Aesthetic:</strong>{" "}
+            <strong className="text-[color:var(--ink)]">Aesthetic:</strong>{" "}
             cream-paper gallery wall, not a product page. Walnut frame + soft
             drop shadow stand in for a real hang. Gold accents are limited to
             the small rule under the title and the halo around the Next button.
           </li>
           <li>
-            <strong className="text-foreground/85">Motion:</strong> painting
-            slides out left + fades; next painting arrives from the right with a
-            tiny scale dip so it reads as physically lifted off the wall. Title
-            + description stagger in after the frame settles. Honours{" "}
-            <code>prefers-reduced-motion</code>.
+            <strong className="text-[color:var(--ink)]">Motion:</strong>{" "}
+            painting slides out left + fades; next painting arrives from the
+            right with a tiny scale dip so it reads as physically lifted off the
+            wall. Title + description stagger in after the frame settles.
+            Honours <code>prefers-reduced-motion</code>.
           </li>
           <li>
-            <strong className="text-foreground/85">Controls:</strong> big Next
-            circle on desktop, dot indicators for direct jump, arrow keys, swipe
-            / drag on mobile, Home + End jump to ends.
+            <strong className="text-[color:var(--ink)]">Controls:</strong> big
+            Next circle on desktop, dot indicators for direct jump, arrow keys,
+            swipe / drag on mobile, Home + End jump to ends.
           </li>
           <li>
-            <strong className="text-foreground/85">Not in this mock-up:</strong>{" "}
+            <strong className="text-[color:var(--ink)]">
+              Not in this mock-up:
+            </strong>{" "}
             real ProductContext feed (currently hard-coded to five paintings),
             add-to-cart wiring, currency / locale switch, wishlist heart,
             view-piece deep link. Wire those in once the look is approved.
