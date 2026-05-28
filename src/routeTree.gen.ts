@@ -20,6 +20,7 @@ import { Route as SignupRouteImport } from "./routes/signup";
 import { Route as TrackRouteImport } from "./routes/track";
 import { Route as ProductIdRouteImport } from "./routes/product.$id";
 import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
+import { Route as PreviewCarouselRouteImport } from "./routes/preview.carousel";
 import { Route as PreviewIdRouteImport } from "./routes/preview.$id";
 import { Route as ResourcesSlugRouteImport } from "./routes/resources.$slug";
 import { Route as WishlistShareRouteImport } from "./routes/wishlist.share";
@@ -79,6 +80,11 @@ const PolicySlugRoute = PolicySlugRouteImport.update({
   path: "/policy/$slug",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PreviewCarouselRoute = PreviewCarouselRouteImport.update({
+  id: "/preview/carousel",
+  path: "/preview/carousel",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const PreviewIdRoute = PreviewIdRouteImport.update({
   id: "/preview/$id",
   path: "/preview/$id",
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   "/signup": typeof SignupRoute;
   "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/carousel": typeof PreviewCarouselRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
   "/resources/$slug": typeof ResourcesSlugRoute;
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   "/signup": typeof SignupRoute;
   "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/carousel": typeof PreviewCarouselRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
   "/resources/$slug": typeof ResourcesSlugRoute;
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   "/signup": typeof SignupRoute;
   "/track": typeof TrackRoute;
   "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/carousel": typeof PreviewCarouselRoute;
   "/preview/$id": typeof PreviewIdRoute;
   "/product/$id": typeof ProductIdRoute;
   "/resources/$slug": typeof ResourcesSlugRoute;
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | "/signup"
     | "/track"
     | "/policy/$slug"
+    | "/preview/carousel"
     | "/preview/$id"
     | "/product/$id"
     | "/resources/$slug"
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | "/signup"
     | "/track"
     | "/policy/$slug"
+    | "/preview/carousel"
     | "/preview/$id"
     | "/product/$id"
     | "/resources/$slug"
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | "/signup"
     | "/track"
     | "/policy/$slug"
+    | "/preview/carousel"
     | "/preview/$id"
     | "/product/$id"
     | "/resources/$slug"
@@ -206,6 +218,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute;
   TrackRoute: typeof TrackRoute;
   PolicySlugRoute: typeof PolicySlugRoute;
+  PreviewCarouselRoute: typeof PreviewCarouselRoute;
   PreviewIdRoute: typeof PreviewIdRoute;
   ProductIdRoute: typeof ProductIdRoute;
   ResourcesSlugRoute: typeof ResourcesSlugRoute;
@@ -291,6 +304,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PolicySlugRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/preview/carousel": {
+      id: "/preview/carousel";
+      path: "/preview/carousel";
+      fullPath: "/preview/carousel";
+      preLoaderRoute: typeof PreviewCarouselRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/preview/$id": {
       id: "/preview/$id";
       path: "/preview/$id";
@@ -326,6 +346,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   TrackRoute: TrackRoute,
   PolicySlugRoute: PolicySlugRoute,
+  PreviewCarouselRoute: PreviewCarouselRoute,
   PreviewIdRoute: PreviewIdRoute,
   ProductIdRoute: ProductIdRoute,
   ResourcesSlugRoute: ResourcesSlugRoute,
