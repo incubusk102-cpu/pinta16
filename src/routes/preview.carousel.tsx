@@ -330,9 +330,13 @@ function CarouselMockupPage() {
         />
 
         <div className="relative mx-auto grid min-h-[calc(100vh-2.5rem)] w-full max-w-[1400px] grid-cols-1 items-center gap-8 px-6 py-10 lg:grid-cols-[1.15fr_1fr] lg:gap-16 lg:px-12">
-          {/* Painting column */}
+          {/* Painting column. Square frame so the whole painting
+              is always visible regardless of orientation — portrait
+              pieces sit centred with a small cream margin, landscape
+              pieces sit centred with a top/bottom margin (gallery
+              mat). Never cropped. */}
           <motion.div
-            className="relative mx-auto w-full max-w-[640px] aspect-[4/5] lg:aspect-[5/6]"
+            className="relative mx-auto w-full max-w-[640px] aspect-square"
             style={{
               perspective: 1400,
             }}
@@ -378,7 +382,7 @@ function CarouselMockupPage() {
                       src={current.image}
                       alt={current.title}
                       draggable={false}
-                      className="block h-full w-full object-cover select-none"
+                      className="block h-full w-full object-contain select-none"
                     />
                     {/* A very soft gallery-spot vignette so the
                         painting reads as lit-from-above rather than
