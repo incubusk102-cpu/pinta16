@@ -20,6 +20,15 @@ export interface CompressOptions {
   minQuality?: number;
   /** Output mime type. Defaults to "image/jpeg". */
   mimeType?: string;
+  /**
+   * Preserve the source image's alpha channel. When true, the encoder
+   * skips the white-flatten step and defaults `mimeType` to `image/png`
+   * (lossless, supports alpha). Use this for logos / icons where the
+   * uploader expects a transparent background to render against any
+   * email theme. Has no effect when `mimeType` is an explicitly opaque
+   * format like `image/jpeg`.
+   */
+  preserveAlpha?: boolean;
 }
 
 export interface CompressedImage {
@@ -122,8 +131,17 @@ export const compressImage = async (
     maxBytes = 800 * 1024,
     initialQuality = 0.85,
     minQuality = 0.55,
-    mimeType = "image/jpeg",
+    preserveAlpha = false,
+    mimeType = preserveAlpha ? "image/png" : "image/jpeg",
   } = opts;
+
+  // Honour the alpha contract: callers that opt in to `preserveAlpha`
+  // but also pass a JPEG mime would silently lose transparency, which
+  // is exactly the bug this option exists to prevent. Fall back to PNG
+  // so the alpha channel survives.
+  const outputMime =
+    preserveAlpha && mimeType === "image/jpeg" ? "image/png" : mimeType;
+  const keepsAlpha = preserveAlpha && outputMime !== "image/jpeg";
 
   const img = await loadImage(file);
   const srcW = img.naturalWidth || img.width;
@@ -150,12 +168,22 @@ export const compressImage = async (
   for (let pass = 0; pass < 8; pass++) {
     canvas.width = targetW;
     canvas.height = targetH;
-    ctx.fillStyle = "#ffffff"; // flatten any alpha against white for JPEG
-    ctx.fillRect(0, 0, targetW, targetH);
+    if (!keepsAlpha) {
+      // Flatten any alpha against white for opaque formats (JPEG). For
+      // alpha-preserving formats (PNG/WebP) skip this step so the
+      // transparent background of the source image survives.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, targetW, targetH);
+    } else {
+      // Clear the canvas — `canvas.width = ...` already zeroes it but
+      // making it explicit keeps this branch obvious next to the
+      // opaque flatten path above.
+      ctx.clearRect(0, 0, targetW, targetH);
+    }
     ctx.drawImage(img, 0, 0, targetW, targetH);
-    blob = await canvasToBlob(canvas, mimeType, quality);
+    blob = await canvasToBlob(canvas, outputMime, quality);
     if (blob.size <= maxBytes) break;
-    if (quality > minQuality + 0.05) {
+    if (!keepsAlpha && quality > minQuality + 0.05) {
       // Try a lower quality first — cheaper than another resize.
       quality = Math.max(minQuality, quality - 0.1);
       continue;
@@ -190,7 +218,7 @@ export const compressImage = async (
     url,
     blob,
     bytes: blob.size,
-    fileName: replaceExt(file.name || "image", extForMime(mimeType)),
+    fileName: replaceExt(file.name || "image", extForMime(outputMime)),
     width: targetW,
     height: targetH,
   };

@@ -38,6 +38,13 @@ interface BaseEmailProps {
    */
   logoSlot?: string;
   bannerSlot?: string;
+  /**
+   * Pull the content section closer to the logo by trimming the header's
+   * bottom padding and the content's top padding by ~12px each. Used by
+   * shorter emails (welcome, voucher) where the default ~52px gap reads
+   * as empty space; the long transactional emails keep the full gap.
+   */
+  compactHeaderSpacing?: boolean;
 }
 
 /**
@@ -123,6 +130,34 @@ const FooterLinks: React.FC<{
   );
 };
 
+// Trim a fixed delta off the matching axis of a 3-or-4-token CSS padding
+// string. `tpl.headerPad` / `tpl.contentPad` follow the standard CSS
+// shorthand (e.g. "28px 32px 20px") so we parse, clamp the target token
+// to a non-negative integer, and reassemble. Keeps the side padding
+// intact so the email body still aligns with the header.
+const trimPaddingAxis = (
+  pad: string,
+  axis: "top" | "bottom",
+  delta: number,
+): string => {
+  const tokens = pad.trim().split(/\s+/);
+  if (tokens.length < 1 || tokens.length > 4) return pad;
+  const idxMap: Record<typeof axis, Record<number, number>> = {
+    top: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    bottom: { 1: 0, 2: 0, 3: 2, 4: 2 },
+  };
+  const idx = idxMap[axis][tokens.length];
+  if (idx === undefined) return pad;
+  const token = tokens[idx];
+  const match = token && token.match(/^(-?\d+(?:\.\d+)?)(px|rem|em)?$/);
+  if (!match) return pad;
+  const value = parseFloat(match[1] || "0");
+  const unit = match[2] || "px";
+  const next = Math.max(0, value - delta);
+  tokens[idx] = `${next}${unit}`;
+  return tokens.join(" ");
+};
+
 /**
  * The single shared chrome used by every transactional email — welcome,
  * order x7, admin alert, voucher, inactive deletion. Renders:
@@ -139,10 +174,17 @@ export default function BaseEmail({
   children,
   logoSlot,
   bannerSlot,
+  compactHeaderSpacing,
 }: BaseEmailProps) {
   const fromName = (config.fromName || "Canvas Hub").trim();
   const tpl = resolveTemplate(config.template);
   const align = resolveHeaderAlign(config.headerAlign);
+  const headerPad = compactHeaderSpacing
+    ? trimPaddingAxis(tpl.headerPad, "bottom", 12)
+    : tpl.headerPad;
+  const contentPad = compactHeaderSpacing
+    ? trimPaddingAxis(tpl.contentPad, "top", 12)
+    : tpl.contentPad;
   const bodyFont = resolveBodyFont(config.bodyFont);
   const accent = safeColor(config.accentColor, palette.light.mutedText);
   const primary = safeColor(config.primaryColor, palette.light.bodyText);
@@ -254,7 +296,7 @@ export default function BaseEmail({
           <Section
             className="email-header-padded"
             style={{
-              padding: tpl.headerPad,
+              padding: headerPad,
               borderBottom: showBanner
                 ? "none"
                 : `1px solid ${palette.light.cardBorder}`,
@@ -266,7 +308,7 @@ export default function BaseEmail({
           <Section
             className="email-content-padded email-text"
             style={{
-              padding: tpl.contentPad,
+              padding: contentPad,
               fontSize: "15px",
               lineHeight: 1.65,
               color: palette.light.bodyText,

@@ -965,9 +965,14 @@ export const WelcomeEmailSection = () => {
     try {
       const presets: Record<
         typeof field,
-        { maxDim: number; maxBytes: number }
+        { maxDim: number; maxBytes: number; preserveAlpha?: boolean }
       > = {
-        logoUrl: { maxDim: 600, maxBytes: 200 * 1024 },
+        // Logos are typically PNGs with a transparent background so the
+        // brand mark sits cleanly against any email theme. Preserve the
+        // alpha channel (encodes as PNG instead of JPEG and skips the
+        // white-flatten step) and bump the byte budget a little since
+        // PNG can't trade quality for size the way JPEG can.
+        logoUrl: { maxDim: 600, maxBytes: 400 * 1024, preserveAlpha: true },
         bannerUrl: { maxDim: 1600, maxBytes: 600 * 1024 },
         avatarUrl: { maxDim: 256, maxBytes: 80 * 1024 },
       };
