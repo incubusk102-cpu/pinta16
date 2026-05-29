@@ -168,10 +168,14 @@ interface DeckProps {
 function ScrollDeck({ artworks }: DeckProps) {
   const deckRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
-  const { scrollYProgress } = useScroll({
+  const { scrollYProgress: rawProgress } = useScroll({
     target: deckRef,
     offset: ["start start", "end end"],
   });
+  // Identity transform strips the ScrollTimeline `accelerate` config so
+  // our slide ranges (which intentionally extend past [0,1]) don't get
+  // handed to WAAPI as invalid keyframe offsets. See animated-gallery.tsx.
+  const scrollYProgress = useTransform(rawProgress, (v) => v);
   const total = artworks.length;
   // Counter index follows scroll progress; clamps to the last slide.
   const counter = useTransform(scrollYProgress, (p) =>
@@ -312,17 +316,15 @@ export default function ScrollGalleryExperience() {
         <ContainerAnimated className="mt-12">
           <span className="flex flex-col items-center gap-3 font-body text-[10px] uppercase tracking-[0.4em] text-muted-foreground">
             Scroll to explore
-            <motion.span
+            {/* CSS-only scroll cue: a gold segment bounces down a hairline
+                track. Pure Tailwind keyframes — no framer/WAAPI animation
+                on mount, and `motion-safe:` opts out under reduced motion. */}
+            <span
               aria-hidden="true"
-              className="block h-10 w-px bg-gradient-to-b from-[var(--logo-color)] to-transparent"
-              animate={{ scaleY: [0.4, 1, 0.4], opacity: [0.4, 1, 0.4] }}
-              transition={{
-                duration: 2.2,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              style={{ originY: 0 }}
-            />
+              className="relative block h-10 w-px overflow-hidden bg-border"
+            >
+              <span className="absolute inset-x-0 top-0 h-3 w-px bg-[var(--logo-color)] motion-safe:animate-bounce" />
+            </span>
           </span>
         </ContainerAnimated>
       </ContainerStagger>

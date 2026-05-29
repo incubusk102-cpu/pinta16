@@ -60,7 +60,15 @@ export const ContainerScroll = ({
 }: React.HTMLAttributes<HTMLDivElement>) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion() ?? false;
-  const { scrollYProgress } = useScroll({ target: scrollRef });
+  const { scrollYProgress: rawProgress } = useScroll({ target: scrollRef });
+  // Route the progress value through an identity transform. `useScroll`
+  // tags its progress value with an `accelerate` config when the browser
+  // supports ScrollTimeline; any range-based `useTransform` derived from
+  // it then inherits that config and is handed to WAAPI with our input
+  // range as keyframe offsets. Offsets outside [0,1] make WAAPI throw.
+  // A function transform doesn't propagate `accelerate`, so downstream
+  // transforms run on the JS frameloop — reliable and clamp-aware.
+  const scrollYProgress = useTransform(rawProgress, (v) => v);
   return (
     <ContainerScrollContext.Provider value={{ scrollYProgress, reduced }}>
       <div
