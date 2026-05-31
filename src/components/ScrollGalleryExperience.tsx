@@ -31,11 +31,12 @@ import {
 //      full catalogue. The grid rakes up from a steep tilt to flat and
 //      the columns drift at different speeds as you scroll, so the
 //      collection assembles itself out of depth.
-//   3. The Gallery — a pinned walk through the featured pieces. Each
-//      painting hangs framed + matted on a softly-lit wall (shown in
-//      full, never cropped) with its caption on a placard *below* the
-//      frame, so type never covers the art. Scroll cross-fades one
-//      piece into the next; a fixed counter tracks where you are.
+//   3. The Studio — a pinned, full-bleed walk through the featured
+//      pieces. Each painting fills the viewport edge-to-edge (no frame,
+//      no margins) with an editorial caption set bottom-left over a
+//      lower-band gradient, so the type reads large without burying the
+//      focal area. Scroll cross-fades one piece into the next; a fixed
+//      counter tracks where you are.
 //
 // Every tile / slide links to the product page, so the entire
 // catalogue is reachable from the homepage by scroll alone. Honours
@@ -60,14 +61,13 @@ interface DeckSlideProps {
   progress: MotionValue<number>;
 }
 
-// One framed piece in the gallery walk. The whole painting is shown
-// (object-contain — never cropped) inside a mat + frame hung on a
-// softly-lit wall, and the caption lives on a placard *below* the frame
-// so type never sits on top of the artwork. A blurred, dimmed copy of
-// the same painting fills the wall behind it for an immersive gallery
-// ambiance. Opacity peaks while the slide's scroll window is centred and
-// cross-fades into its neighbours; the framed art drifts + eases scale
-// for a slow ken-burns.
+// One full-bleed piece in the studio walk. The painting fills the whole
+// viewport edge-to-edge (no frame, no mat, no margins — a "studio" hang),
+// drifting + slowly scaling for a ken-burns as you scroll. The caption is
+// an editorial block anchored bottom-left over a gradient that only darkens
+// the lower band, so the artwork's focal area stays clear while the type
+// reads large and deliberate. Opacity peaks while the slide's scroll window
+// is centred and cross-fades into its neighbours.
 function DeckSlide({ art, index, total, progress }: DeckSlideProps) {
   const seg = 1 / total;
   const start = index * seg;
@@ -77,112 +77,95 @@ function DeckSlide({ art, index, total, progress }: DeckSlideProps) {
     [0, 1, 1, 0],
     { clamp: true },
   );
-  const artY = useTransform(
+  const imgY = useTransform(
     progress,
     [start - seg, start + seg * 2],
-    ["5%", "-5%"],
+    ["8%", "-8%"],
   );
-  const artScale = useTransform(
+  const imgScale = useTransform(
     progress,
     [start - seg, start + seg * 2],
-    [1.06, 0.97],
-  );
-  const bgScale = useTransform(
-    progress,
-    [start - seg, start + seg * 2],
-    [1.25, 1.1],
+    [1.18, 1.02],
   );
   const copyY = useTransform(
     progress,
     [start - seg * 0.5, start, start + seg, start + seg * 1.5],
-    [40, 0, 0, -40],
+    [60, 0, 0, -60],
   );
 
   const price = getEffectivePrice(art);
   const onSale = typeof art.salePrice === "number" && art.salePrice < art.price;
 
   return (
-    <motion.div
-      style={{ opacity }}
-      className="absolute inset-0"
-      aria-hidden={undefined}
-    >
+    <motion.div style={{ opacity }} className="absolute inset-0">
       <Link
         to="/product/$id"
         params={{ id: art.id }}
-        className="group relative flex size-full flex-col items-center justify-center gap-5 px-6 py-20 sm:gap-7 sm:py-24"
+        className="group relative block size-full"
         aria-label={`View ${art.title}`}
       >
-        {/* Ambient gallery wall — the piece's own colours, blurred + dimmed. */}
+        {/* Full-bleed artwork — edge to edge, no frame. */}
         <motion.img
           src={heroImage(art)}
-          alt=""
-          aria-hidden="true"
+          alt={art.title}
           loading={index === 0 ? "eager" : "lazy"}
           decoding="async"
-          style={{ scale: bgScale }}
-          className="pointer-events-none absolute inset-0 size-full object-cover opacity-30 blur-2xl"
+          style={{ y: imgY, scale: imgScale }}
+          className="absolute inset-0 size-full object-cover"
         />
-        <div className="pointer-events-none absolute inset-0 bg-black/60" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(255,255,255,0.16),transparent_62%)]" />
+        {/* Light vignette top (nav legibility) + caption gradient bottom only. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/45 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
 
-        {/* The framed, fully-visible painting. */}
-        <motion.figure
-          style={{ y: artY, scale: artScale }}
-          className="relative z-10 flex items-center justify-center"
-        >
-          <span className="block rounded-[3px] bg-gradient-to-b from-[#2b2b2b] to-[#0e0e0e] p-2 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.85)] ring-1 ring-[var(--logo-color)]/40 sm:p-2.5">
-            <span className="block bg-[#f4efe4] p-3 shadow-inner sm:p-5">
-              <img
-                src={heroImage(art)}
-                alt={art.title}
-                loading={index === 0 ? "eager" : "lazy"}
-                decoding="async"
-                className="block h-auto max-h-[42svh] w-auto max-w-[82vw] object-contain sm:max-h-[52svh] sm:max-w-[62vw] lg:max-w-[46vw]"
-              />
-            </span>
-          </span>
-        </motion.figure>
-
-        {/* Museum placard — sits below the frame, never over the art. */}
+        {/* Editorial caption — anchored bottom-left, type stays off the focal area. */}
         <motion.figcaption
           style={{ y: copyY }}
-          className="relative z-10 w-full max-w-md rounded-sm border border-[var(--logo-color)]/30 bg-[#f4efe4]/95 px-5 py-3 text-center text-[#1c1c1c] shadow-lg backdrop-blur-sm sm:px-6 sm:py-4"
+          className="absolute inset-x-0 bottom-0 z-10 px-6 pb-[12vh] sm:px-10 sm:pb-[9vh] md:px-16 md:pb-[8vh]"
         >
-          <span className="font-body text-[10px] uppercase tracking-[0.4em] text-[#1c1c1c]/55">
-            {String(index + 1).padStart(2, "0")} · {art.category ?? art.medium}
-          </span>
-          <h3 className="mt-1 font-display text-xl leading-tight sm:text-2xl">
-            {art.title}
-          </h3>
-          <div className="mt-1.5 flex flex-wrap items-baseline justify-center gap-x-3 gap-y-0.5 font-body text-xs text-[#1c1c1c]/70 sm:text-sm">
-            <span className="uppercase tracking-[0.15em]">
-              {art.medium}
-              {art.year ? ` · ${art.year}` : ""}
-            </span>
-            <span className="flex items-baseline gap-2">
+          <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <span
-                className="font-medium"
+                className="font-body text-[11px] uppercase tracking-[0.5em]"
+                style={{ color: "var(--logo-color)" }}
+              >
+                {String(index + 1).padStart(2, "0")} /{" "}
+                {String(total).padStart(2, "0")}
+              </span>
+              <span className="h-px w-10 bg-white/40 sm:w-20" />
+              <span className="font-body text-[11px] uppercase tracking-[0.4em] text-white/70">
+                {art.category ?? art.medium}
+              </span>
+            </div>
+            <h3 className="max-w-3xl font-display text-4xl leading-[1.02] text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] sm:text-6xl md:text-7xl">
+              {art.title}
+            </h3>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+              <span className="font-body text-xs uppercase tracking-[0.25em] text-white/65 sm:text-sm">
+                {art.medium}
+                {art.year ? ` · ${art.year}` : ""}
+              </span>
+              <span
+                className="flex items-baseline gap-2 font-display text-2xl sm:text-3xl"
                 style={{ color: "var(--logo-color)" }}
               >
                 {formatPHP(price)}
+                {onSale && (
+                  <span className="font-body text-sm text-white/45 line-through">
+                    {formatPHP(art.price)}
+                  </span>
+                )}
               </span>
-              {onSale && (
-                <span className="text-[#1c1c1c]/40 line-through">
-                  {formatPHP(art.price)}
+              <span className="inline-flex items-center gap-2 font-body text-[11px] uppercase tracking-[0.3em] text-white/80 transition-colors group-hover:text-white">
+                View piece
+                <span
+                  aria-hidden="true"
+                  className="transition-transform duration-300 group-hover:translate-x-1"
+                >
+                  →
                 </span>
-              )}
-            </span>
+              </span>
+            </div>
           </div>
-          <span className="mt-2 inline-flex items-center gap-2 font-body text-[10px] uppercase tracking-[0.3em] text-[#1c1c1c]/70 transition-colors group-hover:text-[#1c1c1c]">
-            View piece
-            <span
-              aria-hidden="true"
-              className="transition-transform duration-300 group-hover:translate-x-1"
-            >
-              →
-            </span>
-          </span>
         </motion.figcaption>
       </Link>
     </motion.div>
@@ -216,42 +199,66 @@ function ScrollDeck({ artworks }: DeckProps) {
 
   if (reduced) {
     // Reduced-motion: no pinning / scroll-linked transforms — just a
-    // clean stacked column of framed pieces the visitor scrolls through
-    // normally. Same gallery framing + placard, so type still never
-    // sits over the art.
+    // clean stack of full-bleed studio frames the visitor scrolls through
+    // normally. Same edge-to-edge artwork + editorial caption, no motion.
     return (
-      <div className="flex flex-col gap-12 bg-black px-6 py-16">
+      <div className="flex flex-col bg-black">
         {artworks.map((art, i) => {
           const price = getEffectivePrice(art);
+          const onSale =
+            typeof art.salePrice === "number" && art.salePrice < art.price;
           return (
             <Link
               key={art.id}
               to="/product/$id"
               params={{ id: art.id }}
-              className="group mx-auto flex w-full max-w-3xl flex-col items-center gap-5"
+              className="group relative block h-[88svh] w-full overflow-hidden"
               aria-label={`View ${art.title}`}
             >
-              <span className="block rounded-[3px] bg-gradient-to-b from-[#2b2b2b] to-[#0e0e0e] p-2 ring-1 ring-[var(--logo-color)]/40 sm:p-2.5">
-                <span className="block bg-[#f4efe4] p-3 sm:p-5">
-                  <img
-                    src={heroImage(art)}
-                    alt={art.title}
-                    loading={i === 0 ? "eager" : "lazy"}
-                    decoding="async"
-                    className="block h-auto max-h-[60svh] w-auto object-contain"
-                  />
-                </span>
-              </span>
-              <figcaption className="w-full max-w-md rounded-sm border border-[var(--logo-color)]/30 bg-[#f4efe4]/95 px-5 py-3 text-center text-[#1c1c1c]">
-                <h3 className="font-display text-xl sm:text-2xl">
-                  {art.title}
-                </h3>
-                <span
-                  className="mt-1 block font-body text-sm font-medium"
-                  style={{ color: "var(--logo-color)" }}
-                >
-                  {formatPHP(price)}
-                </span>
+              <img
+                src={heroImage(art)}
+                alt={art.title}
+                loading={i === 0 ? "eager" : "lazy"}
+                decoding="async"
+                className="absolute inset-0 size-full object-cover"
+              />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+              <figcaption className="absolute inset-x-0 bottom-0 z-10 px-6 pb-12 sm:px-10 md:px-16">
+                <div className="mx-auto flex max-w-7xl flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="font-body text-[11px] uppercase tracking-[0.5em]"
+                      style={{ color: "var(--logo-color)" }}
+                    >
+                      {String(i + 1).padStart(2, "0")} /{" "}
+                      {String(artworks.length).padStart(2, "0")}
+                    </span>
+                    <span className="h-px w-10 bg-white/40 sm:w-20" />
+                    <span className="font-body text-[11px] uppercase tracking-[0.4em] text-white/70">
+                      {art.category ?? art.medium}
+                    </span>
+                  </div>
+                  <h3 className="max-w-3xl font-display text-4xl leading-[1.02] text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] sm:text-6xl">
+                    {art.title}
+                  </h3>
+                  <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                    <span className="font-body text-xs uppercase tracking-[0.25em] text-white/65 sm:text-sm">
+                      {art.medium}
+                      {art.year ? ` · ${art.year}` : ""}
+                    </span>
+                    <span
+                      className="flex items-baseline gap-2 font-display text-2xl sm:text-3xl"
+                      style={{ color: "var(--logo-color)" }}
+                    >
+                      {formatPHP(price)}
+                      {onSale && (
+                        <span className="font-body text-sm text-white/45 line-through">
+                          {formatPHP(art.price)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
               </figcaption>
             </Link>
           );
@@ -443,6 +450,20 @@ export default function ScrollGalleryExperience() {
             Every piece is made to order. Open any artwork to read its story and
             reserve it — we craft and ship it straight to you.
           </p>
+        </ContainerAnimated>
+        <ContainerAnimated>
+          <Link
+            to="/collection"
+            className="group mt-8 inline-flex items-center gap-2 rounded-full border border-[var(--logo-color)]/40 px-6 py-3 font-body text-[11px] uppercase tracking-[0.3em] text-foreground transition-colors hover:border-[var(--logo-color)] hover:text-[var(--logo-color)]"
+          >
+            Browse the full collection
+            <span
+              aria-hidden="true"
+              className="transition-transform duration-300 group-hover:translate-x-1"
+            >
+              →
+            </span>
+          </Link>
         </ContainerAnimated>
       </ContainerStagger>
     </div>
