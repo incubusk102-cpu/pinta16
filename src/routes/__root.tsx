@@ -253,7 +253,11 @@ function ConditionalSiteFooter() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  if (pathname.startsWith("/admin")) return null;
+  // No footer on admin (chrome-free) or on the homepage — the landing is
+  // a self-contained gallery walk, and the footer's nav / policy block
+  // would pull focus away from browsing the pieces. Footers stay on
+  // every other storefront route.
+  if (pathname.startsWith("/admin") || pathname === "/") return null;
   return <SiteFooter />;
 }
 
