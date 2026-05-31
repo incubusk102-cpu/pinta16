@@ -31,10 +31,11 @@ import {
 //      full catalogue. The grid rakes up from a steep tilt to flat and
 //      the columns drift at different speeds as you scroll, so the
 //      collection assembles itself out of depth.
-//   3. The Deck — a pinned, full-bleed "swipe" through the featured
-//      pieces. Scroll position cross-fades + parallaxes one artwork
-//      over the next, one screen at a time, like flipping through a
-//      portfolio. A fixed counter tracks where you are.
+//   3. The Gallery — a pinned walk through the featured pieces. Each
+//      painting hangs framed + matted on a softly-lit wall (shown in
+//      full, never cropped) with its caption on a placard *below* the
+//      frame, so type never covers the art. Scroll cross-fades one
+//      piece into the next; a fixed counter tracks where you are.
 //
 // Every tile / slide links to the product page, so the entire
 // catalogue is reachable from the homepage by scroll alone. Honours
@@ -59,9 +60,14 @@ interface DeckSlideProps {
   progress: MotionValue<number>;
 }
 
-// One full-screen artwork in the pinned deck. Its opacity peaks while
-// its scroll window is centred and cross-fades into its neighbours; the
-// image drifts + eases scale across the window for a slow ken-burns.
+// One framed piece in the gallery walk. The whole painting is shown
+// (object-contain — never cropped) inside a mat + frame hung on a
+// softly-lit wall, and the caption lives on a placard *below* the frame
+// so type never sits on top of the artwork. A blurred, dimmed copy of
+// the same painting fills the wall behind it for an immersive gallery
+// ambiance. Opacity peaks while the slide's scroll window is centred and
+// cross-fades into its neighbours; the framed art drifts + eases scale
+// for a slow ken-burns.
 function DeckSlide({ art, index, total, progress }: DeckSlideProps) {
   const seg = 1 / total;
   const start = index * seg;
@@ -71,20 +77,25 @@ function DeckSlide({ art, index, total, progress }: DeckSlideProps) {
     [0, 1, 1, 0],
     { clamp: true },
   );
-  const imgY = useTransform(
+  const artY = useTransform(
     progress,
     [start - seg, start + seg * 2],
-    ["10%", "-10%"],
+    ["5%", "-5%"],
   );
-  const imgScale = useTransform(
+  const artScale = useTransform(
     progress,
     [start - seg, start + seg * 2],
-    [1.18, 1],
+    [1.06, 0.97],
+  );
+  const bgScale = useTransform(
+    progress,
+    [start - seg, start + seg * 2],
+    [1.25, 1.1],
   );
   const copyY = useTransform(
     progress,
     [start - seg * 0.5, start, start + seg, start + seg * 1.5],
-    [60, 0, 0, -60],
+    [40, 0, 0, -40],
   );
 
   const price = getEffectivePrice(art);
@@ -93,57 +104,77 @@ function DeckSlide({ art, index, total, progress }: DeckSlideProps) {
   return (
     <motion.div
       style={{ opacity }}
-      className="absolute inset-0 flex items-center justify-center"
+      className="absolute inset-0"
       aria-hidden={undefined}
     >
       <Link
         to="/product/$id"
         params={{ id: art.id }}
-        className="group relative block size-full"
+        className="group relative flex size-full flex-col items-center justify-center gap-5 px-6 py-20 sm:gap-7 sm:py-24"
         aria-label={`View ${art.title}`}
       >
-        <div className="absolute inset-0 overflow-hidden">
-          <motion.img
-            src={heroImage(art)}
-            alt={art.title}
-            loading={index === 0 ? "eager" : "lazy"}
-            decoding="async"
-            style={{ y: imgY, scale: imgScale }}
-            className="size-full object-cover"
-          />
-        </div>
-        {/* Legibility scrim — heavier at the bottom where the copy sits. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40" />
-        <motion.div
-          style={{ y: copyY }}
-          className="absolute inset-x-0 bottom-0 mx-auto flex max-w-5xl flex-col gap-3 px-6 pb-[14vh] sm:px-10 md:pb-[12vh]"
+        {/* Ambient gallery wall — the piece's own colours, blurred + dimmed. */}
+        <motion.img
+          src={heroImage(art)}
+          alt=""
+          aria-hidden="true"
+          loading={index === 0 ? "eager" : "lazy"}
+          decoding="async"
+          style={{ scale: bgScale }}
+          className="pointer-events-none absolute inset-0 size-full object-cover opacity-30 blur-2xl"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-black/60" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(255,255,255,0.16),transparent_62%)]" />
+
+        {/* The framed, fully-visible painting. */}
+        <motion.figure
+          style={{ y: artY, scale: artScale }}
+          className="relative z-10 flex items-center justify-center"
         >
-          <span className="font-body text-[10px] uppercase tracking-[0.4em] text-white/70">
+          <span className="block rounded-[3px] bg-gradient-to-b from-[#2b2b2b] to-[#0e0e0e] p-2 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.85)] ring-1 ring-[var(--logo-color)]/40 sm:p-2.5">
+            <span className="block bg-[#f4efe4] p-3 shadow-inner sm:p-5">
+              <img
+                src={heroImage(art)}
+                alt={art.title}
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding="async"
+                className="block h-auto max-h-[42svh] w-auto max-w-[82vw] object-contain sm:max-h-[52svh] sm:max-w-[62vw] lg:max-w-[46vw]"
+              />
+            </span>
+          </span>
+        </motion.figure>
+
+        {/* Museum placard — sits below the frame, never over the art. */}
+        <motion.figcaption
+          style={{ y: copyY }}
+          className="relative z-10 w-full max-w-md rounded-sm border border-[var(--logo-color)]/30 bg-[#f4efe4]/95 px-5 py-3 text-center text-[#1c1c1c] shadow-lg backdrop-blur-sm sm:px-6 sm:py-4"
+        >
+          <span className="font-body text-[10px] uppercase tracking-[0.4em] text-[#1c1c1c]/55">
             {String(index + 1).padStart(2, "0")} · {art.category ?? art.medium}
           </span>
-          <h3 className="font-display text-3xl leading-[1.05] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)] sm:text-5xl md:text-6xl">
+          <h3 className="mt-1 font-display text-xl leading-tight sm:text-2xl">
             {art.title}
           </h3>
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-body text-sm text-white/80">
-            <span className="uppercase tracking-[0.2em]">
+          <div className="mt-1.5 flex flex-wrap items-baseline justify-center gap-x-3 gap-y-0.5 font-body text-xs text-[#1c1c1c]/70 sm:text-sm">
+            <span className="uppercase tracking-[0.15em]">
               {art.medium}
               {art.year ? ` · ${art.year}` : ""}
             </span>
             <span className="flex items-baseline gap-2">
               <span
-                className="text-base font-medium"
+                className="font-medium"
                 style={{ color: "var(--logo-color)" }}
               >
                 {formatPHP(price)}
               </span>
               {onSale && (
-                <span className="text-xs text-white/50 line-through">
+                <span className="text-[#1c1c1c]/40 line-through">
                   {formatPHP(art.price)}
                 </span>
               )}
             </span>
           </div>
-          <span className="mt-1 inline-flex w-fit items-center gap-2 font-body text-[11px] uppercase tracking-[0.3em] text-white/80 transition-colors group-hover:text-white">
+          <span className="mt-2 inline-flex items-center gap-2 font-body text-[10px] uppercase tracking-[0.3em] text-[#1c1c1c]/70 transition-colors group-hover:text-[#1c1c1c]">
             View piece
             <span
               aria-hidden="true"
@@ -152,7 +183,7 @@ function DeckSlide({ art, index, total, progress }: DeckSlideProps) {
               →
             </span>
           </span>
-        </motion.div>
+        </motion.figcaption>
       </Link>
     </motion.div>
   );
@@ -185,9 +216,11 @@ function ScrollDeck({ artworks }: DeckProps) {
 
   if (reduced) {
     // Reduced-motion: no pinning / scroll-linked transforms — just a
-    // clean stacked column the visitor scrolls through normally.
+    // clean stacked column of framed pieces the visitor scrolls through
+    // normally. Same gallery framing + placard, so type still never
+    // sits over the art.
     return (
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-12 bg-black px-6 py-16">
         {artworks.map((art, i) => {
           const price = getEffectivePrice(art);
           return (
@@ -195,28 +228,31 @@ function ScrollDeck({ artworks }: DeckProps) {
               key={art.id}
               to="/product/$id"
               params={{ id: art.id }}
-              className="group relative block h-[80svh] w-full overflow-hidden"
+              className="group mx-auto flex w-full max-w-3xl flex-col items-center gap-5"
               aria-label={`View ${art.title}`}
             >
-              <img
-                src={heroImage(art)}
-                alt={art.title}
-                loading={i === 0 ? "eager" : "lazy"}
-                decoding="async"
-                className="size-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40" />
-              <div className="absolute inset-x-0 bottom-0 mx-auto flex max-w-5xl flex-col gap-2 px-6 pb-16 sm:px-10">
-                <h3 className="font-display text-3xl text-white sm:text-5xl">
+              <span className="block rounded-[3px] bg-gradient-to-b from-[#2b2b2b] to-[#0e0e0e] p-2 ring-1 ring-[var(--logo-color)]/40 sm:p-2.5">
+                <span className="block bg-[#f4efe4] p-3 sm:p-5">
+                  <img
+                    src={heroImage(art)}
+                    alt={art.title}
+                    loading={i === 0 ? "eager" : "lazy"}
+                    decoding="async"
+                    className="block h-auto max-h-[60svh] w-auto object-contain"
+                  />
+                </span>
+              </span>
+              <figcaption className="w-full max-w-md rounded-sm border border-[var(--logo-color)]/30 bg-[#f4efe4]/95 px-5 py-3 text-center text-[#1c1c1c]">
+                <h3 className="font-display text-xl sm:text-2xl">
                   {art.title}
                 </h3>
                 <span
-                  className="font-body text-base font-medium"
+                  className="mt-1 block font-body text-sm font-medium"
                   style={{ color: "var(--logo-color)" }}
                 >
                   {formatPHP(price)}
                 </span>
-              </div>
+              </figcaption>
             </Link>
           );
         })}
@@ -371,14 +407,17 @@ export default function ScrollGalleryExperience() {
               </GalleryCol>
             ))}
           </GalleryContainer>
-          {/* Heading floats over the rising wall. */}
-          <div className="pointer-events-none absolute inset-x-0 top-[12svh] z-10 text-center">
-            <h2 className="font-display text-3xl text-foreground sm:text-5xl">
-              The Wall
-            </h2>
-            <p className="mt-2 font-body text-[11px] uppercase tracking-[0.35em] text-muted-foreground">
-              Scroll — the collection rises
-            </p>
+          {/* Heading floats over the rising wall — on a soft backdrop
+              chip so it stays legible over bright artwork. */}
+          <div className="pointer-events-none absolute inset-x-0 top-[10svh] z-10 flex justify-center px-6 text-center">
+            <div className="rounded-2xl border border-white/15 bg-black/45 px-6 py-3 backdrop-blur-md">
+              <h2 className="font-display text-3xl text-white sm:text-5xl">
+                The Gallery Wall
+              </h2>
+              <p className="mt-1 font-body text-[11px] uppercase tracking-[0.35em] text-white/70">
+                Scroll — the collection rises
+              </p>
+            </div>
           </div>
         </ContainerSticky>
       </ContainerScroll>
