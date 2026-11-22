@@ -1,0 +1,20 @@
+# Canvas Hub — MTA-STS policy file (RFC 8461).
+#
+# Senders MUST fetch this file from
+#   https://mta-sts.canvhub.com/.well-known/mta-sts.txt
+# before delivering mail to *@canvhub.com. Pair this file with the
+# `_mta-sts.canvhub.com` TXT record (which advertises the policy id) and
+# the `_smtp._tls.canvhub.com` TLS-RPT record (which collects failure
+# reports).
+#
+# `mode: testing` means receivers monitor + report failures but do NOT
+# refuse delivery on TLS problems. Once the TLS-RPT reports come back
+# clean for ~2 weeks, flip this file to `mode: enforce` to make the
+# downgrade-attack protection actually binding. Bump `id=` in the DNS
+# TXT record whenever this file changes so receivers re-fetch.
+
+version: STSv1
+mode: testing
+mx: mx1.privateemail.com
+mx: mx2.privateemail.com
+max_age: 86400

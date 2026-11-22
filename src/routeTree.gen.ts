@@ -8,70 +8,350 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as AboutRouteImport } from "./routes/about";
+import { Route as AccountRouteImport } from "./routes/account";
+import { Route as AdminRouteImport } from "./routes/admin";
+import { Route as CollectionRouteImport } from "./routes/collection";
+import { Route as ContactRouteImport } from "./routes/contact";
+import { Route as IndexRouteImport } from "./routes/index";
+import { Route as ResourcesRouteImport } from "./routes/resources";
+import { Route as SignupRouteImport } from "./routes/signup";
+import { Route as TrackRouteImport } from "./routes/track";
+import { Route as ProductIdRouteImport } from "./routes/product.$id";
+import { Route as PolicySlugRouteImport } from "./routes/policy.$slug";
+import { Route as PreviewCarouselRouteImport } from "./routes/preview.carousel";
+import { Route as PreviewIdRouteImport } from "./routes/preview.$id";
+import { Route as ResourcesSlugRouteImport } from "./routes/resources.$slug";
+import { Route as WishlistShareRouteImport } from "./routes/wishlist.share";
 
+const AboutRoute = AboutRouteImport.update({
+  id: "/about",
+  path: "/about",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AccountRoute = AccountRouteImport.update({
+  id: "/account",
+  path: "/account",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+  id: "/admin",
+  path: "/admin",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+const CollectionRoute = CollectionRouteImport.update({
+  id: "/collection",
+  path: "/collection",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ContactRoute = ContactRouteImport.update({
+  id: "/contact",
+  path: "/contact",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+const ResourcesRoute = ResourcesRouteImport.update({
+  id: "/resources",
+  path: "/resources",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SignupRoute = SignupRouteImport.update({
+  id: "/signup",
+  path: "/signup",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const TrackRoute = TrackRouteImport.update({
+  id: "/track",
+  path: "/track",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ProductIdRoute = ProductIdRouteImport.update({
+  id: "/product/$id",
+  path: "/product/$id",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PolicySlugRoute = PolicySlugRouteImport.update({
+  id: "/policy/$slug",
+  path: "/policy/$slug",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PreviewCarouselRoute = PreviewCarouselRouteImport.update({
+  id: "/preview/carousel",
+  path: "/preview/carousel",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PreviewIdRoute = PreviewIdRouteImport.update({
+  id: "/preview/$id",
+  path: "/preview/$id",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ResourcesSlugRoute = ResourcesSlugRouteImport.update({
+  id: "/resources/$slug",
+  path: "/resources/$slug",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const WishlistShareRoute = WishlistShareRouteImport.update({
+  id: "/wishlist/share",
+  path: "/wishlist/share",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  "/": typeof IndexRoute;
+  "/about": typeof AboutRoute;
+  "/account": typeof AccountRoute;
+  "/admin": typeof AdminRoute;
+  "/collection": typeof CollectionRoute;
+  "/contact": typeof ContactRoute;
+  "/resources": typeof ResourcesRoute;
+  "/signup": typeof SignupRoute;
+  "/track": typeof TrackRoute;
+  "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/carousel": typeof PreviewCarouselRoute;
+  "/preview/$id": typeof PreviewIdRoute;
+  "/product/$id": typeof ProductIdRoute;
+  "/resources/$slug": typeof ResourcesSlugRoute;
+  "/wishlist/share": typeof WishlistShareRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  "/": typeof IndexRoute;
+  "/about": typeof AboutRoute;
+  "/account": typeof AccountRoute;
+  "/admin": typeof AdminRoute;
+  "/collection": typeof CollectionRoute;
+  "/contact": typeof ContactRoute;
+  "/resources": typeof ResourcesRoute;
+  "/signup": typeof SignupRoute;
+  "/track": typeof TrackRoute;
+  "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/carousel": typeof PreviewCarouselRoute;
+  "/preview/$id": typeof PreviewIdRoute;
+  "/product/$id": typeof ProductIdRoute;
+  "/resources/$slug": typeof ResourcesSlugRoute;
+  "/wishlist/share": typeof WishlistShareRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/about": typeof AboutRoute;
+  "/account": typeof AccountRoute;
+  "/admin": typeof AdminRoute;
+  "/collection": typeof CollectionRoute;
+  "/contact": typeof ContactRoute;
+  "/resources": typeof ResourcesRoute;
+  "/signup": typeof SignupRoute;
+  "/track": typeof TrackRoute;
+  "/policy/$slug": typeof PolicySlugRoute;
+  "/preview/carousel": typeof PreviewCarouselRoute;
+  "/preview/$id": typeof PreviewIdRoute;
+  "/product/$id": typeof ProductIdRoute;
+  "/resources/$slug": typeof ResourcesSlugRoute;
+  "/wishlist/share": typeof WishlistShareRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin'
-  id: '__root__' | '/' | '/admin'
-  fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath;
+  fullPaths:
+    | "/"
+    | "/about"
+    | "/account"
+    | "/admin"
+    | "/collection"
+    | "/contact"
+    | "/resources"
+    | "/signup"
+    | "/track"
+    | "/policy/$slug"
+    | "/preview/carousel"
+    | "/preview/$id"
+    | "/product/$id"
+    | "/resources/$slug"
+    | "/wishlist/share";
+  fileRoutesByTo: FileRoutesByTo;
+  to:
+    | "/"
+    | "/about"
+    | "/account"
+    | "/admin"
+    | "/collection"
+    | "/contact"
+    | "/resources"
+    | "/signup"
+    | "/track"
+    | "/policy/$slug"
+    | "/preview/carousel"
+    | "/preview/$id"
+    | "/product/$id"
+    | "/resources/$slug"
+    | "/wishlist/share";
+  id:
+    | "__root__"
+    | "/"
+    | "/about"
+    | "/account"
+    | "/admin"
+    | "/collection"
+    | "/contact"
+    | "/resources"
+    | "/signup"
+    | "/track"
+    | "/policy/$slug"
+    | "/preview/carousel"
+    | "/preview/$id"
+    | "/product/$id"
+    | "/resources/$slug"
+    | "/wishlist/share";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  IndexRoute: typeof IndexRoute;
+  AboutRoute: typeof AboutRoute;
+  AccountRoute: typeof AccountRoute;
+  AdminRoute: typeof AdminRoute;
+  CollectionRoute: typeof CollectionRoute;
+  ContactRoute: typeof ContactRoute;
+  ResourcesRoute: typeof ResourcesRoute;
+  SignupRoute: typeof SignupRoute;
+  TrackRoute: typeof TrackRoute;
+  PolicySlugRoute: typeof PolicySlugRoute;
+  PreviewCarouselRoute: typeof PreviewCarouselRoute;
+  PreviewIdRoute: typeof PreviewIdRoute;
+  ProductIdRoute: typeof ProductIdRoute;
+  ResourcesSlugRoute: typeof ResourcesSlugRoute;
+  WishlistShareRoute: typeof WishlistShareRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+    "/about": {
+      id: "/about";
+      path: "/about";
+      fullPath: "/about";
+      preLoaderRoute: typeof AboutRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/account": {
+      id: "/account";
+      path: "/account";
+      fullPath: "/account";
+      preLoaderRoute: typeof AccountRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/admin": {
+      id: "/admin";
+      path: "/admin";
+      fullPath: "/admin";
+      preLoaderRoute: typeof AdminRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/collection": {
+      id: "/collection";
+      path: "/collection";
+      fullPath: "/collection";
+      preLoaderRoute: typeof CollectionRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/contact": {
+      id: "/contact";
+      path: "/contact";
+      fullPath: "/contact";
+      preLoaderRoute: typeof ContactRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/resources": {
+      id: "/resources";
+      path: "/resources";
+      fullPath: "/resources";
+      preLoaderRoute: typeof ResourcesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/signup": {
+      id: "/signup";
+      path: "/signup";
+      fullPath: "/signup";
+      preLoaderRoute: typeof SignupRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/track": {
+      id: "/track";
+      path: "/track";
+      fullPath: "/track";
+      preLoaderRoute: typeof TrackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/product/$id": {
+      id: "/product/$id";
+      path: "/product/$id";
+      fullPath: "/product/$id";
+      preLoaderRoute: typeof ProductIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/policy/$slug": {
+      id: "/policy/$slug";
+      path: "/policy/$slug";
+      fullPath: "/policy/$slug";
+      preLoaderRoute: typeof PolicySlugRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/preview/carousel": {
+      id: "/preview/carousel";
+      path: "/preview/carousel";
+      fullPath: "/preview/carousel";
+      preLoaderRoute: typeof PreviewCarouselRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/preview/$id": {
+      id: "/preview/$id";
+      path: "/preview/$id";
+      fullPath: "/preview/$id";
+      preLoaderRoute: typeof PreviewIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/resources/$slug": {
+      id: "/resources/$slug";
+      path: "/resources/$slug";
+      fullPath: "/resources/$slug";
+      preLoaderRoute: typeof ResourcesSlugRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/wishlist/share": {
+      id: "/wishlist/share";
+      path: "/wishlist/share";
+      fullPath: "/wishlist/share";
+      preLoaderRoute: typeof WishlistShareRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
+  AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
-}
+  CollectionRoute: CollectionRoute,
+  ContactRoute: ContactRoute,
+  ResourcesRoute: ResourcesRoute,
+  SignupRoute: SignupRoute,
+  TrackRoute: TrackRoute,
+  PolicySlugRoute: PolicySlugRoute,
+  PreviewCarouselRoute: PreviewCarouselRoute,
+  PreviewIdRoute: PreviewIdRoute,
+  ProductIdRoute: ProductIdRoute,
+  ResourcesSlugRoute: ResourcesSlugRoute,
+  WishlistShareRoute: WishlistShareRoute,
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();

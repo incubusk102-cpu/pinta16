@@ -1,23 +1,59 @@
-import { useEffect, useCallback, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useCallback, useState, useId } from "react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
+import { useStorefrontConfig } from "@/contexts/StorefrontConfigContext";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import {
+  getEffectivePrice,
+  getDiscountPercent,
+} from "@/contexts/ProductContext";
+import {
+  AVAILABILITY_LABEL,
+  isPurchasable,
+  type Availability,
+} from "@/lib/artworks";
 
 interface LightboxProps {
-  artworks: { image: string; mockup?: string; title: string; medium: string; year: string; price: number; description: string }[];
+  artworks: {
+    id: string;
+    image: string;
+    mockup?: string;
+    title: string;
+    medium: string;
+    year: string;
+    price: number;
+    salePrice?: number;
+    description: string;
+    availability?: Availability;
+  }[];
   currentIndex: number;
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (index: number) => void;
 }
 
-const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: LightboxProps) => {
+const Lightbox = ({
+  artworks,
+  currentIndex,
+  isOpen,
+  onClose,
+  onNavigate,
+}: LightboxProps) => {
   const { addToCart } = useCart();
+  const {
+    config: { vacationMode },
+  } = useStorefrontConfig();
   const [zoomed, setZoomed] = useState(false);
   const [showMockup, setShowMockup] = useState(false);
+  const titleId = useId();
   const art = artworks[currentIndex];
 
   const hasMockup = art?.mockup && art.mockup !== art.image;
+  // Lock <body> scroll while the lightbox is open so the gallery
+  // underneath doesn't drift on touch devices.
+  useBodyScrollLock(isOpen);
 
   const handlePrev = useCallback(() => {
     onNavigate(currentIndex > 0 ? currentIndex - 1 : artworks.length - 1);
@@ -40,7 +76,10 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { if (zoomed) setZoomed(false); else onClose(); }
+      if (e.key === "Escape") {
+        if (zoomed) setZoomed(false);
+        else onClose();
+      }
       if (e.key === "ArrowLeft" && !zoomed) handlePrev();
       if (e.key === "ArrowRight" && !zoomed) handleNext();
     };
@@ -51,6 +90,25 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
   if (!isOpen || !art) return null;
 
   const displayImage = showMockup && hasMockup ? art.mockup! : art.image;
+
+  // Touch/trackpad swipe: drag horizontally to navigate, drag down to
+  // close. Threshold is forgiving (60px / 200px·s velocity) so the
+  // gesture feels responsive without firing on small jitters.
+  const SWIPE_THRESHOLD = 60;
+  const SWIPE_VELOCITY = 200;
+  const onSwipe = (_: unknown, info: PanInfo) => {
+    const { offset, velocity } = info;
+    const horizontal = Math.abs(offset.x) > Math.abs(offset.y);
+    if (horizontal) {
+      if (offset.x < -SWIPE_THRESHOLD || velocity.x < -SWIPE_VELOCITY) {
+        handleNext();
+      } else if (offset.x > SWIPE_THRESHOLD || velocity.x > SWIPE_VELOCITY) {
+        handlePrev();
+      }
+    } else if (offset.y > 120 || velocity.y > 400) {
+      onClose();
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -73,22 +131,69 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
             className="max-w-[95vw] max-h-[95vh] object-contain select-none"
             draggable={false}
           />
-          <button onClick={(e) => { e.stopPropagation(); setZoomed(false); }} className="absolute top-6 right-6 p-3 text-white/80 hover:text-white transition-colors z-10">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomed(false);
+            }}
+            className="absolute top-6 right-6 p-3 text-white/80 hover:text-white transition-colors z-10"
+          >
             <X className="w-6 h-6" />
           </button>
         </motion.div>
       ) : (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex items-center justify-center" onClick={onClose}>
-          <button onClick={onClose} className="absolute top-6 right-6 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10">
-            <X className="w-6 h-6" />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex items-center justify-center"
+          onClick={onClose}
+          drag
+          dragSnapToOrigin
+          dragElastic={0.18}
+          dragMomentum={false}
+          onDragEnd={onSwipe}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-6 right-6 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            aria-label="Close lightbox"
+          >
+            <X className="w-6 h-6" aria-hidden="true" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); handlePrev(); }} className="absolute left-4 md:left-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10">
-            <ChevronLeft className="w-6 h-6" />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrev();
+            }}
+            className="absolute left-2 md:left-8 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            aria-label="Previous product"
+          >
+            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); handleNext(); }} className="absolute right-4 md:right-8 p-3 text-foreground hover:bg-accent rounded-sm transition-colors z-10">
-            <ChevronRight className="w-6 h-6" />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
+            className="absolute right-2 md:right-8 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:bg-accent rounded-sm transition-colors z-10"
+            aria-label="Next product"
+          >
+            <ChevronRight
+              className="w-5 h-5 md:w-6 md:h-6"
+              aria-hidden="true"
+            />
           </button>
-          <div className="max-w-5xl w-full px-16 flex flex-col md:flex-row items-center gap-8" onClick={(e) => e.stopPropagation()}>
+          <span className="md:hidden absolute bottom-3 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full bg-foreground/10 backdrop-blur-sm font-body text-[10px] tracking-[0.25em] uppercase text-muted-foreground pointer-events-none">
+            Swipe to navigate
+          </span>
+          <div
+            className="max-w-5xl w-full px-12 sm:px-16 md:px-16 max-h-[90vh] overflow-y-auto flex flex-col md:flex-row items-center gap-6 md:gap-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="relative">
               <AnimatePresence mode="wait">
                 <motion.img
@@ -99,24 +204,115 @@ const Lightbox = ({ artworks, currentIndex, isOpen, onClose, onNavigate }: Light
                   transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
                   src={displayImage}
                   alt={art.title}
-                  className="max-h-[70vh] max-w-full md:max-w-[60%] object-contain gallery-frame cursor-zoom-in select-none"
+                  className="max-h-[55vh] md:max-h-[70vh] max-w-full md:max-w-[60%] object-contain gallery-frame cursor-zoom-in select-none"
                   draggable={false}
                   onClick={() => setZoomed(true)}
                 />
               </AnimatePresence>
+              {getDiscountPercent(art) > 0 &&
+                (art.availability ?? "available") === "available" && (
+                  <span className="absolute top-3 left-3 px-2 py-0.5 bg-red-600 text-white font-body text-[10px] tracking-wider uppercase rounded-sm">
+                    {getDiscountPercent(art)}% OFF
+                  </span>
+                )}
             </div>
             <div className="text-center md:text-left max-w-sm">
-              <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">{art.medium} · {art.year}</p>
-              <h3 className="font-display text-2xl md:text-3xl text-foreground mb-3">{art.title}</h3>
-              <p className="font-body text-sm text-muted-foreground mb-4 leading-relaxed">{art.description}</p>
-              <p className="font-body text-xl text-foreground font-semibold mb-4">₱{art.price.toLocaleString()}</p>
-              <button
-                onClick={() => addToCart({ id: `art-${currentIndex}`, image: art.image, title: art.title, medium: art.medium, year: art.year, price: art.price })}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-foreground text-background font-body text-xs tracking-[0.2em] uppercase hover:bg-foreground/90 transition-all duration-300 rounded-sm"
+              <p className="font-body text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-2">
+                {art.medium} · {art.year}
+              </p>
+              <h3
+                id={titleId}
+                className="font-display text-2xl md:text-3xl text-foreground mb-3"
               >
-                <ShoppingCart className="w-4 h-4" />
-                Add to Cart
-              </button>
+                {art.title}
+              </h3>
+              <p className="font-body text-sm text-muted-foreground mb-4 leading-relaxed">
+                {art.description}
+              </p>
+              <div className="font-body text-xl text-foreground font-semibold mb-4">
+                {getDiscountPercent(art) > 0 ? (
+                  <>
+                    <span className="line-through text-muted-foreground text-base mr-2">
+                      ₱{art.price.toLocaleString()}
+                    </span>
+                    <span>₱{getEffectivePrice(art).toLocaleString()}</span>
+                    <span className="ml-2 text-sm text-red-500 font-semibold">
+                      {getDiscountPercent(art)}% OFF
+                    </span>
+                  </>
+                ) : (
+                  <>₱{art.price.toLocaleString()}</>
+                )}
+              </div>
+              {(() => {
+                const availability: Availability =
+                  art.availability || "available";
+                // Vacation mode hides the buy button while keeping the
+                // rest of the lightbox visible — buyers can still browse
+                // and view details.
+                const purchasable =
+                  isPurchasable(availability) && !vacationMode.enabled;
+                const buttonLabel = vacationMode.enabled
+                  ? "Shop paused"
+                  : purchasable
+                    ? "Add to Cart"
+                    : `${AVAILABILITY_LABEL[availability]}`;
+                // Show the availability chip for states the buyer
+                // can't act on the same way as "Available" — Reserved,
+                // Sold (button is disabled), Draft. We deliberately
+                // skip the "Made to order" chip here even though it's
+                // non-`available`: the gallery card the user just
+                // tapped already shows a prominent blue MADE TO ORDER
+                // chip (see ArtworkCard), so repeating the same label
+                // in the lightbox reads as noise. Made-to-order is
+                // still purchasable, so the Add to Cart button below
+                // works unchanged; the longer turnaround copy lives on
+                // the product page reached via "View details".
+                const showAvailabilityChip =
+                  availability !== "available" &&
+                  availability !== "made-to-order";
+                return (
+                  <div className="flex flex-col gap-3">
+                    {showAvailabilityChip && (
+                      <span className="inline-flex w-fit items-center px-2.5 py-1 bg-foreground text-background font-body text-[10px] tracking-[0.3em] uppercase rounded-sm">
+                        {AVAILABILITY_LABEL[availability]}
+                      </span>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={() => {
+                          if (!purchasable) return;
+                          addToCart({
+                            id: art.id,
+                            image: art.image,
+                            title: art.title,
+                            medium: art.medium,
+                            year: art.year,
+                            price: getEffectivePrice(art),
+                          });
+                        }}
+                        disabled={!purchasable}
+                        className={`inline-flex items-center gap-2 px-8 py-3 font-body text-xs tracking-[0.2em] uppercase transition-all duration-300 rounded-sm ${
+                          purchasable
+                            ? "bg-foreground text-background hover:bg-foreground/90"
+                            : "bg-muted text-muted-foreground cursor-not-allowed"
+                        }`}
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                        {buttonLabel}
+                      </button>
+                      <Link
+                        to="/product/$id"
+                        params={{ id: art.id }}
+                        onClick={onClose}
+                        className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 text-foreground font-body text-xs tracking-[0.2em] uppercase hover:bg-accent transition-all duration-300 rounded-sm"
+                      >
+                        View details
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </motion.div>

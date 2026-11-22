@@ -1,0 +1,1346 @@
+import { useMemo, useRef, useState } from "react";
+import {
+  Camera,
+  Eye,
+  EyeOff,
+  Pencil,
+  RotateCcw,
+  Star,
+  ArrowUpDown,
+  Trash2,
+  Undo2,
+  XCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
+import {
+  buildImageFields,
+  useProducts,
+  PRODUCT_CATEGORIES,
+  type Product,
+  type ProductAvailability,
+  type ProductCategory,
+  type ProductImage,
+} from "@/contexts/ProductContext";
+import {
+  AVAILABILITY_LABEL,
+  defaultArtworks,
+  getAvailability,
+  type DisplayArtwork,
+} from "@/lib/artworks";
+import { EditProductDialog } from "@/components/admin/EditProductDialog";
+
+type EditMode =
+  | { kind: "update"; product: Product }
+  | { kind: "create-override"; draft: Product; defaultId: string };
+
+type StatusFilter =
+  | "all"
+  | "available"
+  | "hidden"
+  | "customized"
+  | "uploads"
+  | "trash";
+type SortMode = "default" | "title-asc" | "price-asc" | "price-desc";
+type CategoryFilter = "all" | ProductCategory;
+
+// Each row in the unified listing is either a built-in stock entry
+// (optionally overridden by a custom Product via `replacesDefaultId`) or
+// a brand-new custom upload that doesn't replace any default.
+type DefaultRow = {
+  kind: "default";
+  id: string;
+  def: DisplayArtwork;
+  override: Product | undefined;
+  display: DisplayArtwork;
+  effectivePrice: number;
+  sortIndex: number;
+};
+
+type CustomRow = {
+  kind: "custom";
+  id: string;
+  product: Product;
+  display: DisplayArtwork;
+  effectivePrice: number;
+  sortIndex: number;
+};
+
+// Trashed overrides surface in a dedicated Trash sub-tab. They share
+// the row layout with the default/custom rows but carry their own
+// action buttons (Restore + Permanently delete) instead of the
+// hide/edit/move-to-trash trio.
+type TrashRow = {
+  kind: "trash";
+  id: string;
+  product: Product;
+  // The bundled default this override customizes — used to label the row
+  // ("Customization of <title>") and to preserve image fallbacks.
+  def: DisplayArtwork | undefined;
+  display: DisplayArtwork;
+  effectivePrice: number;
+  sortIndex: number;
+};
+
+type Row = DefaultRow | CustomRow | TrashRow;
+
+const buildDraftFromDefault = (def: DisplayArtwork): Product => {
+  const now = new Date().toISOString();
+  const imageFields = buildImageFields(def.images);
+  return {
+    ...imageFields,
+    id: `override-draft-${def.id}`,
+    createdAt: now,
+    title: def.title,
+    medium: def.medium,
+    year: def.year,
+    price: def.price,
+    salePrice: def.salePrice,
+    description: def.description,
+    category: def.category,
+    dimensions: def.dimensions,
+    availability: def.availability,
+    replacesDefaultId: def.id,
+  };
+};
+
+const effectivePriceFor = (d: DisplayArtwork): number =>
+  d.salePrice != null && d.salePrice > 0 && d.salePrice < d.price
+    ? d.salePrice
+    : d.price;
+
+// Treat a custom-upload Product as a DisplayArtwork so the row UI can
+// share the same render branch as built-in stock entries.
+const customProductToDisplay = (p: Product): DisplayArtwork => ({
+  id: p.id,
+  image: p.image,
+  mockup: p.mockup,
+  title: p.title,
+  medium: p.medium,
+  year: p.year,
+  price: p.price,
+  salePrice: p.salePrice,
+  description: p.description,
+  category: p.category,
+  dimensions: p.dimensions,
+  images: p.images && p.images.length > 0 ? p.images : [{ url: p.image }],
+  availability: getAvailability(p),
+  isCustom: true,
+});
+
+const MAX_THUMB_BYTES = 5 * 1024 * 1024;
+
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+export function StockListingsSection() {
+  const { products, addProduct, updateProduct, deleteProduct } = useProducts();
+  const [edit, setEdit] = useState<EditMode | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("default");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+  // Inline thumbnail uploads route through a single hidden file input. We
+  // stash the row that triggered the picker so the change handler knows
+  // which override to write — or which custom upload to update in place.
+  const thumbTargetRef = useRef<
+    | { kind: "default"; defaultId: string; title: string }
+    | { kind: "custom"; productId: string; title: string }
+    | null
+  >(null);
+
+  // Trashed overrides live in the Trash sub-tab; they're excluded from
+  // the active override map so the merged-default row doesn't render
+  // its customized price/image while the listing is supposed to be gone.
+  const overridesByDefaultId = useMemo(() => {
+    const m = new Map<string, Product>();
+    for (const p of products) {
+      if (p.replacesDefaultId && !p.trashed) m.set(p.replacesDefaultId, p);
+    }
+    return m;
+  }, [products]);
+
+  // Bundled defaults whose override is in the trash. We hide the
+  // entire row from the main listing (so the operator doesn't see the
+  // stock copy resurface while the listing is supposed to be gone),
+  // and surface it instead inside the Trash sub-tab.
+  const trashedDefaultIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of products) {
+      if (p.replacesDefaultId && p.trashed) s.add(p.replacesDefaultId);
+    }
+    return s;
+  }, [products]);
+
+  const trashedOverrides = useMemo(
+    () => products.filter((p) => Boolean(p.replacesDefaultId) && p.trashed),
+    [products],
+  );
+
+  const toDisplay = useMemo(
+    () =>
+      (def: DisplayArtwork): DisplayArtwork => {
+        const override = overridesByDefaultId.get(def.id);
+        if (!override) return def;
+        const images =
+          override.images && override.images.length > 0
+            ? override.images
+            : def.images;
+        return {
+          id: def.id,
+          image: override.image || def.image,
+          mockup: override.mockup || def.mockup,
+          title: override.title || def.title,
+          medium: override.medium || def.medium,
+          year: override.year || def.year,
+          price: override.price ?? def.price,
+          salePrice: override.salePrice ?? def.salePrice,
+          description: override.description ?? def.description,
+          category: override.category ?? def.category,
+          dimensions: override.dimensions ?? def.dimensions,
+          images,
+          availability: getAvailability(override),
+          isCustom: false,
+        };
+      },
+    [overridesByDefaultId],
+  );
+
+  // Custom uploads (products that are NOT overrides of a stock entry)
+  // appear in the unified listing alongside the stock catalog so the
+  // operator never has to bounce between two product views. Soft-deleted
+  // custom uploads would also live in Trash if any existed (today the
+  // UI hard-deletes custom uploads, but the filter is defensive).
+  const customUploads = useMemo(
+    () => products.filter((p) => !p.replacesDefaultId && !p.trashed),
+    [products],
+  );
+
+  const allRows = useMemo<Row[]>(() => {
+    const defaultRows: DefaultRow[] = defaultArtworks
+      .filter((def) => !trashedDefaultIds.has(def.id))
+      .map((def, index) => {
+        const override = overridesByDefaultId.get(def.id);
+        const display = toDisplay(def);
+        return {
+          kind: "default",
+          id: def.id,
+          def,
+          override,
+          display,
+          effectivePrice: effectivePriceFor(display),
+          sortIndex: index,
+        };
+      });
+    const customRows: CustomRow[] = customUploads.map((p, index) => {
+      const display = customProductToDisplay(p);
+      return {
+        kind: "custom",
+        id: p.id,
+        product: p,
+        display,
+        effectivePrice: effectivePriceFor(display),
+        // Newest uploads first within the custom group; offset so they
+        // appear after the stock catalog in the default sort order.
+        sortIndex: defaultArtworks.length + index,
+      };
+    });
+    const trashRows: TrashRow[] = trashedOverrides.map((p, index) => {
+      const def = p.replacesDefaultId
+        ? defaultArtworks.find((d) => d.id === p.replacesDefaultId)
+        : undefined;
+      const display = customProductToDisplay(p);
+      return {
+        kind: "trash",
+        id: p.id,
+        product: p,
+        def,
+        display,
+        effectivePrice: effectivePriceFor(display),
+        // Render trashed rows at the bottom of the default sort order so
+        // a "Sort: default" view in the Trash tab is stable.
+        sortIndex: defaultArtworks.length + customUploads.length + index,
+      };
+    });
+    return [...defaultRows, ...customRows, ...trashRows];
+  }, [
+    toDisplay,
+    overridesByDefaultId,
+    trashedDefaultIds,
+    customUploads,
+    trashedOverrides,
+  ]);
+
+  const listings = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = allRows.filter((row) => {
+      // Trash rows are surfaced only when the Trash sub-tab is active.
+      // Every other view drops them on the floor so the operator never
+      // sees a trashed listing while browsing live products.
+      if (statusFilter === "trash") {
+        if (row.kind !== "trash") return false;
+      } else if (row.kind === "trash") {
+        return false;
+      } else if (statusFilter === "available") {
+        // "On storefront" is defined as anything visible to shoppers — so
+        // available, reserved, and sold all pass. Only "draft" (explicitly
+        // hidden) is excluded, which mirrors the chip count and matches
+        // how `getStorefrontArtworks` filters.
+        if (row.display.availability === "draft") return false;
+      } else if (statusFilter === "hidden") {
+        if (row.display.availability !== "draft") return false;
+      } else if (statusFilter === "customized") {
+        if (row.kind !== "default" || !row.override) return false;
+      } else if (statusFilter === "uploads") {
+        if (row.kind !== "custom") return false;
+      }
+      // Category filter
+      if (categoryFilter !== "all") {
+        if (row.display.category !== categoryFilter) return false;
+      }
+      // Search
+      if (q) {
+        const haystack = [
+          row.display.title,
+          row.display.medium,
+          row.display.year,
+          row.display.category,
+          row.display.description,
+          row.id,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+
+    switch (sortMode) {
+      case "title-asc":
+        filtered.sort((a, b) => a.display.title.localeCompare(b.display.title));
+        break;
+      case "price-asc":
+        filtered.sort((a, b) => a.effectivePrice - b.effectivePrice);
+        break;
+      case "price-desc":
+        filtered.sort((a, b) => b.effectivePrice - a.effectivePrice);
+        break;
+      default:
+        filtered.sort((a, b) => a.sortIndex - b.sortIndex);
+    }
+    return filtered;
+  }, [allRows, searchQuery, statusFilter, categoryFilter, sortMode]);
+
+  const customizedCount = allRows.filter(
+    (r) => r.kind === "default" && Boolean(r.override),
+  ).length;
+  const uploadsCount = allRows.filter((r) => r.kind === "custom").length;
+  const hiddenCount = allRows.filter(
+    (r) => r.kind !== "trash" && r.display.availability === "draft",
+  ).length;
+  const trashCount = allRows.filter((r) => r.kind === "trash").length;
+  // The "All" chip should reflect the live catalog only — trashed
+  // rows have their own chip so adding them here would double-count.
+  const liveRowsCount = allRows.length - trashCount;
+
+  const visibleIds = useMemo(() => listings.map((r) => r.id), [listings]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const hasSelection = selectedIds.size > 0;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        for (const id of visibleIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of visibleIds) next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleEdit = (def: DisplayArtwork) => {
+    const override = overridesByDefaultId.get(def.id);
+    if (override) {
+      setEdit({ kind: "update", product: override });
+    } else {
+      setEdit({
+        kind: "create-override",
+        draft: buildDraftFromDefault(def),
+        defaultId: def.id,
+      });
+    }
+  };
+
+  // Editing a custom upload bypasses the override flow — there's no
+  // stock default to fall back to, just an in-place product update.
+  const handleEditCustom = (product: Product) => {
+    setEdit({ kind: "update", product });
+  };
+
+  const handleDeleteCustom = async (product: Product) => {
+    if (
+      !window.confirm(
+        `Permanently delete "${product.title}"? This removes the product from the storefront forever. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(product.id);
+    try {
+      await deleteProduct(product.id);
+      toast.success(`Permanently deleted "${product.title}"`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not remove product",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleSave = async (
+    _id: string,
+    updates: Partial<Product>,
+  ): Promise<void> => {
+    if (!edit) return;
+    if (edit.kind === "update") {
+      await updateProduct(edit.product.id, updates);
+    } else {
+      const { draft, defaultId } = edit;
+      const payload: Omit<Product, "id" | "createdAt"> = {
+        image: draft.image,
+        mockup: draft.mockup,
+        title: draft.title,
+        medium: draft.medium,
+        year: draft.year,
+        price: draft.price,
+        salePrice: draft.salePrice,
+        description: draft.description,
+        category: draft.category,
+        dimensions: draft.dimensions,
+        images: draft.images,
+        imageFileName: draft.imageFileName,
+        imageBytes: draft.imageBytes,
+        mockupFileName: draft.mockupFileName,
+        mockupBytes: draft.mockupBytes,
+        availability: draft.availability,
+        replacesDefaultId: defaultId,
+        ...updates,
+      };
+      await addProduct(payload);
+    }
+  };
+
+  // Shared helper that flips a default's availability by either creating or
+  // updating its override. Returns true on success so bulk callers can count.
+  const applyAvailability = async (
+    def: DisplayArtwork,
+    availability: ProductAvailability,
+  ): Promise<boolean> => {
+    try {
+      const override = overridesByDefaultId.get(def.id);
+      if (override) {
+        await updateProduct(override.id, { availability });
+      } else {
+        const draft = buildDraftFromDefault(def);
+        const { id: _ignoredId, createdAt: _ignoredCreated, ...rest } = draft;
+        void _ignoredId;
+        void _ignoredCreated;
+        await addProduct({ ...rest, availability });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Flip availability for a row regardless of whether it's a stock
+  // default (which goes through the override flow) or a custom upload
+  // (which is a direct product update).
+  const applyAvailabilityRow = async (
+    row: Row,
+    availability: ProductAvailability,
+  ): Promise<boolean> => {
+    if (row.kind === "custom") {
+      try {
+        await updateProduct(row.product.id, { availability });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return applyAvailability(row.display, availability);
+  };
+
+  const setAvailabilityFor = async (
+    def: DisplayArtwork,
+    availability: ProductAvailability,
+  ) => {
+    setBusyId(def.id);
+    try {
+      const ok = await applyAvailability(def, availability);
+      if (!ok) {
+        toast.error("Could not update listing");
+        return;
+      }
+      toast.success(
+        availability === "draft"
+          ? `Hid "${def.title}" from the storefront`
+          : `Restored "${def.title}" on the storefront`,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleInlineThumbClick = (
+    target:
+      | { kind: "default"; def: DisplayArtwork }
+      | { kind: "custom"; product: Product },
+  ) => {
+    if (!thumbInputRef.current) return;
+    if (target.kind === "default") {
+      thumbTargetRef.current = {
+        kind: "default",
+        defaultId: target.def.id,
+        title: target.def.title,
+      };
+    } else {
+      thumbTargetRef.current = {
+        kind: "custom",
+        productId: target.product.id,
+        title: target.product.title,
+      };
+    }
+    // Reset value so picking the same file twice still fires onChange.
+    thumbInputRef.current.value = "";
+    thumbInputRef.current.click();
+  };
+
+  const handleInlineThumbFile = async (file: File | null) => {
+    const target = thumbTargetRef.current;
+    thumbTargetRef.current = null;
+    if (!file || !target) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > MAX_THUMB_BYTES) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    try {
+      const url = await fileToDataUrl(file);
+      const newPrimary: ProductImage = {
+        url,
+        fileName: file.name,
+        bytes: file.size,
+      };
+      if (target.kind === "custom") {
+        const product = products.find((p) => p.id === target.productId);
+        if (!product) return;
+        setBusyId(product.id);
+        const existingImages =
+          product.images && product.images.length > 0
+            ? product.images
+            : product.image
+              ? [{ url: product.image }]
+              : [];
+        const nextImages: ProductImage[] = [
+          newPrimary,
+          ...existingImages.slice(1),
+        ];
+        await updateProduct(product.id, buildImageFields(nextImages));
+        toast.success(`Updated thumbnail for "${target.title}"`);
+        return;
+      }
+      const def = defaultArtworks.find((d) => d.id === target.defaultId);
+      if (!def) return;
+      setBusyId(def.id);
+      const override = overridesByDefaultId.get(def.id);
+      const display = toDisplay(def);
+      const existingImages =
+        override?.images && override.images.length > 0
+          ? override.images
+          : display.images || [];
+      // New thumbnail becomes the primary; preserve any other images that were
+      // attached to the override / default after the first slot.
+      const nextImages: ProductImage[] = [
+        newPrimary,
+        ...existingImages.slice(1),
+      ];
+      const imageFields = buildImageFields(nextImages);
+      if (override) {
+        await updateProduct(override.id, imageFields);
+      } else {
+        const draft = buildDraftFromDefault(def);
+        const { id: _id, createdAt: _createdAt, ...rest } = draft;
+        void _id;
+        void _createdAt;
+        // Spread `imageFields` last so the new thumbnail wins over the
+        // default image fields baked into the draft.
+        await addProduct({ ...rest, ...imageFields });
+      }
+      toast.success(`Updated thumbnail for "${target.title}"`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not update thumbnail",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Move a customized stock row into the Trash. We flip the override's
+  // `trashed` flag rather than hard-deleting it so the operator can
+  // restore the listing later — and so the bundled default doesn't
+  // resurface in the meantime. Permanent removal lives in the Trash
+  // tab's "Permanently delete" action.
+  const handleMoveToTrash = async (def: DisplayArtwork) => {
+    const override = overridesByDefaultId.get(def.id);
+    if (!override) return;
+    if (
+      !window.confirm(
+        `Move "${def.title}" to Trash? The listing will be hidden from the storefront. You can restore it from Stock → Trash.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(def.id);
+    try {
+      await updateProduct(override.id, { trashed: true });
+      toast.success(`Moved "${def.title}" to Trash`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not move to trash",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRestoreFromTrash = async (product: Product) => {
+    setBusyId(product.id);
+    try {
+      await updateProduct(product.id, { trashed: false });
+      toast.success(`Restored "${product.title}"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not restore");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Hard-remove a trashed override from KV. The bundled stock default
+  // (which the override was customizing) will resurface on the
+  // storefront after this — that's the documented tradeoff for the
+  // "bundled defaults are untouchable" rule.
+  const handlePermanentDelete = async (product: Product) => {
+    if (
+      !window.confirm(
+        `Permanently delete "${product.title}"? This removes the customization from the storefront forever and restores the bundled stock default. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(product.id);
+    try {
+      await deleteProduct(product.id);
+      toast.success(`Permanently deleted "${product.title}"`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not permanently delete",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const runBulk = async (
+    kind: "hide" | "show" | "revert" | "restore" | "permdelete",
+  ): Promise<void> => {
+    const targets = allRows.filter((r) => selectedIds.has(r.id));
+    if (targets.length === 0) return;
+    if (kind === "revert") {
+      const withOverride = targets.filter(
+        (r): r is DefaultRow => r.kind === "default" && Boolean(r.override),
+      );
+      if (withOverride.length === 0) {
+        toast.info("None of the selected listings have customizations.");
+        return;
+      }
+      if (
+        !window.confirm(
+          `Revert ${withOverride.length} customized listing${
+            withOverride.length === 1 ? "" : "s"
+          }? This cannot be undone.`,
+        )
+      )
+        return;
+    }
+    if (kind === "permdelete") {
+      const trashTargets = targets.filter(
+        (r): r is TrashRow => r.kind === "trash",
+      );
+      if (trashTargets.length === 0) {
+        toast.info("Select trashed listings to permanently delete.");
+        return;
+      }
+      if (
+        !window.confirm(
+          `Permanently delete ${trashTargets.length} trashed listing${
+            trashTargets.length === 1 ? "" : "s"
+          }? This restores the bundled stock default${
+            trashTargets.length === 1 ? "" : "s"
+          } and cannot be undone.`,
+        )
+      )
+        return;
+    }
+    setBulkBusy(true);
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const row of targets) {
+        if (kind === "hide") {
+          if (row.kind === "trash") continue;
+          if (await applyAvailabilityRow(row, "draft")) ok++;
+          else fail++;
+        } else if (kind === "show") {
+          if (row.kind === "trash") continue;
+          if (await applyAvailabilityRow(row, "available")) ok++;
+          else fail++;
+        } else if (kind === "revert") {
+          if (row.kind !== "default" || !row.override) continue;
+          try {
+            await deleteProduct(row.override.id);
+            ok++;
+          } catch {
+            fail++;
+          }
+        } else if (kind === "restore") {
+          if (row.kind !== "trash") continue;
+          try {
+            await updateProduct(row.product.id, { trashed: false });
+            ok++;
+          } catch {
+            fail++;
+          }
+        } else if (kind === "permdelete") {
+          if (row.kind !== "trash") continue;
+          try {
+            await deleteProduct(row.product.id);
+            ok++;
+          } catch {
+            fail++;
+          }
+        }
+      }
+      if (ok > 0) {
+        const verb =
+          kind === "hide"
+            ? "Hid"
+            : kind === "show"
+              ? "Restored"
+              : kind === "revert"
+                ? "Reverted"
+                : kind === "restore"
+                  ? "Restored"
+                  : "Permanently deleted";
+        toast.success(`${verb} ${ok} listing${ok === 1 ? "" : "s"}`);
+      }
+      if (fail > 0) {
+        toast.error(`${fail} listing${fail === 1 ? "" : "s"} failed`);
+      }
+      clearSelection();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const restoreOverrides = async (snapshot: Product[]) => {
+    if (snapshot.length === 0) return;
+    setBulkBusy(true);
+    let restored = 0;
+    let fail = 0;
+    try {
+      for (const p of snapshot) {
+        try {
+          const { id: _id, createdAt: _createdAt, ...rest } = p;
+          void _id;
+          void _createdAt;
+          await addProduct(rest);
+          restored++;
+        } catch {
+          fail++;
+        }
+      }
+      if (restored > 0) {
+        toast.success(
+          `Restored ${restored} customization${restored === 1 ? "" : "s"}`,
+        );
+      }
+      if (fail > 0) {
+        toast.error(`${fail} could not be restored`);
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleResetAll = async () => {
+    const overrides = products.filter((p) => p.replacesDefaultId);
+    if (overrides.length === 0) {
+      toast.info("No stock customizations to reset.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Reset ALL ${overrides.length} stock customization${
+          overrides.length === 1 ? "" : "s"
+        }? Every product in the stock catalog will revert to its original details.`,
+      )
+    )
+      return;
+    setBulkBusy(true);
+    // Track which overrides were *actually* deleted so the undo toast can
+    // recreate exactly that set. Re-adding the full pre-delete list would
+    // duplicate any overrides whose deleteProduct rejected (addProduct mints
+    // a fresh id without checking for an existing replacesDefaultId).
+    const deleted: Product[] = [];
+    let fail = 0;
+    try {
+      for (const p of overrides) {
+        try {
+          await deleteProduct(p.id);
+          deleted.push({ ...p });
+        } catch {
+          fail++;
+        }
+      }
+      const ok = deleted.length;
+      if (ok > 0) {
+        toast.success(`Reverted ${ok} customization${ok === 1 ? "" : "s"}`, {
+          duration: 10_000,
+          action: {
+            label: "Undo",
+            onClick: () => void restoreOverrides(deleted),
+          },
+        });
+      }
+      if (fail > 0) {
+        toast.error(`${fail} could not be reverted`);
+      }
+      clearSelection();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const editProduct =
+    edit?.kind === "update" ? edit.product : (edit?.draft ?? null);
+
+  const statusChips: { value: StatusFilter; label: string; count: number }[] = [
+    { value: "all", label: "All", count: liveRowsCount },
+    {
+      value: "available",
+      label: "On storefront",
+      count: liveRowsCount - hiddenCount,
+    },
+    { value: "hidden", label: "Hidden", count: hiddenCount },
+    { value: "customized", label: "Customized", count: customizedCount },
+    { value: "uploads", label: "Your uploads", count: uploadsCount },
+    { value: "trash", label: "Trash", count: trashCount },
+  ];
+
+  const showingTrash = statusFilter === "trash";
+
+  return (
+    <section>
+      <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+        <div>
+          <h2 className="font-display text-lg flex items-center gap-2">
+            <Star className="w-4 h-4 text-primary" />
+            {showingTrash ? "Trash" : "All products"} ({listings.length}
+            {listings.length !== (showingTrash ? trashCount : liveRowsCount)
+              ? ` of ${showingTrash ? trashCount : liveRowsCount}`
+              : ""}
+            )
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {showingTrash
+              ? "Deleted customizations live here. Restore brings the listing back to the storefront; Permanently delete removes it from KV and restores the bundled stock default."
+              : "Built-in stock entries and your own uploads in one place. Edit, hide, or move customized listings to Trash from below."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search products…"
+            className="h-9 w-56"
+          />
+          {customizedCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleResetAll()}
+              disabled={bulkBusy}
+              className="gap-1.5 text-destructive hover:text-destructive"
+              title="Delete every stock customization and restore the originals"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Reset all ({customizedCount})
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter + sort row */}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <div className="flex items-center gap-1 flex-wrap">
+          {statusChips.map((chip) => {
+            const active = statusFilter === chip.value;
+            return (
+              <button
+                key={chip.value}
+                type="button"
+                onClick={() => setStatusFilter(chip.value)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition ${
+                  active
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background/40 border-border/60 hover:bg-accent/60"
+                }`}
+              >
+                {chip.label}
+                <span
+                  className={`ml-1.5 text-[10px] ${
+                    active ? "opacity-80" : "text-muted-foreground"
+                  }`}
+                >
+                  {chip.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex-1" />
+        <Select
+          value={categoryFilter}
+          onValueChange={(v) => setCategoryFilter(v as CategoryFilter)}
+        >
+          <SelectTrigger className="h-9 w-[160px] text-xs">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {PRODUCT_CATEGORIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={sortMode}
+          onValueChange={(v) => setSortMode(v as SortMode)}
+        >
+          <SelectTrigger className="h-9 w-[180px] text-xs gap-1.5">
+            <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+            <SelectValue placeholder="Sort" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Default order</SelectItem>
+            <SelectItem value="title-asc">Title A–Z</SelectItem>
+            <SelectItem value="price-asc">Price low → high</SelectItem>
+            <SelectItem value="price-desc">Price high → low</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Bulk action bar */}
+      {listings.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-md bg-muted/30 border border-border/40">
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+            <Checkbox
+              checked={allVisibleSelected}
+              onCheckedChange={() => toggleSelectAllVisible()}
+              aria-label="Select all visible"
+            />
+            {hasSelection
+              ? `${selectedIds.size} selected`
+              : `Select all ${listings.length}`}
+          </label>
+          {hasSelection && (
+            <>
+              {showingTrash ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("restore")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    Restore
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("permdelete")}
+                    disabled={bulkBusy}
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Permanently delete
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("hide")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Hide
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("show")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Show
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runBulk("revert")}
+                    disabled={bulkBusy}
+                    className="gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Revert
+                  </Button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="text-[11px] text-muted-foreground hover:text-foreground underline ml-auto"
+              >
+                Clear selection
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {listings.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border/50 bg-card/20 px-4 py-8 text-center text-xs text-muted-foreground">
+          {showingTrash
+            ? "Trash is empty. Move a customized stock listing here to hide it from the storefront without losing your customization."
+            : "No products match the current filters."}
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {listings.map((row) => {
+            const { display, effectivePrice, id: rowId, kind } = row;
+            const isHidden = display.availability === "draft";
+            const isTrash = kind === "trash";
+            const busy = busyId === rowId || bulkBusy;
+            const hasOverride = row.kind === "default" && Boolean(row.override);
+            const isCustom = kind === "custom";
+            const selected = selectedIds.has(rowId);
+            return (
+              <li
+                key={rowId}
+                className={`flex gap-4 bg-card/40 border rounded-lg p-3 ${
+                  isTrash
+                    ? "border-destructive/30 bg-destructive/5"
+                    : isHidden
+                      ? "border-border/40 opacity-70"
+                      : "border-border/50"
+                } ${selected ? "ring-1 ring-primary/60" : ""}`}
+              >
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  <Checkbox
+                    checked={selected}
+                    onCheckedChange={() => toggleSelect(rowId)}
+                    aria-label={`Select ${display.title}`}
+                  />
+                </div>
+                <div className="flex-shrink-0 relative group/thumb">
+                  <img
+                    src={display.image}
+                    alt={display.title}
+                    className="w-24 h-24 object-cover rounded-md"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  {!isTrash && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        row.kind === "custom"
+                          ? handleInlineThumbClick({
+                              kind: "custom",
+                              product: row.product,
+                            })
+                          : handleInlineThumbClick({
+                              kind: "default",
+                              def: row.display,
+                            })
+                      }
+                      disabled={busy}
+                      className="absolute inset-0 flex items-center justify-center rounded-md bg-black/0 group-hover/thumb:bg-black/40 focus-visible:bg-black/40 transition opacity-0 group-hover/thumb:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed text-white"
+                      aria-label={`Replace thumbnail for ${display.title}`}
+                      title="Replace thumbnail"
+                    >
+                      <Camera className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-medium truncate">{display.title}</h3>
+                    {hasOverride && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded bg-primary/15 text-primary">
+                        Customized
+                      </span>
+                    )}
+                    {isCustom && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded bg-accent/40 text-foreground">
+                        Your upload
+                      </span>
+                    )}
+                    {isTrash && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded bg-destructive/15 text-destructive">
+                        In Trash
+                      </span>
+                    )}
+                    {!isTrash && (
+                      <span
+                        className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider rounded ${
+                          display.availability === "available"
+                            ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                            : display.availability === "made-to-order"
+                              ? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                              : display.availability === "reserved"
+                                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                                : display.availability === "sold"
+                                  ? "bg-slate-700 text-white"
+                                  : "bg-muted text-foreground"
+                        }`}
+                      >
+                        {AVAILABILITY_LABEL[display.availability]}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {display.medium} · {display.year}
+                    {display.dimensions ? ` · ${display.dimensions}` : ""}
+                    {display.category ? ` · ${display.category}` : ""}
+                  </p>
+                  <p className="text-sm font-semibold mt-1">
+                    {display.salePrice != null &&
+                    display.salePrice > 0 &&
+                    display.salePrice < display.price ? (
+                      <>
+                        <span className="line-through text-muted-foreground font-normal mr-1">
+                          ₱{display.price.toLocaleString()}
+                        </span>
+                        <span>₱{effectivePrice.toLocaleString()}</span>
+                        <span className="ml-1 text-xs text-red-500 font-semibold">
+                          {Math.round(
+                            ((display.price - display.salePrice) /
+                              display.price) *
+                              100,
+                          )}
+                          % OFF
+                        </span>
+                      </>
+                    ) : (
+                      <>₱{display.price.toLocaleString()}</>
+                    )}
+                  </p>
+                  {isTrash && row.def && (
+                    <p className="text-[11px] text-muted-foreground mt-1 italic">
+                      Customization of stock default &ldquo;{row.def.title}
+                      &rdquo;. Permanently deleting will restore the bundled
+                      stock entry on the storefront.
+                    </p>
+                  )}
+                  {!isTrash && display.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                      {display.description}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {isTrash ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void handleRestoreFromTrash(row.product)}
+                        disabled={busy}
+                        aria-label={`Restore ${display.title}`}
+                        title="Restore to storefront"
+                      >
+                        <Undo2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void handlePermanentDelete(row.product)}
+                        disabled={busy}
+                        aria-label={`Permanently delete ${display.title}`}
+                        title="Permanently delete"
+                      >
+                        <XCircle className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          row.kind === "custom"
+                            ? handleEditCustom(row.product)
+                            : handleEdit(display)
+                        }
+                        disabled={busy}
+                        aria-label={`Edit ${display.title}`}
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      {isHidden ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void (row.kind === "custom"
+                              ? updateProduct(row.product.id, {
+                                  availability: "available",
+                                })
+                              : setAvailabilityFor(display, "available"))
+                          }
+                          disabled={busy}
+                          aria-label={`Show ${display.title}`}
+                          title="Show on storefront"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void (row.kind === "custom"
+                              ? updateProduct(row.product.id, {
+                                  availability: "draft",
+                                })
+                              : setAvailabilityFor(display, "draft"))
+                          }
+                          disabled={busy}
+                          aria-label={`Hide ${display.title}`}
+                          title="Hide from storefront"
+                        >
+                          <EyeOff className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {row.kind === "default" && hasOverride && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void handleMoveToTrash(display)}
+                          disabled={busy}
+                          aria-label={`Move ${display.title} to Trash`}
+                          title="Move to Trash"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      )}
+                      {row.kind === "custom" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void handleDeleteCustom(row.product)}
+                          disabled={busy}
+                          aria-label={`Delete ${display.title}`}
+                          title="Permanently delete upload"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <input
+        ref={thumbInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null;
+          void handleInlineThumbFile(file);
+        }}
+      />
+
+      <EditProductDialog
+        product={editProduct}
+        open={Boolean(edit)}
+        onClose={() => setEdit(null)}
+        onSave={handleSave}
+      />
+    </section>
+  );
+}

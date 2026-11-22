@@ -1,13 +1,237 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pintaterra — Affordable Art Gallery</title>
-    <meta name="description" content="Discover hand-crafted paintings that transform spaces. Original art, made to order." />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <!-- Static title / description must match the homepage values
+         emitted by `useSEO` in `src/routes/index.tsx` (`Index()`).
+         Non-JS crawlers (older Bingbot, Pinterest's catalog feed
+         fetcher) and social link unfurlers (Facebook, Twitter, Slack,
+         iMessage) read the bare HTML *before* the SPA mounts and
+         `useSEO` rewrites `<head>`, so the static copy here is what
+         shows up in search snippets, link previews, and Pinterest
+         pins. Keep these strings in sync with `Index()` whenever the
+         homepage copy changes. -->
+    <title>
+      Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order
+    </title>
+    <meta
+      name="description"
+      content="Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Canvas Hub" />
+    <meta
+      property="og:title"
+      content="Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order"
+    />
+    <meta
+      property="og:description"
+      content="Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide."
+    />
+    <meta property="og:url" content="https://canvhub.com/" />
+    <meta property="og:image" content="https://canvhub.com/og-default.webp" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_PH" />
+    <meta property="og:locale:alternate" content="fil_PH" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Canvas Hub — Original Filipino Paintings, Hand-Crafted to Order"
+    />
+    <meta
+      name="twitter:description"
+      content="Discover hand-crafted original paintings from the Philippines. Browse the Canvas Hub gallery — each piece made to order by Filipino artists, shipped nationwide."
+    />
+    <meta name="twitter:image" content="https://canvhub.com/og-default.webp" />
+    <meta name="twitter:site" content="@canvashubph" />
+    <meta name="twitter:creator" content="@canvashubph" />
+
+    <!-- Pinterest domain verification. Required so Pinterest's Catalog
+         Manager will accept a feed URL data source for canvhub.com.
+         The content value is issued per-app by Pinterest; rotating it
+         is harmless (worst case the existing claim has to be redone). -->
+    <meta name="p:domain_verify" content="49bded49707165b541b6e020b68eb386" />
+
+    <!-- Default canonical for the homepage. Per-route canonicals are
+         emitted by the `useSEO` hook in src/hooks/useSEO.ts and replace
+         this href as soon as the SPA mounts; the static href below is
+         what non-JS crawlers (e.g. social-link unfurlers) see when
+         fetching the bare HTML document. -->
+    <link rel="canonical" href="https://canvhub.com/" />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1c1c1c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Canvas Hub" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+
+    <!-- Google Fonts — preconnect to start the TLS handshake to
+         fonts.gstatic.com in parallel with the HTML download, then
+         load the stylesheets.
+         Split into two requests for FCP/LCP (see IMPROVEMENTS.md #3):
+           - Inter (body) is critical; loaded as a normal blocking
+             stylesheet so the first paint reads with the right font.
+           - Playfair Display + EB Garamond (display / logo) are
+             loaded with the deferred `print → all` pattern so they
+             don't block the critical path; the noscript fallback
+             keeps users with JS disabled covered.
+         `display=swap` keeps text legible while the woff2s load. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+    />
+    <link
+      id="deferred-fonts"
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+      media="print"
+    />
+    <script src="/font-defer.js" defer></script>
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+      />
+    </noscript>
+
+    <!-- Structured data for Google. `<script type="application/ld+json">`
+         is treated as data, not script, by browsers, so it is not
+         subject to `script-src` CSP enforcement. Two top-level entities:
+           - Organization: who runs the site, contact, country.
+           - WebSite:      site search box on Google SERPs.
+         Per-page schema (Product, BreadcrumbList) is emitted by the
+         relevant route components. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://canvhub.com/#organization",
+            "name": "Canvas Hub",
+            "url": "https://canvhub.com/",
+            "logo": "https://canvhub.com/icon-512.png",
+            "image": "https://canvhub.com/icon-512.png",
+            "description": "Hand-crafted paintings and original art shipped from the Philippines, made to order.",
+            "email": "support@canvhub.com",
+            "areaServed": "PH",
+            "address": {
+              "@type": "PostalAddress",
+              "addressCountry": "PH"
+            },
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "contactType": "customer support",
+              "email": "support@canvhub.com",
+              "availableLanguage": ["English", "Filipino"]
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://canvhub.com/#website",
+            "url": "https://canvhub.com/",
+            "name": "Canvas Hub",
+            "publisher": { "@id": "https://canvhub.com/#organization" },
+            "inLanguage": "en"
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Static boot fallback. Visible immediately on every load so visitors
+         never see a totally blank page while the SPA is downloading or if
+         the SPA fails to mount. React replaces this content the moment
+         `createRoot(...).render()` runs in `src/main.tsx`. The styling is
+         deliberately inline / minimal so it works even when the main CSS
+         bundle hasn't downloaded yet. -->
+    <div id="root">
+      <div
+        id="canvhub-boot-fallback"
+        style="
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          padding: 24px;
+          background: #1c1c1c;
+          color: #f5f3ee;
+          font-family:
+            -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto,
+            &quot;Helvetica Neue&quot;, Arial, sans-serif;
+          text-align: center;
+        "
+      >
+        <div
+          aria-hidden="true"
+          style="
+            width: 36px;
+            height: 36px;
+            border: 3px solid rgba(245, 243, 238, 0.18);
+            border-top-color: #f5f3ee;
+            border-radius: 50%;
+            animation: canvhub-boot-spin 0.9s linear infinite;
+          "
+        ></div>
+        <div
+          style="
+            font-size: 11px;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            opacity: 0.7;
+          "
+        >
+          Canvas Hub
+        </div>
+        <noscript>
+          <p style="max-width: 32ch; opacity: 0.85; font-size: 13px">
+            Canvas Hub needs JavaScript to run. Please enable it in your browser
+            settings and reload this page.
+          </p>
+        </noscript>
+      </div>
+      <style>
+        @keyframes canvhub-boot-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      </style>
+    </div>
+    <!-- Diagnostic overlay. Watches for two failure modes that would
+         otherwise paint a totally blank page on devices where the SPA
+         can't mount:
+           1. an uncaught error / unhandled rejection during boot, OR
+           2. the SPA never replacing #root within 25 s (a silent stall,
+              e.g. a syntax-error parse fail on an older Android Chrome).
+         Logic lives in /public/boot-diagnostics.js so it can be served
+         from the same origin (our CSP forbids inline `<script>`). Loaded
+         before the SPA's module script so it can catch errors from the
+         very first failed import.
+         The `?v=` query string is a manual cache-buster. We also send
+         `Cache-Control: max-age=0, must-revalidate` for this URL (see
+         `public/_headers`), but if a visitor already cached an older
+         version under the default 4 h CDN policy bumping `v` is the
+         only way to force their phone to fetch the new one. Bump it
+         whenever the diagnostic script materially changes (new
+         checkpoints, new failure modes, etc.). -->
+    <script src="/boot-diagnostics.js?v=5"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

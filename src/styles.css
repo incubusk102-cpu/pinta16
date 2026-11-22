@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+/* Google Fonts are loaded via <link rel="preconnect"> + <link rel="stylesheet">
+   in index.html so the connection to fonts.gstatic.com starts at the same
+   time as the document parse, instead of waiting for the Tailwind-built
+   stylesheet to download and a CSS @import to kick off another round-trip. */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -44,8 +47,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-display: 'Playfair Display', serif;
-  --font-body: 'Inter', sans-serif;
+  --font-display: "Playfair Display", serif;
+  --font-body: "Inter", sans-serif;
 }
 
 :root {
@@ -88,13 +91,115 @@
   --gallery-glow: oklch(1 0 0);
   --gallery-surface: oklch(0.18 0 0);
   --gallery-frame: oklch(0.32 0 0);
+  /* Brand gold used by .font-logo (hero + footer wordmarks, navbar C).
+     On dark backgrounds this reads with strong contrast (~7:1).
+     Light theme overrides this to a deeper bronze for readability. */
+  --logo-color: #c4a86a;
   --transition-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
   --transition-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Light theme — opt in via document.documentElement.dataset.theme = "light". */
+:root[data-theme="light"] {
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.18 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0 0);
+  --primary: oklch(0.18 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.94 0 0);
+  --secondary-foreground: oklch(0.18 0 0);
+  --muted: oklch(0.95 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+  --accent: oklch(0.92 0 0);
+  --accent-foreground: oklch(0.18 0 0);
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.18 0 0);
+  --success: oklch(0.5 0.16 152);
+  --success-foreground: oklch(1 0 0);
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-primary: oklch(0.18 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent-foreground: oklch(0.18 0 0);
+  --sidebar-border: oklch(0.88 0 0);
+  --sidebar-ring: oklch(0.18 0 0);
+
+  --gallery-glow: oklch(0.18 0 0);
+  --gallery-surface: oklch(0.96 0 0);
+  --gallery-frame: oklch(0.78 0 0);
+
+  --gradient-elegant-bright: oklch(0.18 0 0);
+  --gradient-elegant-mid: oklch(0.42 0 0);
+  /* Deeper, more saturated bronze for the brand wordmark on light
+     backgrounds (~5.4:1 contrast vs the near-white surface, passes WCAG AA). */
+  --logo-color: oklch(0.42 0.09 70);
+}
+
+:root[data-theme="light"] ::selection {
+  background: oklch(0.18 0 0 / 0.12);
+  color: oklch(0.18 0 0);
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    ) {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    )::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklab, currentColor 22%, transparent) 0%,
+      transparent 68%
+    );
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.35);
+    transition:
+      opacity 320ms var(--transition-smooth),
+      transform 520ms var(--transition-smooth);
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    ):is(:hover, :focus-visible)::after {
+    opacity: 0.12;
+    transform: scale(1.25);
+  }
+
+  :where(button, [role="button"], .ripple-button):not([data-ripple="off"]):not(
+      [data-sidebar="rail"]
+    ):active::after {
+    opacity: 0.24;
+    transform: scale(0.9);
+    transition-duration: 120ms;
+  }
+
+  :where(button, [role="button"], .ripple-button):is(
+      :disabled,
+      [aria-disabled="true"]
+    )::after {
+    opacity: 0;
   }
 
   body {
@@ -103,9 +208,27 @@
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  /* Radix Popper (Select, Popover, Dropdown, etc.) renders its content
+     into a portal at the end of <body>. The wrapper has no z-index of
+     its own, so the content gets buried under fixed-position drawers
+     (CartDrawer at z-85, CheckoutForm panel at z-95). Lift the wrapper
+     above those layers so dropdowns inside drawers/sheets actually
+     show up — without this, clicking a Select trigger inside the
+     checkout drawer looks like nothing happens, which reads as the
+     control being disabled. */
+  [data-radix-popper-content-wrapper] {
+    z-index: 100;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-display);
   }
 
@@ -121,6 +244,11 @@
   }
   .font-body {
     font-family: var(--font-body);
+  }
+  .font-logo {
+    font-family: "EB Garamond", Georgia, "Playfair Display", serif;
+    font-style: italic;
+    color: var(--logo-color);
   }
 
   .gallery-frame {
@@ -146,9 +274,9 @@
   .text-gradient-elegant {
     background: linear-gradient(
       135deg,
-      oklch(1 0 0) 0%,
-      oklch(0.7 0 0) 50%,
-      oklch(1 0 0) 100%
+      var(--gradient-elegant-bright, oklch(1 0 0)) 0%,
+      var(--gradient-elegant-mid, oklch(0.7 0 0)) 50%,
+      var(--gradient-elegant-bright, oklch(1 0 0)) 100%
     );
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -161,14 +289,586 @@
   }
 
   .hover-lift {
-    transition: transform 0.6s var(--transition-smooth), box-shadow 0.6s var(--transition-smooth);
+    transition:
+      transform 0.6s var(--transition-smooth),
+      box-shadow 0.6s var(--transition-smooth);
   }
   .hover-lift:hover {
     transform: translateY(-4px);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
   }
+
+  /* Box-shadow-only lift used on elements that already manage their own
+     transform (e.g. framer-motion 3D-tilt cards). Keeping `transform` out
+     of this class avoids fighting the inline transform set by motion. */
+  .hover-lift-shadow {
+    transition: box-shadow 0.38s var(--transition-smooth);
+  }
+  .hover-lift-shadow:hover {
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
+  }
+
+  /* Slow drifting gradient on the hero wordmark for a subtle premium feel.
+     Keeps the same start/mid/end stops as `.text-gradient-elegant` but
+     animates background-position so the highlight slides across letters. */
+  .text-gradient-elegant {
+    background-size: 200% 200%;
+    animation: gradient-drift 14s ease-in-out infinite;
+  }
+  @keyframes gradient-drift {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* Animated gradient mesh for the homepage static hero. Three slow
+     drifting radial blooms in brand-gold + warm bronze, layered with
+     `background-blend-mode: screen` so the hues mix instead of
+     stacking opaquely. Paused under `prefers-reduced-motion`. */
+  .home-hero-mesh {
+    background:
+      radial-gradient(
+        40% 50% at 18% 22%,
+        color-mix(in oklab, var(--logo-color) 28%, transparent) 0%,
+        transparent 70%
+      ),
+      radial-gradient(
+        45% 55% at 82% 78%,
+        color-mix(in oklab, var(--logo-color) 22%, transparent) 0%,
+        transparent 75%
+      ),
+      radial-gradient(
+        38% 50% at 50% 50%,
+        color-mix(in oklab, var(--foreground) 10%, transparent) 0%,
+        transparent 70%
+      );
+    background-size:
+      180% 180%,
+      180% 180%,
+      180% 180%;
+    background-blend-mode: screen;
+    animation: hero-mesh-drift 22s ease-in-out infinite alternate;
+    opacity: 0.85;
+  }
+  @keyframes hero-mesh-drift {
+    0% {
+      background-position:
+        0% 0%,
+        100% 100%,
+        50% 50%;
+    }
+    50% {
+      background-position:
+        20% 30%,
+        70% 60%,
+        65% 40%;
+    }
+    100% {
+      background-position:
+        40% 60%,
+        50% 30%,
+        50% 60%;
+    }
+  }
+
+  /* Futuristic CTA: brand-gold ring + soft halo that lights up on
+     hover/focus. Stacks cleanly on top of any existing button
+     styles — we only set ring + box-shadow, so the underlying
+     bg / text colour is untouched. */
+  .hover-glow-cta {
+    position: relative;
+    transition:
+      box-shadow 280ms var(--transition-smooth),
+      transform 280ms var(--transition-spring);
+  }
+  .hover-glow-cta:hover,
+  .hover-glow-cta:focus-visible {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--logo-color) 80%, transparent),
+      0 12px 32px -8px color-mix(in oklab, var(--logo-color) 55%, transparent),
+      0 0 24px color-mix(in oklab, var(--logo-color) 30%, transparent);
+  }
+
+  /* Focus ring: replaces the default browser outline with a soft halo that
+     respects the theme. Applied via :focus-visible so mouse clicks don't
+     show it but keyboard nav does. */
+  *:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--background, #000),
+      0 0 0 4px var(--foreground, #fff);
+    border-radius: 2px;
+  }
+
+  /* Scrollbar styling — narrow, monochrome, theme-aware. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(from var(--foreground) l c h / 0.18);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(from var(--foreground) l c h / 0.32);
+  }
+
+  /* Reduced motion: kill the gradient drift + tilt, since framer-motion's
+     `motion-reduce` selector already handles its in-component animations. */
+  @media (prefers-reduced-motion: reduce) {
+    .text-gradient-elegant,
+    .home-hero-mesh {
+      animation: none;
+    }
+    .hover-glow-cta {
+      transition: none;
+    }
+    :where(button, [role="button"], .ripple-button)::after {
+      transition: none;
+      transform: none;
+    }
+    .hover-glow-cta:hover,
+    .hover-glow-cta:focus-visible {
+      transform: none;
+    }
+  }
+
+  .announcement-fade {
+    display: inline-block;
+    animation: announcement-fade-in 400ms ease-out;
+  }
+  @keyframes announcement-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Continuous marquee scroll */
+  .announcement-marquee {
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+  }
+  .announcement-marquee-track {
+    display: inline-flex;
+    gap: 3rem;
+    padding-left: 100%;
+    animation: announcement-marquee-left var(--ann-duration, 18s) linear
+      infinite;
+    will-change: transform;
+  }
+  .announcement-marquee-track[data-direction="right"] {
+    animation-name: announcement-marquee-right;
+  }
+  .announcement-marquee:hover .announcement-marquee-track {
+    animation-play-state: paused;
+  }
+  @keyframes announcement-marquee-left {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes announcement-marquee-right {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  /* Slide-in from the right */
+  .announcement-slide {
+    display: inline-block;
+    animation: announcement-slide-in 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes announcement-slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Pulse highlight */
+  .announcement-pulse {
+    display: inline-block;
+    animation: announcement-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes announcement-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      filter: brightness(1);
+    }
+    50% {
+      transform: scale(1.04);
+      filter: brightness(1.15);
+    }
+  }
+
+  /* Typewriter (per-message) */
+  .announcement-typewriter {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    border-right: 2px solid currentColor;
+    animation:
+      announcement-typewriter-type var(--ann-type-duration, 2.4s) steps(40, end)
+        forwards,
+      announcement-typewriter-caret 0.8s steps(2, end) infinite;
+    max-width: 100%;
+  }
+  @keyframes announcement-typewriter-type {
+    from {
+      width: 0;
+    }
+    to {
+      width: 100%;
+    }
+  }
+  @keyframes announcement-typewriter-caret {
+    0%,
+    100% {
+      border-right-color: currentColor;
+    }
+    50% {
+      border-right-color: transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .announcement-marquee-track,
+    .announcement-pulse,
+    .announcement-typewriter {
+      animation: none !important;
+    }
+    .announcement-marquee-track {
+      padding-left: 0;
+    }
+    .announcement-typewriter {
+      border-right: 0;
+    }
+  }
+
+  /* Continuously-scrolling painting strip (PaintingMarquee).
+     Renders thumbnails twice in the DOM so translating by -50% loops
+     seamlessly. Pauses on hover/focus-within and stays clipped to the
+     rail so the wide animated track cannot create mobile page overflow.
+     Reduced-motion users get a static row that stops at the natural
+     overflow boundary. */
+  .painting-marquee-rail {
+    contain: paint;
+    max-width: 100%;
+    overflow-x: clip;
+    perspective: 1000px;
+  }
+
+  .painting-marquee-track {
+    animation: painting-marquee-scroll linear infinite;
+    backface-visibility: hidden;
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+  }
+
+  .painting-marquee-track:hover,
+  .painting-marquee-track:focus-within {
+    animation-play-state: paused;
+  }
+
+  .painting-marquee-tile {
+    backface-visibility: hidden;
+    contain: paint;
+    transform: translate3d(0, 0, 0);
+    transform-style: preserve-3d;
+    transition:
+      transform 0.28s var(--transition-smooth),
+      box-shadow 0.28s var(--transition-smooth),
+      border-color 0.28s var(--transition-smooth);
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .painting-marquee-tile:hover {
+      transform: translate3d(0, -0.25rem, 18px) rotateX(6deg);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+    }
+  }
+  @keyframes painting-marquee-scroll {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .painting-marquee-track {
+      animation: none !important;
+      transform: none !important;
+    }
+  }
+
+  /* Holographic frame: iridescent ring + slow conic shimmer used on the
+     product hero image. Sits on top of the existing `.gallery-frame`
+     border, so the brown wood mat keeps its weight and the holographic
+     ring reads as a soft glow rather than a paint overlay. Coloured
+     with brand-gold + a teal accent so it complements the warm
+     storefront palette instead of fighting it. */
+  .holo-frame {
+    position: relative;
+    isolation: isolate;
+  }
+  .holo-frame::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from 0deg at 50% 50%,
+      color-mix(in oklab, var(--logo-color) 78%, transparent) 0%,
+      color-mix(in oklab, #4dd0e1 60%, transparent) 30%,
+      color-mix(in oklab, var(--logo-color) 78%, transparent) 60%,
+      color-mix(in oklab, #b388ff 55%, transparent) 85%,
+      color-mix(in oklab, var(--logo-color) 78%, transparent) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.55;
+    animation: holo-spin 9s linear infinite;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .holo-frame::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      125deg,
+      transparent 35%,
+      color-mix(in oklab, #ffffff 60%, transparent) 50%,
+      transparent 65%
+    );
+    background-size: 240% 240%;
+    mix-blend-mode: overlay;
+    opacity: 0.35;
+    animation: holo-sheen 7s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+  @keyframes holo-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes holo-sheen {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* Depth-of-field gallery grid: when ANY card inside the grid is
+     hovered, every other card softens (slight blur + desaturate +
+     scale-down) so the visitor's attention is naturally pulled into
+     the painting they're inspecting. Pure CSS via `:has()` — falls
+     back to no-op on browsers that don't support it (the cards just
+     keep their normal hover behaviour). Honours reduced-motion. */
+  .gallery-dof {
+    --dof-blur: 2.2px;
+    --dof-scale: 0.985;
+  }
+  .gallery-dof .gallery-dof-card {
+    transition:
+      filter 380ms var(--transition-smooth),
+      transform 380ms var(--transition-smooth);
+    will-change: filter, transform;
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .gallery-dof:has(.gallery-dof-card:hover) .gallery-dof-card:not(:hover) {
+      filter: blur(var(--dof-blur)) saturate(0.78) brightness(0.92);
+      transform: scale(var(--dof-scale));
+    }
+  }
+
+  /* Animated section divider: a thin gold hairline with a moving
+     highlight bead and a sparse particle drift. Used between major
+     editorial blocks on the homepage to break the page rhythm without
+     adding visual weight. */
+  .section-divider {
+    position: relative;
+    height: 56px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .section-divider-line {
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--logo-color) 65%, transparent) 50%,
+      transparent 100%
+    );
+  }
+  .section-divider-bead {
+    position: absolute;
+    top: 50%;
+    left: 12%;
+    width: 22%;
+    height: 2px;
+    transform: translateY(-50%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--logo-color) 90%, transparent) 50%,
+      transparent 100%
+    );
+    filter: blur(1px);
+    animation: section-divider-bead 6.5s ease-in-out infinite;
+  }
+  @keyframes section-divider-bead {
+    0%,
+    100% {
+      transform: translate(0%, -50%);
+      opacity: 0;
+    }
+    10%,
+    90% {
+      opacity: 1;
+    }
+    50% {
+      transform: translate(260%, -50%);
+      opacity: 1;
+    }
+  }
+  .section-divider-particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--logo-color) 85%, transparent);
+    box-shadow: 0 0 6px color-mix(in oklab, var(--logo-color) 55%, transparent);
+    animation: section-divider-drift linear infinite;
+    opacity: 0;
+  }
+  @keyframes section-divider-drift {
+    0% {
+      transform: translate3d(-20px, 6px, 0);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.9;
+    }
+    85% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate3d(120px, -6px, 0);
+      opacity: 0;
+    }
+  }
+
+  /* Holographic hairline pinned to the bottom of the GalleryNav once
+     the page has scrolled past the top. Same colour palette as
+     `.holo-frame` so the nav reads as part of the same visual layer
+     when the visitor scrolls into the catalogue. */
+  .nav-holo-edge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--logo-color) 70%, transparent) 18%,
+      color-mix(in oklab, #4dd0e1 55%, transparent) 38%,
+      color-mix(in oklab, #b388ff 55%, transparent) 60%,
+      color-mix(in oklab, var(--logo-color) 70%, transparent) 82%,
+      transparent 100%
+    );
+    background-size: 240% 100%;
+    animation: nav-holo-slide 9s linear infinite;
+    pointer-events: none;
+    opacity: 0.9;
+  }
+  @keyframes nav-holo-slide {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: -240% 50%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .holo-frame::before,
+    .holo-frame::after,
+    .section-divider-bead,
+    .section-divider-particle,
+    .nav-holo-edge {
+      animation: none !important;
+    }
+    .gallery-dof .gallery-dof-card {
+      transition: none !important;
+    }
+  }
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Lenis smooth-scroll wrapper. The library adds these classes to
+   <html> when active; the rules below let Lenis own scrolling
+   without clashing with the native `scroll-behavior: smooth` above
+   or with iframes. When Lenis is NOT active (touch devices, admin,
+   reduced-motion) the native rule keeps applying. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+html.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+html.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+html.lenis.lenis-stopped {
+  overflow: hidden;
+}
+html.lenis.lenis-smooth iframe {
+  pointer-events: none;
 }

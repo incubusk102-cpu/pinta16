@@ -1,1 +1,14 @@
-/* /index.html 200
+# Cloudflare Pages routing.
+#
+# /api/*  is served by Cloudflare Pages Functions in /functions/api/, so
+# we MUST NOT rewrite it — leaving it unmatched lets the Functions router
+# claim it. The catch-all below sends everything else to the SPA shell.
+#
+# /sitemap.xml is exposed at its canonical URL by rewriting to the
+# Pages Function at /api/sitemap. /pinterest-feed.csv similarly
+# exposes the Pinterest Catalog product feed at a clean public URL
+# that Pinterest's Catalog Manager can ingest on a schedule.
+
+/sitemap.xml          /api/sitemap         200
+/pinterest-feed.csv   /api/pinterest-feed  200
+/*                    /index.html          200

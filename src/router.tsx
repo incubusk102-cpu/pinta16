@@ -1,8 +1,26 @@
+import { useEffect } from "react";
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { captureException } from "./lib/observability";
 
-function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function DefaultErrorComponent({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
   const router = useRouter();
+
+  // TanStack Router catches render-time errors and routes them here
+  // instead of letting them propagate to the global handler that the
+  // Sentry browser SDK installs. Forward them explicitly so they still
+  // land in Sentry. No-ops when Sentry isn't configured.
+  useEffect(() => {
+    void captureException(error, {
+      source: "router-default-error-component",
+    });
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -23,11 +41,13 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Something went wrong</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Something went wrong
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           An unexpected error occurred. Please try again.
         </p>
-        {import.meta.env.DEV && error.message && (
+        {error.message && (
           <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
             {error.message}
           </pre>

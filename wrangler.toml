@@ -1,0 +1,326 @@
+# Cloudflare Pages configuration for canvhub.com.
+# Deploys via:
+#   - GitHub integration (Pages auto-builds on push to main), OR
+#   - `npx wrangler pages deploy dist` from CI/local
+#
+# This file controls per-environment runtime config, KV namespace bindings,
+# and compatibility flags. Build settings (command, output dir, root dir,
+# Node version) live in the Pages dashboard under Settings → Build &
+# deployments. They should match:
+#   Build command:       npm run build
+#   Build output:        dist
+#   Root directory:      (empty)
+#   NODE_VERSION env:    20
+
+name = "canvhub"
+pages_build_output_dir = "dist"
+# Bumped from 2024-09-23 → 2025-05-01 (IMPROVEMENTS.md item 5). The
+# `nodejs_compat` flag stays explicit because Pages does not yet
+# auto-enable it on date alone. No new flag-gated runtime behaviour
+# between these dates affects this codebase (we don't touch tail
+# workers, Workers AI v2 binding, or the experimental fetch behaviour
+# changes). Reviewed against
+# https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# KV namespace bindings (production)
+#
+# Create each namespace in the Cloudflare dashboard (Workers & Pages → KV →
+# Create namespace), then paste its id below. The `binding` name is what
+# Pages Functions will see as `env.<BINDING>`.
+#
+# `preview_id` is used for *preview* deploys (PR previews). For zero-config,
+# you can point it at the same namespace as production, but you may want a
+# separate "canvhub-products-preview" namespace etc. so previews can't dirty
+# real data.
+# ---------------------------------------------------------------------------
+
+[[kv_namespaces]]
+binding = "PRODUCTS"
+id = "a892c12dd94048669dbd1cd8f77ef031"
+preview_id = "2424f379a3c84ee4a0beffa1c3c4ac77"
+
+[[kv_namespaces]]
+binding = "HERO_SLIDES"
+id = "e3384f7eea9941eda995c060b9e35949"
+preview_id = "70a56fa3c31f4872b5d02c4c572531a8"
+
+[[kv_namespaces]]
+binding = "STOREFRONT_CONFIG"
+id = "b19124e7c1a14becb530474591d58576"
+preview_id = "7ac4624bf7e14db2b5dc7e319000ce28"
+
+[[kv_namespaces]]
+binding = "POLICIES"
+id = "bd612e81f61e46ff930483b2b0695485"
+preview_id = "695bffdeacd241019bdc8b67cc972b7b"
+
+[[kv_namespaces]]
+binding = "NEWSLETTER"
+id = "29dfcf9ede214827b3fce888a3591f29"
+preview_id = "38f1b48025f447c7a269df1a07fcc32f"
+
+[[kv_namespaces]]
+binding = "VISITORS"
+id = "eea654b5603f4e47bdc9ac002506ce9a"
+preview_id = "08063c118579438b91b45782f9cd0010"
+
+[[kv_namespaces]]
+binding = "ORDERS"
+id = "84646326b4a04e5c88e4fbb18d87969d"
+preview_id = "6a21856fc7da43a9aac06cd509e4b81b"
+
+[[kv_namespaces]]
+binding = "USERS"
+id = "a6b407b9e8384a5893fe0c60ad2f9ece"
+preview_id = "86e8513e206949018aa89730a481a09a"
+
+[[kv_namespaces]]
+binding = "CHAT_THREADS"
+id = "fd3e36943fc4436e9df7d8eee7971cf0"
+preview_id = "05e02e65089447719fb2c4acdfb49a0c"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "7e6af1c8231c4ca7b9f50e45ad0f6c4b"
+preview_id = "3bc241cf6ff04f78b54845c6abccb2d7"
+
+[[kv_namespaces]]
+binding = "AUDIT_LOG"
+id = "893b5fd53eeb4aa79c065a7ba8e7104e"
+preview_id = "927778dd0dd1476da6a68d6c852cfb7d"
+
+[[kv_namespaces]]
+binding = "ADMIN_AUTH"
+id = "9f7a6ffd6e044110a2ee1e2b84e76956"
+preview_id = "2401b357b17948b0b09bd694ab850cbd"
+
+[[kv_namespaces]]
+binding = "CUSTOMER_META"
+id = "b55d858597374aaa8a0ff2ecf21a9177"
+preview_id = "a03c9102eeb1456d87683043d48e001d"
+
+# ---------------------------------------------------------------------------
+# SECURITY_CONFIG
+#
+# Backs the Admin → Security panel: per-endpoint rate limits, Turnstile mode
+# (off / soft / hard), body-size cap (1–10 MB), and IP block list. When this
+# binding is missing, every helper falls back to the hardcoded defaults that
+# match the values shipped in #204 / #206. With the binding present (below),
+# the panel reads the live overrides from KV and Save buttons start working.
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "SECURITY_CONFIG"
+id = "89358933447747e58dee7f7e53dcf999"
+preview_id = "e717d43c38a64b8bb4efc387710620a7"
+
+# ---------------------------------------------------------------------------
+# SECURITY_EVENTS (optional)
+#
+# Stores time-bucketed threat events (scanner probes, CSRF blocks, path
+# traversal attempts, rate-limit denials, IP blocks) and rolling aggregate
+# stats surfaced in Admin → Security → Threat Dashboard. Hourly buckets
+# auto-expire after 7 days to keep the namespace tidy. Also stores the
+# auto-ban configuration (threshold + window).
+#
+# To enable in production:
+#   1. Create the namespace in the Cloudflare dashboard:
+#      Workers & Pages → KV → Create namespace → name `SECURITY_EVENTS`.
+#      Then create a second namespace for preview (e.g. `SECURITY_EVENTS_PREVIEW`).
+#   2. Paste the production + preview IDs below and uncomment the block.
+#   3. `git push` (CI redeploys with the binding active).
+#
+# Until the binding exists, the threat dashboard renders with empty data
+# and a "binding not bound" warning, and `logSecurityEvent` is a no-op —
+# so the rest of the API keeps working unchanged.
+#
+# Same namespace is used for both production and preview because the
+# canvhub Pages project doesn't really exercise the preview environment;
+# split into two namespaces later if previews start carrying real data.
+[[kv_namespaces]]
+binding = "SECURITY_EVENTS"
+id = "67c757b425ee427b9c9bba0a16519ff7"
+preview_id = "67c757b425ee427b9c9bba0a16519ff7"
+
+# ---------------------------------------------------------------------------
+# ABANDONED_CARTS (optional)
+#
+# Stores cart snapshots synced when a shopper enters their email at
+# checkout but never completes payment. A scheduled GitHub Action calls
+# POST /api/abandoned-cart/process every 30 minutes; it finds carts older
+# than 1 h (first nudge) and 24 h (final nudge), sends a branded recovery
+# email, then marks the entry so it isn't re-sent. Entries auto-expire
+# after 7 days via KV TTL.
+#
+# To enable in production:
+#   1. Create the namespace in the Cloudflare dashboard:
+#      Workers & Pages → KV → Create namespace → name `canvhub-abandoned-carts`.
+#      Then create a second namespace for preview.
+#   2. Paste the production + preview IDs below and uncomment the block.
+#   3. `git push` (CI redeploys with the binding active).
+#
+# Until the binding exists, the sync endpoint returns 503 and the cron
+# is a no-op — the storefront keeps working unchanged.
+#
+# TODO(2026-08): Decide whether to ship abandoned-cart recovery. The
+# server-side code (functions/api/abandoned-cart/*) and the cron worker
+# are in main but unbound. To enable, create the production + preview
+# namespaces in the Cloudflare dashboard, paste the IDs below, and
+# uncomment. If we drop the feature, delete the endpoints / cron and
+# this comment block. See IMPROVEMENTS.md item 13.
+#
+# [[kv_namespaces]]
+# binding = "ABANDONED_CARTS"
+# id = "REPLACE_WITH_PRODUCTION_NAMESPACE_ID"
+# preview_id = "REPLACE_WITH_PREVIEW_NAMESPACE_ID"
+
+# ---------------------------------------------------------------------------
+# WISHLISTS
+#
+# Server-side mirror of the per-user wishlist (see
+# `src/contexts/WishlistContext.tsx` and `functions/api/wishlist.js`).
+# Stored under per-user keys: `user/<userId>` → { items: WishlistItem[] }.
+#
+# Same namespace is reused for production and preview because the
+# canvhub Pages project doesn't really exercise the preview environment
+# (matches the SECURITY_EVENTS pattern above). Split into two namespaces
+# later if previews start carrying real customer data.
+[[kv_namespaces]]
+binding = "WISHLISTS"
+id = "32d60ee1d677430eb5fd950f2ede43d9"
+preview_id = "32d60ee1d677430eb5fd950f2ede43d9"
+
+# ---------------------------------------------------------------------------
+# D1 database binding (hybrid KV+SQL architecture)
+#
+# D1 is a managed SQLite database that runs on the same Cloudflare edge as
+# this Pages deployment. It coexists with KV: KV remains the source of truth
+# for fast public reads (products, config, hero slides); D1 enables SQL
+# queries, JOINs, and aggregations for the admin panel (analytics, CRM,
+# inventory reports).
+#
+# Free tier: 5 GB storage, 5 million reads/day, 100k writes/day — more than
+# enough for canvhub's traffic at any realistic scale.
+#
+# To enable:
+#   1. Create the database in the Cloudflare dashboard:
+#      Workers & Pages → D1 → Create database → name: `canvhub`
+#   2. Copy the Database ID and paste it below.
+#   3. Run the migration:  npx wrangler d1 migrations apply canvhub
+#   4. Add the D1 binding in Cloudflare Pages dashboard:
+#      Workers & Pages → canvhub → Settings → Functions → D1 database bindings
+#      Variable name: DB   Database: canvhub
+#   5. `git push` (CI redeploys with the binding active).
+#
+# Until the binding exists, all D1 helpers gracefully return null/no-op —
+# the site keeps working exactly as before on KV alone.
+#
+[[d1_databases]]
+binding = "DB"
+database_name = "canvhub"
+database_id = "68b3022d-91ff-4847-9412-a8cce8bdd508"
+migrations_dir = "migrations"
+
+# ---------------------------------------------------------------------------
+# R2 bucket binding
+#
+# Admin product-photo uploads stream to R2 (`/api/uploads`) and read
+# back through the public proxy (`/api/r/*`). Migrating an existing
+# library of inline base64 images is a one-shot via Admin → Exports →
+# "Migrate inline images to R2".
+#
+# Bucket was created with `canvhub-images` as the name; preview deploys
+# share the same bucket because no separate preview namespace exists.
+# If preview ever needs isolation, create `canvhub-images-preview` and
+# point `preview_bucket_name` at it.
+[[r2_buckets]]
+binding = "UPLOADS_BUCKET"
+bucket_name = "canvhub-images"
+preview_bucket_name = "canvhub-images"
+
+# ---------------------------------------------------------------------------
+# Workers AI binding (used by the Turso vector-search "More like this" rail)
+#
+# Powers `_lib/embeddings.js` — generates 768-dim text embeddings via
+# `@cf/baai/bge-base-en-v1.5` (free up to 10k Neurons/day, more than enough
+# for embedding a few hundred paintings + the occasional admin re-run).
+#
+# When this binding is missing, the admin "Generate embeddings" button
+# returns a 503 explaining how to enable it; the public similar-paintings
+# endpoint silently returns `{ available: false, similar: [] }` and the
+# product page falls back to its existing rule-based "You might also like"
+# section.
+#
+# To enable: add a Workers AI binding in
+#   Workers & Pages → canvhub → Settings → Functions → Workers AI bindings
+#   Variable name: AI
+# Then `git push` to redeploy with the binding active.
+[ai]
+binding = "AI"
+
+# ---------------------------------------------------------------------------
+# Turso (libSQL) — vector search ONLY
+#
+# Turso is the *only* exception to the "no new database engine" rule in
+# AGENTS.md, and it exists to host a single feature: native vector
+# similarity search for the "More like this" rail on the product page.
+# Everything else (orders, customers, products, config, …) still goes
+# through KV (source of truth) + D1 (relational mirror).
+#
+# Turso is bound via plain environment variables, not a wrangler.toml
+# binding, because the libSQL HTTP client (`_lib/turso.js`) talks over
+# HTTPS — there is no native Pages binding for it.
+#
+# To enable in production:
+#   1. Create the database at https://turso.tech (free tier covers
+#      canvhub indefinitely): Dashboard → Create database → name `canvhub`,
+#      region closest to PH (e.g. `aws-ap-southeast-1` Singapore).
+#   2. Generate an auth token: Tokens tab → Create Token → Full access.
+#   3. Add both to Cloudflare Pages → Settings → Environment variables:
+#        TURSO_DATABASE_URL  (plaintext) — e.g. libsql://canvhub-XXXX.turso.io
+#        TURSO_AUTH_TOKEN    (encrypted) — long JWT starting with `eyJ…`
+#   4. `git push` (CI redeploys with the env vars active).
+#   5. In `/admin → Vector Search (Turso)` panel: click "Apply schema"
+#      then "Generate embeddings" to populate the index.
+#
+# Until the env vars are set, every Turso helper is a no-op — the site
+# keeps working unchanged on KV+D1 alone.
+
+# ---------------------------------------------------------------------------
+# TikTok Content Posting API — admin auto-posting (optional)
+#
+# Lets the admin publish paintings to a connected TikTok account as
+# photo posts. Implemented in `_lib/tiktok.js` + `/api/admin/tiktok*`
+# + `src/components/admin/TikTokSection.tsx`.
+#
+# TikTok is bound via plain environment variables (no wrangler.toml
+# binding) because the API is plain HTTPS.
+#
+# To enable in production:
+#   1. Register a TikTok Developer app at https://developers.tiktok.com/
+#      → New App → add the "Login Kit" and "Content Posting API"
+#      products.
+#   2. In the app settings, add this redirect URI:
+#        https://canvhub.com/api/admin/tiktok-callback
+#   3. Add these to Cloudflare Pages → Settings → Variables and Secrets:
+#        TIKTOK_CLIENT_KEY     (Encrypt) — Client Key from your TikTok app
+#        TIKTOK_CLIENT_SECRET  (Encrypt) — Client Secret from your TikTok app
+#        TIKTOK_REDIRECT_URI   (plaintext) — the exact URI from step 2
+#   4. `git push` (CI redeploys with the env vars active).
+#   5. In `/admin → Customize → TikTok` click "Connect TikTok" to start
+#      the OAuth flow, then publish a test painting.
+#
+# Until all three env vars are set, the helper returns a not-configured
+# status and the admin section renders the setup wizard. The rest of
+# the site is unaffected.
+#
+# Token storage: the OAuth access/refresh token pair lives in the
+# STOREFRONT_CONFIG KV namespace under the `tiktok_auth` key. The
+# helper auto-refreshes the 24-hour access token using the 365-day
+# refresh token on every API call.
+#
+# Audit log: every publish attempt (success or fail) writes a row to
+# the D1 `tiktok_posts` table — bootstrapped on demand via the "Apply
+# schema" button in the admin panel.
